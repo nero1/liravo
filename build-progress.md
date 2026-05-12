@@ -32,3 +32,30 @@ Built the complete foundational scaffold for Liravo. Set up Next.js 14 (App Rout
 Progress: 12%
 
 ---
+## Phase 2: Core Social Features ✅
+**Completed:** 2026-05-12
+
+### What was built:
+- ReadingProgressBar component with inline page/percent update
+- XP API route (/api/xp) with action-based XP awards
+- Review system: ReviewForm component + /api/books/[id]/reviews GET/POST
+- Follow/unfollow API (/api/users/[id]/follow) with notifications
+- FollowButton client component
+- Social feed page (/feed) + /api/feed paginated API
+- Notifications page + NotificationList component + /api/notifications
+- Reaction system (want_to_read) + ReactionButtons component
+- Goodreads CSV import (/api/import/goodreads + /settings/import page)
+- Report content API (/api/reports)
+- Annual reading goal API + ReadingGoalForm component
+- Shareable book card OG image (/share/book/[id])
+
+### Technical notes:
+- All XP awards routed through awardXP service in src/services/xp.ts
+- Notifications created via createNotification service
+- CSV parsing done server-side without external dependencies
+- OG image uses next/og ImageResponse
+
+Built the complete book detail page at /book/[id] integrating ReviewForm and ReactionButtons, and added Feed + Notifications links to both SideNav and BottomNav. All TypeScript errors resolved (0 errors). The social graph is now fully functional: follow/unfollow, activity feeds, notifications, reading progress tracking, review submission, want-to-read reactions, Goodreads CSV import, reading goals, and shareable OG image cards.
+Progress: 28%
+
+---

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Compass, Feather, BookOpen, User } from 'lucide-react';
+import { Home, Compass, Feather, BookOpen, User, Bell } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/discover', icon: Compass, labelKey: 'discover' as const },
   { href: '/write', icon: Feather, labelKey: 'write' as const },
   { href: '/shelf', icon: BookOpen, labelKey: 'shelf' as const },
+  { href: '/notifications', icon: Bell, labelKey: 'notifications' as const },
   { href: '/profile', icon: User, labelKey: 'profile' as const },
 ];
 

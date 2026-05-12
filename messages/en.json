@@ -1,10 +1,12 @@
 {
   "nav": {
     "home": "Home",
+    "feed": "Feed",
     "discover": "Discover",
     "write": "Write",
     "shelf": "Shelf",
-    "profile": "Profile"
+    "profile": "Profile",
+    "notifications": "Notifications"
   },
   "auth": {
     "loginTitle": "Welcome to Liravo",

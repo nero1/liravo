@@ -43,7 +43,7 @@ export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
         book_id: bookId,
         user_id: userId,
       }, { onConflict: 'shelf_id,book_id' });
-      setAddedToShelves((prev) => new Set([...prev, shelf.id]));
+      setAddedToShelves((prev) => new Set(Array.from(prev).concat(shelf.id)));
 
       // Award XP via API for shelf additions
       if (shelf.default_type === 'have_read') {

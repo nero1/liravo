@@ -24,7 +24,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const book = shelfBook.books as { page_count: number | null } | null;
+  const book = shelfBook.books as unknown as { page_count: number | null } | null;
   const pageCount = book?.page_count ?? null;
 
   const updates: { progress_pages?: number; progress_percent?: number } = {};

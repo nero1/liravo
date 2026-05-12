@@ -67,7 +67,7 @@ export default async function ShelfDetailPage({ params }: ShelfPageProps) {
       ) : (
         <div className="space-y-3">
           {items.map((item) => {
-            const book = item.books as {
+            const book = item.books as unknown as {
               id: string; title: string; author_name: string;
               cover_url: string | null; page_count: number | null; average_rating: number | null;
             } | null;

@@ -2,17 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Compass, Feather, BookOpen, User } from 'lucide-react';
+import { Home, Compass, Feather, BookOpen, User, Bell, Rss } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 
 const NAV_ITEMS = [
   { href: '/', icon: Home, labelKey: 'home' as const },
+  { href: '/feed', icon: Rss, labelKey: 'feed' as const },
   { href: '/discover', icon: Compass, labelKey: 'discover' as const },
   { href: '/write', icon: Feather, labelKey: 'write' as const },
   { href: '/shelf', icon: BookOpen, labelKey: 'shelf' as const },
   { href: '/profile', icon: User, labelKey: 'profile' as const },
+  { href: '/notifications', icon: Bell, labelKey: 'notifications' as const },
 ];
 
 export function SideNav() {
