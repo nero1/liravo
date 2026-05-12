@@ -6,6 +6,7 @@ export function getLevelTitle(xp: number): string {
   return level?.title ?? 'Legend of the Shelf';
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function awardXP(userId: string, amount: number, reason: string): Promise<number> {
   const supabase = createServiceClient();
 

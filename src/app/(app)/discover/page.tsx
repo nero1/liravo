@@ -33,7 +33,7 @@ async function getTrendingBooks(countryFilter?: string | null) {
     if (!data || data.length === 0) return [];
 
     // Get users in the country
-    const userIds = [...new Set(data.map((r) => r.user_id))];
+    const userIds = Array.from(new Set(data.map((r) => r.user_id)));
     const { data: countryUsers } = await supabase
       .from('users')
       .select('id')

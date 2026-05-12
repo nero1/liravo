@@ -2,7 +2,6 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound, redirect } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { AddToShelfButton } from '@/components/shelf/AddToShelfButton';
 import { ReadingProgressBar } from '@/components/shelf/ReadingProgressBar';
 import type { Metadata } from 'next';
 

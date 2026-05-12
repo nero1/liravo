@@ -101,7 +101,7 @@ export function NotificationList() {
           <Bell className="w-10 h-10 text-muted-foreground/40 mb-3" />
           <p className="text-muted-foreground font-medium">No notifications yet</p>
           <p className="text-sm text-muted-foreground/60 mt-1">
-            When people follow you or interact with your reviews, you'll see it here.
+            When people follow you or interact with your reviews, you&apos;ll see it here.
           </p>
         </div>
       ) : (

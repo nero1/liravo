@@ -53,7 +53,7 @@ export default function GoodreadsImportPage() {
         <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
           <li>Go to goodreads.com and sign in</li>
           <li>Navigate to My Books → Import and Export</li>
-          <li>Click "Export Library" to download your CSV</li>
+          <li>Click &ldquo;Export Library&rdquo; to download your CSV</li>
           <li>Upload the CSV file below</li>
         </ol>
       </div>
