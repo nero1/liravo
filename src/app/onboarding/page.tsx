@@ -1,0 +1,31 @@
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
+import { OnboardingFlow } from '@/components/auth/OnboardingFlow';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = { title: 'Set up your profile' };
+
+export default async function OnboardingPage() {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('users')
+    .select('onboarding_complete, username, display_name')
+    .eq('id', user.id)
+    .single();
+
+  if (profile?.onboarding_complete) redirect('/');
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <OnboardingFlow
+        userId={user.id}
+        initialUsername={profile?.username ?? ''}
+        initialDisplayName={profile?.display_name ?? ''}
+      />
+    </div>
+  );
+}
