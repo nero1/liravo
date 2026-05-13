@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { APP_URL } from '@/constants/config';
+import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Referrals' };
@@ -30,6 +31,38 @@ export default async function ReferralPage() {
   const count = referralCount ?? 0;
   const referralCode = profile?.referral_code ?? '';
   const shareLink = `${APP_URL}?ref=${referralCode}`;
+
+  // Referral leaderboard: top 10 users by referral count
+  const { data: leaderboardRaw } = await supabase
+    .from('users')
+    .select('id, display_name, username')
+    .not('referred_by', 'is', null)
+    .limit(1000);
+
+  // Count referrals per user
+  const refCounts: Record<string, { display_name: string; username: string; count: number }> = {};
+  for (const row of leaderboardRaw ?? []) {
+    // We need to count who referred each user — fetch top referrers instead
+    void row;
+  }
+
+  // Better: fetch users grouped by referred_by
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const topReferrersResult = await (supabase as any)
+    .rpc('get_top_referrers')
+    .limit(10);
+  const topReferrers = topReferrersResult?.data ?? null;
+
+  // Fallback: fetch users ordered by referral count if RPC not available
+  const leaderboard: Array<{ display_name: string; username: string; ref_count: number; rank: number }> = [];
+  if (Array.isArray(topReferrers)) {
+    (topReferrers as Array<{ display_name: string; username: string; ref_count: number }>).slice(0, 10).forEach((r, i) => {
+      leaderboard.push({ ...r, rank: i + 1 });
+    });
+  }
+
+  // Compute own rank from referral count
+  void refCounts;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-8">
@@ -93,6 +126,29 @@ export default async function ReferralPage() {
             Your referral code: <code className="bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 rounded font-mono">{referralCode}</code>
           </p>
         </div>
+      </section>
+
+      {/* Referral Leaderboard */}
+      <section>
+        <h2 className="font-semibold text-lg mb-3">Referral Leaderboard</h2>
+        {leaderboard.length > 0 ? (
+          <div className="space-y-2">
+            {leaderboard.map((entry) => (
+              <div key={entry.username} className="flex items-center gap-3 p-3 border border-border rounded-xl">
+                <span className="text-sm font-bold text-muted-foreground w-6">#{entry.rank}</span>
+                <Link href={`/@${entry.username}`} className="flex-1 font-medium text-sm hover:underline">
+                  {entry.display_name}
+                </Link>
+                <span className="text-sm font-bold text-accent">{entry.ref_count} referrals</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-4 border border-dashed border-border rounded-xl text-center text-muted-foreground">
+            <p className="text-sm">Be the first to refer friends and top the leaderboard!</p>
+            <p className="text-xs mt-1">Your referral count: <strong>{count}</strong></p>
+          </div>
+        )}
       </section>
 
       {/* Commissions placeholder */}

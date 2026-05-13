@@ -116,21 +116,23 @@ export function ProfileView({ profile, isOwner }: ProfileViewProps) {
           </div>
         </div>
 
-        {/* JSON-LD for author profiles */}
-        {profile.is_verified_author && (
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
-                '@context': 'https://schema.org',
-                '@type': 'Person',
-                name: profile.display_name,
-                url: `https://liravo.org/${profile.username}`,
-                description: profile.bio,
-                image: profile.avatar_url,
-              }),
-            }}
-          />
+        {/* Badges section */}
+        {profile.badges && Array.isArray(profile.badges) && profile.badges.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-muted-foreground mb-2">Badges</h2>
+            <div className="flex flex-wrap gap-2">
+              {(profile.badges as Array<{ icon: string; name: string }>).map((badge) => (
+                <span
+                  key={badge.name}
+                  title={badge.name}
+                  className="text-lg"
+                  aria-label={badge.name}
+                >
+                  {badge.icon}
+                </span>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

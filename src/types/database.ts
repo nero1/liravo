@@ -40,6 +40,8 @@ export interface UserRow {
   email_prompt_dismissed_at: string | null;
   created_at: string;
   updated_at: string;
+  // Virtual: populated by pages that join user_badges
+  badges?: Array<{ icon: string; name: string }>;
 }
 
 export interface BookRow {

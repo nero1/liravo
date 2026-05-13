@@ -43,5 +43,22 @@ export default async function PublicProfilePage({ params }: ProfilePageProps) {
   const { data: { user } } = await createClient().auth.getUser();
   const isOwner = user?.id === profile.id;
 
-  return <ProfileView profile={profile} isOwner={isOwner} />;
+  // Fetch earned badges for this user
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: userBadges } = await (supabase as any)
+    .from('user_badges')
+    .select('badge_id, awarded_at')
+    .eq('user_id', profile.id)
+    .order('awarded_at', { ascending: false });
+
+  // Map badge IDs to badge definitions
+  const { BADGE_DEFINITIONS } = await import('@/services/badges');
+  const earnedBadges = (userBadges ?? []).map((ub: { badge_id: string }) => {
+    const def = BADGE_DEFINITIONS.find((b) => b.id === ub.badge_id);
+    return def ? { icon: def.icon, name: def.name } : null;
+  }).filter(Boolean);
+
+  const profileWithBadges = { ...profile, badges: earnedBadges };
+
+  return <ProfileView profile={profileWithBadges} isOwner={isOwner} />;
 }

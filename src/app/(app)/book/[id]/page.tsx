@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -6,9 +7,59 @@ import { Star, BookOpen, Share2 } from 'lucide-react';
 import { ReviewForm } from '@/components/books/ReviewForm';
 import { ReactionButtons } from '@/components/books/ReactionButtons';
 import { AudibleCTA } from '@/components/books/AudibleCTA';
+import { QuoteForm } from '@/components/books/QuoteForm';
+import type { Metadata } from 'next';
+import { APP_URL } from '@/constants/config';
 
 interface BookPageProps {
   params: { id: string };
+}
+
+export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
+  const supabase = createServiceClient();
+  const { data: book } = await supabase
+    .from('books')
+    .select('title, author_name, description, cover_url, isbn_13, published_year, average_rating')
+    .eq('id', params.id)
+    .single();
+
+  if (!book) return { title: 'Book not found' };
+
+  const bookJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Book',
+    name: book.title,
+    author: { '@type': 'Person', name: book.author_name },
+    description: book.description ?? undefined,
+    image: book.cover_url ?? undefined,
+    isbn: book.isbn_13 ?? undefined,
+    datePublished: book.published_year?.toString() ?? undefined,
+    aggregateRating: book.average_rating
+      ? {
+          '@type': 'AggregateRating',
+          ratingValue: book.average_rating.toFixed(1),
+          bestRating: '5',
+          worstRating: '1',
+        }
+      : undefined,
+    url: `${APP_URL}/book/${params.id}`,
+  };
+
+  return {
+    title: `${book.title} by ${book.author_name} — Liravo`,
+    description:
+      book.description
+        ? book.description.slice(0, 160)
+        : `Read reviews and discover ${book.title} on Liravo`,
+    openGraph: {
+      title: `${book.title} by ${book.author_name}`,
+      description: book.description?.slice(0, 200) ?? '',
+      images: book.cover_url ? [book.cover_url] : [],
+    },
+    other: {
+      'script:ld+json': JSON.stringify(bookJsonLd),
+    },
+  };
 }
 
 function StarDisplay({ rating }: { rating: number }) {
@@ -258,6 +309,12 @@ export default async function BookPage({ params }: BookPageProps) {
             })}
           </div>
         )}
+      </section>
+
+      {/* Save a quote */}
+      <section>
+        <h2 className="font-display font-bold text-lg mb-4">Save a Quote</h2>
+        <QuoteForm bookId={params.id} />
       </section>
 
       {/* Write a review */}
