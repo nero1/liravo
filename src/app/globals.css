@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light theme */
+:root {
+  --background: #ffffff;
+  --foreground: #0f0f0f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6b7280;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --primary: #1a1a1a;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #1a1a1a;
+  --accent: #d97706;
+  --accent-foreground: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #0f0f0f;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --ring: #1a1a1a;
+  --radius: 0.5rem;
+}
+
+/* Dark theme */
+.dark {
+  --background: #0f0f0f;
+  --foreground: #f9fafb;
+  --muted: #1f1f1f;
+  --muted-foreground: #9ca3af;
+  --border: #2d2d2d;
+  --input: #2d2d2d;
+  --primary: #f9fafb;
+  --primary-foreground: #0f0f0f;
+  --secondary: #1f1f1f;
+  --secondary-foreground: #f9fafb;
+  --accent: #f59e0b;
+  --accent-foreground: #0f0f0f;
+  --card: #1a1a1a;
+  --card-foreground: #f9fafb;
+  --destructive: #f87171;
+  --destructive-foreground: #0f0f0f;
+  --ring: #f9fafb;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body), system-ui, sans-serif;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display), serif;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display), serif;
+  }
+  .font-body {
+    font-family: var(--font-body), system-ui, sans-serif;
+  }
+}

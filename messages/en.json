@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "home": "Home",
+    "feed": "Feed",
+    "discover": "Discover",
+    "write": "Write",
+    "shelf": "Shelf",
+    "profile": "Profile",
+    "notifications": "Notifications"
+  },
+  "auth": {
+    "loginTitle": "Welcome to Liravo",
+    "loginSubtitle": "Your book discovery social network",
+    "signInGoogle": "Continue with Google",
+    "signInTelegram": "Continue with Telegram",
+    "signOut": "Sign out",
+    "loading": "Signing in..."
+  },
+  "onboarding": {
+    "title": "Let's set up your profile",
+    "username": {
+      "title": "Choose your username",
+      "placeholder": "yourname",
+      "hint": "Letters, numbers, and underscores only"
+    },
+    "userType": {
+      "title": "How do you describe yourself?",
+      "subtitle": "Select all that apply",
+      "reader": "Reader",
+      "author": "Author",
+      "newbie_writer": "Newbie Writer",
+      "creator": "Book Content Creator"
+    },
+    "genres": {
+      "title": "What do you love to read?",
+      "subtitle": "Pick at least 5 genres to personalise your feed",
+      "error": "Please select at least 5 genres"
+    },
+    "next": "Next",
+    "back": "Back",
+    "finish": "Get started"
+  },
+  "books": {
+    "addToShelf": "Add to Shelf",
+    "buyOnAmazon": "Buy on Amazon",
+    "listenOnAudible": "Listen on Audible",
+    "currentlyReading": "Currently Reading",
+    "haveRead": "Have Read",
+    "wantToRead": "Want to Read",
+    "search": "Search books...",
+    "noResults": "No books found",
+    "ratings": "{count} ratings",
+    "reviews": "Reviews",
+    "quotes": "Quotes",
+    "writtenBy": "by {author}"
+  },
+  "profile": {
+    "editProfile": "Edit Profile",
+    "followers": "Followers",
+    "following": "Following",
+    "booksRead": "Books Read",
+    "streak": "{days} day streak",
+    "level": "Level"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "close": "Close",
+    "back": "Back",
+    "search": "Search",
+    "share": "Share",
+    "report": "Report",
+    "offline": "You're offline. Some features may not work.",
+    "darkMode": "Dark mode",
+    "lightMode": "Light mode"
+  }
+}
