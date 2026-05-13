@@ -2,9 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = { title: 'Request Author Verification' };
 
 export default function VerifyAuthorPage() {
   const router = useRouter();
