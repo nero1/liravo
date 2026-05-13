@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "home": "Accueil",
+    "feed": "Fil",
+    "discover": "Découvrir",
+    "write": "Écrire",
+    "shelf": "Étagère",
+    "profile": "Profil",
+    "notifications": "Notifications"
+  },
+  "auth": {
+    "loginTitle": "Bienvenue sur Liravo",
+    "loginSubtitle": "Votre réseau social de découverte de livres",
+    "signInGoogle": "Continuer avec Google",
+    "signInTelegram": "Continuer avec Telegram",
+    "signOut": "Se déconnecter",
+    "loading": "Connexion en cours..."
+  },
+  "onboarding": {
+    "title": "Configurons votre profil",
+    "username": {
+      "title": "Choisissez votre nom d'utilisateur",
+      "placeholder": "votreprenom",
+      "hint": "Lettres, chiffres et tirets bas uniquement"
+    },
+    "userType": {
+      "title": "Comment vous décrivez-vous ?",
+      "subtitle": "Sélectionnez tout ce qui s'applique",
+      "reader": "Lecteur",
+      "author": "Auteur",
+      "newbie_writer": "Écrivain débutant",
+      "creator": "Créateur de contenu littéraire"
+    },
+    "genres": {
+      "title": "Qu'aimez-vous lire ?",
+      "subtitle": "Choisissez au moins 5 genres pour personnaliser votre fil",
+      "error": "Veuillez sélectionner au moins 5 genres"
+    },
+    "next": "Suivant",
+    "back": "Retour",
+    "finish": "Commencer"
+  },
+  "books": {
+    "addToShelf": "Ajouter à l'étagère",
+    "buyOnAmazon": "Acheter sur Amazon",
+    "listenOnAudible": "Écouter sur Audible",
+    "currentlyReading": "En cours de lecture",
+    "haveRead": "Lu",
+    "wantToRead": "À lire",
+    "search": "Rechercher des livres...",
+    "noResults": "Aucun livre trouvé",
+    "ratings": "{count} évaluations",
+    "reviews": "Critiques",
+    "quotes": "Citations",
+    "writtenBy": "par {author}"
+  },
+  "profile": {
+    "editProfile": "Modifier le profil",
+    "followers": "Abonnés",
+    "following": "Abonnements",
+    "booksRead": "Livres lus",
+    "streak": "Série de {days} jours",
+    "level": "Niveau"
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur s'est produite",
+    "retry": "Réessayer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "confirm": "Confirmer",
+    "close": "Fermer",
+    "back": "Retour",
+    "search": "Rechercher",
+    "share": "Partager",
+    "report": "Signaler",
+    "offline": "Vous êtes hors ligne. Certaines fonctionnalités peuvent ne pas fonctionner.",
+    "darkMode": "Mode sombre",
+    "lightMode": "Mode clair"
+  }
+}

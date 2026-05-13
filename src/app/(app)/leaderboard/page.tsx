@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { useLocale } from 'next-intl';
+
+const LOCALE_COUNTRY_NAMES: Record<string, string> = {
+  fr: 'France',
+  de: 'Deutschland',
+  en: 'United States',
+};
 
 // Note: metadata cannot be exported from 'use client' files — title is 'Leaderboard'
 
@@ -20,6 +27,7 @@ type LeaderboardType = 'global' | 'national' | 'friends';
 type LeaderboardPeriod = 'weekly' | 'monthly' | 'alltime';
 
 export default function LeaderboardPage() {
+  const locale = useLocale();
   const [type, setType] = useState<LeaderboardType>('global');
   const [period, setPeriod] = useState<LeaderboardPeriod>('weekly');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -36,7 +44,11 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/leaderboards?type=${type}&period=${period}`)
+    const url = new URL('/api/leaderboards', window.location.origin);
+    url.searchParams.set('type', type);
+    url.searchParams.set('period', period);
+    if (locale && locale !== 'en') url.searchParams.set('locale', locale);
+    fetch(url.toString())
       .then((r) => r.json())
       .then((d: { leaderboard?: LeaderboardEntry[] }) => {
         setEntries(d.leaderboard ?? []);
@@ -59,7 +71,12 @@ export default function LeaderboardPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-      <h1 className="font-display text-2xl font-bold">Leaderboard</h1>
+      <div>
+        <h1 className="font-display text-2xl font-bold">Leaderboard</h1>
+        {type === 'national' && LOCALE_COUNTRY_NAMES[locale] && (
+          <p className="text-sm text-muted-foreground mt-0.5">{LOCALE_COUNTRY_NAMES[locale]}</p>
+        )}
+      </div>
 
       {/* Type Tabs */}
       <div className="flex gap-1 border border-neutral-200 dark:border-neutral-700 rounded-lg p-1">

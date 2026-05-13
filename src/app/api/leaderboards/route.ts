@@ -5,9 +5,16 @@ import { z } from 'zod';
 
 const CACHE_TTL = 300; // 5 minutes
 
+const LOCALE_TO_COUNTRY_CODE: Record<string, string> = {
+  fr: 'FR',
+  de: 'DE',
+  en: 'US',
+};
+
 const QuerySchema = z.object({
   type: z.enum(['global', 'national', 'friends']).default('global'),
   period: z.enum(['weekly', 'monthly', 'alltime']).default('weekly'),
+  locale: z.string().optional(),
 });
 
 interface LeaderboardEntry {
@@ -41,13 +48,14 @@ export async function GET(request: NextRequest) {
   const parsed = QuerySchema.safeParse({
     type: searchParams.get('type') ?? 'global',
     period: searchParams.get('period') ?? 'weekly',
+    locale: searchParams.get('locale') ?? undefined,
   });
 
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid query params' }, { status: 400 });
   }
 
-  const { type, period } = parsed.data;
+  const { type, period, locale } = parsed.data;
 
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -82,20 +90,26 @@ export async function GET(request: NextRequest) {
       level_title: getLevelTitle(u.xp),
     }));
   } else if (type === 'national') {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('country')
-      .eq('id', user.id)
-      .single();
+    // Use locale-derived country if provided, otherwise fall back to user's country setting
+    let countryCode: string | undefined = locale ? LOCALE_TO_COUNTRY_CODE[locale] : undefined;
 
-    if (!profile?.country) {
-      return NextResponse.json({ leaderboard: [] });
+    if (!countryCode) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('country')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.country) {
+        return NextResponse.json({ leaderboard: [] });
+      }
+      countryCode = profile.country as string;
     }
 
     const { data: users } = await supabase
       .from('users')
       .select('id, username, display_name, avatar_url, xp')
-      .eq('country', profile.country)
+      .eq('country', countryCode)
       .order('xp', { ascending: false })
       .limit(50);
 

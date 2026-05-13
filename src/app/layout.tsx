@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister';
+import { getDirection } from '@/lib/rtl';
 import './globals.css';
 
 const inter = Inter({
@@ -50,7 +51,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const messages = await getMessages();
 
   return (
-    <html lang={locale} suppressHydrationWarning className={`${inter.variable} ${playfair.variable}`}>
+    <html lang={locale} dir={getDirection(locale)} suppressHydrationWarning className={`${inter.variable} ${playfair.variable}`}>
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>

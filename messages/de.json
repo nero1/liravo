@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "home": "Startseite",
+    "feed": "Feed",
+    "discover": "Entdecken",
+    "write": "Schreiben",
+    "shelf": "Regal",
+    "profile": "Profil",
+    "notifications": "Benachrichtigungen"
+  },
+  "auth": {
+    "loginTitle": "Willkommen bei Liravo",
+    "loginSubtitle": "Ihr soziales Netzwerk zur Buchentdeckung",
+    "signInGoogle": "Mit Google fortfahren",
+    "signInTelegram": "Mit Telegram fortfahren",
+    "signOut": "Abmelden",
+    "loading": "Anmeldung läuft..."
+  },
+  "onboarding": {
+    "title": "Richten wir Ihr Profil ein",
+    "username": {
+      "title": "Wählen Sie Ihren Benutzernamen",
+      "placeholder": "ihrname",
+      "hint": "Nur Buchstaben, Zahlen und Unterstriche"
+    },
+    "userType": {
+      "title": "Wie würden Sie sich beschreiben?",
+      "subtitle": "Alles Zutreffende auswählen",
+      "reader": "Leser",
+      "author": "Autor",
+      "newbie_writer": "Schreibanfänger",
+      "creator": "Buch-Content-Creator"
+    },
+    "genres": {
+      "title": "Was lesen Sie gerne?",
+      "subtitle": "Wählen Sie mindestens 5 Genres, um Ihren Feed zu personalisieren",
+      "error": "Bitte wählen Sie mindestens 5 Genres aus"
+    },
+    "next": "Weiter",
+    "back": "Zurück",
+    "finish": "Loslegen"
+  },
+  "books": {
+    "addToShelf": "Zum Regal hinzufügen",
+    "buyOnAmazon": "Bei Amazon kaufen",
+    "listenOnAudible": "Bei Audible hören",
+    "currentlyReading": "Lese ich gerade",
+    "haveRead": "Gelesen",
+    "wantToRead": "Möchte ich lesen",
+    "search": "Bücher suchen...",
+    "noResults": "Keine Bücher gefunden",
+    "ratings": "{count} Bewertungen",
+    "reviews": "Rezensionen",
+    "quotes": "Zitate",
+    "writtenBy": "von {author}"
+  },
+  "profile": {
+    "editProfile": "Profil bearbeiten",
+    "followers": "Follower",
+    "following": "Gefolgt",
+    "booksRead": "Gelesene Bücher",
+    "streak": "{days}-Tage-Serie",
+    "level": "Level"
+  },
+  "common": {
+    "loading": "Laden...",
+    "error": "Etwas ist schiefgelaufen",
+    "retry": "Erneut versuchen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "confirm": "Bestätigen",
+    "close": "Schließen",
+    "back": "Zurück",
+    "search": "Suchen",
+    "share": "Teilen",
+    "report": "Melden",
+    "offline": "Sie sind offline. Einige Funktionen sind möglicherweise nicht verfügbar.",
+    "darkMode": "Dunkelmodus",
+    "lightMode": "Hellmodus"
+  }
+}

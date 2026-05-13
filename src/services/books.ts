@@ -112,7 +112,17 @@ export async function getBookById(id: string): Promise<BookRow | null> {
   return data ?? null;
 }
 
-export async function buildAffiliateLinks(book: BookRow, country: string = 'US') {
+const LOCALE_TO_COUNTRY: Record<string, string> = {
+  fr: 'FR',
+  de: 'DE',
+  en: 'US',
+};
+
+export async function buildAffiliateLinks(book: BookRow, country: string = 'US', locale?: string) {
+  // If a locale is provided, use it to derive the country (locale takes precedence)
+  if (locale && LOCALE_TO_COUNTRY[locale]) {
+    country = LOCALE_TO_COUNTRY[locale];
+  }
   const supabase = createServiceClient();
   const redis = getRedisClient();
   const cacheKey = REDIS_KEYS.affiliateLink(book.id, country);
