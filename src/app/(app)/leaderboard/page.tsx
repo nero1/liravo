@@ -55,7 +55,7 @@ export default function LeaderboardPage() {
       })
       .catch(() => setEntries([]))
       .finally(() => setLoading(false));
-  }, [type, period]);
+  }, [type, period, locale]);
 
   const typeLabels: Record<LeaderboardType, string> = {
     global: 'Global',

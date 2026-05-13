@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Star, BookOpen, Share2 } from 'lucide-react';
 import { ReviewForm } from '@/components/books/ReviewForm';
 import { ReactionButtons } from '@/components/books/ReactionButtons';
+import { AudibleCTA } from '@/components/books/AudibleCTA';
 
 interface BookPageProps {
   params: { id: string };
@@ -148,6 +149,11 @@ export default async function BookPage({ params }: BookPageProps) {
           <Share2 size={14} />
           Share
         </Link>
+      </div>
+
+      {/* Audible CTA */}
+      <div className="mb-4">
+        <AudibleCTA locale="en" bookTitle={book.title} />
       </div>
 
       {/* Description */}

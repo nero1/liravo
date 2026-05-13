@@ -479,12 +479,49 @@ Nightly cron (`/api/cron/affiliate-health`) checks top 500 books:
 
 Uses `next-intl`. All strings in `messages/{locale}.json`. No hardcoded English strings in components.
 
-Default locale: `en-US`. Phase 2: French, German.
+Default locale: `en`. Supported: `en`, `fr`, `de`.
 
 ### Adding a New Locale
-1. Create `messages/{locale}.json` with all keys
-2. Add the locale to `src/i18n.ts`
-3. Update `affiliate_tags` table for the new country's Amazon tag
+1. Create `messages/{locale}.json` with all keys from `messages/en.json`
+2. Add the locale code to `locales` array in `src/i18n.ts`
+3. Add affiliate store rows to `affiliate_stores` table for the new country (via admin panel or migration)
+4. If the locale is RTL (Arabic, Hebrew, Farsi), add to `RTL_LOCALES` in `src/lib/rtl.ts` — the `<html dir>` attribute is set automatically
+
+### Adding a New Amazon Affiliate Region
+1. Log in to the Admin Panel → Affiliate & Revenue → Add Store
+2. Set `name` to "Amazon {Country}", `country` to the ISO code (e.g., `JP`), `url_template` to the region's Amazon search URL with `{isbn}` and `{tag}` placeholders, `affiliate_tag` to your Amazon Associates tag for that region, `priority` to `1`, `is_active` to `true`
+3. The `/api/affiliate-tags?country=XX` endpoint is cached in Redis for 1 hour and will serve the new tag automatically
+
+### Locale-Aware Affiliate Routing
+`buildAffiliateLinks` in `src/services/books.ts` accepts an optional `locale` parameter. The locale is mapped to a country code (`fr` → `FR`, `de` → `DE`, `en` → `US`). This country code is used to filter the `affiliate_stores` table so the correct regional links are shown to each user.
+
+The standalone `/api/affiliate-tags?country=US|UK|CA|AU|FR|DE` endpoint returns the affiliate tag for that country's primary Amazon store, cached in Redis for 1 hour.
+
+### Audible Regional CTA System
+`<AudibleCTA locale="en|fr|de" bookTitle="..." />` is a client component that:
+- Builds the correct regional Audible URL: `audible.com` (US), `audible.fr` (FR), `audible.de` (DE)
+- Appends the affiliate tag from the appropriate `NEXT_PUBLIC_AUDIBLE_AFFILIATE_{REGION}` env var
+- Logs clicks via `POST /api/books/click` with `{ store: 'audible', locale }`
+- Renders as an amber CTA button with a headphone icon
+
+To add a new Audible region: add the env var `NEXT_PUBLIC_AUDIBLE_AFFILIATE_{REGION}` and extend the `getAudibleUrl` function in `src/components/books/AudibleCTA.tsx`.
+
+### RTL Support Roadmap
+RTL utilities live in `src/lib/rtl.ts`:
+- `RTL_LOCALES`: tuple of RTL locale codes (`ar`, `he`, `fa`)
+- `isRTL(locale)`: returns true if the locale is in `RTL_LOCALES`
+- `getDirection(locale)`: returns `'rtl'` or `'ltr'`
+
+The root layout (`src/app/layout.tsx`) already passes `dir={getDirection(locale)}` to the `<html>` element. To activate Arabic or Hebrew:
+1. Add the locale to `src/i18n.ts`
+2. Create `messages/ar.json` (or `he.json`)
+3. The `dir="rtl"` attribute is applied automatically — no layout changes needed
+4. Review component-level spacing: use logical CSS properties (`ps`, `pe`, `ms`, `me`) via Tailwind's `rtl:` variant or Tailwind v3 logical-properties utilities
+
+### Locale Preference Storage
+Users can switch locale via the `<LocaleSwitcher />` component in the sidebar. On selection:
+1. `PUT /api/users/locale` saves `preferred_locale` to the `users` table
+2. `router.refresh()` reloads the page so next-intl picks up the new locale from the request context
 
 ### Logical CSS Properties
 All components use `margin-inline-start` (not `margin-left`) etc. to support future RTL expansion.

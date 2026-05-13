@@ -6,6 +6,7 @@ import { Home, Compass, Feather, BookOpen, User, Bell, Rss, Shield } from 'lucid
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
+import { LocaleSwitcher } from './LocaleSwitcher';
 
 const NAV_ITEMS = [
   { href: '/', icon: Home, labelKey: 'home' as const },
@@ -65,7 +66,8 @@ export function SideNav({ isModerator = false }: SideNavProps) {
         </Link>
       )}
 
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-1">
+        <LocaleSwitcher />
         <ThemeToggle />
       </div>
     </aside>
