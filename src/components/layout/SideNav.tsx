@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Compass, Feather, BookOpen, User, Bell, Rss } from 'lucide-react';
+import { Home, Compass, Feather, BookOpen, User, Bell, Rss, Shield } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
@@ -17,7 +17,11 @@ const NAV_ITEMS = [
   { href: '/notifications', icon: Bell, labelKey: 'notifications' as const },
 ];
 
-export function SideNav() {
+interface SideNavProps {
+  isModerator?: boolean;
+}
+
+export function SideNav({ isModerator = false }: SideNavProps) {
   const pathname = usePathname();
   const t = useTranslations('nav');
 
@@ -45,6 +49,21 @@ export function SideNav() {
           </Link>
         );
       })}
+
+      {isModerator && (
+        <Link
+          href="/moderation"
+          className={cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+            pathname.startsWith('/moderation')
+              ? 'bg-accent/10 text-accent'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          )}
+        >
+          <Shield size={20} strokeWidth={pathname.startsWith('/moderation') ? 2.5 : 1.75} />
+          Moderation
+        </Link>
+      )}
 
       <div className="mt-auto">
         <ThemeToggle />
