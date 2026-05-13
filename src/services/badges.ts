@@ -99,6 +99,54 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     icon: '🏗️',
     trigger: 'referral',
   },
+  {
+    id: 'first_prompt',
+    name: 'First Prompt',
+    description: 'Completed your first daily writing prompt',
+    xp_reward: 25,
+    icon: '✏️',
+    trigger: 'prompt_submit',
+  },
+  {
+    id: 'writing_streak_7',
+    name: 'Week Wordsmith',
+    description: 'Maintained a 7-day writing streak',
+    xp_reward: 75,
+    icon: '🔥',
+    trigger: 'writing_streak',
+  },
+  {
+    id: 'writing_streak_30',
+    name: 'Monthly Manuscript',
+    description: 'Maintained a 30-day writing streak',
+    xp_reward: 300,
+    icon: '🏆',
+    trigger: 'writing_streak',
+  },
+  {
+    id: 'challenge_finisher',
+    name: 'Challenge Finisher',
+    description: 'Completed your first writing challenge',
+    xp_reward: 100,
+    icon: '🏅',
+    trigger: 'challenge_submit',
+  },
+  {
+    id: 'workshop_veteran',
+    name: 'Workshop Veteran',
+    description: 'Submitted to 10 workshop critiques',
+    xp_reward: 150,
+    icon: '🛠️',
+    trigger: 'workshop_submit',
+  },
+  {
+    id: 'prolific_writer',
+    name: 'Prolific Writer',
+    description: 'Written 10,000 words total across all submissions',
+    xp_reward: 500,
+    icon: '📝',
+    trigger: 'prolific_writer',
+  },
 ];
 
 // user_badges table: id, user_id, badge_id, awarded_at
@@ -255,6 +303,58 @@ export async function checkAndAwardBadges(
           .select('*', { count: 'exact', head: true })
           .eq('referred_by', userId);
         qualifies = (count ?? 0) >= 20;
+        break;
+      }
+      case 'first_prompt': {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count } = await (supabase as any)
+          .from('prompt_submissions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId);
+        qualifies = (count ?? 0) >= 1;
+        break;
+      }
+      case 'writing_streak_7': {
+        qualifies = (profile.reading_streak ?? 0) >= 7;
+        break;
+      }
+      case 'writing_streak_30': {
+        qualifies = (profile.reading_streak ?? 0) >= 30;
+        break;
+      }
+      case 'challenge_finisher': {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count } = await (supabase as any)
+          .from('writing_challenge_entries')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId);
+        qualifies = (count ?? 0) >= 1;
+        break;
+      }
+      case 'workshop_veteran': {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count } = await (supabase as any)
+          .from('workshop_submissions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId);
+        qualifies = (count ?? 0) >= 10;
+        break;
+      }
+      case 'prolific_writer': {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: pSubs } = await (supabase as any)
+          .from('prompt_submissions')
+          .select('word_count')
+          .eq('user_id', userId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: cEntries } = await (supabase as any)
+          .from('writing_challenge_entries')
+          .select('word_count')
+          .eq('user_id', userId);
+        const totalWords =
+          (pSubs ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0) +
+          (cEntries ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0);
+        qualifies = totalWords >= 10000;
         break;
       }
     }
