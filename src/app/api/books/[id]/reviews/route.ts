@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
+import { classifyTone } from '@/lib/tone-classifier';
+import { checkSpam } from '@/lib/spam-detection';
 
 const reviewSchema = z.object({
   star_rating: z.number().int().min(1).max(5),
@@ -54,6 +56,18 @@ export async function POST(
   }
 
   const { star_rating, body, review_type, mood_tags, spoiler_warning } = parsed.data;
+
+  // Check for spam before proceeding
+  const isSpam = await checkSpam(user.id, 'review');
+  if (isSpam) {
+    return NextResponse.json({ error: 'Too many submissions. Please wait before posting again.' }, { status: 429 });
+  }
+
+  // Classify tone; block toxic content
+  const tone = await classifyTone(body);
+  if (tone === 'toxic') {
+    return NextResponse.json({ error: 'Review contains inappropriate content. Please revise.' }, { status: 400 });
+  }
 
   const serviceSupabase = createServiceClient();
 

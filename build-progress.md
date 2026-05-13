@@ -64,3 +64,8 @@ Built the full discovery, gamification, and viral mechanics layer for Liravo. En
 Progress: 45%
 
 ---
+
+---
+[Phase 4][Moderation and Community Trust]
+Built complete moderation infrastructure. Moderator role with Redis-cached permission checks (isModerator/requireModerator). Report queue API with paginated moderator UI (pending/escalated/resolved tabs). Moderator actions: approve, remove (soft-delete), warn (notification), escalate (notify admins) — all logged to audit trail. Community Notes system: user-submitted, moderator-approved notes displayed below content. Tone classifier using DeepSeek AI with Redis caching and neutral fallback — toxic reviews blocked at submission. Redis sliding-window spam detection (10/hour limit) with auto-report creation. Appeal system: users submit appeals, moderators approve/reject from a dedicated queue. Reusable ReportButton component (modal with reason select). Moderation nav link shown only to moderators/admins.
+Progress: 58%
