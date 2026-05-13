@@ -7,6 +7,38 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Discover' };
 
+interface PromotedBook {
+  id: string;
+  title: string;
+  author_name: string;
+  cover_url: string | null;
+}
+
+async function getPromotedBooks(): Promise<PromotedBook[]> {
+  const supabase = createClient();
+  const now = new Date().toISOString();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: listings } = await (supabase as any)
+    .from('promoted_listings')
+    .select('book_id')
+    .eq('placement', 'discover_top')
+    .eq('is_active', true)
+    .lte('start_date', now)
+    .gte('end_date', now)
+    .limit(5);
+
+  if (!listings || listings.length === 0) return [];
+
+  const bookIds = (listings as Array<{ book_id: string }>).map((l) => l.book_id);
+  const { data: books } = await supabase
+    .from('books')
+    .select('id, title, author_name, cover_url')
+    .in('id', bookIds);
+
+  return books ?? [];
+}
+
 interface TrendingBook {
   book_id: string;
   count: number;
@@ -200,9 +232,10 @@ export default async function DiscoverPage() {
     recommendedBooks = await getRecommendedBooks(user.id);
   }
 
-  const [trendingGlobal, trendingNational] = await Promise.all([
+  const [trendingGlobal, trendingNational, promotedBooks] = await Promise.all([
     getTrendingBooks(),
     userCountry ? getTrendingBooks(userCountry) : Promise.resolve([]),
+    getPromotedBooks(),
   ]);
 
   return (
@@ -211,6 +244,47 @@ export default async function DiscoverPage() {
         <h1 className="font-display text-2xl font-bold mb-4">Discover</h1>
         <BookSearch />
       </div>
+
+      {/* Promoted Books */}
+      {promotedBooks.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="font-display text-xl font-bold">Featured</h2>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent">
+              Promoted
+            </span>
+          </div>
+          <div className="grid grid-cols-5 gap-3">
+            {promotedBooks.map((book) => (
+              <Link
+                key={book.id}
+                href={`/book/${book.id}`}
+                className="flex flex-col gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="relative w-full aspect-[2/3] rounded-md overflow-hidden bg-neutral-200 dark:bg-neutral-700 ring-2 ring-accent/30">
+                  {book.cover_url ? (
+                    <Image
+                      src={book.cover_url}
+                      alt={book.title}
+                      fill
+                      className="object-cover"
+                      sizes="120px"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-4xl">📚</div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold leading-tight line-clamp-2">{book.title}</p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-1">
+                    {book.author_name}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Trending This Week */}
       {trendingGlobal.length > 0 && (
