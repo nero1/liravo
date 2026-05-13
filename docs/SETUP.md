@@ -62,6 +62,7 @@ Copy `.env.local.example` to `.env.local` and fill in the values.
 | `PAYSTACK_PUBLIC_KEY` | Paystack public key |
 | `DODOPAYMENTS_SECRET_KEY` | Dodopayments secret key |
 | `DODOPAYMENTS_WEBHOOK_SECRET` | Dodopayments webhook secret |
+| `PAYMENT_WEBHOOK_SECRET` | Shared secret for all payment webhooks (subscriptions, promoted listings) — generated randomly, stored in payment provider dashboard |
 
 ### Cron
 | Variable | Description |
@@ -152,17 +153,38 @@ Copy `.env.local.example` to `.env.local` and fill in the values.
 
 1. Create an account at [paystack.com](https://paystack.com).
 2. In Settings → API Keys & Webhooks, copy your secret and public keys.
-3. Configure a webhook URL: `https://liravo.org/api/webhooks/paystack`.
-4. Copy the webhook secret and set `PAYSTACK_WEBHOOK_SECRET` (add this to your env).
+   - Set `PAYSTACK_SECRET_KEY` (starts with `sk_live_...`)
+   - Set `PAYSTACK_PUBLIC_KEY` (starts with `pk_live_...`)
+3. Configure a webhook URL: `https://liravo.org/api/subscriptions/webhook`
+   - Set header: `x-payment-provider: paystack`
+   - Set header: `x-webhook-secret: <PAYMENT_WEBHOOK_SECRET value>`
+4. Copy the webhook secret and set `PAYMENT_WEBHOOK_SECRET` in your env.
+5. Test with Paystack's webhook simulator in the dashboard.
+
+### Paystack events handled
+| Event | Action |
+|---|---|
+| `subscription.activated` | Sets `is_premium: true` on user, updates subscription to `active` |
+| `subscription.cancelled` | Sets `is_premium: false`, updates subscription to `cancelled` |
 
 ---
 
 ## 9. Dodopayments Setup
 
 1. Create an account at [dodopayments.com](https://dodopayments.com).
-2. Copy the secret key.
-3. Set up a webhook endpoint: `https://liravo.org/api/webhooks/dodopayments`.
-4. Copy the webhook signing secret.
+2. In Dashboard → API Keys, copy the secret key. Set `DODOPAYMENTS_SECRET_KEY`.
+3. Set up a webhook endpoint: `https://liravo.org/api/subscriptions/webhook`
+   - Set header: `x-payment-provider: dodopayments`
+   - Set header: `x-webhook-secret: <PAYMENT_WEBHOOK_SECRET value>`
+4. Copy the webhook signing secret. Set `DODOPAYMENTS_WEBHOOK_SECRET` (for signature verification).
+5. The same `PAYMENT_WEBHOOK_SECRET` is used across both providers for the shared header check.
+
+### Dodopayments events handled
+| Event | Action |
+|---|---|
+| `subscription.activated` | Sets `is_premium: true` on user |
+| `subscription.cancelled` | Sets `is_premium: false` |
+| `payment.completed` (promoted listings webhook) | Activates promoted listing for 30 days |
 
 ---
 
@@ -187,8 +209,13 @@ Vercel Hobby Plan allows only 1 cron trigger per day. Sub-daily jobs use [cron-j
 | Feed pre-compute | `/api/cron/feed` | Every 5 min | Refresh active user feeds |
 | Leaderboard refresh | `/api/cron/leaderboards` | Every hour | Update leaderboard data |
 | Streak check | `/api/cron/streaks` | Daily (midnight UTC) | Process streak freezes |
-| Prompt generation | `/api/cron/prompts` | Weekly | Pre-generate writing prompts |
-| Affiliate health | `/api/cron/affiliate-health` | Daily | Validate top 500 book links |
+| Shelf recommendations | `/api/cron/shelf-recommendations` | Nightly 02:00 UTC | AI shelf recommendations for users |
+| Leaderboard snapshot | `/api/cron/leaderboard-snapshot` | Weekly Sunday 03:00 | Save weekly leaderboard snapshot |
+| Prompt generation | `/api/cron/generate-prompts` | Weekly Sunday 02:00 | AI-generate 7 days of writing prompts |
+| AI writing plans | `/api/cron/ai-writing-plans` | Weekly Monday 04:00 | Personalised AI writing plans for premium users |
+| Affiliate health | `/api/cron/affiliate-health` | Nightly 03:00 UTC | Validate top 500 book links, flag zero-click books |
+| Taste profiles | `/api/cron/taste-profiles` | Daily 05:00 UTC | Refresh AI taste profiles >30 days old (max 50/run) |
+| Email digest | `/api/cron/email-digest` | Weekly Friday 09:00 | Send weekly reading digest to opted-in users |
 
 ---
 

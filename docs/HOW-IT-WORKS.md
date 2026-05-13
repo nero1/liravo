@@ -288,16 +288,49 @@ Eligible users (50+ reviews, account 30+ days, no warnings) can add contextual n
 6. All calculations via Decimal.js
 
 ### Premium Subscription
-1. User initiates via Dodopayments
-2. Webhook confirms subscription start
-3. Feature gates unlocked immediately
+1. User visits `/premium` and clicks an upgrade button (Dodopayments for global, Paystack for Nigeria)
+2. POST to `/api/subscriptions/create` with `{ provider, currency }` creates a `pending` subscription record and returns a checkout URL
+3. User completes payment on the provider's hosted checkout page
+4. Provider calls `/api/subscriptions/webhook` with `x-payment-provider` and `x-webhook-secret` headers
+5. On `subscription.activated`: `is_premium: true` set on `users` table, subscription status updated to `active`
+6. On `subscription.cancelled`: `is_premium: false`, subscription status set to `cancelled`
+7. User can cancel anytime via POST `/api/subscriptions/cancel`
+
+### Premium Features Unlocked
+- Unlimited custom shelves (free tier: 10)
+- Reading statistics dashboard (`/stats`)
+- AI taste profile (`/taste-profile`)
+- AI writing feedback and plans
+- Weekly email digests
+- Premium badge on profile
 
 ### Promoted Listings
-Phase 1: Admin manually activates after payment.
-Phase 7: Webhook triggers automatic activation.
+Previously: Admin manually activated after payment confirmation.
+Phase 7: Fully automated via webhook at `/api/webhooks/promoted-listings`.
+- Payment provider sends `{ event: 'payment.completed', listing_id, user_id }` with webhook secret
+- System sets `status: 'active'`, `start_date: now`, `end_date: now + 30 days`
+- User receives an in-app notification
 
-### Payouts
-User initiates withdrawal from earnings dashboard once balance ≥ $10. Processed via Dodopayments or Paystack.
+### Earnings Dashboard
+Every user (not just creators) has an `/earnings` page showing:
+- **Tips received**: Sum of `creator_amount` from completed tips
+- **Referral commissions**: 10% of platform's gross from referred users' paid transactions, stored in `referral_commissions` table
+- **Event revenue**: Organiser cut from paid events/workshops
+
+### Payout Flow
+1. User visits `/earnings` and clicks "Request Payout"
+2. POST to `/api/earnings/request-payout` creates a `payout_requests` record with `status: 'pending'`
+3. Admin processes payouts manually via the admin panel or automated scripts
+4. Minimum payout: $10.00 (enforced in UI; future: enforce server-side)
+5. Paid via Dodopayments (global) or Paystack (Nigeria)
+
+### Referral Commission Accounting
+- Referral code is a 12-digit numeric string stored on `users.referral_code`
+- When a referred user (`referred_by` FK) completes a paid transaction:
+  1. Platform takes its gross cut (10% of tips, 100% of subscription revenue)
+  2. 10% of that gross cut is credited to the referrer's `referral_commissions` balance
+  3. The commission is inserted atomically with the parent transaction
+- Commissions are non-reversible unless the parent transaction is refunded
 
 ---
 
@@ -328,9 +361,14 @@ User initiates withdrawal from earnings dashboard once balance ≥ $10. Processe
 | Feed pre-compute | Every 5 min | cron-job.org | Refresh active user feeds |
 | Leaderboard refresh | Every hour | cron-job.org | Update leaderboard snapshots |
 | Daily streak check | 00:00 UTC | Vercel Cron | Process streak freezes and XP |
-| Weekly prompts | Sunday 02:00 | cron-job.org | AI-generate writing prompts |
+| Shelf recommendations | Nightly 02:00 | cron-job.org | AI shelf recommendations |
+| Leaderboard snapshot | Sunday 03:00 | cron-job.org | Save weekly leaderboard snapshot |
+| Prompt generation | Sunday 02:00 | cron-job.org | AI-generate 7 days of writing prompts |
+| AI writing plans | Monday 04:00 | cron-job.org | Personalised plans for premium users |
+| Affiliate health | Nightly 03:00 | cron-job.org | Validate top 500 book links, flag gaps |
+| Taste profiles | Daily 05:00 | cron-job.org | Refresh stale AI taste profiles (max 50/run) |
+| Email digest | Friday 09:00 | cron-job.org | Weekly reading digest emails |
 | Monthly Wrapped | Dec 1 | cron-job.org | Generate Reading Wrapped data |
-| Affiliate health | 03:00 UTC | cron-job.org | Validate top 500 book links |
 | DB pruning | 04:00 UTC | cron-job.org | Clear old notifications, stale caches |
 
 All external cron jobs hit `/api/cron/{name}` with `x-cron-secret: $CRON_SECRET` header.
@@ -392,21 +430,48 @@ security_events (audit log)
 
 ## Admin Panel
 
-Accessible at `/admin`. `is_admin` verified against DB on every request.
+Accessible at `/admin`. `is_admin` verified against DB on every request (never trusted from session).
 
-Sections:
-- **Dashboard**: DAU/WAU/MAU, revenue summary, affiliate clicks, system health
-- **User Management**: search, suspend, ban, grant roles
-- **Moderation Queue**: flagged content, moderator actions
-- **Auth Providers**: toggle Google/Telegram on/off
-- **Book Catalogue**: add/edit books, manage affiliate links
-- **Promoted Listings**: activate/deactivate, view CTR stats
-- **Seasonal Events**: create and manage community events
-- **Writing Challenges**: manage prompts and challenges
-- **Theme Configuration**: light/dark/custom themes
-- **Feature Flags**: toggle features without deployment
-- **Affiliate & Revenue**: store registry, country tags, click reports
-- **System & Cron Status**: last run times, manual triggers
+### Dashboard (`/admin`)
+Stats cards: total users, books, reviews, reports pending, revenue this month (tips + subscriptions).
+Quick links to all admin sections.
+
+### User Management (`/admin/users`)
+- Paginated table: username, email, user types, is_premium, is_moderator, is_admin, created_at
+- Search by username
+- Per-row actions: Grant/Revoke Moderator, Grant/Revoke Premium, Suspend/Unsuspend
+- API: `GET /api/admin/users` (paginated, searchable), `PATCH /api/admin/users` (update user flags)
+- Uses service role key to bypass RLS
+
+### Book Management (`/admin/books`)
+- Top 100 books by have-read count with cover, title, author, source ID, affiliate click count
+- "Refresh Links" button triggers affiliate link regeneration per book
+
+### Feature Flags (`/admin/feature-flags`)
+- Lists all feature flags from DB: name, enabled toggle, description, last updated
+- Toggle: updates DB + immediately deletes Redis cache key (`feature_flag:{name}`)
+- API: `GET /api/admin/feature-flags`, `PATCH /api/admin/feature-flags`
+
+### Affiliate Store Registry (`/admin/affiliate-stores`)
+- CRUD for affiliate stores: name, countries, URL template, affiliate tag, priority, active, non-affiliate
+- Add new store inline, edit existing store inline
+- API: `GET`, `POST`, `PATCH /api/admin/affiliate-stores`
+
+### Seed Content (`/admin/seed`)
+- Create the `@liravo_editors` system account (idempotent — returns 409 if exists)
+- Trigger weekly writing prompt generation
+- API: `POST /api/admin/seed/editors-account`
+
+### Reports, Promoted Listings, Seasonal Events
+- Moderation queue with approve/remove/warn/escalate actions
+- Promote/deactivate listings, view CTR
+- Create/manage community events
+
+### Affiliate Health Monitoring
+Nightly cron (`/api/cron/affiliate-health`) checks top 500 books:
+- Flags books with zero affiliate clicks to `affiliate_health_log` table
+- Report: `{ checked: N, flagged: M }`
+- Helps prioritise affiliate partnership outreach for popular books
 
 ---
 

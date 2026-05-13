@@ -10,9 +10,10 @@ const FREE_SHELF_LIMIT = 10;
 interface NewShelfFormProps {
   userId: string;
   customShelfCount: number;
+  isPremium?: boolean;
 }
 
-export function NewShelfForm({ userId, customShelfCount }: NewShelfFormProps) {
+export function NewShelfForm({ userId, customShelfCount, isPremium = false }: NewShelfFormProps) {
   const router = useRouter();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -20,7 +21,8 @@ export function NewShelfForm({ userId, customShelfCount }: NewShelfFormProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const atLimit = customShelfCount >= FREE_SHELF_LIMIT;
+  // Premium users have unlimited shelves
+  const atLimit = !isPremium && customShelfCount >= FREE_SHELF_LIMIT;
 
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
