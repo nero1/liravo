@@ -2,9 +2,10 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import Decimal from 'decimal.js';
-import { checkAuthRateLimit } from '@/lib/rate-limit';
+import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { claimIdempotency } from '@/lib/idempotency';
 import crypto from 'crypto';
+import { recordMetric } from '@/lib/metrics';
 
 const bodySchema = z.object({
   provider: z.enum(['dodopayments', 'paystack']),
@@ -16,14 +17,18 @@ const PRICE_NGN = new Decimal('7500');
 
 export async function POST(req: Request) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-  const rate = await checkAuthRateLimit(ip);
-  if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const rate = await checkCriticalRateLimit(ip);
+  if (!rate.allowed) {
+    recordMetric('rate_limit_block', { route: 'src/app/api/subscriptions/create/route.ts' }, 'warn');
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
 
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
+    recordMetric('auth_unauthorized', { route: 'src/app/api/subscriptions/create/route.ts' }, 'warn');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -90,5 +95,6 @@ export async function POST(req: Request) {
     return NextResponse.redirect(checkoutUrl, 303);
   }
 
+  recordMetric('subscription_create_success', { route: 'src/app/api/subscriptions/create/route.ts', provider, currency });
   return NextResponse.json({ checkoutUrl }, { status: 201 });
 }

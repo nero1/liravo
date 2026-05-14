@@ -1,9 +1,10 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { detectReplay, isFreshTimestamp, normalizeProviderSignature, verifyHmacSha256 } from '@/lib/webhook-security';
+import { detectReplay, verifyProviderSignature } from '@/lib/webhook-security';
 import { withExponentialBackoff } from '@/lib/retry';
 import { withRedisLock } from '@/lib/locks';
+import { recordMetric } from '@/lib/metrics';
 
 const webhookSchema = z.object({
   event: z.enum(['subscription.activated', 'subscription.cancelled']),
@@ -14,17 +15,13 @@ const webhookSchema = z.object({
 
 export async function POST(req: Request) {
   const provider = req.headers.get('x-payment-provider');
-  const signature = req.headers.get('x-webhook-signature');
+  const signature = req.headers.get('x-webhook-signature') ?? req.headers.get('x-paystack-signature');
   const timestamp = req.headers.get('x-webhook-timestamp');
   const expectedSecret = process.env.PAYMENT_WEBHOOK_SECRET;
 
-  if (!expectedSecret || !signature || !timestamp) {
+  if (!expectedSecret || !signature) {
+    recordMetric('auth_unauthorized', { route: 'src/app/api/subscriptions/webhook/route.ts' }, 'warn');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Bugfix: reject stale webhook deliveries to limit replay window.
-  if (!isFreshTimestamp(timestamp)) {
-    return NextResponse.json({ error: 'Stale webhook timestamp' }, { status: 401 });
   }
 
   if (!provider || !['dodopayments', 'paystack'].includes(provider)) {
@@ -32,11 +29,13 @@ export async function POST(req: Request) {
   }
 
   const rawBody = await req.text();
-  const normalizedSig = normalizeProviderSignature(provider, signature);
-  if (!normalizedSig) {
-    return NextResponse.json({ error: 'Unsupported signature format' }, { status: 400 });
-  }
-  const validSig = verifyHmacSha256({ body: rawBody, secret: expectedSecret, signature: normalizedSig, timestamp });
+  const validSig = verifyProviderSignature({
+    provider,
+    body: rawBody,
+    secret: expectedSecret,
+    signature,
+    timestamp,
+  });
   if (!validSig) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
@@ -160,5 +159,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Webhook is already being processed' }, { status: 409 });
   }
 
+  recordMetric('subscription_webhook_success', { route: 'src/app/api/subscriptions/webhook/route.ts' });
   return result;
 }

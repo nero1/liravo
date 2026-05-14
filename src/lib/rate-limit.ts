@@ -1,7 +1,7 @@
 import { getRedisClient, REDIS_KEYS } from '@/lib/redis';
 import { RATE_LIMITS } from '@/constants/config';
 
-export async function checkAuthRateLimit(ip: string): Promise<{
+async function checkRateLimit(ip: string, failOpen: boolean): Promise<{
   allowed: boolean;
   remaining: number;
   resetAt: number;
@@ -33,7 +33,19 @@ export async function checkAuthRateLimit(ip: string): Promise<{
     const ttl = await redis.ttl(key);
     return { allowed: true, remaining, resetAt: Date.now() + ttl * 1000 };
   } catch {
-    // Bugfix: fail-open fallback avoids total auth outage when Redis is down.
-    return { allowed: true, remaining: RATE_LIMITS.AUTH_MAX_ATTEMPTS, resetAt: Date.now() + 60_000 };
+    if (failOpen) {
+      // Bugfix: fail-open fallback avoids total auth outage when Redis is down.
+      return { allowed: true, remaining: RATE_LIMITS.AUTH_MAX_ATTEMPTS, resetAt: Date.now() + 60_000 };
+    }
+    // Bugfix: fail-closed on high-risk money endpoints when limiter backend is unavailable.
+    return { allowed: false, remaining: 0, resetAt: Date.now() + 60_000 };
   }
+}
+
+export async function checkAuthRateLimit(ip: string) {
+  return checkRateLimit(ip, true);
+}
+
+export async function checkCriticalRateLimit(ip: string) {
+  return checkRateLimit(ip, false);
 }
