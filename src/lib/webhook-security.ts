@@ -24,6 +24,22 @@ export function verifyHmacSha256({
   return safeCompare(digest, signature);
 }
 
+export function normalizeProviderSignature(provider: string, signature: string): string | null {
+  // Bugfix: provider-aware signature canonicalization to prevent false negatives/bypass via prefixed formats.
+  if (provider === 'paystack') {
+    // Paystack commonly sends raw hex in x-paystack-signature.
+    return signature.trim().toLowerCase();
+  }
+  if (provider === 'dodopayments') {
+    // Accept "sha256=<hex>" and "v1=<hex>" prefixes used by many webhook providers.
+    const normalized = signature.trim().toLowerCase();
+    const parts = normalized.split('=');
+    if (parts.length === 2 && ['sha256', 'v1'].includes(parts[0])) return parts[1];
+    return normalized;
+  }
+  return null;
+}
+
 export function isFreshTimestamp(timestamp: string, toleranceSeconds = 300): boolean {
   const parsed = Number(timestamp);
   if (!Number.isFinite(parsed)) return false;
@@ -34,8 +50,10 @@ export function isFreshTimestamp(timestamp: string, toleranceSeconds = 300): boo
 export async function detectReplay(eventId: string, ttlSeconds = 60 * 30): Promise<boolean> {
   const redis = getRedisClient();
   const replayKey = `webhook:event:${eventId}`;
-  const inserted = await redis.setNx(replayKey, '1');
+  const inserted = redis.setNxEx
+    ? await redis.setNxEx(replayKey, '1', ttlSeconds)
+    : await redis.setNx(replayKey, '1');
   if (!inserted) return true;
-  await redis.expire(replayKey, ttlSeconds);
+  if (!redis.setNxEx) await redis.expire(replayKey, ttlSeconds);
   return false;
 }

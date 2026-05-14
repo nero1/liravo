@@ -1,7 +1,8 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { detectReplay, isFreshTimestamp, verifyHmacSha256 } from '@/lib/webhook-security';
+import { detectReplay, isFreshTimestamp, normalizeProviderSignature, verifyHmacSha256 } from '@/lib/webhook-security';
+import { withExponentialBackoff } from '@/lib/retry';
 import { withRedisLock } from '@/lib/locks';
 
 const webhookSchema = z.object({
@@ -31,7 +32,11 @@ export async function POST(req: Request) {
   }
 
   const rawBody = await req.text();
-  const validSig = verifyHmacSha256({ body: rawBody, secret: expectedSecret, signature, timestamp });
+  const normalizedSig = normalizeProviderSignature(provider, signature);
+  if (!normalizedSig) {
+    return NextResponse.json({ error: 'Unsupported signature format' }, { status: 400 });
+  }
+  const validSig = verifyHmacSha256({ body: rawBody, secret: expectedSecret, signature: normalizedSig, timestamp });
   if (!validSig) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
@@ -51,20 +56,38 @@ export async function POST(req: Request) {
   const { event, user_id, subscription_id, event_id } = parsed.data;
 
   // Bugfix: idempotency/replay guard to prevent double credit/debit of premium status.
-  if (await detectReplay(event_id)) {
-    return NextResponse.json({ received: true, replay: true });
+  try {
+    if (await detectReplay(`${provider}:${event_id}`)) {
+      return NextResponse.json({ received: true, replay: true });
+    }
+  } catch {
+    // Bugfix: fail closed when replay protection backend is unavailable.
+    return NextResponse.json({ error: 'Replay protection unavailable' }, { status: 503 });
   }
 
   const result = await withRedisLock(`subscription-webhook:${user_id}`, 10, async () => {
     const supabase = createServiceClient();
 
     // Bugfix: prefer single transactional DB routine when deployed.
-    const { error: rpcError } = await supabase.rpc('process_subscription_webhook' as never, {
-      p_event: event,
-      p_user_id: user_id,
-      p_subscription_id: subscription_id ?? null,
-    } as never);
+    const { error: rpcError } = await withExponentialBackoff(
+      async () => supabase.rpc('process_subscription_webhook' as never, {
+        p_event: event,
+        p_user_id: user_id,
+        p_subscription_id: subscription_id ?? null,
+      } as never),
+      { retries: 2, baseDelayMs: 100 }
+    );
     if (!rpcError) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('financial_audit_log').insert({
+        target_user_id: user_id,
+        action: `subscription_${event}`,
+        provider,
+        provider_event_id: event_id,
+        correlation_id: req.headers.get('x-request-id') ?? null,
+        metadata: { subscription_id, mode: 'rpc' },
+      });
+      console.info('subscription_webhook_processed', { provider, event, user_id, event_id, mode: 'rpc' });
       return NextResponse.json({ received: true, mode: 'rpc' });
     }
 
@@ -120,6 +143,16 @@ export async function POST(req: Request) {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('financial_audit_log').insert({
+      target_user_id: user_id,
+      action: `subscription_${event}`,
+      provider,
+      provider_event_id: event_id,
+      correlation_id: req.headers.get('x-request-id') ?? null,
+      metadata: { subscription_id, mode: 'fallback' },
+    });
+    console.info('subscription_webhook_processed', { provider, event, user_id, event_id, mode: 'fallback' });
     return NextResponse.json({ received: true });
   });
 

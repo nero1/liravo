@@ -9,6 +9,7 @@ export interface RedisClient {
   expire(key: string, seconds: number): Promise<unknown>;
   ttl(key: string): Promise<number>;
   setNx(key: string, value: string): Promise<boolean | number>;
+  setNxEx?(key: string, value: string, ttlSeconds: number): Promise<boolean>;
 }
 
 let _client: RedisClient | null = null;
@@ -27,6 +28,10 @@ function createIoRedisClient(): RedisClient {
     async expire(key, seconds) { return redis.expire(key, seconds); },
     async ttl(key) { return redis.ttl(key); },
     async setNx(key, value) { return redis.setnx(key, value); },
+    async setNxEx(key, value, ttlSeconds) {
+      const result = await redis.set(key, value, 'EX', ttlSeconds, 'NX');
+      return result === 'OK';
+    },
   };
 }
 
@@ -51,6 +56,10 @@ function createUpstashClient(): RedisClient {
     async ttl(key) { return redis.ttl(key); },
     async setNx(key, value) {
       const result = await redis.set(key, value, { nx: true });
+      return result !== null;
+    },
+    async setNxEx(key, value, ttlSeconds) {
+      const result = await redis.set(key, value, { nx: true, ex: ttlSeconds });
       return result !== null;
     },
   };
