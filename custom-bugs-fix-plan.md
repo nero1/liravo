@@ -1,35 +1,51 @@
 # Liravo Bug Fix Plan
-Date/Time: May 14, 2026 04:05 AM UTC
+Date/Time: May 14, 2026 04:35 AM UTC
 
 ## Phase 1 — Financial Integrity & Idempotency (Highest Priority)
-1. Implement strict money validators (decimal precision, min/max thresholds, non-zero) for payout and tip endpoints.
-2. Add mandatory `Idempotency-Key` handling for tip creation and payout requests; persist keyed response snapshots.
-3. Move critical financial mutations into transactional SQL RPCs with explicit failure rollback semantics.
-4. Introduce append-only financial ledger + audit table with correlation IDs and actor/source metadata.
+1. Add strict monetary validation and thresholds for payout creation.
+2. Enforce idempotency keys for tip creation and all payment-intent endpoints.
+3. Move financial writes into transactional boundaries (DB transaction or RPC).
+4. Add immutable financial audit trail with correlation IDs.
+5. Add DB uniqueness constraints for webhook/provider event IDs.
 
-## Phase 2 — Webhook Hardening
-5. Add DB uniqueness constraints for webhook event IDs (`provider + event_id`) and process status state-machine.
-6. Replace generic signature checks with provider-specific canonical verification and signature-version support.
-7. Change webhook replay/lock behavior to fail-closed on dependency outage for critical payment events.
+## Phase 2 — Security Hardening
+6. Harden webhook signature verification to exact provider spec (version/timestamp/canonical payload).
+7. Fail closed on replay-check dependency failure for webhook processing.
+8. Strengthen CSRF enforcement for mutating routes with Origin + Referer/Sec-Fetch-Site policy.
+9. Add endpoint-specific rate limiting for payment and write-heavy routes.
+10. Restrict content-type/body-size parsing policies on sensitive endpoints.
 
-## Phase 3 — Concurrency, Atomic Locks, and Retry Safety
-8. Refactor Redis lock to atomic NX+EX acquisition and guarded release via Lua script.
-9. Replace `Math.random()` lock token with CSPRNG (`crypto.randomUUID()`), and add lock contention metrics.
-10. Ensure retry policies (exponential backoff + jitter + max attempts) are consistent across payment/notification workers.
+## Phase 3 — Concurrency, Resilience, and Scalability
+11. Replace non-atomic locking logic with atomic distributed lock primitives.
+12. Replace weak lock token generation with cryptographic randomness.
+13. Move synchronous side effects (notifications/XP/etc.) to outbox/queue workers.
+14. Implement retry with exponential backoff + jitter and max-attempt governance.
+15. Add thundering-herd mitigation (bounded worker concurrency, adaptive backpressure).
 
-## Phase 4 — Security & Abuse Resistance
-11. Strengthen CSRF checks for mutating cookie-auth APIs using Origin + Referer/Sec-Fetch-Site enforcement.
-12. Add per-route high-risk rate limits (tips, payouts, subscription create/webhook) with 429 response standards.
-13. Enforce request body size/content-type policies to reduce parser abuse and malformed request classes.
+## Phase 4 — Testing & Quality Gates
+16. Convert console-style verification scripts into formal Vitest suites.
+17. Add `npm test` script and enforce test pass in CI.
+18. Add tests for idempotency replay, duplicate webhook events, and transaction rollback safety.
+19. Add adversarial tests for CSRF, rate limit bypass, malformed payloads, and injection attempts.
+20. Add load/concurrency test scenarios for high-risk write paths.
 
-## Phase 5 — Scalability/Observability
-14. Introduce queue/outbox for non-critical side effects (notification, XP) with retry workers.
-15. Add structured logging + tracing for financial routes and webhooks; emit counters for dedupe hits, lock waits, retries.
-16. Add load tests for concurrent tip/payment flows and chaos tests for Redis/Supabase partial outages.
+## Phase 5 — Monitoring & Operations
+21. Instrument structured metrics for financial route success/failure/retry/replay.
+22. Add alerting on webhook replay spikes, payout anomalies, and lock-staleness.
+23. Add dashboards for transaction latency/error rate and queue depth.
+24. Define incident runbooks and reconciliation procedures for payment disputes.
 
-## Phase 6 — Verification & Release Gating
-17. Add integration tests for idempotency replay, duplicate webhook delivery, and transaction rollback behavior.
-18. Add security tests for CSRF bypass attempts and signature forgery scenarios.
-19. Define SLOs (error rate, p95 latency, duplicate event rate) and block release if thresholds regress.
+## Recommended Execution Order
+- Week 1: Phase 1
+- Week 2: Phase 2 + critical Phase 3 items (11–13)
+- Week 3: Remaining Phase 3 + Phase 4
+- Week 4: Phase 5 and readiness verification
 
-Footer/Signature: Generated on May 14, 2026 04:05 AM UTC
+## Exit Criteria
+- No duplicate financial records under retry/replay tests.
+- All payment/webhook/payout routes covered by strict validation + rate limits.
+- Queue/offline side effects resilient under dependency failures.
+- CI executes deterministic tests with meaningful pass/fail outcomes.
+- Monitoring and alerts in place for key financial integrity controls.
+
+Footer/Signature: Generated on May 14, 2026 04:35 AM UTC

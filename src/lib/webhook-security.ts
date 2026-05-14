@@ -25,19 +25,49 @@ export function verifyHmacSha256({
 }
 
 export function normalizeProviderSignature(provider: string, signature: string): string | null {
-  // Bugfix: provider-aware signature canonicalization to prevent false negatives/bypass via prefixed formats.
   if (provider === 'paystack') {
-    // Paystack commonly sends raw hex in x-paystack-signature.
     return signature.trim().toLowerCase();
   }
   if (provider === 'dodopayments') {
-    // Accept "sha256=<hex>" and "v1=<hex>" prefixes used by many webhook providers.
     const normalized = signature.trim().toLowerCase();
     const parts = normalized.split('=');
     if (parts.length === 2 && ['sha256', 'v1'].includes(parts[0])) return parts[1];
     return normalized;
   }
   return null;
+}
+
+export function verifyProviderSignature(params: {
+  provider: string;
+  body: string;
+  secret: string;
+  signature: string;
+  timestamp?: string | null;
+}): boolean {
+  const normalizedSignature = normalizeProviderSignature(params.provider, params.signature);
+  if (!normalizedSignature) return false;
+
+  if (params.provider === 'dodopayments') {
+    // Bugfix: enforce timestamp-bound signatures for dodo-style canonical payloads.
+    if (!params.timestamp || !isFreshTimestamp(params.timestamp)) return false;
+    return verifyHmacSha256({
+      body: params.body,
+      secret: params.secret,
+      signature: normalizedSignature,
+      timestamp: params.timestamp,
+    });
+  }
+
+  if (params.provider === 'paystack') {
+    // Bugfix: paystack verification uses raw request body without timestamp prefix.
+    return verifyHmacSha256({
+      body: params.body,
+      secret: params.secret,
+      signature: normalizedSignature,
+    });
+  }
+
+  return false;
 }
 
 export function isFreshTimestamp(timestamp: string, toleranceSeconds = 300): boolean {

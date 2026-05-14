@@ -3,8 +3,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import Decimal from 'decimal.js';
 import { claimIdempotency } from '@/lib/idempotency';
-import { checkAuthRateLimit } from '@/lib/rate-limit';
+import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import crypto from 'crypto';
+import { recordMetric } from '@/lib/metrics';
 
 const bodySchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
@@ -22,14 +23,18 @@ export async function POST(req: Request) {
   }
 
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-  const rate = await checkAuthRateLimit(ip);
-  if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const rate = await checkCriticalRateLimit(ip);
+  if (!rate.allowed) {
+    recordMetric('rate_limit_block', { route: 'src/app/api/earnings/request-payout/route.ts' }, 'warn');
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
 
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
+    recordMetric('auth_unauthorized', { route: 'src/app/api/earnings/request-payout/route.ts' }, 'warn');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -94,5 +99,6 @@ export async function POST(req: Request) {
     });
   }
 
+  recordMetric('payout_request_success', { route: 'src/app/api/earnings/request-payout/route.ts', amount: amount.toFixed(2) });
   return NextResponse.json({ requested: true }, { status: 201 });
 }
