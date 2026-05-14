@@ -14,7 +14,12 @@ export async function middleware(request: NextRequest) {
     && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)
   ) {
     const requestOrigin = request.headers.get('origin');
-    if (requestOrigin && requestOrigin !== origin) {
+    const referer = request.headers.get('referer');
+    const secFetchSite = request.headers.get('sec-fetch-site');
+    const trustedReferer = referer?.startsWith(origin) ?? false;
+    const trustedFetchSite = secFetchSite === 'same-origin' || secFetchSite === 'same-site';
+    // Bugfix: reject missing-origin mutating requests unless other browser trust headers prove same-site.
+    if ((requestOrigin && requestOrigin !== origin) || (!requestOrigin && !trustedReferer && !trustedFetchSite)) {
       return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 });
     }
   }
