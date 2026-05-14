@@ -4,6 +4,20 @@ import type { Database } from '@/types/database';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });
+  const { pathname, origin } = request.nextUrl;
+
+  // Bugfix: defense-in-depth CSRF guard for mutating API routes using cookie auth.
+  if (
+    pathname.startsWith('/api/')
+    && !pathname.startsWith('/api/webhooks/')
+    && !pathname.startsWith('/api/cron/')
+    && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)
+  ) {
+    const requestOrigin = request.headers.get('origin');
+    if (requestOrigin && requestOrigin !== origin) {
+      return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 });
+    }
+  }
 
   const supabase = createServerClient<Database, 'public'>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,8 +42,6 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const { pathname } = request.nextUrl;
-
   // Protected routes require authentication
   const protectedPaths = ['/profile', '/shelf', '/discover', '/write'];
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));

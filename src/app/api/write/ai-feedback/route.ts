@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getRedisClient } from '@/lib/redis';
 import { AI_MODELS } from '@/constants/ai';
 import crypto from 'crypto';
+import { withExponentialBackoff } from '@/lib/retry';
 
 const FeedbackSchema = z.object({
   text: z.string().min(10).max(10000),
@@ -21,18 +22,21 @@ async function callDeepSeek(prompt: string, text: string): Promise<string | null
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return null;
 
-  const res = await fetch('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: AI_MODELS.DEEPSEEK_MODEL,
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: text },
-      ],
-      max_tokens: 800,
+  const res = await withExponentialBackoff(
+    async () => fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: AI_MODELS.DEEPSEEK_MODEL,
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: text },
+        ],
+        max_tokens: 800,
+      }),
     }),
-  });
+    { retries: 2 }
+  );
 
   if (!res.ok) return null;
   const data = await res.json();
@@ -43,16 +47,19 @@ async function callGemini(prompt: string, text: string): Promise<string | null> 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${prompt}\n\n${text}` }] }],
-        generationConfig: { maxOutputTokens: 800 },
-      }),
-    }
+  const res = await withExponentialBackoff(
+    async () => fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${prompt}\n\n${text}` }] }],
+          generationConfig: { maxOutputTokens: 800 },
+        }),
+      }
+    ),
+    { retries: 2 }
   );
 
   if (!res.ok) return null;

@@ -3,6 +3,8 @@ import { getRedisClient } from '@/lib/redis';
 import { AI_MODELS } from '@/constants/ai';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { withExponentialBackoff } from '@/lib/retry';
+import { withRedisLock } from '@/lib/locks';
 
 const QuerySchema = z.object({
   userId: z.string().uuid().optional(),
@@ -44,18 +46,21 @@ async function callDeepSeek(prompt: string): Promise<Recommendation[]> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error('DeepSeek API key not configured');
 
-  const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: AI_MODELS.DEEPSEEK_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
+  const response = await withExponentialBackoff(
+    async () => fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: AI_MODELS.DEEPSEEK_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+      }),
     }),
-  });
+    { retries: 2 }
+  );
 
   if (!response.ok) throw new Error(`DeepSeek API error: ${response.status}`);
 
@@ -68,15 +73,18 @@ async function callGemini(prompt: string): Promise<Recommendation[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('Gemini API key not configured');
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-      }),
-    }
+  const response = await withExponentialBackoff(
+    async () => fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
+      }
+    ),
+    { retries: 2 }
   );
 
   if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
@@ -147,28 +155,36 @@ export async function GET(request: NextRequest) {
 Example format:
 [{"title": "Book Name", "author": "Author Name", "reason": "Why this book fits"}]`;
 
-  let recommendations: Recommendation[] = [];
-
   try {
-    const circuitOpen = await isCircuitOpen();
-    if (circuitOpen) {
-      // Use Gemini as fallback
-      recommendations = await callGemini(prompt);
-    } else {
-      try {
-        recommendations = await callDeepSeek(prompt);
-      } catch {
-        await recordDeepSeekFailure();
-        // Fallback to Gemini
+    const result = await withRedisLock(`ai-reco:${cacheKey}`, 10, async () => {
+      let recommendations: Recommendation[] = [];
+      const circuitOpen = await isCircuitOpen();
+      if (circuitOpen) {
+        // Use Gemini as fallback
         recommendations = await callGemini(prompt);
+      } else {
+        try {
+          recommendations = await callDeepSeek(prompt);
+        } catch {
+          await recordDeepSeekFailure();
+          // Fallback to Gemini
+          recommendations = await callGemini(prompt);
+        }
       }
-    }
 
-    if (recommendations.length > 0) {
-      await redis.set(cacheKey, JSON.stringify(recommendations), { ex: CACHE_TTL_SECONDS });
-    }
+      if (recommendations.length > 0) {
+        await redis.set(cacheKey, JSON.stringify(recommendations), { ex: CACHE_TTL_SECONDS });
+      }
+      return NextResponse.json({ recommendations });
+    });
 
-    return NextResponse.json({ recommendations });
+    if (!result) {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      const secondRead = await redis.get(cacheKey);
+      if (secondRead) return NextResponse.json({ recommendations: JSON.parse(secondRead) as Recommendation[], cached: true });
+      return NextResponse.json({ error: 'Recommendation generation in progress' }, { status: 409 });
+    }
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(

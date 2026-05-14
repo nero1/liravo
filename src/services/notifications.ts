@@ -19,7 +19,7 @@ export async function createNotification(params: {
   message: string;
 }) {
   const supabase = createServiceClient();
-  await supabase.from('notifications').insert({
+  const { error } = await supabase.from('notifications').insert({
     user_id: params.userId,
     type: params.type,
     actor_id: params.actorId ?? null,
@@ -27,13 +27,18 @@ export async function createNotification(params: {
     entity_id: params.entityId ?? null,
     message: params.message,
   });
+
+  // Bugfix: surface write failures instead of silently swallowing them.
+  if (error) throw new Error(`createNotification failed: ${error.message}`);
 }
 
 export async function markAllRead(userId: string) {
   const supabase = createServiceClient();
-  await supabase
+  const { error } = await supabase
     .from('notifications')
     .update({ is_read: true })
     .eq('user_id', userId)
     .eq('is_read', false);
+
+  if (error) throw new Error(`markAllRead failed: ${error.message}`);
 }
