@@ -52,6 +52,9 @@ export const XP_CONFIG = {
   STREAK_30_DAY: 200,
   FOLLOW_USER: 2,
   RECEIVE_FOLLOWER: 5,
+  // Bugfix: use review-like specific XP events instead of overloading unrelated actions.
+  REVIEW_LIKE_GIVEN: 2,
+  REVIEW_LIKE_RECEIVED: 5,
   SUBMIT_WRITING_PROMPT: 15,
 } as const;
 

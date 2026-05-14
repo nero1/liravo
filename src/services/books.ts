@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient, REDIS_KEYS, REDIS_TTL } from '@/lib/redis';
 import type { BookRow } from '@/types/database';
+import { withExponentialBackoff } from '@/lib/retry';
 
 interface GoogleBooksVolume {
   id: string;
@@ -29,7 +30,10 @@ export async function searchGoogleBooks(query: string, maxResults = 10): Promise
   url.searchParams.set('printType', 'books');
   if (apiKey) url.searchParams.set('key', apiKey);
 
-  const res = await fetch(url.toString(), { next: { revalidate: 3600 } });
+  const res = await withExponentialBackoff(
+    async () => fetch(url.toString(), { next: { revalidate: 3600 } }),
+    { retries: 2 }
+  );
   if (!res.ok) return [];
   const data = await res.json();
   return data.items ?? [];
@@ -63,6 +67,7 @@ export function googleVolumeToBookData(volume: GoogleBooksVolume) {
 export async function getOrCreateBook(googleBooksId: string): Promise<BookRow | null> {
   const supabase = createServiceClient();
   const redis = getRedisClient();
+  const lockKey = `lock:getOrCreateBook:${googleBooksId}`;
 
   // Check DB first
   const { data: existing } = await supabase
@@ -76,10 +81,25 @@ export async function getOrCreateBook(googleBooksId: string): Promise<BookRow | 
     return existing;
   }
 
+  // Bugfix: prevent thundering herd by briefly locking concurrent misses per googleBooksId.
+  const lockAcquired = await redis.setNx(lockKey, '1');
+  if (!lockAcquired) {
+    // Another request is inflight; retry DB fetch after short wait.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const { data: secondTry } = await supabase
+      .from('books')
+      .select('*')
+      .eq('google_books_id', googleBooksId)
+      .single();
+    if (secondTry) return secondTry;
+  } else {
+    await redis.expire(lockKey, 5);
+  }
+
   // Fetch from Google Books and cache
   const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
   const url = `https://www.googleapis.com/books/v1/volumes/${googleBooksId}${apiKey ? `?key=${apiKey}` : ''}`;
-  const res = await fetch(url);
+  const res = await withExponentialBackoff(async () => fetch(url), { retries: 2 });
   if (!res.ok) return null;
 
   const volume: GoogleBooksVolume = await res.json();
@@ -94,6 +114,7 @@ export async function getOrCreateBook(googleBooksId: string): Promise<BookRow | 
   if (inserted) {
     await redis.set(REDIS_KEYS.book(inserted.id), JSON.stringify(inserted), { ex: REDIS_TTL.BOOK });
   }
+  if (lockAcquired) await redis.del(lockKey);
   return inserted ?? null;
 }
 

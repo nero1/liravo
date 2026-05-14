@@ -16,15 +16,21 @@ export async function awardXP(userId: string, amount: number, reason: string): P
   } as never);
 
   if (error) {
-    // Fallback: manual update
-    const { data: user } = await supabase
+    // Bugfix: fallback checks errors to avoid silent XP accounting corruption.
+    const { data: user, error: userFetchError } = await supabase
       .from('users')
       .select('xp')
       .eq('id', userId)
       .single();
+    if (userFetchError) {
+      throw new Error(`awardXP fallback read failed (${reason}): ${userFetchError.message}`);
+    }
 
     const newXp = (user?.xp ?? 0) + amount;
-    await supabase.from('users').update({ xp: newXp }).eq('id', userId);
+    const { error: updateError } = await supabase.from('users').update({ xp: newXp }).eq('id', userId);
+    if (updateError) {
+      throw new Error(`awardXP fallback write failed (${reason}): ${updateError.message}`);
+    }
     return newXp;
   }
 
