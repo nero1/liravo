@@ -16,7 +16,7 @@ export async function GET(
 ) {
   const supabase = createClient();
 
-  const { data: list, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: list, error } = await supabase 
     .from('reading_lists')
     .select('id, user_id, name, description, is_public, created_at, updated_at')
     .eq('id', params.id)
@@ -27,7 +27,7 @@ export async function GET(
   }
 
   // Get books in the list
-  const { data: listBooks } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: listBooks } = await supabase 
     .from('reading_list_books')
     .select('book_id, added_at')
     .eq('list_id', params.id)
@@ -69,7 +69,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: list, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: list, error } = await supabase 
     .from('reading_lists')
     .update(parsed.data)
     .eq('id', params.id)
@@ -95,7 +95,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { error } = await supabase 
     .from('reading_lists')
     .delete()
     .eq('id', params.id)

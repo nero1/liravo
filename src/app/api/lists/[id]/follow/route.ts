@@ -14,7 +14,7 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { error } = await supabase 
     .from('reading_list_follows')
     .upsert({ list_id: params.id, user_id: user.id });
 
@@ -36,7 +36,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  await supabase 
     .from('reading_list_follows')
     .delete()
     .eq('list_id', params.id)

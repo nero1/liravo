@@ -11,8 +11,7 @@ export async function POST(
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: room } = await (supabase as any)
+  const { data: room } = await supabase
     .from('workshop_rooms')
     .select('id, max_members, member_count')
     .eq('id', params.id)
@@ -25,8 +24,7 @@ export async function POST(
   }
 
   // Check already a member
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (supabase as any)
+  const { data: existing } = await supabase
     .from('workshop_members')
     .select('id')
     .eq('user_id', user.id)
@@ -35,15 +33,13 @@ export async function POST(
 
   if (existing) return NextResponse.json({ message: 'Already a member' });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('workshop_members')
     .insert({ user_id: user.id, room_id: params.id });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('workshop_rooms')
     .update({ member_count: (room.member_count ?? 0) + 1 })
     .eq('id', params.id);

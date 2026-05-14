@@ -29,20 +29,17 @@ export default async function WritingProgressPage() {
     .single();
 
   // Aggregate writing stats
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: promptSubs } = await (supabase as any)
+  const { data: promptSubs } = await supabase
     .from('prompt_submissions')
     .select('word_count, created_at')
     .eq('user_id', user.id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: challengeEntries } = await (supabase as any)
+  const { data: challengeEntries } = await supabase
     .from('writing_challenge_entries')
     .select('word_count, created_at')
     .eq('user_id', user.id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: workshopSubs } = await (supabase as any)
+  const { data: workshopSubs } = await supabase
     .from('workshop_submissions')
     .select('id, created_at')
     .eq('user_id', user.id);
@@ -61,8 +58,7 @@ export default async function WritingProgressPage() {
   const workshopCount = (workshopSubs ?? []).length;
 
   // Badges
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: badges } = await (supabase as any)
+  const { data: badges } = await supabase
     .from('user_badges')
     .select('badge_id, awarded_at')
     .eq('user_id', user.id)

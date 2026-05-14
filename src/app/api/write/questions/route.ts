@@ -16,8 +16,7 @@ export async function GET(req: Request) {
   const pageSize = 20;
   const from = (page - 1) * pageSize;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query = (supabase as any)
+  let query = supabase
     .from('writer_questions')
     .select(
       'id, question, tags, answer_count, created_at, author:user_id(display_name, username)',
@@ -63,8 +62,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: question, error } = await (supabase as any)
+  const { data: question, error } = await supabase
     .from('writer_questions')
     .insert({
       user_id: user.id,

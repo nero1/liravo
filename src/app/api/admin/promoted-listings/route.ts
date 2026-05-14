@@ -33,8 +33,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('promoted_listings')
     .select('id, book_id, start_date, end_date, placement, is_active, created_at')
     .order('created_at', { ascending: false });
@@ -71,8 +70,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Book not found' }, { status: 404 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: listing, error } = await (supabase as any)
+  const { data: listing, error } = await supabase
     .from('promoted_listings')
     .insert({
       book_id: parsed.data.book_id,

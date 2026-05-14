@@ -8,8 +8,13 @@ import { withRedisLock } from '@/lib/locks';
 
 const QuerySchema = z.object({
   userId: z.string().uuid().optional(),
-  mood: z.string().optional(),
+  mood: z.string().max(80).optional(),
 });
+
+function containsPromptInjection(text: string): boolean {
+  const lowered = text.toLowerCase();
+  return ['ignore previous instructions', 'system prompt', 'reveal', 'developer instructions'].some((needle) => lowered.includes(needle));
+}
 
 const DEEPSEEK_FAIL_KEY = 'ai:deepseek:failures';
 const DEEPSEEK_CIRCUIT_OPEN_KEY = 'ai:deepseek:circuit_open';
@@ -23,6 +28,11 @@ interface Recommendation {
   author: string;
   reason: string;
 }
+const RecommendationSchema = z.array(z.object({
+  title: z.string().min(1).max(200),
+  author: z.string().min(1).max(120),
+  reason: z.string().min(1).max(400),
+})).max(5);
 
 async function isCircuitOpen(): Promise<boolean> {
   const redis = getRedisClient();
@@ -100,15 +110,10 @@ function parseRecommendations(content: string): Recommendation[] {
   if (!jsonMatch) return [];
 
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as unknown[];
-    return (parsed as Array<{ title?: unknown; author?: unknown; reason?: unknown }>)
-      .filter((item) => item && typeof item === 'object' && item.title && item.author)
-      .map((item) => ({
-        title: String(item.title ?? ''),
-        author: String(item.author ?? ''),
-        reason: String(item.reason ?? ''),
-      }))
-      .slice(0, 5);
+    const parsed = JSON.parse(jsonMatch[0]) as unknown;
+    const valid = RecommendationSchema.safeParse(parsed);
+    // Bugfix: strict schema validation on model output to reduce injection/garbage responses.
+    return valid.success ? valid.data : [];
   } catch {
     return [];
   }
@@ -126,6 +131,10 @@ export async function GET(request: NextRequest) {
   }
 
   const { userId, mood } = parsed.data;
+  if (mood && containsPromptInjection(mood)) {
+    // Bugfix: reject suspicious prompt-injection style mood payloads before model prompt assembly.
+    return NextResponse.json({ error: 'Invalid mood input' }, { status: 400 });
+  }
 
   // Determine genres from user profile if userId provided
   let genres: string[] = [];

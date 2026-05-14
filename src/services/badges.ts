@@ -163,7 +163,7 @@ async function hasAwardedBadge(
   userId: string,
   badgeId: string
 ): Promise<boolean> {
-  const { data } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data } = await supabase 
     .from('user_badges')
     .select('id')
     .eq('user_id', userId)
@@ -180,7 +180,7 @@ async function awardBadge(
   const already = await hasAwardedBadge(supabase, userId, badge.id);
   if (already) return;
 
-  await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  await supabase 
     .from('user_badges')
     .insert({ user_id: userId, badge_id: badge.id });
 
@@ -306,8 +306,7 @@ export async function checkAndAwardBadges(
         break;
       }
       case 'first_prompt': {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { count } = await (supabase as any)
+        const { count } = await supabase
           .from('prompt_submissions')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', userId);
@@ -323,8 +322,7 @@ export async function checkAndAwardBadges(
         break;
       }
       case 'challenge_finisher': {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { count } = await (supabase as any)
+        const { count } = await supabase
           .from('writing_challenge_entries')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', userId);
@@ -332,8 +330,7 @@ export async function checkAndAwardBadges(
         break;
       }
       case 'workshop_veteran': {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { count } = await (supabase as any)
+        const { count } = await supabase
           .from('workshop_submissions')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', userId);
@@ -341,13 +338,11 @@ export async function checkAndAwardBadges(
         break;
       }
       case 'prolific_writer': {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: pSubs } = await (supabase as any)
+        const { data: pSubs } = await supabase
           .from('prompt_submissions')
           .select('word_count')
           .eq('user_id', userId);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: cEntries } = await (supabase as any)
+        const { data: cEntries } = await supabase
           .from('writing_challenge_entries')
           .select('word_count')
           .eq('user_id', userId);

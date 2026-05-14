@@ -13,8 +13,7 @@ export async function POST(req: Request) {
   const redis = getRedisClient();
 
   // Find premium users whose taste profile is > 30 days old or missing
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: premiumUsers } = await (supabase as any)
+  const { data: premiumUsers } = await supabase
     .from('users')
     .select('id')
     .eq('is_premium', true)
@@ -28,8 +27,7 @@ export async function POST(req: Request) {
   for (const u of premiumUsers ?? []) {
     processed++;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existingProfile } = await (supabase as any)
+    const { data: existingProfile } = await supabase
       .from('ai_taste_profiles')
       .select('generated_at')
       .eq('user_id', u.id)
@@ -141,8 +139,7 @@ Write in a warm, insightful tone.`;
 
     const generatedAt = new Date().toISOString();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('ai_taste_profiles').upsert({
+    await supabase.from('ai_taste_profiles').upsert({
       user_id: u.id,
       profile_text: profileText,
       generated_at: generatedAt,

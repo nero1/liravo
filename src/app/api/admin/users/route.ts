@@ -56,8 +56,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     users: (users ?? []).map((u) => ({
       ...u,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      is_premium: (u as any).is_premium ?? false,
+      is_premium: (u).is_premium ?? false,
     })),
     total: count ?? 0,
     page,
@@ -84,8 +83,7 @@ export async function PATCH(req: Request) {
   const { userId, ...updates } = parsed.data;
   const service = createServiceClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await service.from('users').update(updates as any).eq('id', userId);
+  const { error } = await service.from('users').update(updates).eq('id', userId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ updated: true });

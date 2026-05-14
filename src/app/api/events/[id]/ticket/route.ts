@@ -21,8 +21,7 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: event } = await (supabase as any)
+  const { data: event } = await supabase
     .from('events')
     .select('id, title, is_paid, price, currency, event_date, host_id')
     .eq('id', params.id)
@@ -42,8 +41,7 @@ export async function POST(
   // Bugfix: early idempotency support for client retries.
   const idemKey = _req.headers.get('x-idempotency-key');
   if (idemKey) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: idemTicket } = await (supabase as any)
+    const { data: idemTicket } = await supabase
       .from('event_tickets')
       .select('id, amount_paid, platform_fee, host_amount, currency')
       .eq('event_id', params.id)
@@ -64,8 +62,7 @@ export async function POST(
   }
 
   // Check if already purchased
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (supabase as any)
+  const { data: existing } = await supabase
     .from('event_tickets')
     .select('id, status, created_at, amount_paid, platform_fee, host_amount, currency')
     .eq('event_id', params.id)
@@ -93,8 +90,7 @@ export async function POST(
         });
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await supabase
         .from('event_tickets')
         .update({ status: 'expired' })
         .eq('id', existing.id);
@@ -108,8 +104,7 @@ export async function POST(
   const platformFee = price.times(0.1).toDecimalPlaces(2);
   const hostAmount = price.minus(platformFee).toDecimalPlaces(2);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: ticket, error } = await (supabase as any)
+  const { data: ticket, error } = await supabase
     .from('event_tickets')
     .insert({
       event_id: params.id,

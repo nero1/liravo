@@ -10,8 +10,7 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('subscriptions')
     .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
     .eq('user_id', user.id)
@@ -19,8 +18,7 @@ export async function POST() {
 
   await supabase
     .from('users')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update({ is_premium: false } as any)
+    .update({ is_premium: false })
     .eq('id', user.id);
 
   return NextResponse.json({ cancelled: true });

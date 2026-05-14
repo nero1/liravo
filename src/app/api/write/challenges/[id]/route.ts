@@ -7,8 +7,7 @@ export async function GET(
 ) {
   const supabase = createClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: challenge, error } = await (supabase as any)
+  const { data: challenge, error } = await supabase
     .from('writing_challenges')
     .select('*')
     .eq('id', params.id)
@@ -19,8 +18,7 @@ export async function GET(
   }
 
   // Leaderboard: aggregate entries per user
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: entries } = await (supabase as any)
+  const { data: entries } = await supabase
     .from('writing_challenge_entries')
     .select('user_id, word_count, users:user_id(display_name, username)')
     .eq('challenge_id', params.id);

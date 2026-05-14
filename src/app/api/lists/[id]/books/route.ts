@@ -36,7 +36,7 @@ export async function POST(
   }
 
   // Verify the list belongs to the user
-  const { data: list } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: list } = await supabase 
     .from('reading_lists')
     .select('id')
     .eq('id', params.id)
@@ -47,7 +47,7 @@ export async function POST(
     return NextResponse.json({ error: 'List not found or not authorized' }, { status: 404 });
   }
 
-  const { error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { error } = await supabase 
     .from('reading_list_books')
     .upsert({ list_id: params.id, book_id: parsed.data.book_id });
 
@@ -76,7 +76,7 @@ export async function DELETE(
   }
 
   // Verify ownership
-  const { data: list } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: list } = await supabase 
     .from('reading_lists')
     .select('id')
     .eq('id', params.id)
@@ -87,7 +87,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'List not found or not authorized' }, { status: 404 });
   }
 
-  await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  await supabase 
     .from('reading_list_books')
     .delete()
     .eq('list_id', params.id)

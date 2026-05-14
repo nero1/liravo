@@ -26,8 +26,7 @@ export async function GET(request: Request) {
   const supabase = createServiceClient();
 
   // community_notes table may not be in DB type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: notes, error } = await (supabase as any)
+  const { data: notes, error } = await supabase
     .from('community_notes')
     .select('id, note, created_at, author_id')
     .eq('content_type', contentType)
@@ -56,8 +55,7 @@ export async function POST(request: Request) {
   const serviceSupabase = createServiceClient();
 
   // community_notes table may not be in DB type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (serviceSupabase as any)
+  const { data, error } = await serviceSupabase
     .from('community_notes')
     .insert({
       author_id: user.id,
@@ -96,8 +94,7 @@ export async function PATCH(request: Request) {
   const supabase = createServiceClient();
 
   // community_notes table may not be in DB type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('community_notes')
     .update({
       status: parsed.data.status,

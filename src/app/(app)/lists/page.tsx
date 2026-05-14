@@ -26,14 +26,14 @@ export default async function ListsPage() {
   }
 
   // Fetch own lists
-  const { data: ownLists } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: ownLists } = await supabase 
     .from('reading_lists')
     .select('id, user_id, name, description, is_public, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
   // Fetch followed lists
-  const { data: followRelations } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: followRelations } = await supabase 
     .from('reading_list_follows')
     .select('list_id')
     .eq('user_id', user.id);
@@ -41,7 +41,7 @@ export default async function ListsPage() {
   const followedIds = ((followRelations ?? []) as { list_id: string }[]).map((r) => r.list_id);
   let followedLists: ReadingList[] = [];
   if (followedIds.length > 0) {
-    const { data } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    const { data } = await supabase 
       .from('reading_lists')
       .select('id, user_id, name, description, is_public, created_at')
       .in('id', followedIds);

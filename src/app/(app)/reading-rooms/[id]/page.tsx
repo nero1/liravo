@@ -18,8 +18,7 @@ export default async function ReadingRoomPage({
 
   if (!user) redirect('/auth/login');
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: room } = await (supabase as any)
+  const { data: room } = await supabase
     .from('reading_rooms')
     .select('id, name, book_id, is_public, created_by, is_active, created_at')
     .eq('id', params.id)
@@ -27,8 +26,7 @@ export default async function ReadingRoomPage({
 
   if (!room) notFound();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: participantsRaw } = await (supabase as any)
+  const { data: participantsRaw } = await supabase
     .from('room_participants')
     .select('user_id, joined_at')
     .eq('room_id', params.id);

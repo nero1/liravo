@@ -17,8 +17,7 @@ export default async function EventDetailPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: event } = await (supabase as any)
+  const { data: event } = await supabase
     .from('events')
     .select('id, title, description, event_date, is_paid, price, currency, host_id, book_id, max_attendees, created_at')
     .eq('id', params.id)
@@ -45,8 +44,7 @@ export default async function EventDetailPage({
   let hasTicket = false;
   if (user) {
     if (!event.is_paid) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: rsvp } = await (supabase as any)
+      const { data: rsvp } = await supabase
         .from('event_rsvps')
         .select('id')
         .eq('event_id', params.id)
@@ -54,8 +52,7 @@ export default async function EventDetailPage({
         .single();
       hasRsvped = !!rsvp;
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: ticket } = await (supabase as any)
+      const { data: ticket } = await supabase
         .from('event_tickets')
         .select('id, status')
         .eq('event_id', params.id)
@@ -66,8 +63,7 @@ export default async function EventDetailPage({
   }
 
   // RSVP count
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count: rsvpCount } = await (supabase as any)
+  const { count: rsvpCount } = await supabase
     .from('event_rsvps')
     .select('id', { count: 'exact', head: true })
     .eq('event_id', params.id);

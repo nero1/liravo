@@ -13,8 +13,7 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: arc } = await (supabase as any)
+  const { data: arc } = await supabase
     .from('arcs')
     .select('id, author_id, reader_slots, is_active')
     .eq('id', params.id)
@@ -33,8 +32,7 @@ export async function POST(
   }
 
   // Check if already applied
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (supabase as any)
+  const { data: existing } = await supabase
     .from('arc_applications')
     .select('id')
     .eq('arc_id', params.id)
@@ -45,8 +43,7 @@ export async function POST(
     return NextResponse.json({ error: 'Already applied' }, { status: 409 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('arc_applications')
     .insert({
       arc_id: params.id,

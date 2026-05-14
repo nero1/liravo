@@ -10,7 +10,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = createClient();
-  const { data } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data } = await supabase 
     .from('challenges')
     .select('name')
     .eq('id', params.id)
@@ -27,7 +27,7 @@ export default async function ChallengeDetailPage({ params }: Props) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: challenge } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: challenge } = await supabase 
     .from('challenges')
     .select('id, name, description, type, goal_books, goal_pages, starts_at, ends_at')
     .eq('id', params.id)
@@ -36,7 +36,7 @@ export default async function ChallengeDetailPage({ params }: Props) {
   if (!challenge) notFound();
 
   // Get participants with user info
-  const { data: participants } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: participants } = await supabase 
     .from('challenge_participants')
     .select('user_id, joined_at')
     .eq('challenge_id', params.id)

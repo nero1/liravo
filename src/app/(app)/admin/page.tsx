@@ -53,15 +53,13 @@ export default async function AdminPage() {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tips } = await (supabase as any)
+  const { data: tips } = await supabase
     .from('tips')
     .select('platform_fee')
     .eq('status', 'completed')
     .gte('created_at', monthStart.toISOString());
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: subs } = await (supabase as any)
+  const { data: subs } = await supabase
     .from('subscriptions')
     .select('amount')
     .eq('status', 'active')

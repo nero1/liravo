@@ -34,8 +34,7 @@ export default async function ModerationLogPage({ searchParams }: Props) {
   const serviceSupabase = createServiceClient();
 
   // moderation_log table may not exist in DB type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: logs, error } = await (serviceSupabase as any)
+  const { data: logs, error } = await serviceSupabase
     .from('moderation_log')
     .select('*')
     .order('created_at', { ascending: false })

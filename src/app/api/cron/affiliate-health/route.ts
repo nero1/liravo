@@ -31,8 +31,7 @@ export async function POST(req: Request) {
 
     if ((count ?? 0) === 0) {
       // Flag: no affiliate links have been clicked
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('affiliate_health_log').insert({
+      await supabase.from('affiliate_health_log').insert({
         book_id: book.id,
         book_title: book.title,
         issue: 'no_affiliate_clicks',

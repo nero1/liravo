@@ -18,8 +18,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('reading_rooms')
     .select('id, name, book_id, is_public, created_by, is_active, created_at')
     .eq('is_active', true)
@@ -49,8 +48,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: room, error } = await (supabase as any)
+  const { data: room, error } = await supabase
     .from('reading_rooms')
     .insert({
       name: parsed.data.name,
@@ -67,8 +65,7 @@ export async function POST(req: Request) {
   }
 
   // Add creator as first participant
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('room_participants')
     .insert({
       room_id: room.id,

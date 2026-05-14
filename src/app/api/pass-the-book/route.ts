@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   // Try to store in book_passes table first
-  const { error: passError } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { error: passError } = await supabase 
     .from('book_passes')
     .insert({
       sender_id: user.id,
@@ -110,14 +110,14 @@ export async function GET() {
   }
 
   // Get passes from book_passes table if it exists
-  const { data: receivedPasses } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: receivedPasses } = await supabase 
     .from('book_passes')
     .select('id, sender_id, book_id, message, created_at')
     .eq('recipient_id', user.id)
     .order('created_at', { ascending: false })
     .limit(20);
 
-  const { data: sentPasses } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: sentPasses } = await supabase 
     .from('book_passes')
     .select('id, recipient_id, book_id, message, created_at')
     .eq('sender_id', user.id)

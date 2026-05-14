@@ -33,16 +33,14 @@ export default async function WritingChallengesPage() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: challenges } = await (supabase as any)
+  const { data: challenges } = await supabase
     .from('writing_challenges')
     .select('*')
     .lte('start_date', today)
     .gte('end_date', today)
     .order('end_date', { ascending: true });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: joined } = await (supabase as any)
+  const { data: joined } = await supabase
     .from('writing_challenge_participants')
     .select('challenge_id')
     .eq('user_id', user.id);
@@ -136,8 +134,7 @@ function JoinButton({ challengeId }: { challengeId: string }) {
         } = await supabase.auth.getUser();
         if (!user) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: existing } = await (supabase as any)
+        const { data: existing } = await supabase
           .from('writing_challenge_participants')
           .select('id')
           .eq('user_id', user.id)
@@ -146,21 +143,18 @@ function JoinButton({ challengeId }: { challengeId: string }) {
 
         if (existing) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
+        await supabase
           .from('writing_challenge_participants')
           .insert({ user_id: user.id, challenge_id: challengeId });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: challenge } = await (supabase as any)
+        const { data: challenge } = await supabase
           .from('writing_challenges')
           .select('participant_count')
           .eq('id', challengeId)
           .single();
 
         if (challenge) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
+          await supabase
             .from('writing_challenges')
             .update({ participant_count: (challenge.participant_count ?? 0) + 1 })
             .eq('id', challengeId);

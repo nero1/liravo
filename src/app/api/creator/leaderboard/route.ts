@@ -41,8 +41,7 @@ export async function GET() {
   const userIds = users.map((u) => u.id);
 
   // Get tips received per user (sum of recipient_amount)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tips } = await (supabase as any)
+  const { data: tips } = await supabase
     .from('tips')
     .select('recipient_id, recipient_amount')
     .in('recipient_id', userIds)

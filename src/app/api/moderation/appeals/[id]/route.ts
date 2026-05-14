@@ -24,8 +24,7 @@ export async function PATCH(
   const supabase = createServiceClient();
 
   // appeals table may not be in DB type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: appeal, error: fetchError } = await (supabase as any)
+  const { data: appeal, error: fetchError } = await supabase
     .from('appeals')
     .select('*')
     .eq('id', params.id)
@@ -35,8 +34,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Appeal not found' }, { status: 404 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: updated, error } = await (supabase as any)
+  const { data: updated, error } = await supabase
     .from('appeals')
     .update({
       status: parsed.data.status,

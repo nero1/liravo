@@ -26,8 +26,7 @@ export default async function EventsPage() {
 
   const now = new Date().toISOString();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: eventsRaw } = await (supabase as any)
+  const { data: eventsRaw } = await supabase
     .from('events')
     .select('id, title, description, event_date, is_paid, price, currency, host_id, book_id, max_attendees, created_at')
     .gte('event_date', now)

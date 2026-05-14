@@ -52,8 +52,7 @@ export async function drainOutbox(batchSize = 50) {
   const supabase = createServiceClient();
 
   // Bugfix: use DB-side SKIP LOCKED claim RPC for atomic concurrent worker coordination.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any).rpc('claim_outbox_events' as never, {
+  const { data, error } = await supabase.rpc('claim_outbox_events' as never, {
     p_batch_size: Math.min(200, Math.max(1, batchSize)),
   } as never);
 
@@ -66,8 +65,7 @@ export async function drainOutbox(batchSize = 50) {
   for (const event of events) {
     try {
       await processEvent(event);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await supabase
         .from('outbox_events')
         .update({ status: 'processed', processed_at: new Date().toISOString() })
         .eq('id', event.id)
@@ -77,8 +75,7 @@ export async function drainOutbox(batchSize = 50) {
       failed += 1;
       const terminal = event.attempts >= MAX_ATTEMPTS;
       const nextAttemptAt = new Date(Date.now() + nextDelaySeconds(event.attempts) * 1000).toISOString();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      await supabase
         .from('outbox_events')
         .update({
           status: terminal ? 'failed' : 'pending',

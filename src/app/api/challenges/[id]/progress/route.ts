@@ -15,7 +15,7 @@ export async function GET(
   }
 
   // Get challenge details
-  const { data: challenge } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: challenge } = await supabase 
     .from('challenges')
     .select('id, goal_books, goal_pages, starts_at, ends_at')
     .eq('id', params.id)
@@ -26,7 +26,7 @@ export async function GET(
   }
 
   // Check if user has joined
-  const { data: participant } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: participant } = await supabase 
     .from('challenge_participants')
     .select('joined_at')
     .eq('challenge_id', params.id)

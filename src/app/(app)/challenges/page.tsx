@@ -30,7 +30,7 @@ export default async function ChallengesPage() {
 
   const now = new Date().toISOString();
 
-  const { data: activeChallenges } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: activeChallenges } = await supabase 
     .from('challenges')
     .select('id, name, description, type, goal_books, goal_pages, starts_at, ends_at')
     .lte('starts_at', now)
@@ -39,7 +39,7 @@ export default async function ChallengesPage() {
 
   let joinedChallengeIds: Set<string> = new Set();
   if (user) {
-    const { data: participations } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    const { data: participations } = await supabase 
       .from('challenge_participants')
       .select('challenge_id')
       .eq('user_id', user.id);

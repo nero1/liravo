@@ -24,8 +24,7 @@ export async function POST(req: Request) {
 
   const supabase = createServiceClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tip, error: tipError } = await (supabase as any)
+  const { data: tip, error: tipError } = await supabase
     .from('tips')
     .update({ status, provider_reference: providerReference ?? null })
     .eq('id', tipId)
@@ -38,8 +37,7 @@ export async function POST(req: Request) {
 
   if (status === 'completed') {
     // Create payout record (scaffold)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    await supabase
       .from('payouts')
       .insert({
         tip_id: tipId,

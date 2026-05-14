@@ -51,8 +51,7 @@ export async function POST(
   }
 
   // Check question exists
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: question } = await (supabase as any)
+  const { data: question } = await supabase
     .from('writer_questions')
     .select('id, answer_count')
     .eq('id', params.id)
@@ -60,8 +59,7 @@ export async function POST(
 
   if (!question) return NextResponse.json({ error: 'Question not found' }, { status: 404 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: answer, error } = await (supabase as any)
+  const { data: answer, error } = await supabase
     .from('writer_answers')
     .insert({
       user_id: user.id,
@@ -74,8 +72,7 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Increment answer count
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('writer_questions')
     .update({ answer_count: (question.answer_count ?? 0) + 1 })
     .eq('id', params.id);

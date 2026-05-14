@@ -14,20 +14,17 @@ export async function GET() {
     .eq('id', user.id)
     .single();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: promptSubs } = await (supabase as any)
+  const { data: promptSubs } = await supabase
     .from('prompt_submissions')
     .select('word_count')
     .eq('user_id', user.id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: challengeEntries } = await (supabase as any)
+  const { data: challengeEntries } = await supabase
     .from('writing_challenge_entries')
     .select('word_count')
     .eq('user_id', user.id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count: workshopCount } = await (supabase as any)
+  const { count: workshopCount } = await supabase
     .from('workshop_submissions')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id);

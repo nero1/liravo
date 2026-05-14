@@ -20,7 +20,7 @@ export async function GET() {
   }
 
   // Get user's own lists
-  const { data: ownLists, error: ownError } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: ownLists, error: ownError } = await supabase 
     .from('reading_lists')
     .select('id, user_id, name, description, is_public, created_at, updated_at')
     .eq('user_id', user.id)
@@ -31,7 +31,7 @@ export async function GET() {
   }
 
   // Get followed lists
-  const { data: followedRelations } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: followedRelations } = await supabase 
     .from('reading_list_follows')
     .select('list_id')
     .eq('user_id', user.id);
@@ -40,7 +40,7 @@ export async function GET() {
   let followedLists: unknown[] = [];
 
   if (followedIds.length > 0) {
-    const { data } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    const { data } = await supabase 
       .from('reading_lists')
       .select('id, user_id, name, description, is_public, created_at, updated_at')
       .in('id', followedIds);
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: list, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: list, error } = await supabase 
     .from('reading_lists')
     .insert({
       user_id: user.id,

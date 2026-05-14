@@ -61,14 +61,11 @@ export async function POST(
     // Soft-delete the reported content based on entity_type
     // content_reports uses entity_type + entity_id
     if (report.entity_type === 'review') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('reviews').update({ is_hidden: true, moderation_status: 'removed' }).eq('id', report.entity_id);
+      await supabase.from('reviews').update({ is_hidden: true, moderation_status: 'removed' }).eq('id', report.entity_id);
     } else if (report.entity_type === 'quote') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('quotes').update({ is_hidden: true }).eq('id', report.entity_id);
+      await supabase.from('quotes').update({ is_hidden: true }).eq('id', report.entity_id);
     } else if (report.entity_type === 'user') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('users').update({ is_suspended: true }).eq('id', report.entity_id);
+      await supabase.from('users').update({ is_suspended: true }).eq('id', report.entity_id);
     }
   }
 
@@ -130,8 +127,7 @@ export async function POST(
 
   // Log to moderation_log table (may not exist in DB type)
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    await supabase
       .from('moderation_log')
       .insert({
         moderator_id: auth.userId,

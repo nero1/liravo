@@ -19,8 +19,7 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: arc } = await (supabase as any)
+  const { data: arc } = await supabase
     .from('arcs')
     .select('id, author_id')
     .eq('id', params.id)
@@ -39,8 +38,7 @@ export async function POST(
   const { applicationId, approved } = parsed.data;
   const newStatus = approved ? 'approved' : 'rejected';
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: application, error } = await (supabase as any)
+  const { data: application, error } = await supabase
     .from('arc_applications')
     .update({ status: newStatus })
     .eq('id', applicationId)

@@ -25,8 +25,7 @@ export async function POST(request: Request) {
   const serviceSupabase = createServiceClient();
 
   // appeals table may not be in DB type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (serviceSupabase as any)
+  const { data, error } = await serviceSupabase
     .from('appeals')
     .insert({
       user_id: user.id,
@@ -54,8 +53,7 @@ export async function GET() {
   const supabase = createServiceClient();
 
   // appeals table may not be in DB type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: appeals, error } = await (supabase as any)
+  const { data: appeals, error } = await supabase
     .from('appeals')
     .select('*')
     .eq('status', 'pending')

@@ -12,8 +12,7 @@ export async function GET() {
   let databaseStatus: 'ok' | 'error' = 'ok';
   try {
     const supabase = createServiceClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).rpc('pg_sleep', { seconds: 0 }).maybeSingle();
+    const { error } = await supabase.rpc('pg_sleep', { seconds: 0 }).maybeSingle();
     if (error && error.code !== 'PGRST202') {
       // Try simpler query
       const { error: err2 } = await supabase

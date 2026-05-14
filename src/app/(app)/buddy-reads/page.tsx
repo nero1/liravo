@@ -25,8 +25,7 @@ export default async function BuddyReadsPage() {
   if (!user) redirect('/auth/login');
 
   // Get buddy reads user is part of
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: participating } = await (supabase as any)
+  const { data: participating } = await supabase
     .from('buddy_read_participants')
     .select('buddy_read_id')
     .eq('user_id', user.id);
@@ -37,8 +36,7 @@ export default async function BuddyReadsPage() {
 
   let myReads: BuddyRead[] = [];
   if (participatingIds.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from('buddy_reads')
       .select('id, book_id, max_participants, current_chapter, is_active, created_by, created_at')
       .in('id', participatingIds)
@@ -48,8 +46,7 @@ export default async function BuddyReadsPage() {
   }
 
   // Get open buddy reads user can join
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: openReadsRaw } = await (supabase as any)
+  const { data: openReadsRaw } = await supabase
     .from('buddy_reads')
     .select('id, book_id, max_participants, current_chapter, is_active, created_by, created_at')
     .eq('is_active', true)

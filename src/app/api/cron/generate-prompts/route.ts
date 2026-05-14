@@ -150,8 +150,7 @@ Example: 1. [Adventure] A cartographer discovers a map that leads not to a place
   const skipped: string[] = [];
 
   for (const p of prompts) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('writing_prompts')
       .upsert(p, { onConflict: 'date', ignoreDuplicates: true });
 

@@ -44,8 +44,7 @@ export default async function PublicProfilePage({ params }: ProfilePageProps) {
   const isOwner = user?.id === profile.id;
 
   // Fetch earned badges for this user
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: userBadges } = await (supabase as any)
+  const { data: userBadges } = await supabase
     .from('user_badges')
     .select('badge_id, awarded_at')
     .eq('user_id', profile.id)

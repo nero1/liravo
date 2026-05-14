@@ -35,7 +35,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { data: events, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: events, error } = await supabase 
     .from('seasonal_events')
     .select('id, name, description, start_date, end_date, xp_multiplier, is_active, created_at')
     .order('start_date', { ascending: false });
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: event, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: event, error } = await supabase 
     .from('seasonal_events')
     .insert({
       name: parsed.data.name,

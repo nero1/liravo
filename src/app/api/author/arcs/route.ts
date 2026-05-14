@@ -20,8 +20,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const authorId = searchParams.get('authorId') ?? user.id;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('arcs')
     .select('id, book_id, description, reader_slots, close_date, is_active, created_at')
     .eq('author_id', authorId)
@@ -62,8 +61,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('arcs')
     .insert({
       author_id: user.id,

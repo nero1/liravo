@@ -17,8 +17,7 @@ export async function GET() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('writing_challenges')
     .select('*')
     .lte('start_date', today)
@@ -58,8 +57,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('writing_challenges')
     .insert({ ...parsed.data, participant_count: 0 })
     .select()

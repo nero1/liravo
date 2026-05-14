@@ -27,8 +27,7 @@ export async function POST(
   const wordCount = parsed.data.content.trim().split(/\s+/).length;
 
   // Check prompt exists
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: prompt } = await (supabase as any)
+  const { data: prompt } = await supabase
     .from('writing_prompts')
     .select('id')
     .eq('id', params.id)
@@ -37,8 +36,7 @@ export async function POST(
   if (!prompt) return NextResponse.json({ error: 'Prompt not found' }, { status: 404 });
 
   // Check already submitted
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (supabase as any)
+  const { data: existing } = await supabase
     .from('prompt_submissions')
     .select('id')
     .eq('user_id', user.id)
@@ -50,8 +48,7 @@ export async function POST(
   }
 
   // Insert submission
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: submission, error } = await (supabase as any)
+  const { data: submission, error } = await supabase
     .from('prompt_submissions')
     .insert({
       user_id: user.id,

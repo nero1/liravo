@@ -66,7 +66,7 @@ export async function GET() {
     .map(([tag]) => tag)[0] ?? null;
 
   // Badges earned
-  const { data: badges } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: badges } = await supabase 
     .from('user_badges')
     .select('badge_id, awarded_at')
     .eq('user_id', user.id)

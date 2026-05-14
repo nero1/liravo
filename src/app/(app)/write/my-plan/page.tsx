@@ -72,8 +72,7 @@ export default async function MyWritingPlanPage() {
 
   const weekStart = getWeekStart();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: plan } = await (supabase as any)
+  const { data: plan } = await supabase
     .from('writing_plans')
     .select('*')
     .eq('user_id', user.id)
