@@ -18,8 +18,7 @@ async function getPromotedBooks(): Promise<PromotedBook[]> {
   const supabase = createClient();
   const now = new Date().toISOString();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: listings } = await (supabase as any)
+  const { data: listings } = await supabase
     .from('promoted_listings')
     .select('book_id')
     .eq('placement', 'discover_top')

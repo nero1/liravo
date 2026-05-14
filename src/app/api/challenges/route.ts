@@ -9,7 +9,7 @@ export async function GET() {
 
   const now = new Date().toISOString();
 
-  const { data: challenges, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: challenges, error } = await supabase 
     .from('challenges')
     .select('id, name, description, type, goal_books, goal_pages, starts_at, ends_at, created_at')
     .lte('starts_at', now)

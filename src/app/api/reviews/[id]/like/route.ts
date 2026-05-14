@@ -22,11 +22,12 @@ export async function POST(
 
   const reviewId = params.id;
   const idemHeader = request.headers.get('x-idempotency-key');
-  if (idemHeader) {
-    // Bugfix: avoid duplicate like-side effects on network retries.
-    const firstAttempt = await ensureIdempotency(`review-like:${user.id}:${reviewId}:${idemHeader}`, 120);
-    if (!firstAttempt) return NextResponse.json({ deduped: true });
+  if (!idemHeader || idemHeader.length < 8) {
+    // Bugfix: enforce idempotency-key for replay-safe like toggles and XP side effects.
+    return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
   }
+  const firstAttempt = await ensureIdempotency(`review-like:${user.id}:${reviewId}:${idemHeader}`, 120);
+  if (!firstAttempt) return NextResponse.json({ deduped: true });
 
   const result = await withRedisLock(`review-like:${reviewId}:${user.id}`, 5, async () => {
     // Bugfix: prefer atomic DB function if available (toggle + count update in one transaction).

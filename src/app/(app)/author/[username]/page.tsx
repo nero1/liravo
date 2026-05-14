@@ -58,8 +58,7 @@ export default async function AuthorProfilePage({
   if (!isAuthorProfile) notFound();
 
   // Fetch author's books
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: authorBooks } = await (supabase as any)
+  const { data: authorBooks } = await supabase
     .from('author_books')
     .select('id, book_id, created_at')
     .eq('author_id', author.id)
@@ -86,8 +85,7 @@ export default async function AuthorProfilePage({
   }
 
   // From-the-author posts
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: postsRaw } = await (supabase as any)
+  const { data: postsRaw } = await supabase
     .from('author_posts')
     .select('id, title, body, type, book_id, created_at')
     .eq('author_id', author.id)
@@ -97,8 +95,7 @@ export default async function AuthorProfilePage({
   const posts: AuthorPost[] = postsRaw ?? [];
 
   // Q&A section (using author_posts with type 'qa')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: qaRaw } = await (supabase as any)
+  const { data: qaRaw } = await supabase
     .from('author_qa')
     .select('id, question, answer, asked_by, created_at, answered_at')
     .eq('author_id', author.id)
@@ -109,8 +106,7 @@ export default async function AuthorProfilePage({
   const qaItems = qaRaw ?? [];
 
   // Active ARCs
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: arcsRaw } = await (supabase as any)
+  const { data: arcsRaw } = await supabase
     .from('arcs')
     .select('id, book_id, description, reader_slots, close_date, created_at')
     .eq('author_id', author.id)

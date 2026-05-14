@@ -25,8 +25,7 @@ export default async function BuddyReadRoomPage({
 
   if (!user) redirect('/auth/login');
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: buddyRead } = await (supabase as any)
+  const { data: buddyRead } = await supabase
     .from('buddy_reads')
     .select('id, book_id, max_participants, current_chapter, is_active, created_by, created_at')
     .eq('id', params.id)
@@ -34,8 +33,7 @@ export default async function BuddyReadRoomPage({
 
   if (!buddyRead) notFound();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: participantsRaw } = await (supabase as any)
+  const { data: participantsRaw } = await supabase
     .from('buddy_read_participants')
     .select('user_id, joined_at')
     .eq('buddy_read_id', params.id);
@@ -70,8 +68,7 @@ export default async function BuddyReadRoomPage({
     .single();
 
   // Get shared notes
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: notesRaw } = await (supabase as any)
+  const { data: notesRaw } = await supabase
     .from('buddy_read_notes')
     .select('id, user_id, content, created_at')
     .eq('buddy_read_id', params.id)

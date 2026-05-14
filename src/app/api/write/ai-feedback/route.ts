@@ -6,6 +6,11 @@ import { AI_MODELS } from '@/constants/ai';
 import crypto from 'crypto';
 import { withExponentialBackoff } from '@/lib/retry';
 
+function containsPromptInjection(text: string): boolean {
+  const lowered = text.toLowerCase();
+  return ['ignore previous instructions', 'system prompt', 'reveal prompt', 'developer instructions'].some((needle) => lowered.includes(needle));
+}
+
 const FeedbackSchema = z.object({
   text: z.string().min(10).max(10000),
   type: z.enum(['grammar', 'style', 'structure', 'overall']),
@@ -96,9 +101,20 @@ export async function POST(req: Request) {
     );
   }
 
+  const contentLength = Number(req.headers.get('content-length') ?? '0');
+  if (Number.isFinite(contentLength) && contentLength > 20_000) {
+    // Bugfix: hard cap body size to reduce parser abuse and runaway token spend.
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  }
+
   let body: unknown;
   try {
-    body = await req.json();
+    const raw = await req.text();
+    if (raw.length > 20_000) {
+      // Bugfix: enforce size limit on real payload bytes, not only content-length header.
+      return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+    }
+    body = raw ? JSON.parse(raw) : {};
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
@@ -109,7 +125,12 @@ export async function POST(req: Request) {
   }
 
   const { text, type } = parsed.data;
-  const cacheKey = `ai_feedback:${crypto.createHash('sha256').update(`${type}:${text}`).digest('hex')}`;
+  if (containsPromptInjection(text)) {
+    // Bugfix: basic prompt-injection screening for user-submitted content.
+    return NextResponse.json({ error: 'Prompt content rejected by safety policy.' }, { status: 400 });
+  }
+  // Bugfix: scope cache by user to avoid cross-user inference leaks.
+  const cacheKey = `ai_feedback:${user.id}:${crypto.createHash('sha256').update(`${type}:${text}`).digest('hex')}`;
 
   const redis = getRedisClient();
   const cached = await redis.get(cacheKey);

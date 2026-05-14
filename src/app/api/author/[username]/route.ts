@@ -17,23 +17,20 @@ export async function GET(
     return NextResponse.json({ error: 'Author not found' }, { status: 404 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: books } = await (supabase as any)
+  const { data: books } = await supabase
     .from('author_books')
     .select('id, book_id, author_id, created_at')
     .eq('author_id', author.id)
     .limit(20);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: posts } = await (supabase as any)
+  const { data: posts } = await supabase
     .from('author_posts')
     .select('id, title, body, type, book_id, created_at')
     .eq('author_id', author.id)
     .order('created_at', { ascending: false })
     .limit(10);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: arcs } = await (supabase as any)
+  const { data: arcs } = await supabase
     .from('arcs')
     .select('id, book_id, description, reader_slots, close_date, created_at')
     .eq('author_id', author.id)

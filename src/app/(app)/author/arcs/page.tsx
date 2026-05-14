@@ -38,8 +38,7 @@ export default async function AuthorArcsPage() {
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: arcs } = await (supabase as any)
+  const { data: arcs } = await supabase
     .from('arcs')
     .select('id, book_id, description, reader_slots, close_date, is_active, created_at')
     .eq('author_id', user.id)

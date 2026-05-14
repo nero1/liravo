@@ -39,8 +39,7 @@ export default async function TasteProfilePage() {
   }
 
   // Load taste profile
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tasteProfile } = await (supabase as any)
+  const { data: tasteProfile } = await supabase
     .from('ai_taste_profiles')
     .select('profile_text, generated_at')
     .eq('user_id', user.id)

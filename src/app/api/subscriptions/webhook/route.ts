@@ -5,6 +5,7 @@ import { detectReplay, verifyProviderSignature } from '@/lib/webhook-security';
 import { withExponentialBackoff } from '@/lib/retry';
 import { withRedisLock } from '@/lib/locks';
 import { recordMetric } from '@/lib/metrics';
+import { getRequestCorrelationId } from '@/lib/utils';
 
 const webhookSchema = z.object({
   event: z.enum(['subscription.activated', 'subscription.cancelled']),
@@ -14,6 +15,7 @@ const webhookSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const correlationId = getRequestCorrelationId(req);
   const provider = req.headers.get('x-payment-provider');
   const signature = req.headers.get('x-webhook-signature') ?? req.headers.get('x-paystack-signature');
   const timestamp = req.headers.get('x-webhook-timestamp');
@@ -56,7 +58,8 @@ export async function POST(req: Request) {
 
   // Bugfix: idempotency/replay guard to prevent double credit/debit of premium status.
   try {
-    if (await detectReplay(`${provider}:${event_id}`)) {
+    // Bugfix: strengthen replay uniqueness scope across provider, user, and subscription dimensions.
+    if (await detectReplay(`${provider}:${event_id}:${user_id}:${subscription_id ?? 'none'}`)) {
       return NextResponse.json({ received: true, replay: true });
     }
   } catch {
@@ -64,7 +67,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Replay protection unavailable' }, { status: 503 });
   }
 
-  const result = await withRedisLock(`subscription-webhook:${user_id}`, 10, async () => {
+  // Bugfix: extend lock TTL to reduce concurrent interleaving on slow DB retries/fallback work.
+  const result = await withRedisLock(`subscription-webhook:${user_id}`, 60, async () => {
     const supabase = createServiceClient();
 
     // Bugfix: prefer single transactional DB routine when deployed.
@@ -77,15 +81,18 @@ export async function POST(req: Request) {
       { retries: 2, baseDelayMs: 100 }
     );
     if (!rpcError) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('financial_audit_log').insert({
+            const { error: auditError } = await supabase.from('financial_audit_log').insert({
         target_user_id: user_id,
         action: `subscription_${event}`,
         provider,
         provider_event_id: event_id,
-        correlation_id: req.headers.get('x-request-id') ?? null,
+        correlation_id: correlationId,
         metadata: { subscription_id, mode: 'rpc' },
       });
+      if (auditError) {
+        // Bugfix: fail closed when post-transaction audit write fails on financial webhook.
+        return NextResponse.json({ error: 'Failed to persist audit trail' }, { status: 500 });
+      }
       console.info('subscription_webhook_processed', { provider, event, user_id, event_id, mode: 'rpc' });
       return NextResponse.json({ received: true, mode: 'rpc' });
     }
@@ -94,15 +101,13 @@ export async function POST(req: Request) {
     if (event === 'subscription.activated') {
       const { error: userError } = await supabase
         .from('users')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({ is_premium: true } as any)
+                .update({ is_premium: true })
         .eq('id', user_id);
 
       if (userError) return NextResponse.json({ error: userError.message }, { status: 500 });
 
       if (subscription_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: subError } = await (supabase as any)
+                const { error: subError } = await supabase
           .from('subscriptions')
           .update({ status: 'active', activated_at: new Date().toISOString() })
           .eq('id', subscription_id);
@@ -110,8 +115,7 @@ export async function POST(req: Request) {
           // Bugfix: compensate user premium flag if subscription write fails.
           await supabase
             .from('users')
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .update({ is_premium: false } as any)
+                        .update({ is_premium: false })
             .eq('id', user_id);
           return NextResponse.json({ error: subError.message }, { status: 500 });
         }
@@ -119,14 +123,12 @@ export async function POST(req: Request) {
     } else if (event === 'subscription.cancelled') {
       const { error: userError } = await supabase
         .from('users')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({ is_premium: false } as any)
+                .update({ is_premium: false })
         .eq('id', user_id);
       if (userError) return NextResponse.json({ error: userError.message }, { status: 500 });
 
       if (subscription_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: subError } = await (supabase as any)
+                const { error: subError } = await supabase
           .from('subscriptions')
           .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
           .eq('id', subscription_id);
@@ -134,23 +136,25 @@ export async function POST(req: Request) {
           // Bugfix: compensate user premium flag if subscription write fails.
           await supabase
             .from('users')
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .update({ is_premium: true } as any)
+                        .update({ is_premium: true })
             .eq('id', user_id);
           return NextResponse.json({ error: subError.message }, { status: 500 });
         }
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('financial_audit_log').insert({
+        const { error: auditError } = await supabase.from('financial_audit_log').insert({
       target_user_id: user_id,
       action: `subscription_${event}`,
       provider,
       provider_event_id: event_id,
-      correlation_id: req.headers.get('x-request-id') ?? null,
+      correlation_id: correlationId,
       metadata: { subscription_id, mode: 'fallback' },
     });
+    if (auditError) {
+      // Bugfix: fail closed when fallback-mode audit write fails.
+      return NextResponse.json({ error: 'Failed to persist audit trail' }, { status: 500 });
+    }
     console.info('subscription_webhook_processed', { provider, event, user_id, event_id, mode: 'fallback' });
     return NextResponse.json({ received: true });
   });

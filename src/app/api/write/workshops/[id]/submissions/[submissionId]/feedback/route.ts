@@ -29,8 +29,7 @@ export async function POST(
   }
 
   // Verify submission belongs to this room
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: submission } = await (supabase as any)
+  const { data: submission } = await supabase
     .from('workshop_submissions')
     .select('id')
     .eq('id', params.submissionId)
@@ -39,8 +38,7 @@ export async function POST(
 
   if (!submission) return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: feedback, error } = await (supabase as any)
+  const { data: feedback, error } = await supabase
     .from('workshop_feedback')
     .insert({
       user_id: user.id,

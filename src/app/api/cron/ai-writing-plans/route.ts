@@ -123,8 +123,7 @@ export async function POST(req: Request) {
 
   for (const user of (users as UserProfile[]) ?? []) {
     // Check if plan already exists for this week
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existing } = await (supabase as any)
+    const { data: existing } = await supabase
       .from('writing_plans')
       .select('id')
       .eq('user_id', user.id)
@@ -155,8 +154,7 @@ Keep each task focused, achievable, and creative. Vary the exercises (character 
 
     const tasks = parseTasksFromAI(rawText);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: insertError } = await (supabase as any)
+    const { error: insertError } = await supabase
       .from('writing_plans')
       .insert({
         user_id: user.id,

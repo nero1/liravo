@@ -14,8 +14,7 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: buddyRead } = await (supabase as any)
+  const { data: buddyRead } = await supabase
     .from('buddy_reads')
     .select('id, max_participants, is_active')
     .eq('id', params.id)
@@ -30,8 +29,7 @@ export async function POST(
   }
 
   // Check if already joined
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (supabase as any)
+  const { data: existing } = await supabase
     .from('buddy_read_participants')
     .select('user_id')
     .eq('buddy_read_id', params.id)
@@ -43,8 +41,7 @@ export async function POST(
   }
 
   // Check participant count
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count } = await (supabase as any)
+  const { count } = await supabase
     .from('buddy_read_participants')
     .select('user_id', { count: 'exact', head: true })
     .eq('buddy_read_id', params.id);
@@ -53,8 +50,7 @@ export async function POST(
     return NextResponse.json({ error: 'Buddy read is full' }, { status: 400 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('buddy_read_participants')
     .insert({
       buddy_read_id: params.id,

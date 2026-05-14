@@ -1,51 +1,49 @@
-# Liravo Bug Fix Plan
-Date/Time: May 14, 2026 04:35 AM UTC
+# Custom Bugs Fix Plan
+Date/Time: May 14, 2026 07:46 AM UTC
 
-## Phase 1 — Financial Integrity & Idempotency (Highest Priority)
-1. Add strict monetary validation and thresholds for payout creation.
-2. Enforce idempotency keys for tip creation and all payment-intent endpoints.
-3. Move financial writes into transactional boundaries (DB transaction or RPC).
-4. Add immutable financial audit trail with correlation IDs.
-5. Add DB uniqueness constraints for webhook/provider event IDs.
+1. Harden webhook integrity path
+- Expand replay key composition and validate canonical event fingerprints.
+- Extend lock TTL + heartbeat.
+- Move final state transition to a single transactional routine where possible.
 
-## Phase 2 — Security Hardening
-6. Harden webhook signature verification to exact provider spec (version/timestamp/canonical payload).
-7. Fail closed on replay-check dependency failure for webhook processing.
-8. Strengthen CSRF enforcement for mutating routes with Origin + Referer/Sec-Fetch-Site policy.
-9. Add endpoint-specific rate limiting for payment and write-heavy routes.
-10. Restrict content-type/body-size parsing policies on sensitive endpoints.
+2. Repair financial atomicity and accounting integrity
+- Add transactional payout reserve RPC (balance check + reserve + audit log).
+- Enforce exactly-once semantics for tips/subscriptions via unique business keys.
+- Make audit log write mandatory/transactional.
 
-## Phase 3 — Concurrency, Resilience, and Scalability
-11. Replace non-atomic locking logic with atomic distributed lock primitives.
-12. Replace weak lock token generation with cryptographic randomness.
-13. Move synchronous side effects (notifications/XP/etc.) to outbox/queue workers.
-14. Implement retry with exponential backoff + jitter and max-attempt governance.
-15. Add thundering-herd mitigation (bounded worker concurrency, adaptive backpressure).
+3. Strengthen abuse controls and edge trust
+- Replace raw x-forwarded-for usage with trusted IP derivation.
+- Add route-level and global rate limits with separate budgets for auth, money, AI.
+- Enforce server-side body-size caps independent of request headers.
 
-## Phase 4 — Testing & Quality Gates
-16. Convert console-style verification scripts into formal Vitest suites.
-17. Add `npm test` script and enforce test pass in CI.
-18. Add tests for idempotency replay, duplicate webhook events, and transaction rollback safety.
-19. Add adversarial tests for CSRF, rate limit bypass, malformed payloads, and injection attempts.
-20. Add load/concurrency test scenarios for high-risk write paths.
+4. Add defense-in-depth for AI endpoints
+- Add structured output validation and strict schema fail-closed behavior.
+- Add prompt-injection mitigations (policy prompts + filtering + output constraints).
+- Scope caches by user/tenant and avoid caching sensitive data by default.
 
-## Phase 5 — Monitoring & Operations
-21. Instrument structured metrics for financial route success/failure/retry/replay.
-22. Add alerting on webhook replay spikes, payout anomalies, and lock-staleness.
-23. Add dashboards for transaction latency/error rate and queue depth.
-24. Define incident runbooks and reconciliation procedures for payment disputes.
+5. Improve reliability/retry behavior under load
+- Restrict retries to transient failures only.
+- Add circuit-breakers per provider and backpressure behavior.
+- Add thundering-herd protection for hot keys and batch queuing for spikes.
 
-## Recommended Execution Order
-- Week 1: Phase 1
-- Week 2: Phase 2 + critical Phase 3 items (11–13)
-- Week 3: Remaining Phase 3 + Phase 4
-- Week 4: Phase 5 and readiness verification
+6. Make side effects idempotent and race-safe
+- Route all XP/notification writes through outbox with idempotency keys.
+- Add unique constraints for XP/event dedupe.
+- Add compensating/reconciliation jobs for partial failures.
 
-## Exit Criteria
-- No duplicate financial records under retry/replay tests.
-- All payment/webhook/payout routes covered by strict validation + rate limits.
-- Queue/offline side effects resilient under dependency failures.
-- CI executes deterministic tests with meaningful pass/fail outcomes.
-- Monitoring and alerts in place for key financial integrity controls.
+7. Raise type safety and code quality baseline
+- Remove `any` from API critical paths.
+- Introduce generated DB types and stricter lint rules.
+- Add nullability guards and typed helper wrappers for Supabase RPC results.
 
-Footer/Signature: Generated on May 14, 2026 04:35 AM UTC
+8. Close observability and monitoring gaps
+- Standardize structured logs with correlation IDs.
+- Add security/finance dashboards and alert thresholds.
+- Add periodic reconciliation reports for ledger vs aggregates.
+
+9. Validation and rollout
+- Add concurrency, fuzz, and property-based tests for money flows.
+- Run penetration tests for OWASP top-10 and prompt-injection scenarios.
+- Roll out behind feature flags with canary monitoring and rollback criteria.
+
+Footer/Signature: Generated on May 14, 2026 07:46 AM UTC

@@ -13,7 +13,7 @@ const CreateDebateSchema = z.object({
 export async function GET() {
   const supabase = createClient();
 
-  const { data: debates, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: debates, error } = await supabase 
     .from('book_debates')
     .select('id, book_id, user_id, question, yes_count, no_count, is_active, created_at')
     .eq('is_active', true)
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: debate, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: debate, error } = await supabase 
     .from('book_debates')
     .insert({
       book_id: parsed.data.book_id,

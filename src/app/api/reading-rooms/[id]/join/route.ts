@@ -14,8 +14,7 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: room } = await (supabase as any)
+  const { data: room } = await supabase
     .from('reading_rooms')
     .select('id, is_active, is_public')
     .eq('id', params.id)
@@ -30,8 +29,7 @@ export async function POST(
   }
 
   // Check if already joined
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (supabase as any)
+  const { data: existing } = await supabase
     .from('room_participants')
     .select('user_id')
     .eq('room_id', params.id)
@@ -42,8 +40,7 @@ export async function POST(
     return NextResponse.json({ joined: true, alreadyJoined: true });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('room_participants')
     .insert({
       room_id: params.id,

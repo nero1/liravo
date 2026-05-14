@@ -19,7 +19,7 @@ export async function GET(
   const userId = searchParams.get('userId');
 
   try {
-    const { data: challenge } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    const { data: challenge } = await supabase 
       .from('challenges')
       .select('name, goal_books')
       .eq('id', params.id)
@@ -41,7 +41,7 @@ export async function GET(
       }
 
       // Get progress
-      const { data: progress } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+      const { data: progress } = await supabase 
         .from('challenge_participants')
         .select('joined_at')
         .eq('challenge_id', params.id)

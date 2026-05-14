@@ -24,8 +24,7 @@ export default async function ReadingRoomsPage() {
 
   if (!user) redirect('/auth/login');
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: roomsRaw } = await (supabase as any)
+  const { data: roomsRaw } = await supabase
     .from('reading_rooms')
     .select('id, name, book_id, is_public, created_by, is_active, created_at')
     .eq('is_active', true)

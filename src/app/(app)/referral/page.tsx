@@ -47,8 +47,7 @@ export default async function ReferralPage() {
   }
 
   // Better: fetch users grouped by referred_by
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const topReferrersResult = await (supabase as any)
+  const topReferrersResult = await supabase
     .rpc('get_top_referrers')
     .limit(10);
   const topReferrers = topReferrersResult?.data ?? null;

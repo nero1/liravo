@@ -14,8 +14,7 @@ export async function GET(request: Request) {
   const supabase = createServiceClient();
 
   // moderation_log table may not exist in DB type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: logs, error } = await (supabase as any)
+  const { data: logs, error } = await supabase
     .from('moderation_log')
     .select('*')
     .order('created_at', { ascending: false })

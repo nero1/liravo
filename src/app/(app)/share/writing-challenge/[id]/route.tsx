@@ -17,8 +17,7 @@ export async function GET(
   let userName = 'A Writer';
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: challenge } = await (supabase as any)
+    const { data: challenge } = await supabase
       .from('writing_challenges')
       .select('name')
       .eq('id', params.id)
@@ -37,8 +36,7 @@ export async function GET(
 
       if (profile) userName = profile.display_name;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { count } = await (supabase as any)
+      const { count } = await supabase
         .from('writing_challenge_entries')
         .select('*', { count: 'exact', head: true })
         .eq('challenge_id', params.id)

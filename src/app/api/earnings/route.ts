@@ -12,8 +12,7 @@ export async function GET() {
   }
 
   // Tips received (as creator)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tips } = await (supabase as any)
+  const { data: tips } = await supabase
     .from('tips')
     .select('creator_amount')
     .eq('creator_id', user.id)
@@ -25,8 +24,7 @@ export async function GET() {
   );
 
   // Referral commissions (10% of platform gross from referred users' subscriptions)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: commissions } = await (supabase as any)
+  const { data: commissions } = await supabase
     .from('referral_commissions')
     .select('amount')
     .eq('referrer_id', user.id);
@@ -37,8 +35,7 @@ export async function GET() {
   );
 
   // Event revenue (ticket sales, workshop fees)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: eventRevenue } = await (supabase as any)
+  const { data: eventRevenue } = await supabase
     .from('event_revenue')
     .select('amount')
     .eq('organizer_id', user.id);
@@ -51,8 +48,7 @@ export async function GET() {
   const totalEarnings = tipsTotal.plus(commissionsTotal).plus(eventTotal);
 
   // Payout history
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: payouts } = await (supabase as any)
+  const { data: payouts } = await supabase
     .from('payout_requests')
     .select('id, amount, status, created_at')
     .eq('user_id', user.id)

@@ -5,6 +5,15 @@ export interface RetryOptions {
   shouldRetry?: (error: unknown, attempt: number) => boolean;
 }
 
+function isTransientError(error: unknown): boolean {
+  if (error instanceof TypeError) return true; // network fetch failures
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return msg.includes('timeout') || msg.includes('network') || msg.includes('429') || msg.includes('5');
+  }
+  return false;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -23,7 +32,8 @@ export async function withExponentialBackoff<T>(
       return await op();
     } catch (error) {
       lastError = error;
-      const retryAllowed = options.shouldRetry ? options.shouldRetry(error, attempt) : true;
+      // Bugfix: default retries only for transient failures to prevent retry storms on permanent/4xx errors.
+      const retryAllowed = options.shouldRetry ? options.shouldRetry(error, attempt) : isTransientError(error);
       if (attempt >= retries || !retryAllowed) {
         break;
       }

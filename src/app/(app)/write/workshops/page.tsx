@@ -24,8 +24,7 @@ export default async function WorkshopsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rooms } = await (supabase as any)
+  const { data: rooms } = await supabase
     .from('workshop_rooms')
     .select('*, facilitator:facilitator_id(display_name, username)')
     .eq('is_active', true)
@@ -118,8 +117,7 @@ function CreateRoomForm() {
           const name = formData.get('name') as string;
           const topic = formData.get('topic') as string;
           const max_members = Math.min(8, Math.max(3, parseInt(formData.get('max_members') as string, 10) || 5));
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from('workshop_rooms').insert({
+          await supabase.from('workshop_rooms').insert({
             name,
             topic: topic || null,
             max_members,
@@ -179,8 +177,7 @@ function JoinRoomButton({ roomId }: { roomId: string }) {
         } = await supabase.auth.getUser();
         if (!user) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: room } = await (supabase as any)
+        const { data: room } = await supabase
           .from('workshop_rooms')
           .select('id, max_members, member_count')
           .eq('id', roomId)
@@ -188,8 +185,7 @@ function JoinRoomButton({ roomId }: { roomId: string }) {
 
         if (!room || (room.member_count ?? 0) >= (room.max_members ?? 8)) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: existing } = await (supabase as any)
+        const { data: existing } = await supabase
           .from('workshop_members')
           .select('id')
           .eq('user_id', user.id)
@@ -198,13 +194,11 @@ function JoinRoomButton({ roomId }: { roomId: string }) {
 
         if (existing) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
+        await supabase
           .from('workshop_members')
           .insert({ user_id: user.id, room_id: roomId });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
+        await supabase
           .from('workshop_rooms')
           .update({ member_count: (room.member_count ?? 0) + 1 })
           .eq('id', roomId);

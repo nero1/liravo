@@ -17,7 +17,7 @@ export async function POST(
 
   // Verify challenge exists and is active
   const now = new Date().toISOString();
-  const { data: challenge } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: challenge } = await supabase 
     .from('challenges')
     .select('id, ends_at')
     .eq('id', params.id)
@@ -28,7 +28,7 @@ export async function POST(
     return NextResponse.json({ error: 'Challenge not found or not active' }, { status: 404 });
   }
 
-  const { error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { error } = await supabase 
     .from('challenge_participants')
     .upsert({ challenge_id: params.id, user_id: user.id });
 

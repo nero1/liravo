@@ -7,8 +7,7 @@ export async function GET(
 ) {
   const supabase = createClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: room, error } = await (supabase as any)
+  const { data: room, error } = await supabase
     .from('workshop_rooms')
     .select('*')
     .eq('id', params.id)
@@ -16,14 +15,12 @@ export async function GET(
 
   if (error || !room) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: members } = await (supabase as any)
+  const { data: members } = await supabase
     .from('workshop_members')
     .select('user_id, users:user_id(display_name, username)')
     .eq('room_id', params.id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: submissions } = await (supabase as any)
+  const { data: submissions } = await supabase
     .from('workshop_submissions')
     .select('id, title, excerpt, word_count, created_at, user_id, users:user_id(display_name, username)')
     .eq('room_id', params.id)
@@ -33,8 +30,7 @@ export async function GET(
   // Fetch feedback for each submission
   const submissionsWithFeedback = await Promise.all(
     (submissions ?? []).map(async (sub: { id: string; [key: string]: unknown }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: feedback } = await (supabase as any)
+      const { data: feedback } = await supabase
         .from('workshop_feedback')
         .select('id, comment, created_at, user_id, users:user_id(display_name, username)')
         .eq('submission_id', sub.id)

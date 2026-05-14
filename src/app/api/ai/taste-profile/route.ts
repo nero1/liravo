@@ -130,8 +130,7 @@ Write in a warm, insightful tone. Focus on what kind of stories this reader grav
   const generatedAt = new Date().toISOString();
 
   // Store in DB
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('ai_taste_profiles').upsert({
+  await supabase.from('ai_taste_profiles').upsert({
     user_id: user.id,
     profile_text: profileText,
     generated_at: generatedAt,

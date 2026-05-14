@@ -21,8 +21,7 @@ export async function PATCH(
   }
 
   // Check user is a participant
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: participant } = await (supabase as any)
+  const { data: participant } = await supabase
     .from('buddy_read_participants')
     .select('user_id')
     .eq('buddy_read_id', params.id)
@@ -45,8 +44,7 @@ export async function PATCH(
   }
 
   if (Object.keys(updates).length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    await supabase
       .from('buddy_reads')
       .update(updates)
       .eq('id', params.id);
@@ -54,8 +52,7 @@ export async function PATCH(
 
   // Add note if provided
   if (parsed.data.note) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    await supabase
       .from('buddy_read_notes')
       .insert({
         buddy_read_id: params.id,

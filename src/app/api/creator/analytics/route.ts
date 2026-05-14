@@ -35,8 +35,7 @@ export async function GET() {
   );
 
   // Tips received (sum from tips table)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tips } = await (supabase as any)
+  const { data: tips } = await supabase
     .from('tips')
     .select('recipient_amount')
     .eq('recipient_id', user.id)

@@ -6,6 +6,7 @@ import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { claimIdempotency } from '@/lib/idempotency';
 import crypto from 'crypto';
 import { recordMetric } from '@/lib/metrics';
+import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 
 const bodySchema = z.object({
   provider: z.enum(['dodopayments', 'paystack']),
@@ -16,7 +17,8 @@ const PRICE_USD = new Decimal('4.99');
 const PRICE_NGN = new Decimal('7500');
 
 export async function POST(req: Request) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  const correlationId = getRequestCorrelationId(req);
+  const ip = getClientIp(req);
   const rate = await checkCriticalRateLimit(ip);
   if (!rate.allowed) {
     recordMetric('rate_limit_block', { route: 'src/app/api/subscriptions/create/route.ts' }, 'warn');
@@ -35,7 +37,13 @@ export async function POST(req: Request) {
   let body: unknown;
   const contentType = req.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) {
-    body = await req.json().catch(() => ({}));
+    const raw = await req.text().catch(() => '');
+    if (raw.length > 10_000) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+    try {
+      body = raw ? JSON.parse(raw) : {};
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
   } else {
     const form = await req.formData().catch(() => new FormData());
     body = { provider: form.get('provider'), currency: form.get('currency') };
@@ -58,8 +66,7 @@ export async function POST(req: Request) {
 
   const amount = currency === 'NGN' ? PRICE_NGN.toFixed(2) : PRICE_USD.toFixed(2);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: insertError } = await (supabase as any).from('subscriptions').insert({
+    const { error: insertError } = await supabase.from('subscriptions').insert({
     user_id: user.id,
     provider,
     status: 'pending',
@@ -71,8 +78,7 @@ export async function POST(req: Request) {
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from('financial_audit_log').insert({
+    const { error: auditError } = await supabase.from('financial_audit_log').insert({
     actor_user_id: user.id,
     target_user_id: user.id,
     action: 'subscription_create_pending',
@@ -80,9 +86,13 @@ export async function POST(req: Request) {
     currency,
     provider,
     idempotency_key: idemKey,
-    correlation_id: req.headers.get('x-request-id') ?? null,
+    correlation_id: correlationId,
     metadata: {},
   });
+  if (auditError) {
+    // Bugfix: fail closed if audit log write fails for financial mutation.
+    return NextResponse.json({ error: 'Failed to persist audit trail' }, { status: 500 });
+  }
 
   const checkoutUrl =
     provider === 'paystack'

@@ -21,8 +21,7 @@ export async function GET() {
   }
 
   // Get buddy reads the user is part of, or open ones they can join
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: participating } = await (supabase as any)
+  const { data: participating } = await supabase
     .from('buddy_read_participants')
     .select('buddy_read_id')
     .eq('user_id', user.id);
@@ -34,8 +33,7 @@ export async function GET() {
   // Get buddy reads user is in
   let myReads: unknown[] = [];
   if (participatingIds.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: myReadsData } = await (supabase as any)
+    const { data: myReadsData } = await supabase
       .from('buddy_reads')
       .select('id, book_id, max_participants, current_chapter, is_active, created_by, created_at')
       .in('id', participatingIds)
@@ -45,8 +43,7 @@ export async function GET() {
   }
 
   // Get open buddy reads user can join
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: openReads } = await (supabase as any)
+  const { data: openReads } = await supabase
     .from('buddy_reads')
     .select('id, book_id, max_participants, current_chapter, is_active, created_by, created_at')
     .eq('is_active', true)
@@ -79,8 +76,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: buddyRead, error } = await (supabase as any)
+  const { data: buddyRead, error } = await supabase
     .from('buddy_reads')
     .insert({
       book_id: parsed.data.book_id,
@@ -97,8 +93,7 @@ export async function POST(req: Request) {
   }
 
   // Add creator as first participant
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  await supabase
     .from('buddy_read_participants')
     .insert({
       buddy_read_id: buddyRead.id,

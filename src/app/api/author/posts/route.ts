@@ -18,8 +18,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'authorId required' }, { status: 400 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('author_posts')
     .select('id, title, body, type, book_id, author_id, created_at')
     .eq('author_id', authorId)
@@ -61,8 +60,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('author_posts')
     .insert({
       author_id: user.id,

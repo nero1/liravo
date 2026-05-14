@@ -11,8 +11,7 @@ const CreateRoomSchema = z.object({
 export async function GET() {
   const supabase = createClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('workshop_rooms')
     .select('*, facilitator:facilitator_id(display_name, username)')
     .eq('is_active', true)
@@ -41,8 +40,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('workshop_rooms')
     .insert({
       ...parsed.data,

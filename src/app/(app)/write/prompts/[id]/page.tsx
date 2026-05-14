@@ -15,8 +15,7 @@ interface PageProps {
 export default async function PromptResponsesPage({ params, searchParams }: PageProps) {
   const supabase = createClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: prompt } = await (supabase as any)
+  const { data: prompt } = await supabase
     .from('writing_prompts')
     .select('*')
     .eq('id', params.id)
@@ -27,8 +26,7 @@ export default async function PromptResponsesPage({ params, searchParams }: Page
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10));
   const from = (page - 1) * PAGE_SIZE;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: submissions, count } = await (supabase as any)
+  const { data: submissions, count } = await supabase
     .from('prompt_submissions')
     .select('id, content, word_count, created_at, user_id, users:user_id(display_name, username, avatar_url)', { count: 'exact' })
     .eq('prompt_id', params.id)
@@ -53,29 +51,26 @@ export default async function PromptResponsesPage({ params, searchParams }: Page
       </div>
 
       <div className="space-y-4">
-        {(submissions ?? []).map((sub: {
-          id: string;
-          content: string;
-          word_count: number;
-          created_at: string;
-          users: { display_name: string; username: string; avatar_url: string | null } | null;
-        }) => (
+        {(submissions ?? []).map((sub) => {
+          // Bugfix: relation payload can be array-shaped depending on Supabase join typing; normalize safely.
+          const profile = Array.isArray(sub.users) ? sub.users[0] : sub.users;
+          return (
           <div key={sub.id} className="rounded-xl border bg-card p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold overflow-hidden">
-                {sub.users?.avatar_url ? (
+                {profile?.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={sub.users.avatar_url} alt={sub.users.display_name} className="w-full h-full object-cover" />
+                  <img src={profile.avatar_url} alt={profile.display_name} className="w-full h-full object-cover" />
                 ) : (
-                  sub.users?.display_name?.[0]?.toUpperCase() ?? '?'
+                  profile?.display_name?.[0]?.toUpperCase() ?? '?'
                 )}
               </div>
               <div>
                 <Link
-                  href={`/profile/${sub.users?.username ?? ''}`}
+                  href={`/profile/${profile?.username ?? ''}`}
                   className="text-sm font-medium hover:underline"
                 >
-                  {sub.users?.display_name ?? 'Unknown'}
+                  {profile?.display_name ?? 'Unknown'}
                 </Link>
                 <span className="text-xs text-muted-foreground ml-2">{sub.word_count} words</span>
               </div>
@@ -85,7 +80,7 @@ export default async function PromptResponsesPage({ params, searchParams }: Page
             </div>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{sub.content}</p>
           </div>
-        ))}
+        )})}
       </div>
 
       {totalPages > 1 && (

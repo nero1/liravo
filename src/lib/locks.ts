@@ -19,9 +19,21 @@ export async function withRedisLock<T>(
   if (!redis.setNxEx) {
     await redis.expire(lockKey, ttlSeconds);
   }
+  // Bugfix: heartbeat lock TTL during long critical sections to reduce accidental expiry/races.
+  const heartbeat = setInterval(async () => {
+    try {
+      const currentOwner = await redis.get(lockKey);
+      if (currentOwner === ownerToken) {
+        await redis.expire(lockKey, ttlSeconds);
+      }
+    } catch {
+      // best-effort heartbeat
+    }
+  }, Math.max(1000, Math.floor((ttlSeconds * 1000) / 2)));
   try {
     return await task();
   } finally {
+    clearInterval(heartbeat);
     // Bugfix: release only if this worker still owns the lock token.
     const currentOwner = await redis.get(lockKey);
     if (currentOwner === ownerToken) {

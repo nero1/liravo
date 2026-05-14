@@ -15,8 +15,7 @@ export async function GET(
 ) {
   const supabase = createClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('workshop_submissions')
     .select('id, title, excerpt, word_count, created_at, user_id, users:user_id(display_name, username)')
     .eq('room_id', params.id)
@@ -48,8 +47,7 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: submission, error } = await (supabase as any)
+  const { data: submission, error } = await supabase
     .from('workshop_submissions')
     .insert({
       user_id: user.id,

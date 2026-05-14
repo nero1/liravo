@@ -24,8 +24,7 @@ export async function POST(request: NextRequest) {
 
   const hash = await bcrypt.hash(parsed.data.pin, 12);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('users')
     .update({ pin_hash: hash })
     .eq('id', user.id);
@@ -45,8 +44,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid PIN format' }, { status: 400 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: userData } = await (supabase as any)
+  const { data: userData } = await supabase
     .from('users')
     .select('pin_hash')
     .eq('id', user.id)

@@ -15,7 +15,7 @@ export async function POST(
   }
 
   // Get the original list
-  const { data: original } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: original } = await supabase 
     .from('reading_lists')
     .select('id, name, description')
     .eq('id', params.id)
@@ -27,7 +27,7 @@ export async function POST(
   }
 
   // Create fork
-  const { data: forked, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: forked, error } = await supabase 
     .from('reading_lists')
     .insert({
       user_id: user.id,
@@ -43,7 +43,7 @@ export async function POST(
   }
 
   // Copy books
-  const { data: originalBooks } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: originalBooks } = await supabase 
     .from('reading_list_books')
     .select('book_id')
     .eq('list_id', params.id);
@@ -53,7 +53,7 @@ export async function POST(
       list_id: forked.id,
       book_id: b.book_id,
     }));
-    await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    await supabase 
       .from('reading_list_books')
       .insert(inserts);
   }

@@ -35,7 +35,7 @@ export async function POST(
   const { vote } = parsed.data;
 
   // Check if user already voted
-  const { data: existingVote } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: existingVote } = await supabase 
     .from('debate_votes')
     .select('vote')
     .eq('debate_id', params.id)
@@ -47,7 +47,7 @@ export async function POST(
   }
 
   // Insert vote
-  const { error: voteError } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { error: voteError } = await supabase 
     .from('debate_votes')
     .insert({ debate_id: params.id, user_id: user.id, vote });
 
@@ -59,15 +59,15 @@ export async function POST(
   const field = vote === 'yes' ? 'yes_count' : 'no_count';
 
   // Get current count
-  const { data: debate } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: debate } = await supabase
     .from('book_debates')
-    .select(`${field}`)
+    .select('yes_count,no_count')
     .eq('id', params.id)
     .single();
 
   if (debate) {
-    const current = (debate[field] as number) ?? 0;
-    await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    const current = field === 'yes_count' ? (debate.yes_count ?? 0) : (debate.no_count ?? 0);
+    await supabase 
       .from('book_debates')
       .update({ [field]: current + 1 })
       .eq('id', params.id);

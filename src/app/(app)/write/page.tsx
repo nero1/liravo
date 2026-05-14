@@ -59,14 +59,12 @@ export default async function WritePage() {
   const isNewbieWriter = profile?.user_types?.includes('newbie_writer') ?? false;
 
   // Fetch writing stats
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: promptStats } = await (supabase as any)
+  const { data: promptStats } = await supabase
     .from('prompt_submissions')
     .select('id, word_count', { count: 'exact' })
     .eq('user_id', user.id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: challengeStats } = await (supabase as any)
+  const { data: challengeStats } = await supabase
     .from('writing_challenge_entries')
     .select('id, word_count', { count: 'exact' })
     .eq('user_id', user.id);

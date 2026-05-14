@@ -19,8 +19,7 @@ export async function GET(req: Request) {
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '20'), 50);
   const now = new Date().toISOString();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('events')
     .select('id, title, description, event_date, is_paid, price, currency, host_id, book_id, max_attendees, created_at')
     .gte('event_date', now)
@@ -67,8 +66,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: event, error } = await (supabase as any)
+  const { data: event, error } = await supabase
     .from('events')
     .insert({
       title: parsed.data.title,

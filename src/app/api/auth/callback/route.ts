@@ -57,14 +57,16 @@ export async function GET(request: Request) {
             await checkAndAwardBadges(referrer.id, 'referral');
 
             // Record in referrals table if it exists
-            await (serviceClient as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-              .from('referrals')
-              .insert({
-                referrer_id: referrer.id,
-                referred_id: user.id,
-              })
-              .then(() => null)
-              .catch(() => null); // Silently ignore if table doesn't exist
+            try {
+              await serviceClient
+                .from('referrals')
+                .insert({
+                  referrer_id: referrer.id,
+                  referred_id: user.id,
+                });
+            } catch {
+              // Silently ignore if table doesn't exist
+            }
           }
         }
 

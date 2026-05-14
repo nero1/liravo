@@ -27,11 +27,12 @@ export async function POST(
   }
 
   const idemHeader = request.headers.get('x-idempotency-key');
-  if (idemHeader) {
-    // Bugfix: suppress duplicate side effects on client retries.
-    const firstAttempt = await ensureIdempotency(`follow:${user.id}:${targetId}:${idemHeader}`, 120);
-    if (!firstAttempt) return NextResponse.json({ following: true, idempotent: true });
+  if (!idemHeader || idemHeader.length < 8) {
+    // Bugfix: require idempotency key so follow + XP/notification side effects are replay-safe.
+    return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
   }
+  const firstAttempt = await ensureIdempotency(`follow:${user.id}:${targetId}:${idemHeader}`, 120);
+  if (!firstAttempt) return NextResponse.json({ following: true, idempotent: true });
 
   // Bugfix: validate target existence/eligibility before creating relationship side effects.
   const { data: targetUser } = await supabase

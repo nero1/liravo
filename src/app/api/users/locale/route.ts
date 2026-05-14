@@ -30,8 +30,7 @@ export async function PUT(request: NextRequest) {
 
   const { locale } = parsed.data;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('users')
     .update({ preferred_locale: locale })
     .eq('id', user.id);

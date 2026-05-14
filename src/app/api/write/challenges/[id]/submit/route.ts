@@ -33,8 +33,7 @@ export async function POST(
   }
 
   // Check challenge exists and is active
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: challenge } = await (supabase as any)
+  const { data: challenge } = await supabase
     .from('writing_challenges')
     .select('id, end_date')
     .eq('id', params.id)
@@ -48,8 +47,7 @@ export async function POST(
   }
 
   // Insert entry
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: entry, error } = await (supabase as any)
+  const { data: entry, error } = await supabase
     .from('writing_challenge_entries')
     .insert({
       user_id: user.id,

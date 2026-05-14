@@ -10,7 +10,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = createClient();
-  const { data } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data } = await supabase 
     .from('reading_lists')
     .select('name')
     .eq('id', params.id)
@@ -22,7 +22,7 @@ export default async function ListDetailPage({ params }: Props) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: list } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: list } = await supabase 
     .from('reading_lists')
     .select('id, user_id, name, description, is_public, created_at')
     .eq('id', params.id)
@@ -43,7 +43,7 @@ export default async function ListDetailPage({ params }: Props) {
   }
 
   // Get books
-  const { data: listBooks } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: listBooks } = await supabase 
     .from('reading_list_books')
     .select('book_id, added_at')
     .eq('list_id', params.id)
@@ -66,7 +66,7 @@ export default async function ListDetailPage({ params }: Props) {
   // Is the current user following this list?
   let isFollowing = false;
   if (user && !isOwner) {
-    const { data: followData } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    const { data: followData } = await supabase 
       .from('reading_list_follows')
       .select('list_id')
       .eq('list_id', params.id)
