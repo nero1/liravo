@@ -14,6 +14,10 @@ const QUICK_LINKS = [
   { label: 'Affiliate Stores', href: '/admin/affiliate-stores', icon: '🔗' },
   { label: 'Promoted Listings', href: '/admin/promoted-listings', icon: '★' },
   { label: 'Seasonal Events', href: '/admin/seasonal-events', icon: '🎉' },
+  { label: 'Writing Challenges', href: '/admin/writing-challenges', icon: '✍️' },
+  { label: 'Auth Providers', href: '/admin/auth-providers', icon: '🔐' },
+  { label: 'Theme', href: '/admin/theme', icon: '🎨' },
+  { label: 'Cron Status', href: '/admin/cron-status', icon: '⏱' },
   { label: 'Seed Content', href: '/admin/seed', icon: '🌱' },
 ];
 

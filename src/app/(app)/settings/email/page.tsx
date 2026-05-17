@@ -12,7 +12,7 @@ export default async function EmailSettingsPage() {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('email')
+    .select('email, email_verified')
     .eq('id', user.id)
     .single();
 
@@ -21,8 +21,12 @@ export default async function EmailSettingsPage() {
       <h1 className="font-display text-2xl font-bold mb-2">Email Recovery</h1>
       <p className="text-sm text-muted-foreground mb-6">
         Add an email address for account recovery. This is optional but recommended.
+        Email notifications are available on paid plans only.
       </p>
-      <EmailSettingsForm currentEmail={profile?.email ?? null} />
+      <EmailSettingsForm
+        currentEmail={profile?.email ?? null}
+        isVerified={profile?.email_verified ?? false}
+      />
     </div>
   );
 }
