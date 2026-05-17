@@ -4,9 +4,11 @@ import { createServiceClient } from '@/lib/supabase/server';
 export const runtime = 'edge';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { userId: string } }
 ) {
+  const { searchParams } = new URL(request.url);
+  const isStories = searchParams.get('format') === 'stories';
   const supabase = createServiceClient();
 
   let displayName = 'A Reader';
@@ -48,6 +50,72 @@ export async function GET(
     }
   } catch {
     // Use defaults
+  }
+
+  if (isStories) {
+    // 9:16 Instagram Stories format (1080×1920)
+    return new ImageResponse(
+      (
+        <div
+          style={{
+            width: '1080px',
+            height: '1920px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(180deg, #1c1917 0%, #292524 40%, #44403c 70%, #1c1917 100%)',
+            fontFamily: 'sans-serif',
+            position: 'relative',
+          }}
+        >
+          {/* Top accent line */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', background: 'linear-gradient(90deg, #d97706, #f59e0b, #fbbf24)' }} />
+
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '40px',
+              padding: '80px 60px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '22px', color: '#d97706', fontWeight: '700', letterSpacing: '6px', textTransform: 'uppercase' }}>
+              Liravo · {currentYear} Wrapped
+            </div>
+
+            <div style={{ fontSize: '64px', color: '#ffffff', fontWeight: '900', lineHeight: 1.1 }}>
+              {displayName}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '48px', marginTop: '32px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div style={{ fontSize: '120px', color: '#f59e0b', fontWeight: '900', lineHeight: 1 }}>{booksRead}</div>
+                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>Books Read</div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div style={{ fontSize: '120px', color: '#f59e0b', fontWeight: '900', lineHeight: 1 }}>{maxStreak}</div>
+                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>Day Streak</div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div style={{ fontSize: '56px', color: '#f59e0b', fontWeight: '900', lineHeight: 1.2, maxWidth: '800px', textAlign: 'center' }}>{topGenre}</div>
+                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>Top Genre</div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '20px', color: '#78716c', marginTop: '48px' }}>liravo.org</div>
+          </div>
+
+          {/* Bottom accent line */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '6px', background: 'linear-gradient(90deg, #d97706, #f59e0b, #fbbf24)' }} />
+        </div>
+      ),
+      { width: 1080, height: 1920 }
+    );
   }
 
   return new ImageResponse(

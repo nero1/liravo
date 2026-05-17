@@ -120,6 +120,43 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: subError.message }, { status: 500 });
         }
       }
+
+      // Credit referral commission (10% of platform gross) to the referrer, if any
+      const { data: referredUser } = await supabase
+        .from('users')
+        .select('referred_by')
+        .eq('id', user_id)
+        .single();
+
+      if (referredUser?.referred_by) {
+        const { data: sub } = await supabase
+          .from('subscriptions')
+          .select('amount, currency')
+          .eq('id', subscription_id ?? '')
+          .single();
+
+        if (sub?.amount) {
+          const Decimal = (await import('decimal.js')).default;
+          const gross = new Decimal(sub.amount);
+          const platformFee = gross.times('0.10'); // 10% platform fee
+          const commission = platformFee.times('0.10'); // 10% of platform's gross take
+
+          // Use upsert with onConflict to achieve idempotent insert
+          await (supabase.from('referral_commissions') as unknown as {
+            upsert: (v: unknown, opts: unknown) => Promise<unknown>;
+          }).upsert({
+            referrer_id: referredUser.referred_by,
+            referred_user_id: user_id,
+            transaction_id: event_id,
+            transaction_type: 'subscription',
+            gross_transaction_amount: gross.toFixed(4),
+            platform_fee_amount: platformFee.toFixed(4),
+            commission_rate: '0.1000',
+            commission_amount: commission.toFixed(4),
+            idempotency_key: `ref_commission_${event_id}`,
+          }, { onConflict: 'idempotency_key', ignoreDuplicates: true });
+        }
+      }
     } else if (event === 'subscription.cancelled') {
       const { error: userError } = await supabase
         .from('users')

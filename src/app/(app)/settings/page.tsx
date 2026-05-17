@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText } from 'lucide-react';
+import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText, ShieldCheck } from 'lucide-react';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Settings' };
@@ -14,6 +14,7 @@ export default async function SettingsPage() {
   const settingsLinks = [
     { href: '/settings/email', icon: Mail, label: 'Email Recovery', desc: 'Add email for account recovery' },
     { href: '/settings/pin', icon: Lock, label: '4-Digit PIN', desc: 'Extra security for sensitive actions' },
+    { href: '/settings/2fa', icon: ShieldCheck, label: 'Two-Factor Auth', desc: 'Authenticator app (no SMS)' },
     { href: '/settings/import', icon: Upload, label: 'Import Books', desc: 'Import from Goodreads CSV' },
     { href: '/settings/verify-author', icon: FileText, label: 'Author Verification', desc: 'Apply for verified author status' },
     { href: '/settings/appeal', icon: AlertTriangle, label: 'Appeal a Decision', desc: 'Contest a moderation action' },
