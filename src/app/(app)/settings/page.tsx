@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText, ShieldCheck } from 'lucide-react';
+import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText, ShieldCheck, Download } from 'lucide-react';
+import { SettingsDataActions } from './SettingsDataActions';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Settings' };
@@ -40,6 +41,42 @@ export default async function SettingsPage() {
             <ChevronRight size={16} className="text-muted-foreground" />
           </Link>
         ))}
+      </div>
+
+      {/* Data and account actions */}
+      <div className="mt-8 space-y-4">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Data &amp; Privacy</h2>
+        <div className="space-y-2">
+          <a
+            href="/api/users/export"
+            download
+            className="flex items-center justify-between p-4 border border-border rounded-xl hover:bg-muted transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Download size={18} className="text-muted-foreground" />
+              <div>
+                <p className="font-medium text-sm">Export My Data (JSON)</p>
+                <p className="text-xs text-muted-foreground">Download your full reading history, reviews, and quotes</p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-muted-foreground" />
+          </a>
+          <a
+            href="/api/users/export?format=csv"
+            download
+            className="flex items-center justify-between p-4 border border-border rounded-xl hover:bg-muted transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Download size={18} className="text-muted-foreground" />
+              <div>
+                <p className="font-medium text-sm">Export Reading History (CSV)</p>
+                <p className="text-xs text-muted-foreground">Goodreads-compatible CSV of your shelf</p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-muted-foreground" />
+          </a>
+        </div>
+        <SettingsDataActions />
       </div>
     </div>
   );

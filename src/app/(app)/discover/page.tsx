@@ -7,6 +7,27 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Discover' };
 
+interface CreatorEntry {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  want_to_read_score: number;
+  is_verified_author: boolean;
+}
+
+async function getTopCreators(): Promise<CreatorEntry[]> {
+  try {
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    const res = await fetch(`${APP_URL}/api/creator/leaderboard`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json() as { leaderboard?: CreatorEntry[] };
+    return (data.leaderboard ?? []).slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
 interface PromotedBook {
   id: string;
   title: string;
@@ -252,11 +273,12 @@ export default async function DiscoverPage() {
     recommendedBooks = await getRecommendedBooks(user.id);
   }
 
-  const [trendingGlobal, trendingNational, promotedBooks, hiddenGems] = await Promise.all([
+  const [trendingGlobal, trendingNational, promotedBooks, hiddenGems, topCreators] = await Promise.all([
     getTrendingBooks(),
     userCountry ? getTrendingBooks(userCountry) : Promise.resolve([]),
     getPromotedBooks(),
     getHiddenGems(),
+    getTopCreators(),
   ]);
 
   return (
@@ -393,6 +415,42 @@ export default async function DiscoverPage() {
           ))}
         </div>
       </section>
+
+      {/* Top Creators This Week */}
+      {topCreators.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-xl font-bold">Top Creators</h2>
+            <Link href="/creator/leaderboard" className="text-sm text-accent hover:underline">
+              See all
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {topCreators.map((creator, i) => (
+              <Link
+                key={creator.user_id}
+                href={`/profile/${creator.username}`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted transition-colors"
+              >
+                <span className="text-sm font-bold text-muted-foreground w-5 text-center">{i + 1}</span>
+                <div className="w-9 h-9 rounded-full bg-muted overflow-hidden flex-shrink-0">
+                  {creator.avatar_url && (
+                    <Image src={creator.avatar_url} alt={creator.display_name} width={36} height={36} className="object-cover" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm line-clamp-1">{creator.display_name}</p>
+                  <p className="text-xs text-muted-foreground">@{creator.username}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-semibold text-accent">{creator.want_to_read_score}</p>
+                  <p className="text-xs text-muted-foreground">want-to-reads</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Recommended for You */}
       {user && recommendedBooks.length > 0 && (

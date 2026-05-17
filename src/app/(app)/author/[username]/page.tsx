@@ -6,12 +6,35 @@ import type { Metadata } from 'next';
 import { FollowButton } from '@/components/profile/FollowButton';
 import { AuthorPostCard } from '@/components/author/AuthorPostCard';
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
+
 export async function generateMetadata({
   params,
 }: {
   params: { username: string };
 }): Promise<Metadata> {
-  return { title: `Author: ${params.username}` };
+  const supabase = createClient();
+  const { data: author } = await supabase
+    .from('users')
+    .select('display_name, bio, avatar_url')
+    .eq('username', params.username)
+    .single();
+
+  const name = author?.display_name ?? params.username;
+  const description = author?.bio ?? `Discover books by ${name} on Liravo.`;
+
+  return {
+    title: `${name} — Author on Liravo`,
+    description,
+    openGraph: {
+      title: `${name} on Liravo`,
+      description,
+      images: author?.avatar_url ? [{ url: author.avatar_url }] : [],
+      url: `${APP_URL}/author/${params.username}`,
+      type: 'profile',
+    },
+    alternates: { canonical: `${APP_URL}/author/${params.username}` },
+  };
 }
 
 interface AuthorPost {
@@ -133,7 +156,19 @@ export default async function AuthorProfilePage({
     isFollowing = !!follow;
   }
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: author.display_name,
+    url: `${APP_URL}/author/${author.username}`,
+    ...(author.avatar_url && { image: author.avatar_url }),
+    ...(author.bio && { description: author.bio }),
+    sameAs: (author.external_links ?? []) as string[],
+  };
+
   return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
       <div className="space-y-4">
@@ -315,5 +350,6 @@ export default async function AuthorProfilePage({
         </section>
       )}
     </div>
+    </>
   );
 }
