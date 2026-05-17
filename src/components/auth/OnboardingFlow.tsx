@@ -38,9 +38,17 @@ export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: 
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
 
+  // Honeypot: bots fill this, humans don't see it
+  const [honeypot, setHoneypot] = useState('');
+
   const validateUsername = (val: string) => /^[a-zA-Z0-9_]{3,30}$/.test(val);
 
   const handleUsernameNext = async () => {
+    // Honeypot check — if filled, silently reject (bots shouldn't get an error signal)
+    if (honeypot) {
+      setStep('user_type');
+      return;
+    }
     if (!validateUsername(username)) {
       setError('Username must be 3–30 characters, letters, numbers, and underscores only.');
       return;
@@ -199,6 +207,18 @@ export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: 
               <p className="text-xs text-muted-foreground mt-1">Letters, numbers, and underscores. 3–30 characters.</p>
             </div>
           </div>
+
+          {/* Honeypot — hidden from real users, bots fill it */}
+          <input
+            type="text"
+            name="website"
+            value={honeypot}
+            onChange={(e) => setHoneypot(e.target.value)}
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', opacity: 0 }}
+          />
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 

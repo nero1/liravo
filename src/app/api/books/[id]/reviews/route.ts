@@ -6,6 +6,7 @@ import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import { classifyTone } from '@/lib/tone-classifier';
 import { checkSpam } from '@/lib/spam-detection';
+import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
 
 const reviewSchema = z.object({
   star_rating: z.number().int().min(1).max(5),
@@ -55,7 +56,9 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
   }
 
-  const { star_rating, body, review_type, mood_tags, spoiler_warning } = parsed.data;
+  const { star_rating, review_type, mood_tags, spoiler_warning } = parsed.data;
+  // Sanitize before any further processing or storage
+  const body = review_type === 'long' ? sanitizeRichText(parsed.data.body) : sanitizeText(parsed.data.body);
 
   // Check for spam before proceeding
   const isSpam = await checkSpam(user.id, 'review');
