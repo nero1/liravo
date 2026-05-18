@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { NotificationList } from '@/components/notifications/NotificationList';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'Notifications — Liravo',
 };

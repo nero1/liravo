@@ -4,6 +4,8 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import Decimal from 'decimal.js';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'Admin Dashboard — Liravo' };
 
 const QUICK_LINKS = [

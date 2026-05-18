@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const schema = z.object({
   tipId: z.string().uuid(),
   status: z.enum(['completed', 'failed']),

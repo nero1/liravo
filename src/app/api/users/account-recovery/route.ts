@@ -6,6 +6,8 @@ import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 import crypto from 'crypto';
 
+export const dynamic = 'force-dynamic';
+
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
 
 const schema = z.object({

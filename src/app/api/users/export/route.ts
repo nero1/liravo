@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   const ip = getClientIp(req);
   const rate = await checkCriticalRateLimit(ip);

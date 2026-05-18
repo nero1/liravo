@@ -5,6 +5,8 @@ import type { Metadata } from 'next';
 import type { BookRow } from '@/types/database';
 import { buildAffiliateLinks } from '@/services/books';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Essential Books for Writers — Liravo Resource Library',
   description:

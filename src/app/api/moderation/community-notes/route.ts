@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireModerator } from '@/lib/moderation';
 
+export const dynamic = 'force-dynamic';
+
 const noteSubmitSchema = z.object({
   content_type: z.enum(['review', 'quote', 'profile', 'debate']),
   content_id: z.string().uuid(),

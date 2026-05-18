@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { awardXP } from '@/services/xp';
 
+export const dynamic = 'force-dynamic';
+
 const CreateQuestionSchema = z.object({
   question: z.string().min(10).max(280),
   tags: z.array(z.string().max(50)).max(5).optional(),

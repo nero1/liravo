@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const createSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().min(1).max(5000),

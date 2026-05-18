@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 // debate_votes table not in generated types — using any cast
 // Expected columns: debate_id, user_id, vote (yes|no), created_at
 

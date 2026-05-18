@@ -13,6 +13,8 @@ import bcrypt from 'bcryptjs';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 const APP_NAME = 'Liravo';
 
 function generateRecoveryCodes(count = 8): string[] {

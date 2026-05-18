@@ -2,6 +2,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { AI_MODELS } from '@/constants/ai';
 
+export const dynamic = 'force-dynamic';
+
 interface UserProfile {
   id: string;
   genres: string[];

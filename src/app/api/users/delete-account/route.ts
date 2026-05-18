@@ -4,6 +4,8 @@ import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
 
+export const dynamic = 'force-dynamic';
+
 // Soft-delete: sets deleted_at, hard delete via cron after 30 days (PRD §15.10)
 export async function DELETE(req: Request) {
   const ip = getClientIp(req);

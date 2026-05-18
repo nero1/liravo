@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { requireModerator } from '@/lib/moderation';
 import { createServiceClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const actionSchema = z.object({
   action: z.enum(['approve', 'remove', 'warn', 'escalate']),
   reason: z.string().max(1000).optional(),

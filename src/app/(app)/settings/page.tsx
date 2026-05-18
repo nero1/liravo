@@ -5,6 +5,8 @@ import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText, ShieldCheck,
 import { SettingsDataActions } from './SettingsDataActions';
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'Settings' };
 
 export default async function SettingsPage() {

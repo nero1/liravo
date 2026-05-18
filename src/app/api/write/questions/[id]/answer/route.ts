@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { awardXP } from '@/services/xp';
 
+export const dynamic = 'force-dynamic';
+
 const AnswerSchema = z.object({
   answer: z.string().min(20).max(5000),
 });

@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { ensureIdempotency } from '@/lib/idempotency';
 import { withExponentialBackoff } from '@/lib/retry';
 
+export const dynamic = 'force-dynamic';
+
 const paramsSchema = z.object({ id: z.string().uuid() });
 
 export async function POST(

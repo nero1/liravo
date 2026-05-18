@@ -6,6 +6,8 @@ import type { Metadata } from 'next';
 import { FollowButton } from '@/components/profile/FollowButton';
 import { AuthorPostCard } from '@/components/author/AuthorPostCard';
 
+export const dynamic = 'force-dynamic';
+
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
 
 export async function generateMetadata({

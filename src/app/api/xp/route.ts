@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 
+export const dynamic = 'force-dynamic';
+
 const XP_AMOUNTS: Record<string, number> = {
   finish_book: 50,
   write_review: 20,

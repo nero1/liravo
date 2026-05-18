@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createNotification } from '@/services/notifications';
 
+export const dynamic = 'force-dynamic';
+
 const schema = z.object({
   userId: z.string().uuid(),
   approved: z.boolean(),

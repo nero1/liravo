@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { createNotification } from '@/services/notifications';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(
   _req: Request,
   { params }: { params: { id: string } }

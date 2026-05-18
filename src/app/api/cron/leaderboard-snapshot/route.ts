@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient } from '@/lib/redis';
 
+export const dynamic = 'force-dynamic';
+
 // Snapshot the current global XP leaderboard into Redis weekly keys
 // and reset weekly XP counters
 

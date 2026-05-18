@@ -4,6 +4,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { BookOpen, Star, Rss } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'Feed — Liravo',
 };

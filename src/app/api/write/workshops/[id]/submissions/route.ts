@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { checkAndAwardBadges } from '@/services/badges';
 
+export const dynamic = 'force-dynamic';
+
 const SubmitSchema = z.object({
   title: z.string().min(1).max(200),
   excerpt: z.string().min(1).max(1000),

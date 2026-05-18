@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { requireModerator } from '@/lib/moderation';
 import { createServiceClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const patchSchema = z.object({
   status: z.enum(['approved', 'rejected']),
   note: z.string().max(500).optional(),

@@ -2,6 +2,8 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 async function requireAdmin() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();

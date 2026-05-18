@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import EmailSettingsForm from './EmailSettingsForm';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'Email Recovery' };
 
 export default async function EmailSettingsPage() {

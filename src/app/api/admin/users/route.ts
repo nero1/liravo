@@ -2,6 +2,8 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const patchSchema = z.object({
   userId: z.string().uuid(),
   is_moderator: z.boolean().optional(),

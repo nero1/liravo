@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const CreateRoomSchema = z.object({
   name: z.string().min(3).max(100),
   topic: z.string().max(200).optional(),

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 
+export const dynamic = 'force-dynamic';
+
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }

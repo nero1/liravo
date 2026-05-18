@@ -3,6 +3,8 @@ import { APP_URL } from '@/constants/config';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'Referrals' };
 
 export default async function ReferralPage() {

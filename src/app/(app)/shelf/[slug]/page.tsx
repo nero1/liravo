@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { ReadingProgressBar } from '@/components/shelf/ReadingProgressBar';
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 interface ShelfPageProps {
   params: { slug: string };
 }

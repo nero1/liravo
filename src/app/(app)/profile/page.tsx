@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { ProfileView } from '@/components/profile/ProfileView';
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'My Profile' };
 
 export default async function ProfilePage() {

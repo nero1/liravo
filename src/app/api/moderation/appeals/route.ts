@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireModerator } from '@/lib/moderation';
 
+export const dynamic = 'force-dynamic';
+
 const appealSchema = z.object({
   report_id: z.string().uuid().optional(),
   reason: z.string().min(10).max(500),

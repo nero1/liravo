@@ -9,6 +9,8 @@ import { recordMetric } from '@/lib/metrics';
 import { enqueueOutboxEvent } from '@/lib/outbox';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 const schema = z.object({
   recipientId: z.string().uuid(),
   amount: z.number().min(0.5).max(5000),

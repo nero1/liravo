@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { awardXP, incrementStreak } from '@/services/xp';
 import { checkAndAwardBadges } from '@/services/badges';
 
+export const dynamic = 'force-dynamic';
+
 const SubmitSchema = z.object({
   content: z.string().min(50).max(2000),
 });

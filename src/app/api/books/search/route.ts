@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { searchGoogleBooks, googleVolumeToBookData } from '@/services/books';
 import { createServiceClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   const { data: { user } } = await createClient().auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
