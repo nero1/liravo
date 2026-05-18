@@ -7,6 +7,27 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Discover' };
 
+interface CreatorEntry {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  want_to_read_score: number;
+  is_verified_author: boolean;
+}
+
+async function getTopCreators(): Promise<CreatorEntry[]> {
+  try {
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    const res = await fetch(`${APP_URL}/api/creator/leaderboard`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json() as { leaderboard?: CreatorEntry[] };
+    return (data.leaderboard ?? []).slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
 interface PromotedBook {
   id: string;
   title: string;
@@ -130,6 +151,27 @@ async function getTrendingBooks(countryFilter?: string | null) {
   }
 }
 
+interface HiddenGem {
+  id: string;
+  title: string;
+  author_name: string;
+  cover_url: string | null;
+  average_rating: number | null;
+  have_read_count: number;
+}
+
+async function getHiddenGems(): Promise<HiddenGem[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('books')
+    .select('id, title, author_name, cover_url, average_rating, have_read_count')
+    .gte('average_rating', 4.0)
+    .lt('have_read_count', 50)
+    .order('average_rating', { ascending: false })
+    .limit(10);
+  return data ?? [];
+}
+
 async function getRecommendedBooks(userId: string) {
   const supabase = createClient();
 
@@ -231,10 +273,12 @@ export default async function DiscoverPage() {
     recommendedBooks = await getRecommendedBooks(user.id);
   }
 
-  const [trendingGlobal, trendingNational, promotedBooks] = await Promise.all([
+  const [trendingGlobal, trendingNational, promotedBooks, hiddenGems, topCreators] = await Promise.all([
     getTrendingBooks(),
     userCountry ? getTrendingBooks(userCountry) : Promise.resolve([]),
     getPromotedBooks(),
+    getHiddenGems(),
+    getTopCreators(),
   ]);
 
   return (
@@ -311,6 +355,51 @@ export default async function DiscoverPage() {
         </section>
       )}
 
+      {/* Hidden Gems */}
+      {hiddenGems.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="font-display text-xl font-bold">Hidden Gems</h2>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              Underrated
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">Highly rated books not many people have discovered yet.</p>
+          <div className="grid grid-cols-5 gap-3">
+            {hiddenGems.map((book) => (
+              <Link
+                key={book.id}
+                href={`/book/${book.id}`}
+                className="flex flex-col gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="relative w-full aspect-[2/3] rounded-md overflow-hidden bg-neutral-200 dark:bg-neutral-700">
+                  {book.cover_url ? (
+                    <Image
+                      src={book.cover_url}
+                      alt={book.title}
+                      fill
+                      className="object-cover"
+                      sizes="120px"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-4xl">💎</div>
+                  )}
+                  {book.average_rating && (
+                    <div className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded font-medium">
+                      ★ {book.average_rating.toFixed(1)}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold leading-tight line-clamp-2">{book.title}</p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-1">{book.author_name}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Browse by Mood */}
       <section>
         <h2 className="font-display text-xl font-bold mb-4">Browse by Mood</h2>
@@ -326,6 +415,42 @@ export default async function DiscoverPage() {
           ))}
         </div>
       </section>
+
+      {/* Top Creators This Week */}
+      {topCreators.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-xl font-bold">Top Creators</h2>
+            <Link href="/creator/leaderboard" className="text-sm text-accent hover:underline">
+              See all
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {topCreators.map((creator, i) => (
+              <Link
+                key={creator.user_id}
+                href={`/profile/${creator.username}`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted transition-colors"
+              >
+                <span className="text-sm font-bold text-muted-foreground w-5 text-center">{i + 1}</span>
+                <div className="w-9 h-9 rounded-full bg-muted overflow-hidden flex-shrink-0">
+                  {creator.avatar_url && (
+                    <Image src={creator.avatar_url} alt={creator.display_name} width={36} height={36} className="object-cover" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm line-clamp-1">{creator.display_name}</p>
+                  <p className="text-xs text-muted-foreground">@{creator.username}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-semibold text-accent">{creator.want_to_read_score}</p>
+                  <p className="text-xs text-muted-foreground">want-to-reads</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Recommended for You */}
       {user && recommendedBooks.length > 0 && (

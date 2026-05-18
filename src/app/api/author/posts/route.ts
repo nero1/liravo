@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
 
 const postSchema = z.object({
   title: z.string().min(1).max(200),
@@ -64,8 +65,8 @@ export async function POST(req: Request) {
     .from('author_posts')
     .insert({
       author_id: user.id,
-      title: parsed.data.title,
-      body: parsed.data.body,
+      title: sanitizeText(parsed.data.title),
+      body: sanitizeRichText(parsed.data.body),
       book_id: parsed.data.book_id ?? null,
       type: parsed.data.type,
     })

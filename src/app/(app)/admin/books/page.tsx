@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import { AudiobookToggle } from './AudiobookToggle';
 
 export const metadata: Metadata = { title: 'Book Management — Admin' };
 
@@ -20,7 +21,7 @@ export default async function AdminBooksPage() {
 
   const { data: books } = await supabase
     .from('books')
-    .select('id, title, author_name, cover_url, google_books_id, have_read_count')
+    .select('id, title, author_name, cover_url, google_books_id, have_read_count, has_audiobook')
     .order('have_read_count', { ascending: false })
     .limit(100);
 
@@ -55,6 +56,7 @@ export default async function AdminBooksPage() {
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Author</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Source</th>
               <th className="text-center px-4 py-3 font-semibold text-muted-foreground">Affiliate Clicks</th>
+              <th className="text-center px-4 py-3 font-semibold text-muted-foreground">Audiobook</th>
               <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Actions</th>
             </tr>
           </thead>
@@ -80,6 +82,9 @@ export default async function AdminBooksPage() {
                 </td>
                 <td className="px-4 py-3 text-center">
                   {affiliateCounts[book.id] ?? 0}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <AudiobookToggle bookId={book.id} initial={book.has_audiobook ?? false} />
                 </td>
                 <td className="px-4 py-3">
                   <form action="/api/books/refresh-affiliate" method="POST">

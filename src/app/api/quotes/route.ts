@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
+import { sanitizeText } from '@/lib/sanitize';
 
 const createQuoteSchema = z.object({
   book_id: z.string().uuid(),
@@ -25,7 +26,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { book_id, content, page_number } = parsed.data;
+  const { book_id, page_number } = parsed.data;
+  const content = sanitizeText(parsed.data.content);
 
   const serviceSupabase = createServiceClient();
   const { data: quote, error } = await serviceSupabase

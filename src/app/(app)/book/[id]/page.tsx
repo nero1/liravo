@@ -55,7 +55,9 @@ export async function generateMetadata({ params }: BookPageProps): Promise<Metad
       title: `${book.title} by ${book.author_name}`,
       description: book.description?.slice(0, 200) ?? '',
       images: book.cover_url ? [book.cover_url] : [],
+      url: `${APP_URL}/book/${params.id}`,
     },
+    alternates: { canonical: `${APP_URL}/book/${params.id}` },
     other: {
       'script:ld+json': JSON.stringify(bookJsonLd),
     },

@@ -1,8 +1,8 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { sendEmail, buildWeeklyDigestEmail } from '@/lib/email';
 
 export async function POST(req: Request) {
-  // Validate CRON_SECRET
   const authHeader = req.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
@@ -12,11 +12,13 @@ export async function POST(req: Request) {
 
   const supabase = createServiceClient();
 
-  // Get premium users
+  // Only send digests to paid subscribers who have a verified email and have opted in
   const { data: premiumUsers, error } = await supabase
     .from('users')
     .select('id, email, display_name, username')
     .eq('email_verified', true)
+    .eq('is_premium', true)
+    .eq('email_digest_enabled', true)
     .not('email', 'is', null)
     .limit(500);
 
@@ -25,35 +27,79 @@ export async function POST(req: Request) {
   }
 
   const users = premiumUsers ?? [];
-  let processed = 0;
+  let sent = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   for (const user of users) {
-    if (!user.email) continue;
+    if (!user.email) {
+      skipped++;
+      continue;
+    }
 
-    // Gather weekly activity summary
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    try {
+      const [{ count: newFollowers }, { count: newNotifications }, { data: recentBooks }] =
+        await Promise.all([
+          supabase
+            .from('follows')
+            .select('follower_id', { count: 'exact', head: true })
+            .eq('following_id', user.id)
+            .gte('created_at', since),
+          supabase
+            .from('notifications')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('created_at', since),
+          supabase
+            .from('shelf_books')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('added_at', since),
+        ]);
 
-    const { count: newFollowers } = await supabase
-      .from('follows')
-      .select('follower_id', { count: 'exact', head: true })
-      .eq('following_id', user.id)
-      .gte('created_at', since);
+      const stats = {
+        newFollowers: newFollowers ?? 0,
+        newNotifications: newNotifications ?? 0,
+        booksThisWeek: (recentBooks as unknown as { length: number } | null)?.length ?? 0,
+      };
 
-    const { count: newNotifications } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gte('created_at', since);
+      // Skip if nothing happened — no email needed
+      if (stats.newFollowers === 0 && stats.newNotifications === 0 && stats.booksThisWeek === 0) {
+        skipped++;
+        continue;
+      }
 
-    // Scaffold: log digest info (no real email sent)
-    console.log(`[Email Digest] User: ${user.email} (${user.display_name})`);
-    console.log(`  - New followers this week: ${newFollowers ?? 0}`);
-    console.log(`  - New notifications this week: ${newNotifications ?? 0}`);
-    console.log(`  - Profile: /profile/${user.username}`);
-    console.log(`  [SCAFFOLD] Email would be sent here via email provider`);
+      const { subject, html, text } = buildWeeklyDigestEmail(
+        user.display_name ?? user.username,
+        user.username,
+        stats
+      );
 
-    processed++;
+      const result = await sendEmail({
+        to: user.email,
+        type: 'weekly_digest',
+        isPaidUser: true,
+        subject,
+        html,
+        text,
+      });
+
+      if (result.ok) {
+        sent++;
+      } else {
+        errors.push(`${user.id}: ${result.error}`);
+      }
+    } catch (err) {
+      errors.push(`${user.id}: ${err instanceof Error ? err.message : 'unknown'}`);
+    }
   }
 
-  return NextResponse.json({ processed, message: `Digest scaffold logged for ${processed} users` });
+  return NextResponse.json({
+    sent,
+    skipped,
+    errors: errors.slice(0, 10),
+    message: `Digest sent to ${sent} users, skipped ${skipped}`,
+  });
 }
