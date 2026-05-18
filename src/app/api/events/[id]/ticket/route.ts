@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import Decimal from 'decimal.js';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const paramsSchema = z.object({ id: z.string().uuid() });
 
 export async function POST(

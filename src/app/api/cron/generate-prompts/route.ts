@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { AI_MODELS } from '@/constants/ai';
 
+export const dynamic = 'force-dynamic';
+
 const IDEMPOTENCY_KEY_PREFIX = 'cron:generate_prompts:';
 
 async function callDeepSeek(prompt: string): Promise<string | null> {

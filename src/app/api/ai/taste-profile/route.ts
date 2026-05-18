@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { AI_MODELS } from '@/constants/ai';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   const supabase = createClient();
   const {

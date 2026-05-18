@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getRedisClient } from '@/lib/redis';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const CACHE_TTL = 3600; // 1 hour
 
 const QuerySchema = z.object({

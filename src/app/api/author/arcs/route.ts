@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const arcSchema = z.object({
   book_id: z.string().uuid(),
   description: z.string().min(1).max(1000),

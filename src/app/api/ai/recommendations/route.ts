@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { withExponentialBackoff } from '@/lib/retry';
 import { withRedisLock } from '@/lib/locks';
 
+export const dynamic = 'force-dynamic';
+
 const QuerySchema = z.object({
   userId: z.string().uuid().optional(),
   mood: z.string().max(80).optional(),

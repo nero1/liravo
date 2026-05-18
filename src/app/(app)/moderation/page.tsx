@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { isModerator } from '@/lib/moderation';
 import { createServiceClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ModerationPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();

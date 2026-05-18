@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { isAdmin } from '@/lib/moderation';
 import { createServiceClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const PAGE_SIZE = 20;
 
 interface Props {

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { checkAndAwardBadges } from '@/services/badges';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const BodySchema = z.object({
   trigger: z.string().min(1),
 });

@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { NewShelfForm } from '@/components/shelf/NewShelfForm';
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'New Shelf' };
 
 export default async function NewShelfPage() {

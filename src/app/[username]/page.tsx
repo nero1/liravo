@@ -4,6 +4,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { ProfileView } from '@/components/profile/ProfileView';
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 interface ProfilePageProps {
   params: { username: string };
 }

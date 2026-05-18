@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 
+export const dynamic = 'force-dynamic';
+
 const createSchema = z.object({
   book_id: z.string().uuid(),
   max_participants: z.number().int().min(2).max(5),

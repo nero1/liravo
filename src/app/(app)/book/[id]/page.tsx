@@ -11,6 +11,8 @@ import { QuoteForm } from '@/components/books/QuoteForm';
 import type { Metadata } from 'next';
 import { APP_URL } from '@/constants/config';
 
+export const dynamic = 'force-dynamic';
+
 interface BookPageProps {
   params: { id: string };
 }

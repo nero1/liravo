@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const reportSchema = z.object({
   content_type: z.enum(['review', 'quote', 'profile']),
   content_id: z.string().uuid(),

@@ -7,6 +7,8 @@ import { withRedisLock } from '@/lib/locks';
 import { recordMetric } from '@/lib/metrics';
 import { getRequestCorrelationId } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 const webhookSchema = z.object({
   event: z.enum(['subscription.activated', 'subscription.cancelled']),
   user_id: z.string().uuid(),

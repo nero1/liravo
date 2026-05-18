@@ -6,6 +6,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { ReportActionForm } from '@/components/moderation/ReportActionForm';
 import type { ContentReportRow } from '@/types/database';
 
+export const dynamic = 'force-dynamic';
+
 const PAGE_SIZE = 20;
 
 interface Props {

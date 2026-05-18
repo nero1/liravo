@@ -8,6 +8,8 @@ import crypto from 'crypto';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 const bodySchema = z.object({
   provider: z.enum(['dodopayments', 'paystack']),
   currency: z.enum(['USD', 'NGN']),

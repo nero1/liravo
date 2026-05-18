@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import bcrypt from 'bcryptjs';
 
+export const dynamic = 'force-dynamic';
+
 const setPinSchema = z.object({
   pin: z.string().length(4).regex(/^\d{4}$/, 'PIN must be 4 digits'),
 });

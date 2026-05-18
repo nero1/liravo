@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 // challenge_participants table not in generated types — using any cast
 // Expected columns: challenge_id, user_id, joined_at
 

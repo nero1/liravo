@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import TwoFAClient from './TwoFAClient';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: '2FA Security — Liravo' };
 
 export default async function TwoFAPage() {

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getRedisClient } from '@/lib/redis';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const CACHE_TTL = 300; // 5 minutes
 
 const LOCALE_TO_COUNTRY_CODE: Record<string, string> = {

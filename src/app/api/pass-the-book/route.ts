@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 // book_passes table may not exist — fallback to notifications table with type='book_pass'
 
 const PassBookSchema = z.object({

@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { requireModerator } from '@/lib/moderation';
 import { createServiceClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const PAGE_SIZE = 20;
 
 const patchSchema = z.object({

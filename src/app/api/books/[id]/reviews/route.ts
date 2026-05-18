@@ -8,6 +8,8 @@ import { classifyTone } from '@/lib/tone-classifier';
 import { checkSpam } from '@/lib/spam-detection';
 import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
 
+export const dynamic = 'force-dynamic';
+
 const reviewSchema = z.object({
   star_rating: z.number().int().min(1).max(5),
   body: z.string().min(1).max(2000),

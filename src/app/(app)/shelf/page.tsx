@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = { title: 'My Shelf' };
 
 export default async function ShelfPage() {

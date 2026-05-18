@@ -6,6 +6,8 @@ import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import { sanitizeText } from '@/lib/sanitize';
 
+export const dynamic = 'force-dynamic';
+
 const createQuoteSchema = z.object({
   book_id: z.string().uuid(),
   content: z.string().min(1).max(1000),

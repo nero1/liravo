@@ -4,6 +4,8 @@ import Decimal from 'decimal.js';
 import { recordMetric } from '@/lib/metrics';
 import { getRequestCorrelationId } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 async function paystackCreateRecipient(opts: {
   name: string;
   accountNumber: string;

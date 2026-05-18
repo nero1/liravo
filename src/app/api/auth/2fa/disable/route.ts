@@ -6,6 +6,8 @@ import bcrypt from 'bcryptjs';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 const schema = z.object({
   code: z.string().length(6).regex(/^\d{6}$/).optional(),
   recoveryCode: z.string().min(8).max(20).optional(),

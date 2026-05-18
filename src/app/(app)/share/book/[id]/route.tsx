@@ -1,6 +1,8 @@
 import { ImageResponse } from '@vercel/og';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 export const runtime = 'edge';
 
 export async function GET(

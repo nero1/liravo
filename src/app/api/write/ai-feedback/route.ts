@@ -6,6 +6,8 @@ import { AI_MODELS } from '@/constants/ai';
 import crypto from 'crypto';
 import { withExponentialBackoff } from '@/lib/retry';
 
+export const dynamic = 'force-dynamic';
+
 function containsPromptInjection(text: string): boolean {
   const lowered = text.toLowerCase();
   return ['ignore previous instructions', 'system prompt', 'reveal prompt', 'developer instructions'].some((needle) => lowered.includes(needle));

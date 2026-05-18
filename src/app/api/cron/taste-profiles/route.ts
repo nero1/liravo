@@ -3,6 +3,8 @@ import { getRedisClient } from '@/lib/redis';
 import { NextResponse } from 'next/server';
 import { AI_MODELS } from '@/constants/ai';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   const secret = req.headers.get('x-cron-secret');
   if (!secret || secret !== process.env.CRON_SECRET) {

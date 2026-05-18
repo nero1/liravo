@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 // seasonal_events table not in generated types — using any cast
 // Expected columns: id, name, description, start_date, end_date, xp_multiplier, is_active, created_at
 

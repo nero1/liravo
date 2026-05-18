@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient } from '@/lib/redis';
 
+export const dynamic = 'force-dynamic';
+
 const CHUNK_SIZE = 100;
 const RECO_TTL = 86400; // 24 hours
 
