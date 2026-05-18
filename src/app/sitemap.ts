@@ -1,6 +1,8 @@
 import { MetadataRoute } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
