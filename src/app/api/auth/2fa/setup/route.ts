@@ -21,7 +21,7 @@ function generateRecoveryCodes(count = 8): string[] {
   );
 }
 
-export async function GET(req: Request) {
+export async function GET() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
