@@ -2,11 +2,19 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database';
 
+type ServerClient = ReturnType<typeof createServerClient<Database, 'public'>>;
+
+function createUnconfiguredStub(): ServerClient {
+  // When env vars are absent, return a stub so routes respond with 401 instead of crashing.
+  const notAuth = async () => ({ data: { user: null, session: null }, error: null });
+  return { auth: { getUser: notAuth, getSession: notAuth } } as unknown as ServerClient;
+}
+
 export function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+    return createUnconfiguredStub();
   }
   const cookieStore = cookies();
   return createServerClient<Database, 'public'>(
