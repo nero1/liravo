@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 
+export const dynamic = 'force-dynamic';
+
 const CACHE_KEY = 'creator:leaderboard';
 const CACHE_TTL = 300; // 5 minutes
 

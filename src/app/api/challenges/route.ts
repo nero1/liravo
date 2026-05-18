@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 // challenges table not in generated types — using any cast
 // Expected columns: id, name, description, type (weekly|monthly), goal_books, goal_pages, starts_at, ends_at, created_at
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import type { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Discover' };
 
 interface CreatorEntry {

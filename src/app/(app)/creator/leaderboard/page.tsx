@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import { USER_TYPE_LABELS } from '@/constants/config';
 import type { UserType } from '@/constants/config';
 
+export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Creator Leaderboard' };
 
 interface LeaderboardEntry {
