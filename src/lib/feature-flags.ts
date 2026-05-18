@@ -3,13 +3,13 @@ import { getRedisClient, REDIS_KEYS, REDIS_TTL } from '@/lib/redis';
 import { FEATURE_FLAGS } from '@/constants/config';
 
 export async function getFeatureFlag(flagName: string): Promise<boolean> {
-  const redis = getRedisClient();
-  const cacheKey = REDIS_KEYS.featureFlag(flagName);
-
-  const cached = await redis.get(cacheKey);
-  if (cached !== null) return cached === 'true';
-
   try {
+    const redis = getRedisClient();
+    const cacheKey = REDIS_KEYS.featureFlag(flagName);
+
+    const cached = await redis.get(cacheKey);
+    if (cached !== null) return cached === 'true';
+
     const supabase = createServiceClient();
     const { data } = await supabase
       .from('feature_flags')
