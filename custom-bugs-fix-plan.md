@@ -1,49 +1,54 @@
 # Custom Bugs Fix Plan
-Date/Time: May 14, 2026 07:46 AM UTC
+Date/Time: May 23, 2026 09:39 PM UTC
 
-1. Harden webhook integrity path
-- Expand replay key composition and validate canonical event fingerprints.
-- Extend lock TTL + heartbeat.
-- Move final state transition to a single transactional routine where possible.
+1. Identity and authorization invariants (Critical)
+- Build shared `requireSelfOrAdmin()` guard for all `/api/users/*` mutating routes.
+- Enforce DB-backed `is_admin` verification via service-side query/RPC.
+- Add regression tests: self access, cross-user denial, admin override.
 
-2. Repair financial atomicity and accounting integrity
-- Add transactional payout reserve RPC (balance check + reserve + audit log).
-- Enforce exactly-once semantics for tips/subscriptions via unique business keys.
-- Make audit log write mandatory/transactional.
+2. Financial correctness and integrity (Critical)
+- Implement transactional payout reserve RPC (check available balance + reserve + create payout atomically).
+- Enforce unique idempotency constraints for payouts/tips/webhook events.
+- Move financial audit/event writes into same transaction (transactional outbox).
 
-3. Strengthen abuse controls and edge trust
-- Replace raw x-forwarded-for usage with trusted IP derivation.
-- Add route-level and global rate limits with separate budgets for auth, money, AI.
-- Enforce server-side body-size caps independent of request headers.
+3. Cron hardening and Vercel Hobby compliance (Critical/High)
+- Standardize cron auth helper (`Authorization: Bearer <CRON_SECRET>`).
+- Add distributed lock + overlap prevention wrapper for all cron routes.
+- Update setup docs to only daily-or-less schedules and external orchestrator instructions.
 
-4. Add defense-in-depth for AI endpoints
-- Add structured output validation and strict schema fail-closed behavior.
-- Add prompt-injection mitigations (policy prompts + filtering + output constraints).
-- Scope caches by user/tenant and avoid caching sensitive data by default.
+4. CSRF and abuse defense in depth (High)
+- Add CSRF token validation for cookie-auth mutating APIs.
+- Keep origin/referer/sec-fetch checks as secondary signal.
+- Centralize rate-limit policy by route risk tier (auth, money, AI, social).
 
-5. Improve reliability/retry behavior under load
-- Restrict retries to transient failures only.
-- Add circuit-breakers per provider and backpressure behavior.
-- Add thundering-herd protection for hot keys and batch queuing for spikes.
+5. Retry/availability resilience (High)
+- Replace retry message heuristics with status-class error taxonomy.
+- Add circuit-breaker/budget for external dependencies.
+- Introduce jitter and max concurrency caps for fan-out workloads.
 
-6. Make side effects idempotent and race-safe
-- Route all XP/notification writes through outbox with idempotency keys.
-- Add unique constraints for XP/event dedupe.
-- Add compensating/reconciliation jobs for partial failures.
+6. AI privacy and prompt-injection controls (Critical/High)
+- Scope AI cache keys by user/tenant and policy version.
+- Validate model outputs against strict schema and reject malformed payloads.
+- Add prompt-injection filtering and unsafe-output redaction.
 
-7. Raise type safety and code quality baseline
-- Remove `any` from API critical paths.
-- Introduce generated DB types and stricter lint rules.
-- Add nullability guards and typed helper wrappers for Supabase RPC results.
+7. SEO, i18n, accessibility, and UX quality (Medium)
+- Add metadata/canonical/OG coverage to major dynamic pages.
+- Complete translation keys and enforce no hardcoded user-visible strings.
+- Add accessibility sweep for forms/navigation/ARIA labels.
 
-8. Close observability and monitoring gaps
-- Standardize structured logs with correlation IDs.
-- Add security/finance dashboards and alert thresholds.
-- Add periodic reconciliation reports for ledger vs aggregates.
+8. Pagination and scalability cleanup (Medium)
+- Standardize cursor pagination for high-volume endpoints.
+- Add indexes aligned with cursor sort columns.
+- Cap page sizes and include deterministic sort keys.
 
-9. Validation and rollout
-- Add concurrency, fuzz, and property-based tests for money flows.
-- Run penetration tests for OWASP top-10 and prompt-injection scenarios.
-- Roll out behind feature flags with canary monitoring and rollback criteria.
+9. Observability, monitoring, and ops readiness (Medium/Low)
+- Require correlation IDs on sensitive operations.
+- Create dashboards/alerts for webhook replay conflicts, payout failures, cron overlaps.
+- Add restore-drill SOP and backup verification checklist.
 
-Footer/Signature: Generated on May 14, 2026 07:46 AM UTC
+10. Validation rollout
+- Add concurrency/load tests for payout/webhook/cron paths.
+- Add security tests (CSRF, replay, IDOR, abuse throttling).
+- Deploy behind feature flags and canary with rollback criteria.
+
+Footer/Signature: Generated on May 23, 2026 09:39 PM UTC
