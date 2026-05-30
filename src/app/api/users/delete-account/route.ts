@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ export async function DELETE(req: Request) {
   if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
 
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const service = createServiceClient();

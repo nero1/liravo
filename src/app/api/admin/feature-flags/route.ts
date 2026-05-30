@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { invalidateFeatureFlag } from '@/lib/feature-flags';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,9 +22,7 @@ async function checkAdmin(supabase: ReturnType<typeof createClient>, userId: str
 
 export async function GET() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!(await checkAdmin(supabase, user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -42,9 +41,7 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!(await checkAdmin(supabase, user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

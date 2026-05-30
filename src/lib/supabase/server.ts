@@ -1,8 +1,15 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database';
+import { isDigitalOcean } from '@/lib/db/provider';
+import { createDoClient, createDoServiceClient } from '@/lib/db/unified-client';
 
 export function createClient() {
+  if (isDigitalOcean()) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return createDoClient() as any;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -37,6 +44,11 @@ export function createClient() {
 }
 
 export function createServiceClient() {
+  if (isDigitalOcean()) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return createDoServiceClient() as any;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {

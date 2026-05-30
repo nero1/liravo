@@ -6,6 +6,7 @@ import { XP_CONFIG } from '@/constants/config';
 import { z } from 'zod';
 import { ensureIdempotency } from '@/lib/idempotency';
 import { withExponentialBackoff } from '@/lib/retry';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const targetId = params.id;
@@ -100,7 +101,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const targetId = params.id;

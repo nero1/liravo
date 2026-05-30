@@ -2,6 +2,16 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
+const isDoMode = process.env.DATABASE_PROVIDER === 'digitalocean';
+
+const s3CdnHostname = process.env.S3_CDN_URL
+  ? (() => { try { return new URL(process.env.S3_CDN_URL).hostname; } catch { return null; } })()
+  : null;
+
+const supabaseConnectSrc = isDoMode
+  ? ''
+  : ' https://*.supabase.co wss://*.supabase.co';
+
 const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
@@ -17,22 +27,26 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' blob: data: https: http:",
       "font-src 'self' data:",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://books.googleapis.com https://openlibrary.org",
+      `connect-src 'self'${supabaseConnectSrc} https://books.googleapis.com https://openlibrary.org`,
       "frame-src 'self' https://oauth.telegram.org https://www.youtube.com",
       "worker-src 'self' blob:",
     ].join('; '),
   },
 ];
 
+const remotePatterns = [
+  { protocol: 'https', hostname: 'books.google.com' },
+  { protocol: 'https', hostname: 'covers.openlibrary.org' },
+  { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+  ...(isDoMode
+    ? s3CdnHostname ? [{ protocol: 'https', hostname: s3CdnHostname }] : []
+    : [{ protocol: 'https', hostname: '*.supabase.co' }]),
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: 'books.google.com' },
-      { protocol: 'https', hostname: 'covers.openlibrary.org' },
-      { protocol: 'https', hostname: '*.supabase.co' },
-      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
-    ],
+    remotePatterns,
     formats: ['image/webp'],
   },
   async headers() {
@@ -40,6 +54,7 @@ const nextConfig = {
   },
   experimental: {
     serverActions: { allowedOrigins: ['liravo.org', 'localhost:3000'] },
+    optimizePackageImports: isDoMode ? ['postgres'] : ['@supabase/supabase-js'],
   },
 };
 

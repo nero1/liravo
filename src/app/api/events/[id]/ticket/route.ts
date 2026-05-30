@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import Decimal from 'decimal.js';
 import { z } from 'zod';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,9 +16,7 @@ export async function POST(
   if (!paramsSchema.safeParse(params).success) {
     return NextResponse.json({ error: 'Invalid event id' }, { status: 400 });
   }
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
