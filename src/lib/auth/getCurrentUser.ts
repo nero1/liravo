@@ -1,14 +1,12 @@
 import { cookies } from 'next/headers';
 import { getRedisClient } from '@/lib/redis';
 import { isDigitalOcean } from '@/lib/db/provider';
+import { SESSION_COOKIE } from '@/lib/db/unified-client';
 
 export interface SessionUser {
   id: string;
   email: string;
 }
-
-const SESSION_COOKIE = 'liravo-session';
-const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
 
 // Reads the current authenticated user in a provider-aware way.
 // DO mode: reads session cookie → validates in Redis.
@@ -45,16 +43,5 @@ async function getSupabaseUser(): Promise<SessionUser | null> {
   return { id: user.id, email: user.email ?? '' };
 }
 
-export async function createSession(user: SessionUser): Promise<string> {
-  const token = crypto.randomUUID();
-  const redis = getRedisClient();
-  await redis.set(`do:session:${token}`, JSON.stringify(user), { ex: SESSION_TTL });
-  return token;
-}
-
-export async function destroySession(token: string): Promise<void> {
-  const redis = getRedisClient();
-  await redis.del(`do:session:${token}`);
-}
-
-export { SESSION_COOKIE };
+// Re-export from unified-client for callers that only import from this module
+export { SESSION_COOKIE } from '@/lib/db/unified-client';

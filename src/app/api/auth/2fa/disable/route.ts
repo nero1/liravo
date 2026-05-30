@@ -1,4 +1,4 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { verifySync } from 'otplib';
 import { z } from 'zod';
@@ -21,7 +21,6 @@ export async function POST(req: Request) {
   const rate = await checkCriticalRateLimit(ip);
   if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
 
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

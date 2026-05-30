@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { checkAndAwardBadges } from '@/services/badges';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -11,7 +10,6 @@ const BodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
   const user = await getCurrentUser();
 
   if (!user) {

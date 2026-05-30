@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getStorageProvider } from '@/lib/storage/provider';
 import { isDigitalOcean } from '@/lib/db/provider';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -7,7 +7,6 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

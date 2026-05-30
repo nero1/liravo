@@ -13,33 +13,6 @@ interface MutationState {
   returning: boolean;
 }
 
-// Parse OR filter string like "col1.eq.val1,col2.gte.val2"
-function parseOrFilter(filter: string): string {
-  const sql = getSql();
-  const parts = filter.split(',').map((part) => {
-    const dotIdx = part.indexOf('.');
-    const col = part.slice(0, dotIdx);
-    const rest = part.slice(dotIdx + 1);
-    const opIdx = rest.indexOf('.');
-    const op = rest.slice(0, opIdx);
-    const val = rest.slice(opIdx + 1);
-    switch (op) {
-      case 'eq': return sql`${sql(col)} = ${val}`;
-      case 'neq': return sql`${sql(col)} != ${val}`;
-      case 'gt': return sql`${sql(col)} > ${val}`;
-      case 'gte': return sql`${sql(col)} >= ${val}`;
-      case 'lt': return sql`${sql(col)} < ${val}`;
-      case 'lte': return sql`${sql(col)} <= ${val}`;
-      case 'is': return val === 'null' ? sql`${sql(col)} IS NULL` : sql`${sql(col)} IS ${sql.unsafe(val)}`;
-      default: return sql`${sql(col)} = ${val}`;
-    }
-  });
-  // Combine with OR — postgres.js doesn't support array join of fragments directly,
-  // so we build it recursively
-  if (parts.length === 1) return parts[0] as unknown as string;
-  return parts.reduce((acc, cur) => sql`${acc as unknown as ReturnType<typeof sql>} OR ${cur as unknown as ReturnType<typeof sql>}`) as unknown as string;
-}
-
 export class PgQueryBuilder<T = Record<string, unknown>> {
   private _table: string;
   private _selectCols: string = '*';
@@ -206,17 +179,20 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
   private _buildOrSql(filter: string): string {
     return filter.split(',').map((part) => {
-      const [col, op, ...rest] = part.split('.');
+      const [rawCol, op, ...rest] = part.split('.');
+      // Sanitize column name — only allow valid SQL identifier chars
+      const col = `"${rawCol.replace(/[^a-zA-Z0-9_]/g, '')}"`;
       const val = rest.join('.');
+      const escaped = val.replace(/'/g, "''");
       switch (op) {
-        case 'eq':  return `${col} = '${val.replace(/'/g, "''")}'`;
-        case 'neq': return `${col} != '${val.replace(/'/g, "''")}'`;
-        case 'gt':  return `${col} > '${val.replace(/'/g, "''")}'`;
-        case 'gte': return `${col} >= '${val.replace(/'/g, "''")}'`;
-        case 'lt':  return `${col} < '${val.replace(/'/g, "''")}'`;
-        case 'lte': return `${col} <= '${val.replace(/'/g, "''")}'`;
-        case 'is':  return val === 'null' ? `${col} IS NULL` : `${col} IS ${val.toUpperCase()}`;
-        default:    return `${col} = '${val.replace(/'/g, "''")}'`;
+        case 'eq':  return `${col} = '${escaped}'`;
+        case 'neq': return `${col} != '${escaped}'`;
+        case 'gt':  return `${col} > '${escaped}'`;
+        case 'gte': return `${col} >= '${escaped}'`;
+        case 'lt':  return `${col} < '${escaped}'`;
+        case 'lte': return `${col} <= '${escaped}'`;
+        case 'is':  return val === 'null' ? `${col} IS NULL` : `${col} IS ${val === 'true' ? 'TRUE' : 'FALSE'}`;
+        default:    return `${col} = '${escaped}'`;
       }
     }).join(' OR ');
   }
@@ -275,49 +251,61 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
       const hasWhere = this._filters.length > 0 || this._orFragment;
       const where = this.buildWhere();
 
-      // Build join fragments as correlated subqueries/lateral joins
-      let joinSql = '';
+      // Build join fragments with properly quoted identifiers.
+      // selectJoinSql: extra expressions added to the SELECT list.
+      // fromJoinSql: JOIN clauses appended to the FROM clause.
+      let selectJoinSql = '';
+      let fromJoinSql = '';
       for (const j of joins) {
+        // Sanitize all identifiers — these come from application code, not user input.
+        const jTable = j.table.replace(/[^a-zA-Z0-9_]/g, '');
+        const jAlias = j.alias.replace(/[^a-zA-Z0-9_]/g, '');
+        const jFk    = j.fk.replace(/[^a-zA-Z0-9_]/g, '');
+        const mainTbl = this._table.replace(/[^a-zA-Z0-9_]/g, '');
+
         if (j.cols === 'count') {
-          joinSql += `, (SELECT COUNT(*) FROM ${j.table} WHERE ${j.fk} = ${this._table}.id) AS ${j.alias}`;
+          // Correlated COUNT subquery in the SELECT list
+          selectJoinSql += `, (SELECT COUNT(*) FROM "${jTable}" WHERE "${jTable}"."${jFk}" = "${mainTbl}".id) AS "${jAlias}"`;
         } else {
-          // Simple LEFT JOIN returning json_build_object
-          const fields = j.cols.split(',').map((f) => f.trim());
-          const jsonFields = fields.flatMap((f) => [`'${f}'`, `${j.table}.${f}`]).join(', ');
-          joinSql += ` LEFT JOIN LATERAL (SELECT json_build_object(${jsonFields}) AS ${j.alias} FROM ${j.table} WHERE ${j.fk} = ${this._table}.id LIMIT 1) AS ${j.alias}_sub ON true`;
+          // LATERAL join — JSON object returned as a named column
+          const fields = j.cols.split(',').map((f) => f.trim().replace(/[^a-zA-Z0-9_]/g, ''));
+          const jsonPairs = fields.flatMap((f) => [`'${f}'`, `"${jTable}"."${f}"`]).join(', ');
+          fromJoinSql += ` LEFT JOIN LATERAL (SELECT json_build_object(${jsonPairs}) AS data FROM "${jTable}" WHERE "${jTable}"."${jFk}" = "${mainTbl}".id LIMIT 1) AS "${jAlias}_sub" ON true`;
+          selectJoinSql += `, "${jAlias}_sub".data AS "${jAlias}"`;
         }
       }
 
+      const selectExpr = plainCols + selectJoinSql;
+
       let query: unknown;
-      const selectExpr = plainCols + (joins.length > 0 && joins.some((j) => j.cols !== 'count') ? '' : joinSql.startsWith(',') ? joinSql : '');
 
       if (hasWhere) {
         if (this._orderCol && this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit} OFFSET ${this._offset}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit} OFFSET ${this._offset}`;
         } else if (this._orderCol && this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit}`;
         } else if (this._orderCol) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')}`;
         } else if (this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} WHERE ${where} LIMIT ${this._limit} OFFSET ${this._offset}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} LIMIT ${this._limit} OFFSET ${this._offset}`;
         } else if (this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} WHERE ${where} LIMIT ${this._limit}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} LIMIT ${this._limit}`;
         } else {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} WHERE ${where}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where}`;
         }
       } else {
         if (this._orderCol && this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit} OFFSET ${this._offset}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit} OFFSET ${this._offset}`;
         } else if (this._orderCol && this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit}`;
         } else if (this._orderCol) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')}`;
         } else if (this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} LIMIT ${this._limit} OFFSET ${this._offset}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} LIMIT ${this._limit} OFFSET ${this._offset}`;
         } else if (this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')} LIMIT ${this._limit}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} LIMIT ${this._limit}`;
         } else {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(joinSql.startsWith(' LEFT') ? joinSql : '')}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)}`;
         }
       }
 
@@ -361,15 +349,26 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
             ? m.onConflict.split(',').map((c) => c.trim())
             : [keys[0]];
           const updateCols = keys.filter((k) => !conflictCols.includes(k));
+
+          // Build conflict and SET clauses using double-quoted identifiers.
+          // Column names come from application data objects, not user input.
+          const safeId = (c: string) => `"${c.replace(/[^a-zA-Z0-9_]/g, '')}"`;
+          const conflictExpr = conflictCols.map(safeId).join(', ');
           const updateExpr = updateCols.length > 0
-            ? sql`DO UPDATE SET ${sql(updateCols.map((c) => sql`${sql(c)} = EXCLUDED.${sql(c)}` as unknown as string).join(', ') as unknown as Parameters<typeof sql>[0])}`
-            : sql`DO NOTHING`;
+            ? `DO UPDATE SET ${updateCols.map((c) => `${safeId(c)} = EXCLUDED.${safeId(c)}`).join(', ')}`
+            : 'DO NOTHING';
 
           if (m.returning) {
-            const result = await sql`INSERT INTO ${sql(this._table)} ${sql(rows)} ON CONFLICT (${sql(conflictCols)}) ${updateExpr} RETURNING *`;
+            const result = await sql.unsafe(
+              `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr} RETURNING *`,
+              rows.flatMap((r) => keys.map((k) => r[k]))
+            );
             return { data: (rows.length === 1 ? result[0] : result) as unknown as T, error: null };
           }
-          await sql`INSERT INTO ${sql(this._table)} ${sql(rows)} ON CONFLICT (${sql(conflictCols)}) ${updateExpr}`;
+          await sql.unsafe(
+            `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr}`,
+            rows.flatMap((r) => keys.map((k) => r[k]))
+          );
           return { data: null, error: null };
         }
 

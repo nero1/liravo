@@ -148,4 +148,9 @@ export async function createDoSession(user: DoUser): Promise<string> {
   return token;
 }
 
+export async function destroySession(token: string): Promise<void> {
+  const redis = getRedisClient();
+  await redis.del(`do:session:${token}`);
+}
+
 export { SESSION_COOKIE, SESSION_TTL };
