@@ -479,31 +479,44 @@ psql "postgresql://user:pass@host:25432/dbname?sslmode=require" \
 
 ## 16. Database Seeding
 
-Run the seed script after running migrations:
+There is no automated seed script. Seeding is a two-step manual process: promote the first
+admin via SQL, then use the in-app admin UI to seed content.
+
+### Step 1 — Bootstrap the first admin user
+
+The `is_admin` flag defaults to `false` for every new account. You must flip it directly in
+the database after signing up for the first time.
+
+**Supabase mode**: Sign up via the app, then open the Supabase Table Editor, find your user
+row in the `users` table, and set `is_admin` to `true`.
+
+**DO mode**: Sign up via `/` (the email + password form), then run:
 
 ```bash
-npm run seed
+psql "$DIRECT_DATABASE_URL" -c \
+  "UPDATE users SET is_admin = true WHERE email = 'your@email.com';"
 ```
 
-This creates:
-- The `@liravo` Liravo Editors system account
-- Default affiliate stores (Amazon US, UK, CA, AU)
-- Default feature flags
-- Initial writing prompts (60 days)
+Use `DIRECT_DATABASE_URL` (port 25432), not the PgBouncer URL, for one-off psql commands.
 
-### Admin account setup
+### Step 2 — Seed platform content via the admin UI
 
-**Supabase mode**: In the Supabase Table Editor, find the user row and set `is_admin: true`.
+Once your account has `is_admin = true`, log in and navigate to **`/admin/seed`**. From there:
 
-**DO mode** (using psql with the direct connection):
-```bash
-psql "$DIRECT_DATABASE_URL" -c "UPDATE users SET is_admin = true WHERE email = 'admin@example.com';"
-```
+| Action | What it creates |
+|--------|-----------------|
+| **Create Liravo Editors Account** | The `@liravo_editors` system account used for platform-curated content |
+| **Seed Writing Prompts (7 days)** | 7 days of AI-generated community writing prompts |
+
+These actions are idempotent — running them twice returns a 409 rather than duplicating data.
 
 ### Invite codes (DO mode)
 
+After you have an admin user ID, seed initial invite codes:
+
 ```bash
-psql "$DIRECT_DATABASE_URL" -c "INSERT INTO invite_codes (code, created_by) VALUES ('INVITE123', '<admin-user-id>');"
+psql "$DIRECT_DATABASE_URL" -c \
+  "INSERT INTO invite_codes (code, created_by) VALUES ('INVITE123', '<admin-user-id>');"
 ```
 
 ---
