@@ -10,6 +10,8 @@ interface AddToShelfButtonProps {
   userId: string;
 }
 
+const isDoMode = process.env.NEXT_PUBLIC_DATABASE_PROVIDER === 'digitalocean';
+
 export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
   const [shelves, setShelves] = useState<ShelfRow[]>([]);
   const [addedToShelves, setAddedToShelves] = useState<Set<string>>(new Set());
@@ -18,6 +20,15 @@ export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
 
   useEffect(() => {
     const load = async () => {
+      if (isDoMode) {
+        const res = await fetch(`/api/shelves?bookId=${encodeURIComponent(bookId)}`);
+        if (!res.ok) return;
+        const { shelves: s, addedToShelves: a } = await res.json();
+        setShelves(s ?? []);
+        setAddedToShelves(new Set(a ?? []));
+        return;
+      }
+
       const supabase = createClient();
       const [{ data: shelvesData }, { data: existingEntries }] = await Promise.all([
         supabase.from('shelves').select('*').eq('user_id', userId).order('is_default', { ascending: false }),
@@ -31,9 +42,40 @@ export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
 
   const handleToggleShelf = async (shelf: ShelfRow) => {
     setLoading(true);
+    const isAdded = addedToShelves.has(shelf.id);
+
+    if (isDoMode) {
+      const res = await fetch('/api/shelf-books/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shelfId: shelf.id,
+          bookId,
+          action: isAdded ? 'remove' : 'add',
+        }),
+      });
+
+      if (res.ok) {
+        if (isAdded) {
+          setAddedToShelves((prev) => { const next = new Set(prev); next.delete(shelf.id); return next; });
+        } else {
+          setAddedToShelves((prev) => new Set(Array.from(prev).concat(shelf.id)));
+          if (shelf.default_type === 'have_read') {
+            await fetch('/api/xp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'finish_book' }),
+            });
+          }
+        }
+      }
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
 
-    if (addedToShelves.has(shelf.id)) {
+    if (isAdded) {
       await supabase.from('shelf_books').delete()
         .eq('shelf_id', shelf.id).eq('book_id', bookId).eq('user_id', userId);
       setAddedToShelves((prev) => { const next = new Set(prev); next.delete(shelf.id); return next; });

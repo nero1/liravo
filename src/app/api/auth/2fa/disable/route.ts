@@ -1,10 +1,11 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { verifySync } from 'otplib';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,8 +21,7 @@ export async function POST(req: Request) {
   const rate = await checkCriticalRateLimit(ip);
   if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
 
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const raw = await req.text().catch(() => '');

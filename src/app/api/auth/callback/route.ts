@@ -4,11 +4,19 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import { checkAndAwardBadges } from '@/services/badges';
+import { isDigitalOcean } from '@/lib/db/provider';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
+
+  // DO mode: OAuth is not supported — redirect with error
+  if (isDigitalOcean()) {
+    return NextResponse.redirect(`${origin}/login?error=oauth_not_supported`);
+  }
+
   const code = searchParams.get('code');
   const next = searchParams.get('next') ?? '/';
   const refCode = searchParams.get('ref');
@@ -17,7 +25,7 @@ export async function GET(request: Request) {
     const supabase = createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (user) {
         const { data: profile } = await supabase
           .from('users')

@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { recordMetric } from '@/lib/metrics';
 import { enqueueOutboxEvent } from '@/lib/outbox';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,9 +39,7 @@ export async function POST(req: Request) {
   }
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     recordMetric('auth_unauthorized', { route: 'src/app/api/tips/create/route.ts' }, 'warn');

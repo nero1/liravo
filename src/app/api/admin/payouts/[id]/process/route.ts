@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import Decimal from 'decimal.js';
 import { recordMetric } from '@/lib/metrics';
 import { getRequestCorrelationId } from '@/lib/utils';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,7 +81,7 @@ export async function POST(
 ) {
   const correlationId = getRequestCorrelationId(req);
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { data: adminProfile } = await supabase

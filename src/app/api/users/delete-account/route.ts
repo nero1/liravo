@@ -1,8 +1,12 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { isDigitalOcean } from '@/lib/db/provider';
+import { SESSION_COOKIE, destroySession } from '@/lib/db/unified-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,8 +16,7 @@ export async function DELETE(req: Request) {
   const rate = await checkCriticalRateLimit(ip);
   if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
 
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const service = createServiceClient();
@@ -36,7 +39,19 @@ export async function DELETE(req: Request) {
   }
 
   // Sign the user out immediately
-  await supabase.auth.signOut();
+  if (isDigitalOcean()) {
+    // DO mode: destroy Redis session and clear the session cookie
+    const cookieStore = cookies();
+    const token = cookieStore.get(SESSION_COOKIE)?.value;
+    if (token) await destroySession(token);
+    const response = NextResponse.json({ deleted: true, message: 'Your account has been scheduled for deletion. It will be permanently removed in 30 days.' });
+    response.cookies.delete(SESSION_COOKIE);
+    recordMetric('account_deleted', { user_id: user.id });
+    return response;
+  } else {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+  }
 
   recordMetric('account_deleted', { user_id: user.id });
   return NextResponse.json({ deleted: true, message: 'Your account has been scheduled for deletion. It will be permanently removed in 30 days.' });

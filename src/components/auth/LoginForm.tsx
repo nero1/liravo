@@ -3,17 +3,128 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 
 interface LoginFormProps {
   googleEnabled: boolean;
   telegramEnabled: boolean;
 }
 
+const isDoMode = process.env.NEXT_PUBLIC_DATABASE_PROVIDER === 'digitalocean';
+
 export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   const t = useTranslations('auth');
-  const [loading, setLoading] = useState<'google' | 'telegram' | null>(null);
+  const router = useRouter();
+  const [loading, setLoading] = useState<'google' | 'telegram' | 'email' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // DO mode: email/password state
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
+
+  // ── DO mode ──────────────────────────────────────────────────────────────────
+  if (isDoMode) {
+    const handleEmailAuth = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoading('email');
+      setError(null);
+
+      const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        if (json.error === 'PASSWORD_RESET_REQUIRED') {
+          setError(
+            'Your account was created via OAuth and has no password set. ' +
+            'Contact support to receive a password reset link.'
+          );
+        } else {
+          setError(json.error ?? 'Something went wrong');
+        }
+        setLoading(null);
+        return;
+      }
+
+      router.push(isSignup ? '/onboarding' : '/');
+      router.refresh();
+    };
+
+    return (
+      <div className="space-y-4">
+        {error && (
+          <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleEmailAuth} className="space-y-3">
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium mb-1">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-accent"
+              autoComplete="email"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium mb-1">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              minLength={isSignup ? 8 : 1}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-accent"
+              autoComplete={isSignup ? 'new-password' : 'current-password'}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading !== null}
+            className="w-full px-4 py-3 bg-accent text-accent-foreground rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+          >
+            {loading === 'email'
+              ? t('loading')
+              : isSignup
+                ? 'Create account'
+                : 'Sign in'}
+          </button>
+        </form>
+
+        <button
+          type="button"
+          onClick={() => { setIsSignup((v) => !v); setError(null); }}
+          className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+        </button>
+
+        <p className="text-center text-xs text-muted-foreground pt-2">
+          By signing in, you agree to our Terms of Service and Privacy Policy.
+        </p>
+      </div>
+    );
+  }
+
+  // ── Supabase mode (OAuth) ────────────────────────────────────────────────────
   const handleGoogleLogin = async () => {
     setLoading('google');
     setError(null);

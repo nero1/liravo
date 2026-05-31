@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { Database } from '@/types/database';
+import { getDoUserFromRequest } from '@/lib/db/unified-client';
+
+const isDoMode = process.env.DATABASE_PROVIDER === 'digitalocean';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });
@@ -24,6 +27,27 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // ── DigitalOcean mode ────────────────────────────────────────────────────────
+  if (isDoMode) {
+    const user = await getDoUserFromRequest((name) => request.cookies.get(name)?.value);
+
+    const protectedPaths = ['/profile', '/shelf', '/discover', '/write'];
+    const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
+
+    if (isProtected && !user) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    if (pathname.startsWith('/admin') && !user) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    if (pathname === '/login' && user) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+
+    return response;
+  }
+
+  // ── Supabase mode ────────────────────────────────────────────────────────────
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

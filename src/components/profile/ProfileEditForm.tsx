@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import type { UserRow } from '@/types/database';
 import { cn } from '@/lib/utils';
 
+const isDoMode = process.env.NEXT_PUBLIC_DATABASE_PROVIDER === 'digitalocean';
+
 interface ProfileEditFormProps {
   profile: UserRow;
 }
@@ -38,26 +40,65 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
     setSaving(true);
     setError(null);
 
-    const supabase = createClient();
     let avatarUrl = profile.avatar_url;
 
     if (avatarFile) {
-      const ext = avatarFile.name.split('.').pop();
-      const path = `avatars/${profile.id}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(path, avatarFile, { upsert: true });
+      if (isDoMode) {
+        // DO mode: upload via API endpoint that uses S3
+        const fd = new FormData();
+        fd.append('file', avatarFile);
+        const res = await fetch('/api/users/avatar', { method: 'POST', body: fd });
+        if (!res.ok) {
+          setError('Failed to upload avatar');
+          setSaving(false);
+          return;
+        }
+        const { publicUrl } = await res.json();
+        avatarUrl = publicUrl;
+      } else {
+        const supabase = createClient();
+        const ext = avatarFile.name.split('.').pop();
+        const path = `avatars/${profile.id}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(path, avatarFile, { upsert: true });
 
-      if (uploadError) {
-        setError('Failed to upload avatar');
+        if (uploadError) {
+          setError('Failed to upload avatar');
+          setSaving(false);
+          return;
+        }
+
+        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+        avatarUrl = publicUrl;
+      }
+    }
+
+    // Profile fields update goes through an API route in DO mode too
+    if (isDoMode) {
+      const res = await fetch('/api/users/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          display_name: displayName.trim(),
+          bio: bio.trim() || null,
+          country: country.trim() || null,
+          avatar_url: avatarUrl,
+          external_links: links.filter(Boolean),
+        }),
+      });
+      if (!res.ok) {
+        const { error: msg } = await res.json();
+        setError(msg ?? 'Failed to save');
         setSaving(false);
         return;
       }
-
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-      avatarUrl = publicUrl;
+      router.push('/profile');
+      router.refresh();
+      return;
     }
 
+    const supabase = createClient();
     const { error: updateError } = await supabase.from('users').update({
       display_name: displayName.trim(),
       bio: bio.trim() || null,
