@@ -149,7 +149,7 @@ export default function WorkshopRoomPage() {
           {members.map((m) => (
             <Link
               key={m.user_id}
-              href={`/profile/${m.users?.username ?? ''}`}
+              href={`/user/${m.users?.username ?? ''}`}
               className="text-xs rounded-full border px-3 py-1 hover:bg-muted transition-colors"
             >
               {m.users?.display_name ?? 'Unknown'}
@@ -216,7 +216,7 @@ export default function WorkshopRoomPage() {
                     <h3 className="font-semibold">{sub.title}</h3>
                     {sub.users && (
                       <Link
-                        href={`/profile/${sub.users.username}`}
+                        href={`/user/${sub.users.username}`}
                         className="text-xs text-muted-foreground hover:underline"
                       >
                         by {sub.users.display_name}

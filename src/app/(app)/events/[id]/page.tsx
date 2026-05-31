@@ -113,7 +113,7 @@ export default async function EventDetailPage({
           <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
             Hosted by{' '}
             <Link
-              href={`/profile/${host.username}`}
+              href={`/user/${host.username}`}
               className="text-accent hover:underline font-medium"
             >
               {host.display_name}

@@ -9,9 +9,14 @@ export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });
   const { pathname, origin } = request.nextUrl;
 
+  // Mobile clients (React Native) send a Bearer token instead of cookies.
+  // Bearer token presence proves identity — skip CSRF for these requests.
+  const hasBearerToken = request.headers.get('authorization')?.startsWith('Bearer ');
+
   // Bugfix: defense-in-depth CSRF guard for mutating API routes using cookie auth.
   if (
-    pathname.startsWith('/api/')
+    !hasBearerToken
+    && pathname.startsWith('/api/')
     && !pathname.startsWith('/api/webhooks/')
     && !pathname.startsWith('/api/cron/')
     && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)

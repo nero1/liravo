@@ -137,7 +137,7 @@ export default async function ReferralPage() {
             {leaderboard.map((entry) => (
               <div key={entry.username} className="flex items-center gap-3 p-3 border border-border rounded-xl">
                 <span className="text-sm font-bold text-muted-foreground w-6">#{entry.rank}</span>
-                <Link href={`/@${entry.username}`} className="flex-1 font-medium text-sm hover:underline">
+                <Link href={`/user/${entry.username}`} className="flex-1 font-medium text-sm hover:underline">
                   {entry.display_name}
                 </Link>
                 <span className="text-sm font-bold text-accent">{entry.ref_count} referrals</span>

@@ -69,7 +69,7 @@ export default async function PromptResponsesPage({ params, searchParams }: Page
               </div>
               <div>
                 <Link
-                  href={`/profile/${profile?.username ?? ''}`}
+                  href={`/user/${profile?.username ?? ''}`}
                   className="text-sm font-medium hover:underline"
                 >
                   {profile?.display_name ?? 'Unknown'}

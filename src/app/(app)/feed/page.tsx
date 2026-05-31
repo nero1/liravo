@@ -164,7 +164,7 @@ export default async function FeedPage({
               <div className="flex-1 min-w-0">
                 <p className="text-sm">
                   <Link
-                    href={`/@${item.user?.username}`}
+                    href={`/user/${item.user?.username}`}
                     className="font-semibold hover:text-amber-600 transition-colors"
                   >
                     {item.user?.display_name ?? 'Unknown'}

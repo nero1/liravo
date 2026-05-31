@@ -72,7 +72,7 @@ export default async function WorkshopsPage() {
                       <span>
                         Facilitator:{' '}
                         <Link
-                          href={`/profile/${room.facilitator.username}`}
+                          href={`/user/${room.facilitator.username}`}
                           className="hover:underline"
                         >
                           {room.facilitator.display_name}

@@ -6,6 +6,8 @@ import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
+
 interface ProfilePageProps {
   params: { username: string };
 }
@@ -23,9 +25,13 @@ export async function generateMetadata({ params }: ProfilePageProps): Promise<Me
   return {
     title: `${data.display_name} (@${params.username})`,
     description: data.bio ?? `${data.display_name}'s reading profile on Liravo`,
+    alternates: {
+      canonical: `${APP_URL}/user/${params.username}`,
+    },
     openGraph: {
       title: `${data.display_name} on Liravo`,
       description: data.bio ?? '',
+      url: `${APP_URL}/user/${params.username}`,
       images: data.avatar_url ? [data.avatar_url] : [],
     },
   };

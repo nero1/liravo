@@ -35,7 +35,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .limit(2000);
 
   const authorRoutes: MetadataRoute.Sitemap = (authors ?? []).map((a) => ({
-    url: `${APP_URL}/${a.username}`,
+    url: `${APP_URL}/user/${a.username}`,
     lastModified: a.updated_at ? new Date(a.updated_at) : new Date(),
     changeFrequency: 'weekly' as const,
     priority: 0.7,

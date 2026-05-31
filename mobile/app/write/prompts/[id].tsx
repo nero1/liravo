@@ -1,0 +1,38 @@
+import { View, Text, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { ENDPOINTS } from '@/constants/api';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import type { WritingPromptRow } from '@/types';
+
+export default function PromptDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const qc = useQueryClient();
+  const [response, setResponse] = useState('');
+  const { data, isLoading } = useQuery({ queryKey: ['write', 'prompt', id], queryFn: () => api.get<{ prompt: WritingPromptRow }>(ENDPOINTS.write.promptById(id!)), enabled: !!id });
+  const submit = useMutation({
+    mutationFn: () => api.post(ENDPOINTS.write.submitPrompt(id!), { content: response }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['write', 'prompt', id] }); Alert.alert('Submitted!'); setResponse(''); },
+    onError: (err) => Alert.alert('Error', (err as Error).message),
+  });
+  if (isLoading || !data) return <LoadingSpinner />;
+  const prompt = data.prompt;
+  return (
+    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 16 }}>
+          <View className="bg-accent/10 border border-accent/30 rounded-xl p-4">
+            <Text className="text-foreground font-medium">{prompt.prompt}</Text>
+          </View>
+          <Input label="Your Response" value={response} onChangeText={setResponse} placeholder="Write your response here..." multiline numberOfLines={8} maxLength={5000} style={{ minHeight: 160, textAlignVertical: 'top' }} />
+          <Button onPress={() => submit.mutate()} loading={submit.isPending} disabled={response.trim().length < 10} size="lg">Submit</Button>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}

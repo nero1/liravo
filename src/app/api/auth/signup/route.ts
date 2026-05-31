@@ -67,7 +67,15 @@ export async function POST(request: Request) {
 
   const token = await createDoSession({ id, email });
 
-  const response = NextResponse.json({ ok: true, userId: id });
+  // Fetch the newly created user row so mobile clients can bootstrap in one round-trip.
+  const supabaseForProfile = createServiceClient();
+  const { data: profile } = await supabaseForProfile
+    .from('users')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  const response = NextResponse.json({ ok: true, token, user: profile, userId: id });
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
