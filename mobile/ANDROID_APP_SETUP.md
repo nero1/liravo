@@ -1,15 +1,16 @@
 # Android App Setup Guide
 
-> This guide explains how to build the Liravo Android app (APK or AAB) from source using Expo Application Services (EAS). No local Android SDK installation is needed — Expo builds everything in the cloud.
+> This guide explains how to build the Liravo Android app (APK or AAB), set up Google Play Billing for in-app subscriptions, configure deep links, and submit to the Play Store. No local Android SDK installation is needed — Expo builds everything in the cloud.
 
 ---
 
 ## What You Need Before You Start
 
 1. **An Expo account** — sign up free at [expo.dev](https://expo.dev)
-2. **An EAS project** — created from the Expo dashboard (steps below)
-3. **The `mobile/` folder** pushed to your GitHub repo (already done)
-4. **Your environment variables** from `mobile/.env.example` — you'll enter these in the EAS dashboard
+2. **A Google Play Console account** — one-time $25 registration fee at [play.google.com/console](https://play.google.com/console)
+3. **A Google Cloud Console account** — free, used for service account credentials
+4. **The `mobile/` folder** pushed to your GitHub repo (already done)
+5. **Your environment variables** from `mobile/.env.example`
 
 ---
 
@@ -17,240 +18,229 @@
 
 | Term | What it means |
 |---|---|
-| **APK** | Android Package — a file you can install directly on a phone (sideload). Good for testing. |
-| **AAB** | Android App Bundle — the format Google Play Store requires for publishing. |
-| **EAS Build** | Expo's cloud build service. Compiles your app without you needing Android Studio. |
-| **Development build** | A debug version of the app with extra tools for developers. |
-| **Preview build** | A release-like APK for testing — closest to what users will get, minus the Play Store. |
+| **APK** | Android Package — install directly on a phone (sideload). Good for testing. |
+| **AAB** | Android App Bundle — what the Play Store requires. Google converts it to APKs per device. |
+| **EAS Build** | Expo's cloud build service. No Android Studio needed. |
+| **Preview build** | Release-like APK for testing — closest to what Play Store users get. |
+| **Google Play Billing** | Google's mandatory payment system for digital subscriptions sold through the Play Store. Google takes 15% commission. |
+| **RTDN** | Real-time Developer Notifications — Google pushes subscription lifecycle events (renewed, cancelled, expired) to your server. |
 
 ---
 
-## Option A — Build via the Expo Website (Recommended for Beginners)
+## Part 1 — Building the App
 
-### Step 1 — Connect your repo to Expo
+### Option A — Expo Website (Recommended for Beginners)
+
+#### Step 1 — Connect your repo to Expo
 
 1. Go to [expo.dev](https://expo.dev) and log in.
-2. Click **Create a project** → give it the name `liravo`.
-3. In the project settings, copy the **Project ID** (looks like `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
-4. Open `mobile/app.json` and paste it in:
+2. Click **Create a project** → name it `liravo`.
+3. Copy the **Project ID** from the project settings.
+4. Open `mobile/app.json` and paste it:
    ```json
-   "extra": {
-     "eas": {
-       "projectId": "YOUR-PROJECT-ID-HERE"
-     }
-   }
+   "extra": { "eas": { "projectId": "YOUR-PROJECT-ID-HERE" } }
    ```
 5. Push that change to GitHub.
 
-### Step 2 — Add your environment variables
+#### Step 2 — Add environment variables
 
-1. In the Expo dashboard, open your project → **Environment variables**.
-2. Add each variable from `mobile/.env.example`:
-   - `EXPO_PUBLIC_API_URL` → your backend URL (e.g. `https://liravo.org`)
+1. In your Expo project → **Environment variables**, add:
+   - `EXPO_PUBLIC_API_URL` → `https://liravo.org`
    - `EXPO_PUBLIC_DATABASE_PROVIDER` → `supabase` or `digitalocean`
-   - If using Supabase: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-   - If using DigitalOcean: `EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID` (see note below)
-3. Set the **Visibility** of each to **Secret** so they aren't exposed in logs.
+   - If Supabase: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+   - If DigitalOcean: `EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID` (see below)
+2. Set every variable to **Secret** visibility.
 
-> **Getting the Android Google Client ID (DO mode only):**
-> 1. Go to [Google Cloud Console](https://console.cloud.google.com) → **APIs & Services** → **Credentials**
-> 2. Click **Create Credentials** → **OAuth client ID** → Application type: **Android**
-> 3. Enter your package name: `org.liravo.app`
-> 4. For the SHA-1 fingerprint during testing, use the one from `eas credentials --platform android`
-> 5. Also create a second OAuth client ID of type **Web application** — this is needed by Expo's auth proxy
-> 6. Add your Expo redirect URI to the web client's allowed redirects: `https://auth.expo.io/@your-expo-username/liravo`
+> **Getting the Android Google Client ID (DigitalOcean mode only):**
+> 1. Google Cloud Console → **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth client ID** → type: **Android**
+> 2. Package name: `org.liravo.app`. SHA-1 fingerprint: run `eas credentials --platform android` and copy it.
+> 3. Also create a **Web application** OAuth client. Add `https://auth.expo.io/@your-expo-username/liravo` as an allowed redirect URI.
+> 4. Use the Android client ID as `EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID`.
 
-### Step 3 — Trigger a build
+#### Step 3 — Trigger a build
 
-1. In your project on expo.dev, go to **Builds** → **New build**.
-2. Select:
-   - **Platform**: Android
-   - **Profile**: `preview` (gives you an APK you can install directly on a phone)
-3. Click **Start build**.
-4. Wait ~10–20 minutes. Expo emails you when it's done.
-5. Download the `.apk` file from the build page and install it on your Android device.
+1. **Builds** → **New build** → Platform: Android → Profile: `preview` → **Start build**.
+2. Wait ~15 minutes. Download the `.apk` when done and install it on your device.
 
-> To get an **AAB** for the Play Store, repeat with profile `production` instead of `preview`.
+> For Play Store submission, use profile `production` — this produces an `.aab` file.
 
 ---
 
-## Option B — Build via the CLI
-
-Use this if you're comfortable with a terminal, or want to automate builds in CI.
-
-### Prerequisites
+### Option B — CLI
 
 ```bash
 npm install -g eas-cli
-eas login          # log in with your Expo account
-```
+eas login
 
-### Build commands
-
-```bash
 cd mobile
-
-# Install dependencies first
 npm install
 
-# APK for testing (installs directly on device)
-eas build --platform android --profile preview
-
-# APK for development (includes Expo dev tools)
-eas build --platform android --profile development
-
-# AAB for Play Store submission
-eas build --platform android --profile production
+eas build --platform android --profile preview      # APK for testing
+eas build --platform android --profile production   # AAB for Play Store
 ```
-
-Each command queues a cloud build and prints a URL to track progress. The resulting file is downloadable from that URL or from the Expo dashboard.
-
-### Build profiles explained
-
-These are defined in `mobile/eas.json`:
-
-```json
-{
-  "build": {
-    "development": { "android": { "buildType": "apk" } },
-    "preview":     { "android": { "buildType": "apk" } },
-    "production":  { "android": { "buildType": "app-bundle" } }
-  }
-}
-```
-
-Use `preview` day-to-day for testing. Use `production` only when submitting to the Play Store.
 
 ---
 
-## Option C — GitHub Actions (Automated CI Builds)
+### Option C — GitHub Actions (Automated Builds)
 
-You can trigger EAS builds automatically on every push to `main`.
-
-Create `.github/workflows/android.yml` in the repo root:
+Create `.github/workflows/android.yml`:
 
 ```yaml
 name: Android Build
-
 on:
   push:
     branches: [main]
-    paths:
-      - 'mobile/**'
-
+    paths: ['mobile/**']
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
-
-      - name: Build preview APK
-        working-directory: mobile
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        with: { node-version: 20 }
+      - run: npm install -g eas-cli
+      - working-directory: mobile
+        env: { EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }} }
         run: eas build --platform android --profile preview --non-interactive
 ```
 
-You'll need to add `EXPO_TOKEN` as a GitHub secret. Get it from expo.dev → **Account settings** → **Access tokens**.
+Get `EXPO_TOKEN` from expo.dev → **Account settings** → **Access tokens**.
 
 ---
 
-## Installing the APK on Your Phone
+### Installing a Preview APK on Your Phone
 
-1. On your Android phone, go to **Settings → Apps → Special app access → Install unknown apps**.
-2. Allow your browser (or Files app) to install APKs.
-3. Open the `.apk` download on your phone and tap **Install**.
-
-> This is called "sideloading". It's safe for your own app — just don't sideload APKs from sources you don't trust.
+1. **Settings → Apps → Special app access → Install unknown apps** → allow your Files app.
+2. Open the downloaded `.apk` on your phone → **Install**.
 
 ---
 
-## Deep Linking Setup
+## Part 2 — Google Play Billing (Subscriptions)
 
-Deep linking lets a URL like `https://liravo.org/user/johndoe` open directly inside the app instead of the browser.
+This is required to sell the Premium subscription through the Play Store. Google takes 15% on your first $1M/year.
 
-Liravo uses two mechanisms:
+### Step 1 — Create the app in Play Console
 
-### 1. Custom scheme links (always works, no setup required)
+1. Go to [play.google.com/console](https://play.google.com/console) → **Create app**.
+2. Package name: `org.liravo.app` — must match `mobile/app.json` exactly.
+3. Upload your first `.aab` file (production build) to **Internal testing** to activate the app.
 
-These work out of the box because `mobile/app.json` already has:
-```json
-"scheme": "liravo"
+### Step 2 — Create the subscription product
+
+1. Play Console → your app → **Monetize** → **Subscriptions** → **Create subscription**.
+2. **Product ID**: `liravo_premium_monthly` — this must match `mobile/constants/iap.ts` exactly.
+3. Name: `Liravo Premium`.
+4. Set the price to $4.99/month. Play automatically converts to local currencies.
+5. Click **Save** then **Activate**.
+
+### Step 3 — Service account for server-side verification
+
+Your backend needs to verify purchase tokens with Google Play's API. This requires a service account.
+
+1. **Google Cloud Console** → select (or create) the same project as your Play Console → **IAM & Admin** → **Service accounts** → **Create service account**.
+2. Name it `play-billing`. Grant it no Cloud IAM roles (not needed). Click **Done**.
+3. Click the service account → **Keys** → **Add key** → **JSON**. Download the key file.
+4. Back in **Play Console** → **Setup** → **API access** → **Link to Google Cloud project** (link the same project). Then under **Service accounts**, grant the play-billing account **Financial data viewer** access.
+5. Copy the entire contents of the JSON key file. Open `.env.local` on your server and add:
+   ```
+   GOOGLE_PLAY_SERVICE_ACCOUNT_KEY={"type":"service_account", ... paste the entire JSON on one line ... }
+   GOOGLE_PLAY_PACKAGE_NAME=org.liravo.app
+   ```
+
+### Step 4 — Real-time Developer Notifications (RTDN)
+
+RTDN keeps your database in sync when subscriptions renew, cancel, or expire — even when the user is offline.
+
+1. **Google Cloud Console** → **Pub/Sub** → **Topics** → **Create topic**. Name it `play-rtdn`. Copy the full topic name (looks like `projects/your-project/topics/play-rtdn`).
+2. Click the topic → **Subscriptions** → **Create subscription**:
+   - Delivery type: **Push**
+   - Endpoint URL: `https://liravo.org/api/mobile/rtdn?secret=YOUR_RTDN_SECRET`
+   - Expiration: **Never expire**
+3. **Play Console** → your app → **Monetize** → **Subscriptions** → **Real-time developer notifications** → paste the full Pub/Sub topic name → **Save**.
+4. Add to your server `.env.local`:
+   ```
+   GOOGLE_PLAY_RTDN_SECRET=YOUR_RTDN_SECRET
+   ```
+   Use any long random string as the secret (e.g., `openssl rand -hex 32`).
+
+The backend endpoint `POST /api/mobile/rtdn` is already implemented. It handles all subscription lifecycle events (renewed, cancelled, expired, grace period, etc.) and keeps `users.is_premium` accurate automatically.
+
+### How it all works end-to-end
+
+```
+User taps "Subscribe" in app
+        ↓
+Google Play Billing sheet appears (Google's native UI — Google handles payment)
+        ↓
+User approves with their Google account / card / Google Pay method
+        ↓
+App receives a purchaseToken
+        ↓
+App calls POST /api/mobile/verify-purchase with the token
+        ↓
+Backend verifies token with Google Play API using the service account
+        ↓
+Backend sets users.is_premium = true, creates subscription record
+        ↓
+App updates UI immediately — user has Premium
+        ↓
+(Later, when subscription renews or cancels...)
+        ↓
+Google sends RTDN notification to POST /api/mobile/rtdn
+        ↓
+Backend updates is_premium automatically
 ```
 
-A link like `liravo://user/johndoe` will open the app if it's installed. This is used internally for OAuth redirects and push notification taps.
+---
 
-### 2. Universal / HTTPS links (branded URLs like `liravo.org/user/johndoe`)
+## Part 3 — Deep Linking
 
-This makes real `https://liravo.org` URLs open the app. It requires a bit of one-time server setup.
+Deep linking lets `https://liravo.org/user/johndoe` open the app instead of the browser.
 
-**Step 1 — Create the asset links file on your server**
+### Custom scheme (works automatically)
 
-Create a file at exactly this URL on your backend:
-```
-https://liravo.org/.well-known/assetlinks.json
-```
+`mobile/app.json` already has `"scheme": "liravo"`. Links like `liravo://user/johndoe` open the app if installed.
 
-With this content (replace `FINGERPRINT` with your app's SHA-256 signing certificate):
+### HTTPS Universal Links
+
+#### Step 1 — Add asset links to your server
+
+Create a route at `https://liravo.org/.well-known/assetlinks.json`:
+
 ```json
 [{
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
     "package_name": "org.liravo.app",
-    "sha256_cert_fingerprints": ["YOUR_SHA256_FINGERPRINT_HERE"]
+    "sha256_cert_fingerprints": ["YOUR_SHA256_FINGERPRINT"]
   }
 }]
 ```
 
-To get your fingerprint:
+Get your fingerprint:
 ```bash
 eas credentials --platform android
+# Look for "SHA-256 Certificate Fingerprint"
 ```
-Look for the **SHA-256 Certificate Fingerprint** in the output.
 
-**Step 2 — Add the intent filter in app.json**
+#### Step 2 — Add intent filter in app.json
 
-Add this under `android` in `mobile/app.json`:
+Under `android` in `mobile/app.json`:
 ```json
-"android": {
-  "package": "org.liravo.app",
-  "intentFilters": [
-    {
-      "action": "VIEW",
-      "autoVerify": true,
-      "data": [
-        { "scheme": "https", "host": "liravo.org" }
-      ],
-      "category": ["BROWSABLE", "DEFAULT"]
-    }
-  ]
-}
+"intentFilters": [{
+  "action": "VIEW",
+  "autoVerify": true,
+  "data": [{ "scheme": "https", "host": "liravo.org" }],
+  "category": ["BROWSABLE", "DEFAULT"]
+}]
 ```
 
-**Step 3 — Handle the URL in the app**
+Rebuild after this change — it's baked into the APK.
 
-Expo Router automatically maps incoming URLs to screens using the same file-based routing. Since the app already has `app/user/[username].tsx`, a tap on `https://liravo.org/user/johndoe` will automatically open that screen. No extra code needed.
+#### Step 3 — Test
 
-**Step 4 — Rebuild**
-
-Deep linking changes require a new build (they're baked into the APK). Trigger a new `preview` build after making these changes.
-
-### Testing deep links
-
-On a device with the app already installed:
 ```bash
-# Test custom scheme
-adb shell am start -W -a android.intent.action.VIEW -d "liravo://user/johndoe"
-
-# Test HTTPS universal link
 adb shell am start -W -a android.intent.action.VIEW -d "https://liravo.org/user/johndoe"
 ```
 
@@ -260,8 +250,9 @@ adb shell am start -W -a android.intent.action.VIEW -d "https://liravo.org/user/
 
 | Problem | Fix |
 |---|---|
-| Build fails with "missing credentials" | Run `eas credentials` in the `mobile/` folder to generate a keystore |
-| App installs but shows blank screen | Check that `EXPO_PUBLIC_API_URL` is set correctly in EAS environment variables |
-| Google Pay button doesn't appear | The device must have Google Pay set up and a card added |
-| Deep links open the browser instead of the app | The `assetlinks.json` file must be reachable at the exact URL with `Content-Type: application/json` |
-| Build says "project not found" | Make sure the `projectId` in `app.json` matches your Expo dashboard |
+| "Item not found" when subscribing | The subscription product isn't activated in Play Console, or you're testing with a development build (billing only works in signed release builds on a real device) |
+| Purchase goes through but Premium not activated | Check that `GOOGLE_PLAY_SERVICE_ACCOUNT_KEY` is set on the server and the service account has **Financial data viewer** in Play Console |
+| RTDN not firing | Verify the Pub/Sub topic name is correct in Play Console, and that the push subscription endpoint URL is publicly reachable |
+| Build fails with "missing credentials" | Run `eas credentials --platform android` to generate or import a keystore |
+| Deep links open browser instead of app | `assetlinks.json` must be served with `Content-Type: application/json` and no redirect |
+| "Project not found" during build | The `projectId` in `app.json` must match your Expo dashboard |

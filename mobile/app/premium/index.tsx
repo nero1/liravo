@@ -1,11 +1,8 @@
-import { View, Text, ScrollView, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
+import { useAuthStore } from '@/stores/auth';
 import { Card } from '@/components/ui/Card';
-import { PaymentSheet } from '@/components/ui/PaymentSheet';
+import { useGooglePlayBilling } from '@/hooks/useGooglePlayBilling';
 
 const FEATURES = [
   'Unlimited custom shelves',
@@ -16,40 +13,21 @@ const FEATURES = [
   'Premium badge on profile',
 ];
 
-function idempotencyKey() {
-  return Array.from({ length: 16 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
-}
-
 export default function PremiumScreen() {
-  const qc = useQueryClient();
-  const [loading, setLoading] = useState(false);
-  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const { user } = useAuthStore();
+  const { premiumProduct, purchasing, restoring, subscribe, restorePurchases } = useGooglePlayBilling();
 
-  async function startCheckout(provider: 'dodopayments' | 'paystack', currency: 'USD' | 'NGN') {
-    setLoading(true);
-    try {
-      const res = await api.post<{ checkoutUrl: string }>(
-        ENDPOINTS.subscriptions.create,
-        { provider, currency },
-        { 'idempotency-key': idempotencyKey() },
-      );
-      if (res.checkoutUrl) setCheckoutUrl(res.checkoutUrl);
-    } catch (err) {
-      Alert.alert('Error', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const isPremium = user?.is_premium ?? false;
 
-  function onPaymentSuccess() {
-    setCheckoutUrl(null);
-    qc.invalidateQueries({ queryKey: ['profile'] });
-    Alert.alert('Welcome to Premium!', 'Your subscription is now active.');
-  }
+  // Price comes from the Play Store so it auto-localises to the user's currency
+  const priceLabel = premiumProduct?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0]?.formattedPrice
+    ?? premiumProduct?.localizedPrice
+    ?? '$4.99';
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 16 }}>
+
         <View className="items-center gap-2">
           <Text className="text-4xl">★</Text>
           <Text className="text-3xl font-bold text-foreground">Liravo Premium</Text>
@@ -58,55 +36,62 @@ export default function PremiumScreen() {
           </Text>
         </View>
 
-        <Card className="gap-3">
-          <Text className="text-2xl font-bold text-foreground text-center">$4.99 / month</Text>
-          {FEATURES.map((f) => (
-            <Text key={f} className="text-foreground">✓ {f}</Text>
-          ))}
-        </Card>
-
-        {/* Global — DodoPayments checkout (supports Google Pay, Apple Pay, cards) */}
-        <TouchableOpacity
-          onPress={() => startCheckout('dodopayments', 'USD')}
-          disabled={loading}
-          className="bg-accent rounded-xl py-4 items-center"
-          activeOpacity={0.85}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text className="text-white font-semibold text-base">
-              Subscribe — Google Pay / Card (Global)
+        {isPremium ? (
+          <Card className="items-center gap-2 py-6">
+            <Text className="text-2xl">★</Text>
+            <Text className="font-bold text-lg text-foreground">You're Premium!</Text>
+            <Text className="text-muted-foreground text-sm text-center">
+              Enjoying all premium features, {user?.display_name ?? 'reader'}.
             </Text>
-          )}
-        </TouchableOpacity>
+          </Card>
+        ) : (
+          <Card className="gap-3">
+            <Text className="text-2xl font-bold text-foreground text-center">
+              {priceLabel} / month
+            </Text>
+            {FEATURES.map((f) => (
+              <Text key={f} className="text-foreground">✓ {f}</Text>
+            ))}
+          </Card>
+        )}
 
-        {/* Nigeria — Paystack */}
-        <TouchableOpacity
-          onPress={() => startCheckout('paystack', 'NGN')}
-          disabled={loading}
-          className="border border-accent rounded-xl py-4 items-center"
-          activeOpacity={0.85}
-        >
-          <Text className="text-accent font-semibold text-base">Pay with Paystack (Nigeria)</Text>
-        </TouchableOpacity>
+        {!isPremium && (
+          <>
+            <TouchableOpacity
+              onPress={subscribe}
+              disabled={purchasing || restoring}
+              className="bg-accent rounded-xl py-4 items-center"
+              activeOpacity={0.85}
+            >
+              {purchasing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-white font-bold text-base">
+                  Subscribe — {priceLabel} / month
+                </Text>
+              )}
+            </TouchableOpacity>
 
-        <Text className="text-center text-xs text-muted-foreground">
-          Cancel anytime. No hidden fees.
+            <TouchableOpacity
+              onPress={restorePurchases}
+              disabled={purchasing || restoring}
+              className="items-center py-2"
+              activeOpacity={0.7}
+            >
+              {restoring ? (
+                <ActivityIndicator color="#d97706" size="small" />
+              ) : (
+                <Text className="text-accent text-sm">Restore previous purchase</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        <Text className="text-center text-xs text-muted-foreground px-4">
+          Subscription is charged through your Google Play account.
+          Cancel anytime in the Play Store — no hidden fees.
         </Text>
       </ScrollView>
-
-      {/* In-app payment WebView — DodoPayments checkout has Google Pay built in */}
-      {checkoutUrl && (
-        <PaymentSheet
-          url={checkoutUrl}
-          visible
-          onSuccess={onPaymentSuccess}
-          onCancel={() => setCheckoutUrl(null)}
-          successPattern="activated=1"
-          cancelPattern="cancelled=1"
-        />
-      )}
     </SafeAreaView>
   );
 }
