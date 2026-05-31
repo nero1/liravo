@@ -479,8 +479,26 @@ psql "postgresql://user:pass@host:25432/dbname?sslmode=require" \
 
 ## 16. Database Seeding
 
-There is no automated seed script. Seeding is a two-step manual process: promote the first
-admin via SQL, then use the in-app admin UI to seed content.
+Seeding populates the platform with books, reading lists, writing prompts, writing challenges,
+and the `@liravo_editors` system account. All seed operations are **idempotent** — safe to run
+multiple times without duplicating data.
+
+### What gets seeded
+
+| Domain | Count | Idempotency |
+|--------|-------|-------------|
+| Liravo Editors account | 1 | Skip if username exists |
+| Books | ~100 titles | Upsert on `isbn_13` |
+| Reviews | ~30 (top books) | Skip if `(user_id, book_id)` exists |
+| Quotes | ~45 (top books) | Skip if `(user_id, book_id, content)` exists |
+| Writing prompts | 63 days | Skip if `prompt_date` already has a prompt |
+| Writing challenges | 6 (4 weekly + 2 monthly) | Skip if `title` exists |
+| Reading lists | 20 curated lists | Skip if `(user_id, title)` exists |
+
+> Feature flags and affiliate stores are seeded by the database migrations (migration 001) and
+> do not need to be re-seeded manually.
+
+---
 
 ### Step 1 — Bootstrap the first admin user
 
@@ -499,16 +517,83 @@ psql "$DIRECT_DATABASE_URL" -c \
 
 Use `DIRECT_DATABASE_URL` (port 25432), not the PgBouncer URL, for one-off psql commands.
 
-### Step 2 — Seed platform content via the admin UI
+---
 
-Once your account has `is_admin = true`, log in and navigate to **`/admin/seed`**. From there:
+### Step 2 — Seed via CLI (recommended for initial setup)
 
-| Action | What it creates |
-|--------|-----------------|
-| **Create Liravo Editors Account** | The `@liravo_editors` system account used for platform-curated content |
-| **Seed Writing Prompts (7 days)** | 7 days of AI-generated community writing prompts |
+The CLI seed script runs directly against the database and does not require the app server
+to be running. It requires Supabase credentials only.
 
-These actions are idempotent — running them twice returns a 409 rather than duplicating data.
+```bash
+# Load env vars first (choose one method):
+export $(grep -v '^#' .env.local | xargs)
+# or: source .env.local
+
+# Run the full seed:
+npm run seed
+
+# Dry run — prints what would be inserted without writing anything:
+npm run seed:dry
+
+# Seed only a specific domain:
+npx tsx scripts/seed.ts --only=editors-account
+npx tsx scripts/seed.ts --only=books
+npx tsx scripts/seed.ts --only=reviews-quotes
+npx tsx scripts/seed.ts --only=prompts
+npx tsx scripts/seed.ts --only=challenges
+npx tsx scripts/seed.ts --only=reading-lists
+```
+
+**Required env vars for CLI seed:**
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+The seed script prints a verification summary on completion:
+
+```
+Verification:
+  [PASS] liravo_editors account — found
+  [PASS] Books — 100 rows (min 90)
+  [PASS] Writing prompts — 63 rows (min 55)
+  [PASS] Writing challenges — 6 rows (min 5)
+  [PASS] Reading lists — 20 rows (min 15)
+  [PASS] Reviews — 30 rows (min 25)
+  [PASS] Quotes — 45 rows (min 30)
+```
+
+---
+
+### Step 3 — Seed via Admin UI (for deployed environments)
+
+Once your account has `is_admin = true`, log in and navigate to **`/admin/seed`**. Run the
+numbered actions in order — each depends on the previous:
+
+| Step | Action | What it creates |
+|------|--------|-----------------|
+| 1 | **Create Liravo Editors Account** | The `@liravo_editors` system account |
+| 2 | **Seed Books** | ~100 curated books across all genres |
+| 3 | **Seed Reading Lists** | 20 SEO-optimised reading lists |
+| 4 | **Seed Writing Prompts (63 days, static)** | 63 days of pre-written daily prompts |
+| 5 | **Seed Writing Challenges** | 4 weekly + 2 monthly challenges |
+| — | **Generate AI Writing Prompts** | 7 more days of AI-generated prompts (optional) |
+
+---
+
+### Manual SQL verification
+
+Run these queries after seeding to confirm everything is in place:
+
+```sql
+SELECT COUNT(*) FROM books;                    -- expect >= 100
+SELECT COUNT(*) FROM writing_prompts;          -- expect >= 60
+SELECT COUNT(*) FROM writing_challenges;       -- expect >= 6
+SELECT COUNT(*) FROM reading_lists;            -- expect >= 20
+SELECT COUNT(*) FROM reviews;                  -- expect >= 25
+SELECT COUNT(*) FROM quotes;                   -- expect >= 30
+SELECT id, username FROM users WHERE username = 'liravo_editors';
+```
+
+---
 
 ### Invite codes (DO mode)
 
