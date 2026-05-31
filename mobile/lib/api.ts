@@ -23,11 +23,13 @@ async function request<T>(
   method: Method = 'GET',
   body?: unknown,
   params?: Record<string, string | number | undefined>,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
   const token = useAuthStore.getState().token;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...extraHeaders,
   };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -63,7 +65,8 @@ async function request<T>(
 export const api = {
   get: <T>(path: string, params?: Record<string, string | number | undefined>) =>
     request<T>(path, 'GET', undefined, params),
-  post: <T>(path: string, body?: unknown) => request<T>(path, 'POST', body),
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    request<T>(path, 'POST', body, undefined, headers),
   put: <T>(path: string, body?: unknown) => request<T>(path, 'PUT', body),
   patch: <T>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
   delete: <T>(path: string) => request<T>(path, 'DELETE'),

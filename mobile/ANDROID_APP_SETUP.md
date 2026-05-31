@@ -49,8 +49,16 @@
    - `EXPO_PUBLIC_API_URL` → your backend URL (e.g. `https://liravo.org`)
    - `EXPO_PUBLIC_DATABASE_PROVIDER` → `supabase` or `digitalocean`
    - If using Supabase: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-   - `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` → your Stripe publishable key (for Google Pay)
+   - If using DigitalOcean: `EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID` (see note below)
 3. Set the **Visibility** of each to **Secret** so they aren't exposed in logs.
+
+> **Getting the Android Google Client ID (DO mode only):**
+> 1. Go to [Google Cloud Console](https://console.cloud.google.com) → **APIs & Services** → **Credentials**
+> 2. Click **Create Credentials** → **OAuth client ID** → Application type: **Android**
+> 3. Enter your package name: `org.liravo.app`
+> 4. For the SHA-1 fingerprint during testing, use the one from `eas credentials --platform android`
+> 5. Also create a second OAuth client ID of type **Web application** — this is needed by Expo's auth proxy
+> 6. Add your Expo redirect URI to the web client's allowed redirects: `https://auth.expo.io/@your-expo-username/liravo`
 
 ### Step 3 — Trigger a build
 

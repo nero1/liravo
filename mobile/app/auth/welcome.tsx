@@ -1,22 +1,34 @@
-import { View, Text, TouchableOpacity, Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View, Text, TouchableOpacity, Alert, ActivityIndicator,
+  TextInput, KeyboardAvoidingView, Platform, ScrollView,
+} from 'react-native';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import { isSupabaseMode, supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID ?? '';
 
 export default function WelcomeScreen() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { loginWithEmail, signUpWithEmail } = useAuth();
+  const { loginWithEmail, signUpWithEmail, loginWithGoogleToken } = useAuth();
 
-  // ── Supabase / Google OAuth ──────────────────────────────────────────────────
-  async function signInWithGoogle() {
+  // Google OAuth request (used only in DO mode)
+  const [, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
+    androidClientId: GOOGLE_CLIENT_ID,
+    scopes: ['openid', 'profile', 'email'],
+  });
+
+  // ── Supabase Google OAuth ────────────────────────────────────────────────────
+  async function signInWithGoogleSupabase() {
     setLoading(true);
     try {
       const redirectUrl = makeRedirectUri();
@@ -26,7 +38,6 @@ export default function WelcomeScreen() {
       });
       if (error) throw error;
       if (!data.url) throw new Error('No auth URL returned');
-
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
       if (result.type === 'success' && result.url) {
         const url = new URL(result.url);
@@ -40,7 +51,23 @@ export default function WelcomeScreen() {
     }
   }
 
-  // ── DigitalOcean / email+password ────────────────────────────────────────────
+  // ── DO mode Google OAuth ─────────────────────────────────────────────────────
+  async function signInWithGoogleDO() {
+    setLoading(true);
+    try {
+      const result = await promptGoogleAsync();
+      if (result.type !== 'success') return;
+      const idToken = result.authentication?.idToken;
+      if (!idToken) throw new Error('No ID token from Google');
+      await loginWithGoogleToken(idToken);
+    } catch (err) {
+      Alert.alert('Sign in failed', (err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Email / password ─────────────────────────────────────────────────────────
   async function handleEmailAuth() {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Missing fields', 'Please enter your email and password.');
@@ -60,11 +87,14 @@ export default function WelcomeScreen() {
     }
   }
 
+  const signInWithGoogle = isSupabaseMode ? signInWithGoogleSupabase : signInWithGoogleDO;
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 justify-between py-12">
+
             {/* Logo */}
             <View className="items-center gap-4">
               <View className="w-20 h-20 bg-accent rounded-2xl items-center justify-center">
@@ -76,87 +106,90 @@ export default function WelcomeScreen() {
               </Text>
             </View>
 
-            {isSupabaseMode ? (
-              // ── Google OAuth button ──────────────────────────────────────────
-              <View className="gap-4">
-                <TouchableOpacity
-                  onPress={signInWithGoogle}
-                  disabled={loading}
-                  className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm"
-                  activeOpacity={0.8}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#1a1a1a" />
-                  ) : (
-                    <>
-                      <Text className="text-2xl font-bold text-[#4285F4]">G</Text>
-                      <Text className="font-semibold text-foreground text-base">Continue with Google</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                <Text className="text-center text-xs text-muted-foreground px-4">
-                  By continuing, you agree to Liravo's Terms of Service and Privacy Policy.
-                </Text>
-              </View>
-            ) : (
-              // ── Email / password form ────────────────────────────────────────
-              <View className="gap-4">
-                {/* Tab switcher */}
-                <View className="flex-row border border-border rounded-xl overflow-hidden">
-                  {(['login', 'signup'] as const).map((t) => (
-                    <TouchableOpacity
-                      key={t}
-                      onPress={() => setTab(t)}
-                      className={`flex-1 py-3 items-center ${tab === t ? 'bg-accent' : 'bg-transparent'}`}
-                      activeOpacity={0.8}
-                    >
-                      <Text className={`font-semibold capitalize ${tab === t ? 'text-white' : 'text-muted-foreground'}`}>
-                        {t === 'login' ? 'Log In' : 'Sign Up'}
+            <View className="gap-4">
+              {/* Google button — shown in both modes */}
+              <TouchableOpacity
+                onPress={signInWithGoogle}
+                disabled={loading}
+                className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm"
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#1a1a1a" />
+                ) : (
+                  <>
+                    <Text className="text-2xl font-bold text-[#4285F4]">G</Text>
+                    <Text className="font-semibold text-foreground text-base">Continue with Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Email / password — only in DO mode */}
+              {!isSupabaseMode && (
+                <>
+                  <View className="flex-row items-center gap-3">
+                    <View className="flex-1 h-px bg-border" />
+                    <Text className="text-muted-foreground text-xs">or</Text>
+                    <View className="flex-1 h-px bg-border" />
+                  </View>
+
+                  {/* Tab switcher */}
+                  <View className="flex-row border border-border rounded-xl overflow-hidden">
+                    {(['login', 'signup'] as const).map((t) => (
+                      <TouchableOpacity
+                        key={t}
+                        onPress={() => setTab(t)}
+                        className={`flex-1 py-3 items-center ${tab === t ? 'bg-accent' : 'bg-transparent'}`}
+                        activeOpacity={0.8}
+                      >
+                        <Text className={`font-semibold capitalize ${tab === t ? 'text-white' : 'text-muted-foreground'}`}>
+                          {t === 'login' ? 'Log In' : 'Sign Up'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TextInput
+                    className="border border-border rounded-xl px-4 py-3.5 text-foreground bg-muted"
+                    placeholder="Email"
+                    placeholderTextColor="#6b7280"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                    value={email}
+                    onChangeText={setEmail}
+                  />
+                  <TextInput
+                    className="border border-border rounded-xl px-4 py-3.5 text-foreground bg-muted"
+                    placeholder="Password"
+                    placeholderTextColor="#6b7280"
+                    secureTextEntry
+                    textContentType={tab === 'signup' ? 'newPassword' : 'password'}
+                    value={password}
+                    onChangeText={setPassword}
+                  />
+
+                  <TouchableOpacity
+                    onPress={handleEmailAuth}
+                    disabled={loading}
+                    className="bg-accent rounded-xl py-4 items-center"
+                    activeOpacity={0.8}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text className="font-semibold text-white text-base">
+                        {tab === 'login' ? 'Log In' : 'Create Account'}
                       </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
 
-                <TextInput
-                  className="border border-border rounded-xl px-4 py-3.5 text-foreground bg-muted"
-                  placeholder="Email"
-                  placeholderTextColor="#6b7280"
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  textContentType="emailAddress"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-                <TextInput
-                  className="border border-border rounded-xl px-4 py-3.5 text-foreground bg-muted"
-                  placeholder="Password"
-                  placeholderTextColor="#6b7280"
-                  secureTextEntry
-                  textContentType={tab === 'signup' ? 'newPassword' : 'password'}
-                  value={password}
-                  onChangeText={setPassword}
-                />
-
-                <TouchableOpacity
-                  onPress={handleEmailAuth}
-                  disabled={loading}
-                  className="bg-accent rounded-xl py-4 items-center"
-                  activeOpacity={0.8}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text className="font-semibold text-white text-base">
-                      {tab === 'login' ? 'Log In' : 'Create Account'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-
-                <Text className="text-center text-xs text-muted-foreground px-4">
-                  By continuing, you agree to Liravo's Terms of Service and Privacy Policy.
-                </Text>
-              </View>
-            )}
+              <Text className="text-center text-xs text-muted-foreground px-4">
+                By continuing, you agree to Liravo's Terms of Service and Privacy Policy.
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

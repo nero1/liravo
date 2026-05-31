@@ -5,13 +5,10 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { StripeProvider } from '@stripe/stripe-react-native';
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/stores/auth';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-
-const STRIPE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isLoading } = useAuth();
@@ -47,7 +44,6 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StripeProvider publishableKey={STRIPE_KEY} merchantIdentifier="merchant.org.liravo">
         <QueryClientProvider client={queryClient}>
           <StatusBar style="auto" />
           <AuthGuard>
@@ -124,7 +120,6 @@ export default function RootLayout() {
             </Stack>
           </AuthGuard>
         </QueryClientProvider>
-        </StripeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

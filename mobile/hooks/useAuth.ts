@@ -82,5 +82,11 @@ export function useAuth() {
     setUser(res.user);
   }
 
-  return { user, token, isLoading, logout, fetchProfile, loginWithEmail, signUpWithEmail };
+  async function loginWithGoogleToken(idToken: string): Promise<void> {
+    const res = await api.post<{ token: string; user: UserRow }>('/api/auth/google', { idToken });
+    await setToken(res.token);
+    setUser(res.user);
+  }
+
+  return { user, token, isLoading, logout, fetchProfile, loginWithEmail, signUpWithEmail, loginWithGoogleToken };
 }
