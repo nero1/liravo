@@ -32,7 +32,7 @@ export default function ProfileScreen() {
         <View className="flex-row items-center justify-between px-4 py-3">
           <Text className="text-2xl font-bold text-foreground">Profile</Text>
           <View className="flex-row gap-2">
-            <TouchableOpacity onPress={() => router.push('/settings/index')} className="p-2">
+            <TouchableOpacity onPress={() => router.push('/settings')} className="p-2">
               <Settings size={22} color="#6b7280" />
             </TouchableOpacity>
           </View>
@@ -78,12 +78,12 @@ export default function ProfileScreen() {
             {[
               { label: '📊 Reading Stats', path: '/stats' },
               { label: '🏆 Leaderboard', path: '/leaderboard' },
-              { label: '📝 My Lists', path: '/lists/index' },
-              { label: '💬 My Quotes', path: '/quotes/index' },
-              { label: '🎁 Referral', path: '/referral/index' },
-              ...(user.is_creator ? [{ label: '💰 Earnings', path: '/earnings/index' }] : []),
+              { label: '📝 My Lists', path: '/lists' },
+              { label: '💬 My Quotes', path: '/quotes' },
+              { label: '🎁 Referral', path: '/referral' },
+              ...(user.is_creator ? [{ label: '💰 Earnings', path: '/earnings' }] : []),
               ...(user.is_moderator ? [{ label: '🛡️ Moderation', path: '/moderation/reports' }] : []),
-              ...(user.is_admin ? [{ label: '⚙️ Admin Panel', path: '/admin/index' }] : []),
+              ...(user.is_admin ? [{ label: '⚙️ Admin Panel', path: '/admin' }] : []),
             ].map(({ label, path }) => (
               <TouchableOpacity
                 key={path}

@@ -48,6 +48,6 @@ export function useToggleShelf() {
 export function useTrackAffiliateClick() {
   return useMutation({
     mutationFn: (body: { book_id: string; link_type: string; store_name?: string }) =>
-      api.get(ENDPOINTS.books.click, body),
+      api.post(ENDPOINTS.books.click, body),
   });
 }

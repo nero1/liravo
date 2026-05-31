@@ -3,6 +3,8 @@ export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://liravo.org';
 export const ENDPOINTS = {
   // Auth
   auth: {
+    login: '/api/auth/login',
+    signup: '/api/auth/signup',
     logout: '/api/auth/logout',
     pin: '/api/auth/pin',
     twoFaSetup: '/api/auth/2fa/setup',
@@ -10,6 +12,7 @@ export const ENDPOINTS = {
   },
   // Users
   users: {
+    me: '/api/users/me',
     profile: '/api/users/profile',
     avatar: '/api/users/avatar',
     locale: '/api/users/locale',
@@ -48,7 +51,7 @@ export const ENDPOINTS = {
   leaderboards: '/api/leaderboards',
   // Reviews & Quotes
   reviews: {
-    list: '/api/reviews',
+    create: '/api/reviews',
     byId: (id: string) => `/api/reviews/${id}`,
     like: (id: string) => `/api/reviews/${id}/like`,
   },
@@ -142,6 +145,9 @@ export const ENDPOINTS = {
   subscriptions: {
     create: '/api/subscriptions/create',
     cancel: '/api/subscriptions/cancel',
+  },
+  payments: {
+    createIntent: '/api/payments/create-intent',
   },
   referral: {
     stats: '/api/referral/stats',

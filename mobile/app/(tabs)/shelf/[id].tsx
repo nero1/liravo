@@ -10,13 +10,13 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import type { ShelfRow, ShelfBookRow } from '@/types';
 
 export default function ShelfDetailScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['shelf', slug],
-    queryFn: () => api.get<{ shelf: ShelfRow; books: ShelfBookRow[] }>(ENDPOINTS.shelves.byId(slug!)),
-    enabled: !!slug,
+    queryKey: ['shelf', id],
+    queryFn: () => api.get<{ shelf: ShelfRow; books: ShelfBookRow[] }>(ENDPOINTS.shelves.byId(id!)),
+    enabled: !!id,
   });
 
   const shelf = data?.shelf;

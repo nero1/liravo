@@ -37,6 +37,13 @@
         {
           "photosPermission": "Allow Liravo to access your photos to set a profile picture."
         }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.org.liravo",
+          "enableGooglePay": true
+        }
       ]
     ],
     "experiments": {

@@ -1,25 +1,28 @@
-import { View, Text, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
-import { supabase } from '@/lib/supabase';
+import { isSupabaseMode, supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function WelcomeScreen() {
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { loginWithEmail, signUpWithEmail } = useAuth();
 
+  // ── Supabase / Google OAuth ──────────────────────────────────────────────────
   async function signInWithGoogle() {
     setLoading(true);
     try {
-      const redirectUrl = makeRedirectUri({ scheme: 'liravo', path: 'auth/callback' });
+      const redirectUrl = makeRedirectUri();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        },
+        options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
       });
       if (error) throw error;
       if (!data.url) throw new Error('No auth URL returned');
@@ -28,9 +31,7 @@ export default function WelcomeScreen() {
       if (result.type === 'success' && result.url) {
         const url = new URL(result.url);
         const code = url.searchParams.get('code');
-        if (code) {
-          await supabase.auth.exchangeCodeForSession(code);
-        }
+        if (code) await supabase.auth.exchangeCodeForSession(code);
       }
     } catch (err) {
       Alert.alert('Sign in failed', (err as Error).message);
@@ -39,41 +40,126 @@ export default function WelcomeScreen() {
     }
   }
 
+  // ── DigitalOcean / email+password ────────────────────────────────────────────
+  async function handleEmailAuth() {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Missing fields', 'Please enter your email and password.');
+      return;
+    }
+    setLoading(true);
+    try {
+      if (tab === 'login') {
+        await loginWithEmail(email.trim(), password);
+      } else {
+        await signUpWithEmail(email.trim(), password);
+      }
+    } catch (err) {
+      Alert.alert(tab === 'login' ? 'Login failed' : 'Sign up failed', (err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <View className="flex-1 px-6 justify-between py-12">
-        <View className="items-center gap-4">
-          <View className="w-20 h-20 bg-accent rounded-2xl items-center justify-center">
-            <Text className="text-4xl">📚</Text>
-          </View>
-          <Text className="text-4xl font-bold text-foreground">Liravo</Text>
-          <Text className="text-muted-foreground text-center text-lg max-w-xs">
-            Discover books through people you trust, not algorithms.
-          </Text>
-        </View>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+          <View className="flex-1 px-6 justify-between py-12">
+            {/* Logo */}
+            <View className="items-center gap-4">
+              <View className="w-20 h-20 bg-accent rounded-2xl items-center justify-center">
+                <Text className="text-4xl">📚</Text>
+              </View>
+              <Text className="text-4xl font-bold text-foreground">Liravo</Text>
+              <Text className="text-muted-foreground text-center text-lg max-w-xs">
+                Discover books through people you trust, not algorithms.
+              </Text>
+            </View>
 
-        <View className="gap-4">
-          <TouchableOpacity
-            onPress={signInWithGoogle}
-            disabled={loading}
-            className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm"
-            activeOpacity={0.8}
-          >
-            {loading ? (
-              <ActivityIndicator color="#1a1a1a" />
+            {isSupabaseMode ? (
+              // ── Google OAuth button ──────────────────────────────────────────
+              <View className="gap-4">
+                <TouchableOpacity
+                  onPress={signInWithGoogle}
+                  disabled={loading}
+                  className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm"
+                  activeOpacity={0.8}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#1a1a1a" />
+                  ) : (
+                    <>
+                      <Text className="text-2xl font-bold text-[#4285F4]">G</Text>
+                      <Text className="font-semibold text-foreground text-base">Continue with Google</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <Text className="text-center text-xs text-muted-foreground px-4">
+                  By continuing, you agree to Liravo's Terms of Service and Privacy Policy.
+                </Text>
+              </View>
             ) : (
-              <>
-                <Text className="text-2xl">G</Text>
-                <Text className="font-semibold text-foreground text-base">Continue with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
+              // ── Email / password form ────────────────────────────────────────
+              <View className="gap-4">
+                {/* Tab switcher */}
+                <View className="flex-row border border-border rounded-xl overflow-hidden">
+                  {(['login', 'signup'] as const).map((t) => (
+                    <TouchableOpacity
+                      key={t}
+                      onPress={() => setTab(t)}
+                      className={`flex-1 py-3 items-center ${tab === t ? 'bg-accent' : 'bg-transparent'}`}
+                      activeOpacity={0.8}
+                    >
+                      <Text className={`font-semibold capitalize ${tab === t ? 'text-white' : 'text-muted-foreground'}`}>
+                        {t === 'login' ? 'Log In' : 'Sign Up'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
-          <Text className="text-center text-xs text-muted-foreground px-4">
-            By continuing, you agree to Liravo's Terms of Service and Privacy Policy.
-          </Text>
-        </View>
-      </View>
+                <TextInput
+                  className="border border-border rounded-xl px-4 py-3.5 text-foreground bg-muted"
+                  placeholder="Email"
+                  placeholderTextColor="#6b7280"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+                <TextInput
+                  className="border border-border rounded-xl px-4 py-3.5 text-foreground bg-muted"
+                  placeholder="Password"
+                  placeholderTextColor="#6b7280"
+                  secureTextEntry
+                  textContentType={tab === 'signup' ? 'newPassword' : 'password'}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+
+                <TouchableOpacity
+                  onPress={handleEmailAuth}
+                  disabled={loading}
+                  className="bg-accent rounded-xl py-4 items-center"
+                  activeOpacity={0.8}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text className="font-semibold text-white text-base">
+                      {tab === 'login' ? 'Log In' : 'Create Account'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <Text className="text-center text-xs text-muted-foreground px-4">
+                  By continuing, you agree to Liravo's Terms of Service and Privacy Policy.
+                </Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

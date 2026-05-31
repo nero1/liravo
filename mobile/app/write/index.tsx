@@ -3,9 +3,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 const WRITING_SECTIONS = [
-  { emoji: '✍️', label: 'Daily Prompts', path: '/write/prompts/index', desc: "Today's writing prompts" },
-  { emoji: '🏆', label: 'Writing Challenges', path: '/write/challenges/index', desc: 'Compete and win XP' },
-  { emoji: '👥', label: 'Workshops', path: '/write/workshops/index', desc: 'Critique & feedback groups' },
+  { emoji: '✍️', label: 'Daily Prompts', path: '/write/prompts', desc: "Today's writing prompts" },
+  { emoji: '🏆', label: 'Writing Challenges', path: '/write/challenges', desc: 'Compete and win XP' },
+  { emoji: '👥', label: 'Workshops', path: '/write/workshops', desc: 'Critique & feedback groups' },
   { emoji: '📊', label: 'My Progress', path: '/write/progress', desc: 'Track your word count' },
   { emoji: '📚', label: 'Resources', path: '/write/resources', desc: 'Craft books & guides' },
   { emoji: '❓', label: 'Ask an Author', path: '/write/ask', desc: 'Q&A with verified authors' },

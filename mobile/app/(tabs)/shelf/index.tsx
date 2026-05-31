@@ -36,7 +36,7 @@ export default function ShelfScreen() {
       <FlatList
         data={shelves}
         keyExtractor={(s) => s.id}
-        renderItem={({ item }) => <ShelfRow shelf={item} />}
+        renderItem={({ item }) => <ShelfListItem shelf={item} />}
         ListEmptyComponent={
           <EmptyState
             title="No shelves yet"
@@ -53,14 +53,14 @@ export default function ShelfScreen() {
   );
 }
 
-function ShelfRow({ shelf }: { shelf: ShelfRow }) {
+function ShelfListItem({ shelf }: { shelf: ShelfRow }) {
   const router = useRouter();
   const icon = shelf.default_type ? DEFAULT_ICONS[shelf.default_type] ?? '📚' : '📚';
 
   return (
     <TouchableOpacity
       className="flex-row items-center px-4 py-4 border-b border-border gap-3"
-      onPress={() => router.push(`/shelf/${shelf.slug}`)}
+      onPress={() => router.push(`/(tabs)/shelf/${shelf.id}`)}
       activeOpacity={0.7}
     >
       <Text className="text-2xl">{icon}</Text>

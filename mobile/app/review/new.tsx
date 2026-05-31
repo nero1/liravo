@@ -21,7 +21,7 @@ export default function NewReviewScreen() {
 
   const submit = useMutation({
     mutationFn: () =>
-      api.post(ENDPOINTS.reviews.list, {
+      api.post(ENDPOINTS.reviews.create, {
         book_id: bookId,
         rating,
         content,
