@@ -1,10 +1,11 @@
 import { View, Text, ScrollView, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import * as WebBrowser from 'expo-web-browser';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
 import { Card } from '@/components/ui/Card';
+import { PaymentSheet } from '@/components/ui/PaymentSheet';
 
 const FEATURES = [
   'Unlimited custom shelves',
@@ -15,32 +16,35 @@ const FEATURES = [
   'Premium badge on profile',
 ];
 
-function generateIdempotencyKey() {
-  const arr = new Uint8Array(16);
-  // Use Math.random as a fallback — not cryptographic but fine for idempotency keys
-  for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
-  return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
+function idempotencyKey() {
+  return Array.from({ length: 16 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
 }
 
 export default function PremiumScreen() {
+  const qc = useQueryClient();
   const [loading, setLoading] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
-  async function handleSubscribe(provider: 'dodopayments' | 'paystack', currency: 'USD' | 'NGN') {
+  async function startCheckout(provider: 'dodopayments' | 'paystack', currency: 'USD' | 'NGN') {
     setLoading(true);
     try {
       const res = await api.post<{ checkoutUrl: string }>(
         ENDPOINTS.subscriptions.create,
         { provider, currency },
-        { 'idempotency-key': generateIdempotencyKey() },
+        { 'idempotency-key': idempotencyKey() },
       );
-      if (res.checkoutUrl) {
-        await WebBrowser.openBrowserAsync(res.checkoutUrl);
-      }
+      if (res.checkoutUrl) setCheckoutUrl(res.checkoutUrl);
     } catch (err) {
       Alert.alert('Error', (err as Error).message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function onPaymentSuccess() {
+    setCheckoutUrl(null);
+    qc.invalidateQueries({ queryKey: ['profile'] });
+    Alert.alert('Welcome to Premium!', 'Your subscription is now active.');
   }
 
   return (
@@ -49,7 +53,9 @@ export default function PremiumScreen() {
         <View className="items-center gap-2">
           <Text className="text-4xl">★</Text>
           <Text className="text-3xl font-bold text-foreground">Liravo Premium</Text>
-          <Text className="text-muted-foreground text-center">Unlock the full reading & writing experience</Text>
+          <Text className="text-muted-foreground text-center">
+            Unlock the full reading & writing experience
+          </Text>
         </View>
 
         <Card className="gap-3">
@@ -59,19 +65,25 @@ export default function PremiumScreen() {
           ))}
         </Card>
 
+        {/* Global — DodoPayments checkout (supports Google Pay, Apple Pay, cards) */}
         <TouchableOpacity
-          onPress={() => handleSubscribe('dodopayments', 'USD')}
+          onPress={() => startCheckout('dodopayments', 'USD')}
           disabled={loading}
           className="bg-accent rounded-xl py-4 items-center"
           activeOpacity={0.85}
         >
-          {loading ? <ActivityIndicator color="#fff" /> : (
-            <Text className="text-white font-semibold text-base">Pay with Card (Global)</Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text className="text-white font-semibold text-base">
+              Subscribe — Google Pay / Card (Global)
+            </Text>
           )}
         </TouchableOpacity>
 
+        {/* Nigeria — Paystack */}
         <TouchableOpacity
-          onPress={() => handleSubscribe('paystack', 'NGN')}
+          onPress={() => startCheckout('paystack', 'NGN')}
           disabled={loading}
           className="border border-accent rounded-xl py-4 items-center"
           activeOpacity={0.85}
@@ -83,6 +95,18 @@ export default function PremiumScreen() {
           Cancel anytime. No hidden fees.
         </Text>
       </ScrollView>
+
+      {/* In-app payment WebView — DodoPayments checkout has Google Pay built in */}
+      {checkoutUrl && (
+        <PaymentSheet
+          url={checkoutUrl}
+          visible
+          onSuccess={onPaymentSuccess}
+          onCancel={() => setCheckoutUrl(null)}
+          successPattern="activated=1"
+          cancelPattern="cancelled=1"
+        />
+      )}
     </SafeAreaView>
   );
 }
