@@ -149,7 +149,7 @@ export default function ChallengeDetailPage() {
               >
                 <span className="text-sm font-bold text-muted-foreground w-5">#{i + 1}</span>
                 <Link
-                  href={`/profile/${entry.users?.username ?? ''}`}
+                  href={`/user/${entry.users?.username ?? ''}`}
                   className="flex-1 font-medium text-sm hover:underline"
                 >
                   {entry.users?.display_name ?? 'Unknown'}

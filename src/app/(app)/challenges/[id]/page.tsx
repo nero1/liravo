@@ -125,7 +125,7 @@ export default async function ChallengeDetailPage({ params }: Props) {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <Link href={`/@${p.username}`} className="font-medium text-sm hover:underline">
+                  <Link href={`/user/${p.username}`} className="font-medium text-sm hover:underline">
                     {p.display_name}
                     {p.id === user?.id && <span className="text-accent ml-1">(you)</span>}
                   </Link>

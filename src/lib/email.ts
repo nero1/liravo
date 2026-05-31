@@ -153,7 +153,7 @@ export function buildWeeklyDigestEmail(
   <li><strong>${stats.booksThisWeek}</strong> book${stats.booksThisWeek !== 1 ? 's' : ''} tracked this week</li>
 </ul>
 <p><a href="${APP_URL}/feed" style="display:inline-block;padding:10px 20px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">View your feed</a></p>`,
-    text: `Hi ${displayName},\n\nYour Liravo week:\n- ${stats.newFollowers} new followers\n- ${stats.newNotifications} new notifications\n- ${stats.booksThisWeek} books tracked\n\nView your feed: ${APP_URL}/feed\n\nProfile: ${APP_URL}/${username}`,
+    text: `Hi ${displayName},\n\nYour Liravo week:\n- ${stats.newFollowers} new followers\n- ${stats.newNotifications} new notifications\n- ${stats.booksThisWeek} books tracked\n\nView your feed: ${APP_URL}/feed\n\nProfile: ${APP_URL}/user/${username}`,
   };
 }
 

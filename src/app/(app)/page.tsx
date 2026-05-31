@@ -95,7 +95,7 @@ export default async function HomePage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm">
-                      <Link href={`/@${item.users.username}`} className="font-medium hover:underline">
+                      <Link href={`/user/${item.users.username}`} className="font-medium hover:underline">
                         {item.users.display_name}
                       </Link>
                       {' '}added{' '}

@@ -127,7 +127,7 @@ export default async function CreatorLeaderboardPage() {
                             href={
                               entry.is_verified_author
                                 ? `/author/${entry.username}`
-                                : `/profile/${entry.username}`
+                                : `/user/${entry.username}`
                             }
                             className="font-medium hover:text-accent transition-colors truncate block"
                           >

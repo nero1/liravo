@@ -253,7 +253,7 @@ export default async function BookPage({ params }: BookPageProps) {
               return (
                 <div key={review.id} className="border border-border rounded-xl p-4">
                   <div className="flex items-start gap-3 mb-2">
-                    <Link href={`/@${reviewer?.username}`} className="shrink-0">
+                    <Link href={`/user/${reviewer?.username}`} className="shrink-0">
                       {reviewer?.avatar_url ? (
                         <Image
                           src={reviewer.avatar_url}
@@ -273,7 +273,7 @@ export default async function BookPage({ params }: BookPageProps) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Link
-                          href={`/@${reviewer?.username}`}
+                          href={`/user/${reviewer?.username}`}
                           className="font-medium text-sm hover:text-amber-600 transition-colors"
                         >
                           {reviewer?.display_name}

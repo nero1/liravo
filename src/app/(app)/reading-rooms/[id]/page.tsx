@@ -114,7 +114,7 @@ export default async function ReadingRoomPage({
             {participants.map((p) => (
               <Link
                 key={p.id}
-                href={`/profile/${p.username}`}
+                href={`/user/${p.username}`}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:border-accent transition-colors text-sm"
               >
                 {p.avatar_url ? (

@@ -430,7 +430,7 @@ export default async function DiscoverPage() {
             {topCreators.map((creator, i) => (
               <Link
                 key={creator.user_id}
-                href={`/profile/${creator.username}`}
+                href={`/user/${creator.username}`}
                 className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted transition-colors"
               >
                 <span className="text-sm font-bold text-muted-foreground w-5 text-center">{i + 1}</span>
