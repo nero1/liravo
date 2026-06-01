@@ -4,7 +4,7 @@ import type { Database } from '@/types/database';
 import { getDoUserFromRequest } from '@/lib/db/unified-client';
 import { isDirectPostgres } from '@/lib/db/provider';
 
-const isDoMode = isDirectPostgres();
+const isDirectPostgresMode = isDirectPostgres();
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });
@@ -34,7 +34,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── DigitalOcean mode ────────────────────────────────────────────────────────
-  if (isDoMode) {
+  if (isDirectPostgresMode) {
     const user = await getDoUserFromRequest((name) => request.cookies.get(name)?.value);
 
     const protectedPaths = ['/profile', '/shelf', '/discover', '/write'];

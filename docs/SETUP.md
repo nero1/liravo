@@ -454,32 +454,53 @@ Vercel Hobby Plan allows only 1 cron trigger per day. Sub-daily jobs use [cron-j
 - [ ] Separate production PostgreSQL cluster (do not share staging and production)
 - [ ] Connection Pool created in **Transaction** mode (port 25061)
 - [ ] Automated backups enabled in DO console (Databases → your cluster → Backups)
-- [ ] All migrations run via psql on the **direct** port (25432)
-- [ ] S3-compatible storage bucket created
+- [ ] All migrations run via psql on the **direct** port (25432) — see Section 15
+- [ ] S3-compatible storage bucket created with public read access
 - [ ] CDN enabled on the storage bucket
 - [ ] `S3_*` env vars set and verified
 - [ ] `DATABASE_PROVIDER=digitalocean` and `NEXT_PUBLIC_DATABASE_PROVIDER=digitalocean` set
+
+### Railway mode additional checklist
+
+- [ ] PgBouncer + PostgreSQL + pgAdmin template deployed in Railway project
+- [ ] `pgbouncer` service `POOL_MODE` confirmed as `transaction`
+- [ ] All migrations run via the **Postgres service URL** (not PgBouncer) — see Section 15
+- [ ] Redis service added to Railway project (or Upstash configured externally)
+- [ ] S3-compatible storage bucket created with public read access (Cloudflare R2 recommended)
+- [ ] CDN enabled on the storage bucket
+- [ ] `S3_*` env vars set and verified
+- [ ] `DATABASE_URL` set to the **PgBouncer** service URL (not the Postgres service URL)
+- [ ] `DATABASE_PROVIDER=railway` and `NEXT_PUBLIC_DATABASE_PROVIDER=railway` set
 
 ---
 
 ## 15. Database Migrations
 
-Run migrations in the following order. In Supabase mode, use the SQL Editor. In DO mode, use
-the **direct** connection (port 25432) — **not** the PgBouncer URL (PgBouncer does not support
-DDL reliably in Transaction mode).
+Run migrations in the following order. **How** you run them depends on your provider:
+
+- **Supabase**: Open the Supabase SQL Editor (Dashboard → SQL Editor) and paste each file's content in order.
+- **DigitalOcean**: Use the **direct** connection (port 25432) — **not** the PgBouncer URL. PgBouncer Transaction mode does not support DDL reliably.
+- **Railway**: Use the **Postgres service** connection URL — **not** the PgBouncer service URL. Same reason as above.
 
 ```bash
-# DO mode — run all migrations via direct connection
-psql "postgresql://user:pass@host:25432/dbname?sslmode=require" \
-  -f supabase/migrations/001_initial_schema.sql
+# DigitalOcean — direct connection (port 25432)
+DIRECT_URL="postgresql://user:pass@host:25432/dbname?sslmode=require"
 
-psql "postgresql://user:pass@host:25432/dbname?sslmode=require" \
-  -f supabase/migrations/002_additional_stores.sql
+# Railway — Postgres service URL (not PgBouncer)
+DIRECT_URL="postgresql://postgres:pass@postgres.railway.internal:5432/railway"
 
-# ... continue in order through all files ...
-
-psql "postgresql://user:pass@host:25432/dbname?sslmode=require" \
-  -f supabase/migrations/011_password_hash_for_do.sql
+# Run all migrations in order (same command for both DO and Railway):
+psql "$DIRECT_URL" -f supabase/migrations/001_initial_schema.sql
+psql "$DIRECT_URL" -f supabase/migrations/002_additional_stores.sql
+psql "$DIRECT_URL" -f supabase/migrations/003_atomic_fixes.sql
+psql "$DIRECT_URL" -f supabase/migrations/004_webhook_and_financial_integrity.sql
+psql "$DIRECT_URL" -f supabase/migrations/005_outbox_events.sql
+psql "$DIRECT_URL" -f supabase/migrations/006_outbox_retry_schedule.sql
+psql "$DIRECT_URL" -f supabase/migrations/007_outbox_claim_rpc.sql
+psql "$DIRECT_URL" -f supabase/migrations/008_missing_tables.sql
+psql "$DIRECT_URL" -f supabase/migrations/009_themes_and_email_tokens.sql
+psql "$DIRECT_URL" -f supabase/migrations/010_payout_methods_and_audiobook.sql
+psql "$DIRECT_URL" -f supabase/migrations/011_password_hash_for_do.sql
 ```
 
 ### Migration order
@@ -496,10 +517,10 @@ psql "postgresql://user:pass@host:25432/dbname?sslmode=require" \
 | `008_missing_tables.sql` | Additional tables |
 | `009_themes_and_email_tokens.sql` | Theme management & email tokens |
 | `010_payout_methods_and_audiobook.sql` | Payout methods & audiobook flag |
-| `011_password_hash_for_do.sql` | `password_hash` column — required before switching to DO mode |
+| `011_password_hash_for_do.sql` | `password_hash` column — required for DigitalOcean and Railway modes |
 
-> **Note**: Migration 011 is safe to apply in Supabase mode too — the columns stay NULL for
-> OAuth-only users and have no effect on Supabase Auth.
+> **Note**: Migration 011 is safe to apply in Supabase mode too — the column stays NULL for
+> OAuth-only users and has no effect on Supabase Auth.
 
 ---
 
@@ -534,14 +555,21 @@ the database after signing up for the first time.
 **Supabase mode**: Sign up via the app, then open the Supabase Table Editor, find your user
 row in the `users` table, and set `is_admin` to `true`.
 
-**DO mode**: Sign up via `/` (the email + password form), then run:
+**DigitalOcean mode**: Sign up via the email + password form on the home page (`/`), then run:
 
 ```bash
-psql "$DIRECT_DATABASE_URL" -c \
+# Use the direct connection (port 25432), NOT the PgBouncer URL
+psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c \
   "UPDATE users SET is_admin = true WHERE email = 'your@email.com';"
 ```
 
-Use `DIRECT_DATABASE_URL` (port 25432), not the PgBouncer URL, for one-off psql commands.
+**Railway mode**: Sign up via the email + password form on the home page (`/`), then run:
+
+```bash
+# Use the Postgres service URL (not PgBouncer)
+psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c \
+  "UPDATE users SET is_admin = true WHERE email = 'your@email.com';"
+```
 
 ---
 
@@ -573,6 +601,9 @@ npx tsx scripts/seed.ts --only=reading-lists
 **Required env vars for CLI seed:**
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
+
+> **DigitalOcean / Railway mode**: The CLI seed script connects via the Supabase SDK and requires Supabase credentials.
+> If you're not running Supabase at all, use the **Admin UI seed** (Step 3 below) instead — it works in all three modes.
 
 The seed script prints a verification summary on completion:
 
@@ -621,12 +652,18 @@ SELECT id, username FROM users WHERE username = 'liravo_editors';
 
 ---
 
-### Invite codes (DO mode)
+### Invite codes (DigitalOcean / Railway mode)
 
-After you have an admin user ID, seed initial invite codes:
+After you have an admin user ID, seed initial invite codes via the direct Postgres connection
+(not the PgBouncer URL):
 
 ```bash
-psql "$DIRECT_DATABASE_URL" -c \
+# DigitalOcean (port 25432)
+psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c \
+  "INSERT INTO invite_codes (code, created_by) VALUES ('INVITE123', '<admin-user-id>');"
+
+# Railway (Postgres service URL)
+psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c \
   "INSERT INTO invite_codes (code, created_by) VALUES ('INVITE123', '<admin-user-id>');"
 ```
 
@@ -634,13 +671,18 @@ psql "$DIRECT_DATABASE_URL" -c \
 
 ## 17. Limitations
 
-### DO mode limitations
+### DigitalOcean and Railway mode limitations
 
-- **No OAuth**: Google and Telegram login buttons are automatically hidden in DO mode. Users
-  sign in with email + password.
-- **Existing Supabase users**: If you migrate an existing Supabase deployment to DO mode,
-  users who signed in via OAuth will not have a `password_hash`. Their first login attempt
-  will return `PASSWORD_RESET_REQUIRED`. See Section 20 (Troubleshooting) for recovery steps.
+Both direct-PostgreSQL modes (DigitalOcean and Railway) share these limitations:
+
+- **No OAuth**: Google and Telegram login buttons are automatically hidden. Users sign in
+  with email + password only.
+- **No Supabase Realtime**: Live updates use SSE polling instead of Supabase's WebSocket
+  connection. Updates appear within ~5–30 seconds rather than instantly.
+- **Migrating from Supabase**: If you switch an existing Supabase deployment to DigitalOcean
+  or Railway, users who signed in via OAuth will have no `password_hash`. Their first
+  email+password login will return `PASSWORD_RESET_REQUIRED`. See Section 21 (Troubleshooting)
+  for recovery steps.
 
 ---
 
@@ -651,7 +693,7 @@ psql "$DIRECT_DATABASE_URL" -c \
 **Supabase mode only** — Supabase manages JWT signing. To rotate: Supabase Dashboard → Settings
 → API → JWT Secret → Regenerate. All active sessions will be invalidated; users must sign in again.
 
-**DO mode** — Sessions are stored in Redis. To invalidate all sessions:
+**DigitalOcean / Railway mode** — Sessions are stored in Redis. To invalidate all sessions:
 ```bash
 redis-cli --scan --pattern "do:session:*" | xargs redis-cli del
 ```
@@ -711,17 +753,38 @@ The rotation process differs by provider:
 ### DigitalOcean Backups
 
 - Automated backups: Databases → your cluster → Backups → Enable daily backups
-- Backups are retained for 7 days
+- Backups are retained for 7 days on the Basic plan
 
-**Manual backup** (uses direct port 25432 — not PgBouncer):
+**Manual backup** (uses the direct port 25432 — not the PgBouncer URL):
 ```bash
 pg_dump "postgresql://user:pass@host:25432/dbname?sslmode=require" > backup_$(date +%Y%m%d).sql
 ```
 
-**Restore** (uses direct port 25432):
+**Restore** (uses the direct port 25432):
 ```bash
 psql "postgresql://user:pass@host:25432/dbname?sslmode=require" < backup_20240101.sql
 ```
+
+### Railway Backups
+
+Railway includes automated daily backups for PostgreSQL services (retention varies by plan).
+To find them: Railway Dashboard → your project → `postgres` service → **Backups** tab.
+
+**Manual backup** (uses the Postgres service URL — not the PgBouncer URL):
+```bash
+pg_dump "postgresql://postgres:pass@postgres.railway.internal:5432/railway" \
+  > backup_$(date +%Y%m%d).sql
+```
+
+**Restore**:
+```bash
+psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" \
+  < backup_20240101.sql
+```
+
+> **Tip**: When running `psql` or `pg_dump` locally against Railway, use the **public** URL
+> exposed in the Railway dashboard (Railway → postgres service → Connect), not the internal
+> `.railway.internal` URL, which is only accessible from within your Railway project.
 
 ### Manual Backup (Supabase)
 
@@ -747,9 +810,14 @@ Each migration file should have a corresponding rollback.
 
 **Supabase mode**: Run rollback SQL in the Supabase SQL Editor or via psql.
 
-**DO mode**: Run rollback SQL via psql using the **direct** connection (port 25432, not PgBouncer):
+**DigitalOcean mode**: Run rollback SQL via psql using the **direct** connection (port 25432, not PgBouncer):
 ```bash
 psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c "<rollback SQL here>"
+```
+
+**Railway mode**: Run rollback SQL via the **Postgres service URL** (not PgBouncer):
+```bash
+psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c "<rollback SQL here>"
 ```
 
 ---
@@ -758,19 +826,23 @@ psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c "<rollback SQ
 
 ### "Migrations fail with 'relation already exists'"
 
-In DO mode, check what tables already exist before running a migration:
+In DigitalOcean or Railway mode, check what tables already exist before running a migration:
 ```bash
-psql "$DATABASE_URL_DIRECT" -c "\dt"
+# DigitalOcean
+psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c "\dt"
+
+# Railway
+psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c "\dt"
 ```
-If the table already exists, either the migration was partially applied or you're running it twice.
+If a table already exists, either the migration was partially applied or you're running it twice.
 Wrap the DDL in `IF NOT EXISTS` or skip the relevant migration.
 
-### "Game/realtime features not updating"
+### "Realtime features not updating"
 
-In DO mode, realtime uses SSE polling (no Supabase Realtime WebSocket needed). If updates seem
-slow or stale, check the EventSource connection in browser DevTools (Network tab → filter by
-`eventsource`). Verify the SSE endpoint is returning 200 and streaming events. Polling interval
-is typically 5–30 seconds.
+In DigitalOcean and Railway modes, realtime uses SSE polling (no Supabase Realtime WebSocket).
+If updates seem slow or stale, check the EventSource connection in browser DevTools (Network tab
+→ filter by `eventsource`). Verify the SSE endpoint returns 200 and is streaming events.
+Polling interval is typically 5–30 seconds.
 
 ### "Login returns PASSWORD_RESET_REQUIRED"
 
@@ -791,7 +863,7 @@ UPDATE users SET password_hash = '<paste-hash-here>' WHERE email = 'user@example
 
 Then ask the user to log in with `NewPassword123` and immediately change their password.
 
-### "Avatar uploads fail in DO mode"
+### "Avatar uploads fail in DigitalOcean or Railway mode"
 
 Verify that `S3_ENDPOINT`, `S3_KEY`, `S3_SECRET`, `S3_BUCKET`, and `S3_CDN_URL` are all set.
 Test the connection manually:
@@ -807,7 +879,8 @@ c.send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET, Key: 'test.txt', Bo
 
 Lower `DATABASE_POOL_MAX` (default 5). Each serverless function instance creates its own pool.
 With Vercel spinning up many instances, the total connections = instances × `DATABASE_POOL_MAX`.
-Ensure the PgBouncer pool size is set high enough on the DO side.
+Ensure the PgBouncer pool size is set high enough (DigitalOcean: Connection Pools settings;
+Railway: `pgbouncer` service environment variables — `MAX_CLIENT_CONN` and `DEFAULT_POOL_SIZE`).
 
 ---
 
