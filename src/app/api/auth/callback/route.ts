@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import { checkAndAwardBadges } from '@/services/badges';
-import { isDigitalOcean } from '@/lib/db/provider';
+import { isDirectPostgres } from '@/lib/db/provider';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -12,8 +12,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
 
-  // DO mode: OAuth is not supported — redirect with error
-  if (isDigitalOcean()) {
+  // Direct-postgres mode: OAuth is not supported — redirect with error
+  if (isDirectPostgres()) {
     return NextResponse.redirect(`${origin}/login?error=oauth_not_supported`);
   }
 

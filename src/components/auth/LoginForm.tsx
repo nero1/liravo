@@ -10,7 +10,7 @@ interface LoginFormProps {
   telegramEnabled: boolean;
 }
 
-const isDoMode = process.env.NEXT_PUBLIC_DATABASE_PROVIDER === 'digitalocean';
+const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supabase') !== 'supabase';
 
 export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   const t = useTranslations('auth');
@@ -18,13 +18,13 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   const [loading, setLoading] = useState<'google' | 'telegram' | 'email' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // DO mode: email/password state
+  // Direct-postgres mode: email/password state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
 
-  // ── DO mode ──────────────────────────────────────────────────────────────────
-  if (isDoMode) {
+  // ── Direct-postgres mode ──────────────────────────────────────────────────────
+  if (isDirectPostgresMode) {
     const handleEmailAuth = async (e: React.FormEvent) => {
       e.preventDefault();
       setLoading('email');

@@ -27,11 +27,13 @@ describe('provider.ts', () => {
     else process.env.DATABASE_PROVIDER = originalEnv;
   });
 
-  it('exports getProvider and isDigitalOcean', async () => {
+  it('exports getProvider, isDigitalOcean, isRailway, isDirectPostgres', async () => {
     process.env.DATABASE_PROVIDER = 'supabase';
     const mod = await import('../src/lib/db/provider');
     expect(typeof mod.getProvider).toBe('function');
     expect(typeof mod.isDigitalOcean).toBe('function');
+    expect(typeof mod.isRailway).toBe('function');
+    expect(typeof mod.isDirectPostgres).toBe('function');
   });
 
   it('getProvider returns "supabase" by default', async () => {
@@ -44,6 +46,12 @@ describe('provider.ts', () => {
     process.env.DATABASE_PROVIDER = 'digitalocean';
     const { getProvider } = await import('../src/lib/db/provider');
     expect(getProvider()).toBe('digitalocean');
+  });
+
+  it('getProvider returns "railway"', async () => {
+    process.env.DATABASE_PROVIDER = 'railway';
+    const { getProvider } = await import('../src/lib/db/provider');
+    expect(getProvider()).toBe('railway');
   });
 
   it('throws on invalid DATABASE_PROVIDER', async () => {
@@ -62,6 +70,36 @@ describe('provider.ts', () => {
     process.env.DATABASE_PROVIDER = 'supabase';
     const { isDigitalOcean } = await import('../src/lib/db/provider');
     expect(isDigitalOcean()).toBe(false);
+  });
+
+  it('isRailway is true when DATABASE_PROVIDER=railway', async () => {
+    process.env.DATABASE_PROVIDER = 'railway';
+    const { isRailway } = await import('../src/lib/db/provider');
+    expect(isRailway()).toBe(true);
+  });
+
+  it('isRailway is false for digitalocean mode', async () => {
+    process.env.DATABASE_PROVIDER = 'digitalocean';
+    const { isRailway } = await import('../src/lib/db/provider');
+    expect(isRailway()).toBe(false);
+  });
+
+  it('isDirectPostgres is true for digitalocean', async () => {
+    process.env.DATABASE_PROVIDER = 'digitalocean';
+    const { isDirectPostgres } = await import('../src/lib/db/provider');
+    expect(isDirectPostgres()).toBe(true);
+  });
+
+  it('isDirectPostgres is true for railway', async () => {
+    process.env.DATABASE_PROVIDER = 'railway';
+    const { isDirectPostgres } = await import('../src/lib/db/provider');
+    expect(isDirectPostgres()).toBe(true);
+  });
+
+  it('isDirectPostgres is false for supabase', async () => {
+    process.env.DATABASE_PROVIDER = 'supabase';
+    const { isDirectPostgres } = await import('../src/lib/db/provider');
+    expect(isDirectPostgres()).toBe(false);
   });
 });
 
@@ -273,9 +311,9 @@ describe('auth routes — source patterns', () => {
     expect(src).toContain('oauth_not_supported');
   });
 
-  it('callback route uses isDigitalOcean guard', () => {
+  it('callback route uses isDirectPostgres guard', () => {
     const src = readSrc('app', 'api', 'auth', 'callback', 'route.ts');
-    expect(src).toContain('isDigitalOcean');
+    expect(src).toContain('isDirectPostgres');
   });
 });
 
@@ -353,14 +391,14 @@ describe('audit — zero raw supabase.auth.getUser() calls in API routes', () =>
 
   it('server.ts createClient is provider-aware', () => {
     const src = readSrc('lib', 'supabase', 'server.ts');
-    expect(src).toContain('isDigitalOcean');
+    expect(src).toContain('isDirectPostgres');
     expect(src).toContain('createDoClient');
     expect(src).toContain('createDoServiceClient');
   });
 
-  it('getCurrentUser works in both modes (source inspection)', () => {
+  it('getCurrentUser works in all modes (source inspection)', () => {
     const src = readSrc('lib', 'auth', 'getCurrentUser.ts');
-    expect(src).toContain('isDigitalOcean');
+    expect(src).toContain('isDirectPostgres');
     expect(src).toContain('do:session:');
     expect(src).toContain('getSupabaseUser');
     expect(src).toContain('getDoUser');

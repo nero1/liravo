@@ -6,7 +6,7 @@ export function getSql(): ReturnType<typeof postgres> {
   if (_sql) return _sql;
 
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL is required when DATABASE_PROVIDER=digitalocean');
+  if (!url) throw new Error('DATABASE_URL is required in direct PostgreSQL mode (digitalocean or railway)');
 
   const sslEnabled = process.env.DATABASE_SSL !== 'false';
 

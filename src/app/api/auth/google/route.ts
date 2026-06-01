@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { createDoSession, SESSION_COOKIE, SESSION_TTL } from '@/lib/db/unified-client';
-import { isDigitalOcean } from '@/lib/db/provider';
+import { isDirectPostgres } from '@/lib/db/provider';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 
@@ -34,8 +34,8 @@ async function verifyGoogleIdToken(idToken: string): Promise<GoogleTokenInfo> {
 }
 
 export async function POST(request: Request) {
-  if (!isDigitalOcean()) {
-    return NextResponse.json({ error: 'This endpoint is only available in DO mode' }, { status: 404 });
+  if (!isDirectPostgres()) {
+    return NextResponse.json({ error: 'This endpoint is only available in direct PostgreSQL mode' }, { status: 404 });
   }
 
   const ip = getClientIp(request);

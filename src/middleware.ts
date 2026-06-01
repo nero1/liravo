@@ -2,8 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { Database } from '@/types/database';
 import { getDoUserFromRequest } from '@/lib/db/unified-client';
+import { isDirectPostgres } from '@/lib/db/provider';
 
-const isDoMode = process.env.DATABASE_PROVIDER === 'digitalocean';
+const isDoMode = isDirectPostgres();
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });

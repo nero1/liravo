@@ -9,8 +9,8 @@ This document covers everything a developer needs to go from zero to a running L
 Liravo is a Next.js 14 (App Router) social book discovery platform. The stack:
 
 - **Frontend**: Next.js 14, TypeScript, Tailwind CSS
-- **Database**: Supabase (default) **or** DigitalOcean Managed PostgreSQL via postgres.js
-- **Cache / Sessions**: Redis via ioredis or Upstash — **required in both provider modes**
+- **Database**: Supabase (default), DigitalOcean Managed PostgreSQL, or Railway PostgreSQL — switched via a single `DATABASE_PROVIDER` env var
+- **Cache / Sessions**: Redis via ioredis or Upstash — **required in all provider modes**
 - **Deployment**: Vercel (Hobby Plan for MVP)
 - **AI**: DeepSeek (primary), Gemini (fallback)
 - **Payments**: Paystack + Dodopayments
@@ -25,12 +25,12 @@ Copy `.env.local.example` to `.env.local` and fill in the values.
 
 | Variable | Description |
 |---|---|
-| `DATABASE_PROVIDER` | `supabase` (default) or `digitalocean` |
+| `DATABASE_PROVIDER` | `supabase` (default), `digitalocean`, or `railway` |
 | `NEXT_PUBLIC_DATABASE_PROVIDER` | Mirror of `DATABASE_PROVIDER` — required for client components |
 
 Both default to `supabase` if unset.
 
-### Supabase _(Required in Supabase mode only; can be omitted in DO mode)_
+### Supabase _(Required when `DATABASE_PROVIDER=supabase` or unset)_
 
 | Variable | Description |
 |---|---|
@@ -38,21 +38,21 @@ Both default to `supabase` if unset.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon/public key (Project Settings → API) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key — **never expose to client** |
 
-### DigitalOcean PostgreSQL _(Required in DO mode only)_
+### DigitalOcean / Railway PostgreSQL _(Required when `DATABASE_PROVIDER=digitalocean` or `=railway`)_
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PgBouncer URL (port **25061** — see Section 3b below) |
+| `DATABASE_URL` | PgBouncer connection URL (transaction mode — see Sections 3b and 5b) |
 | `DATABASE_POOL_MAX` | Max connections per serverless instance (default: `5`) |
 | `DATABASE_SSL` | Set to `false` only for local dev without SSL; default: `true` |
 
-### Object Storage — S3-compatible _(Required in DO mode; unused in Supabase mode)_
+### Object Storage — S3-compatible _(Required in DigitalOcean and Railway modes; unused in Supabase mode)_
 
 These variables are intentionally named `S3_*` — they are **provider-neutral** and work
 with Cloudflare R2, Backblaze B2, DigitalOcean Spaces, AWS S3, or any S3-compatible service.
 
 ```bash
-# S3-compatible object storage (used when DATABASE_PROVIDER=digitalocean)
+# S3-compatible object storage (used when DATABASE_PROVIDER=digitalocean or =railway)
 # Provider-neutral: works with R2, B2, DO Spaces, AWS S3, or any compatible provider.
 
 S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com   # Example: Cloudflare R2
@@ -159,20 +159,21 @@ S3_CDN_URL=https://cdn.example.com        # Public CDN/download base URL for the
 
 ### Provider Comparison
 
-| Feature | Supabase | DigitalOcean |
-|---|---|---|
-| Database | PostgreSQL via Supabase SDK | PostgreSQL via postgres.js (direct) |
-| Auth | Supabase Auth (JWT) | bcrypt + Redis JWT sessions |
-| Storage | Supabase Storage | S3-compatible (R2, B2, DO Spaces, AWS) |
-| Realtime | Supabase Realtime WebSocket | SSE polling |
-| OAuth | Google + Telegram | Not supported |
-| Cost notes | Free tier available; scales by usage | Pay for DB cluster + object storage separately |
-| RLS | Row-Level Security via Postgres | Application-level auth filtering |
+| Feature | Supabase | DigitalOcean | Railway |
+|---|---|---|---|
+| Database | PostgreSQL via Supabase SDK | PostgreSQL via postgres.js (direct) | PostgreSQL via postgres.js (direct) |
+| Auth | Supabase Auth (JWT) | bcrypt + Redis JWT sessions | bcrypt + Redis JWT sessions |
+| Storage | Supabase Storage | S3-compatible (R2, B2, DO Spaces, AWS) | S3-compatible (R2, B2, DO Spaces, AWS) |
+| Realtime | Supabase Realtime WebSocket | SSE polling | SSE polling |
+| OAuth | Google + Telegram | Not supported | Not supported |
+| Connection pooling | Built-in | Built-in PgBouncer (port 25061) | PgBouncer service from Railway template |
+| Cost notes | Free tier available; scales by usage | Pay for DB cluster + object storage separately | Pay for Railway services + object storage |
+| RLS | Row-Level Security via Postgres | Application-level auth filtering | Application-level auth filtering |
 
 ### Object Storage Provider Comparison
 
-When `DATABASE_PROVIDER=digitalocean`, Liravo uses the S3 API for object storage. Any
-S3-compatible provider works — no code changes required between providers, only env vars.
+When `DATABASE_PROVIDER=digitalocean` or `DATABASE_PROVIDER=railway`, Liravo uses the S3 API
+for object storage. Any S3-compatible provider works — no code changes required, only env vars.
 
 | Provider | Free tier | Egress fees | Notes |
 |---|---|---|---|
@@ -220,26 +221,32 @@ S3_REGION=us-east-1
 S3_CDN_URL=https://liravo-avatars.s3.us-east-1.amazonaws.com
 ```
 
-### DATABASE_URL — PgBouncer Setup (Most Commonly Missed Step)
+### Section 3b — DATABASE_URL and PgBouncer (Most Commonly Missed Step)
 
-> **Important**: DigitalOcean shows the **direct** PostgreSQL URL (port 25432) by default on the
-> Connection Details tab. **Do not use this URL in the app.**
+Both DigitalOcean and Railway use PgBouncer in **transaction pooling mode**. The app must
+connect to PgBouncer, not the raw Postgres port. The direct Postgres URL is only used for migrations.
 
-The app requires the **PgBouncer URL** (port 25061). This URL must be created manually:
+**DigitalOcean**: DigitalOcean shows the direct URL (port 25432) by default. You must create a pool manually:
 
 1. Go to **Databases** → your cluster → **Connection Pools** tab
-2. Click **Create Pool**
-3. Choose **Transaction** mode — NOT Session mode (Session mode breaks prepared statements and serverless)
-4. Set a pool size appropriate for your plan
-5. Copy the connection string — it uses **port 25061**
-6. Set this as `DATABASE_URL` in your env
+2. Click **Create Pool** → choose **Transaction** mode
+3. Copy the connection string (port **25061**) → set as `DATABASE_URL`
 
-The direct connection (port 25432) is still correct for running migrations manually via `psql`.
+The direct connection (port 25432) is used only for running migrations via `psql`.
+
+**Railway**: Deploy the **"PgBouncer + PostgreSQL + pgAdmin"** template from the Railway template gallery.
+This creates three services in your project:
+- `postgres` — the raw database (use this URL only for migrations)
+- `pgbouncer` — the connection pooler in transaction mode (use this as `DATABASE_URL`)
+- `pgadmin` — optional management UI
+
+Set `DATABASE_URL` to the PgBouncer service's internal URL. The Postgres service URL is used only for
+running migrations (optionally document it as `DATABASE_DIRECT_URL` for your own reference).
 
 ### Connection Pooling Explanation
 
 - `prepare: false` is **required** in postgres.js because PgBouncer Transaction mode does not
-  support prepared statements. Omitting this will cause cryptic query failures.
+  support prepared statements. Omitting this will cause cryptic query failures at runtime.
 - `DATABASE_POOL_MAX` controls the maximum connections **per serverless function instance**.
   The default of 5 is correct for serverless; PgBouncer handles the actual server-side pooling.
 - For persistent servers (not serverless), you can raise this to 10–20.
@@ -266,8 +273,8 @@ The direct connection (port 25432) is still correct for running migrations manua
 1. Create a new Managed PostgreSQL cluster in the DigitalOcean console.
 2. In Connection Pools → Create Pool:
    - Mode: **Transaction** (not Session)
-   - Copy the connection string (port 25061) → set as `DATABASE_URL`
-3. Run the migration via direct connection (see Section 17):
+   - Copy the connection string (port **25061**) → set as `DATABASE_URL`
+3. Run migrations via the direct connection (port 25432 — see Section 17):
    ```bash
    psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -f supabase/migrations/001_initial_schema.sql
    # ... repeat for all migrations in order
@@ -278,13 +285,32 @@ The direct connection (port 25432) is still correct for running migrations manua
 
 ---
 
+## 5b. Railway PostgreSQL Setup
+
+1. In your Railway project, click **New** → **Template** → search for **"PgBouncer + PostgreSQL + pgAdmin"** and deploy it.
+   This creates three services: `postgres`, `pgbouncer`, and `pgadmin`.
+2. In the `pgbouncer` service → **Variables**, confirm `POOL_MODE=transaction` (it should be the default).
+3. Copy the `pgbouncer` service's connection URL → set as `DATABASE_URL` in your app's env vars.
+4. Copy the `postgres` service's connection URL — use this **only for migrations** (not for the app).
+5. Run migrations via the direct Postgres URL:
+   ```bash
+   psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" \
+     -f supabase/migrations/001_initial_schema.sql
+   # ... repeat for all migrations in order
+   ```
+6. Set `DATABASE_PROVIDER=railway` and `NEXT_PUBLIC_DATABASE_PROVIDER=railway`.
+7. Configure S3-compatible storage (see Section 2 above) — Cloudflare R2 is recommended.
+8. Redis is required — configure it as per Section 6 (below). You can add a Redis service directly in Railway.
+
+---
+
 ## 6. Redis Setup
 
-Redis is **required in both Supabase and DigitalOcean modes**. It is used for:
-- Rate limiting (both modes)
-- Feature flag caching (both modes)
-- Feed caching (both modes)
-- Session storage (DO mode only)
+Redis is **required in all three provider modes**. It is used for:
+- Rate limiting (all modes)
+- Feature flag caching (all modes)
+- Feed caching (all modes)
+- Session storage (DigitalOcean and Railway modes only)
 
 ### Option A: Upstash (recommended for Vercel)
 

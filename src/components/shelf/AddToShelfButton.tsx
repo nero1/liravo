@@ -10,7 +10,7 @@ interface AddToShelfButtonProps {
   userId: string;
 }
 
-const isDoMode = process.env.NEXT_PUBLIC_DATABASE_PROVIDER === 'digitalocean';
+const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supabase') !== 'supabase';
 
 export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
   const [shelves, setShelves] = useState<ShelfRow[]>([]);
@@ -20,7 +20,7 @@ export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
 
   useEffect(() => {
     const load = async () => {
-      if (isDoMode) {
+      if (isDirectPostgresMode) {
         const res = await fetch(`/api/shelves?bookId=${encodeURIComponent(bookId)}`);
         if (!res.ok) return;
         const { shelves: s, addedToShelves: a } = await res.json();
@@ -44,7 +44,7 @@ export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
     setLoading(true);
     const isAdded = addedToShelves.has(shelf.id);
 
-    if (isDoMode) {
+    if (isDirectPostgresMode) {
       const res = await fetch('/api/shelf-books/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

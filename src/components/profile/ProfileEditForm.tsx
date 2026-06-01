@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { UserRow } from '@/types/database';
 import { cn } from '@/lib/utils';
 
-const isDoMode = process.env.NEXT_PUBLIC_DATABASE_PROVIDER === 'digitalocean';
+const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supabase') !== 'supabase';
 
 interface ProfileEditFormProps {
   profile: UserRow;
@@ -43,8 +43,8 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
     let avatarUrl = profile.avatar_url;
 
     if (avatarFile) {
-      if (isDoMode) {
-        // DO mode: upload via API endpoint that uses S3
+      if (isDirectPostgresMode) {
+        // Direct-postgres mode: upload via API endpoint that uses S3
         const fd = new FormData();
         fd.append('file', avatarFile);
         const res = await fetch('/api/users/avatar', { method: 'POST', body: fd });
@@ -74,8 +74,8 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
       }
     }
 
-    // Profile fields update goes through an API route in DO mode too
-    if (isDoMode) {
+    // Profile fields update goes through an API route in direct-postgres mode too
+    if (isDirectPostgresMode) {
       const res = await fetch('/api/users/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

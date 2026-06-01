@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
+import { isDirectPostgres } from '@/lib/db/provider';
 
 export interface StorageProvider {
   upload(
@@ -63,7 +64,7 @@ function getS3Client(): S3Client {
   const secret = process.env.S3_SECRET;
 
   if (!endpoint || !key || !secret) {
-    throw new Error('S3_ENDPOINT, S3_KEY, and S3_SECRET are required when DATABASE_PROVIDER=digitalocean');
+    throw new Error('S3_ENDPOINT, S3_KEY, and S3_SECRET are required in direct PostgreSQL mode');
   }
 
   _s3Client = new S3Client({
@@ -132,9 +133,7 @@ export function getStorageProvider(
     getPublicUrl: (path: string) => { data: { publicUrl: string } };
   }
 ): StorageProvider {
-  const provider = process.env.DATABASE_PROVIDER ?? 'supabase';
-
-  if (provider === 'digitalocean') {
+  if (isDirectPostgres()) {
     if (!_storageProvider) _storageProvider = createS3StorageAdapter();
     return _storageProvider;
   }

@@ -2,7 +2,8 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
-const isDoMode = process.env.DATABASE_PROVIDER === 'digitalocean';
+const provider = process.env.DATABASE_PROVIDER ?? 'supabase';
+const isDoMode = provider !== 'supabase';
 
 const s3CdnHostname = process.env.S3_CDN_URL
   ? (() => { try { return new URL(process.env.S3_CDN_URL).hostname; } catch { return null; } })()
