@@ -2,13 +2,14 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
-const isDoMode = process.env.DATABASE_PROVIDER === 'digitalocean';
+const provider = process.env.DATABASE_PROVIDER ?? 'supabase';
+const isDirectPostgres = provider !== 'supabase';
 
 const s3CdnHostname = process.env.S3_CDN_URL
   ? (() => { try { return new URL(process.env.S3_CDN_URL).hostname; } catch { return null; } })()
   : null;
 
-const supabaseConnectSrc = isDoMode
+const supabaseConnectSrc = isDirectPostgres
   ? ''
   : ' https://*.supabase.co wss://*.supabase.co';
 
@@ -38,7 +39,7 @@ const remotePatterns = [
   { protocol: 'https', hostname: 'books.google.com' },
   { protocol: 'https', hostname: 'covers.openlibrary.org' },
   { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
-  ...(isDoMode
+  ...(isDirectPostgres
     ? s3CdnHostname ? [{ protocol: 'https', hostname: s3CdnHostname }] : []
     : [{ protocol: 'https', hostname: '*.supabase.co' }]),
 ];
@@ -54,7 +55,7 @@ const nextConfig = {
   },
   experimental: {
     serverActions: { allowedOrigins: ['liravo.org', 'localhost:3000'] },
-    optimizePackageImports: isDoMode ? ['postgres'] : ['@supabase/supabase-js'],
+    optimizePackageImports: isDirectPostgres ? ['postgres'] : ['@supabase/supabase-js'],
   },
 };
 

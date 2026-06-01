@@ -33,7 +33,7 @@ function createDoBrowserClient() {
 }
 
 export function createClient() {
-  if (process.env.NEXT_PUBLIC_DATABASE_PROVIDER === 'digitalocean') {
+  if ((process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supabase') !== 'supabase') {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return createDoBrowserClient() as any;
   }

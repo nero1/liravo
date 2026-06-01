@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-const isSupabaseMode = process.env.EXPO_PUBLIC_DATABASE_PROVIDER !== 'digitalocean';
+const isSupabaseMode = (process.env.EXPO_PUBLIC_DATABASE_PROVIDER ?? 'supabase') === 'supabase';
 
 const ExpoSecureStoreAdapter = {
   getItem: (key: string) => SecureStore.getItemAsync(key),
@@ -9,8 +9,8 @@ const ExpoSecureStoreAdapter = {
 };
 
 // Only initialise the Supabase client when Supabase is the auth provider.
-// When DATABASE_PROVIDER=digitalocean this module exports null so no
-// Supabase SDK code is ever imported/executed in that configuration.
+// In digitalocean or railway mode this module exports null so no
+// Supabase SDK code is ever imported/executed in those configurations.
 export const supabase = (() => {
   if (!isSupabaseMode) return null as never;
   // Dynamic require keeps the import out of DO-mode bundles entirely.

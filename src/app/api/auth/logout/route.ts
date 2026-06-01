@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { isDigitalOcean } from '@/lib/db/provider';
+import { isDirectPostgres } from '@/lib/db/provider';
 import { SESSION_COOKIE, destroySession } from '@/lib/db/unified-client';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
-  if (isDigitalOcean()) {
+  if (isDirectPostgres()) {
     const cookieStore = cookies();
     const token = cookieStore.get(SESSION_COOKIE)?.value;
     if (token) await destroySession(token);

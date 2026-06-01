@@ -5,7 +5,7 @@ import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { isDigitalOcean } from '@/lib/db/provider';
+import { isDirectPostgres } from '@/lib/db/provider';
 import { SESSION_COOKIE, destroySession } from '@/lib/db/unified-client';
 
 export const dynamic = 'force-dynamic';
@@ -39,8 +39,8 @@ export async function DELETE(req: Request) {
   }
 
   // Sign the user out immediately
-  if (isDigitalOcean()) {
-    // DO mode: destroy Redis session and clear the session cookie
+  if (isDirectPostgres()) {
+    // Direct-postgres mode: destroy Redis session and clear the session cookie
     const cookieStore = cookies();
     const token = cookieStore.get(SESSION_COOKIE)?.value;
     if (token) await destroySession(token);

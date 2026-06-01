@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getStorageProvider } from '@/lib/storage/provider';
-import { isDigitalOcean } from '@/lib/db/provider';
+import { isDirectPostgres } from '@/lib/db/provider';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
   let publicUrl: string;
 
-  if (isDigitalOcean()) {
+  if (isDirectPostgres()) {
     const storage = getStorageProvider();
     const bucket = process.env.S3_BUCKET ?? 'avatars';
     const { data, error } = await storage.upload(bucket, path, body, { contentType, upsert: true });

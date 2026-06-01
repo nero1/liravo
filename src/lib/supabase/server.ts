@@ -1,11 +1,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database';
-import { isDigitalOcean } from '@/lib/db/provider';
+import { isDirectPostgres } from '@/lib/db/provider';
 import { createDoClient, createDoServiceClient } from '@/lib/db/unified-client';
 
 export function createClient() {
-  if (isDigitalOcean()) {
+  if (isDirectPostgres()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return createDoClient() as any;
   }
@@ -44,7 +44,7 @@ export function createClient() {
 }
 
 export function createServiceClient() {
-  if (isDigitalOcean()) {
+  if (isDirectPostgres()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return createDoServiceClient() as any;
   }

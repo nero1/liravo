@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { getRedisClient } from '@/lib/redis';
-import { isDigitalOcean } from '@/lib/db/provider';
+import { isDirectPostgres } from '@/lib/db/provider';
 import { SESSION_COOKIE } from '@/lib/db/unified-client';
 
 export interface SessionUser {
@@ -12,7 +12,7 @@ export interface SessionUser {
 // DO mode: reads session cookie → validates in Redis.
 // Supabase mode: delegates to the Supabase auth client (wrapped in createClient()).
 export async function getCurrentUser(): Promise<SessionUser | null> {
-  if (isDigitalOcean()) {
+  if (isDirectPostgres()) {
     return getDoUser();
   }
   return getSupabaseUser();
