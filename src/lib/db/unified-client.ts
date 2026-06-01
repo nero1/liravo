@@ -13,6 +13,7 @@ import { cookies } from 'next/headers';
 import { getRedisClient } from '@/lib/redis';
 import { PgQueryBuilder, getPgQueryBuilderFactory } from './query-builder';
 import { getStorageProvider } from '@/lib/storage/provider';
+import { withUserContext } from './pg';
 
 const SESSION_COOKIE = 'liravo-session';
 const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
@@ -154,3 +155,24 @@ export async function destroySession(token: string): Promise<void> {
 }
 
 export { SESSION_COOKIE, SESSION_TTL };
+
+/**
+ * Re-exported for DO/Railway routes that want to group DB operations under a
+ * user-scoped transaction.  Usage:
+ *
+ *   import { withUserContext } from '@/lib/db/unified-client';
+ *
+ *   const { data: { user } } = await supabase.auth.getUser();
+ *   if (!user) return unauthorized();
+ *
+ *   const result = await withUserContext(user.id, async () => {
+ *     const { data } = await supabase.from('shelves').select('*').eq('user_id', user.id);
+ *     return data;
+ *   });
+ *
+ * All PgQueryBuilder calls inside the callback automatically run in the same
+ * transaction with app.current_user_id set, providing an audit trail and a
+ * foundation for future database-level RLS enforcement without changes to
+ * individual queries.
+ */
+export { withUserContext };

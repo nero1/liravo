@@ -390,7 +390,18 @@ Redis sliding window. Auth routes: 5 attempts per 15 minutes, 30-minute lockout.
 All inputs validated server-side with Zod. User HTML (long reviews, bio) sanitised with DOMPurify. `dangerouslySetInnerHTML` is never used.
 
 ### Row Level Security
-All Supabase tables have RLS enabled. Default deny. Explicit allow policies. Service role key used only server-side.
+
+**Supabase mode**: Every table has RLS enabled with default deny. All 50+ user-facing tables have explicit allow policies keyed on `auth.uid()`. Two system tables (`outbox_events`, `financial_audit_log`) are intentionally default deny with no user policies — only the service_role (used by webhooks and cron jobs) can access them. The service role key is never exposed to the client. Policy coverage is fully defined in `supabase/migrations/012_rls_enforcement.sql`.
+
+Key policy patterns:
+- User-owned data: `USING (user_id = auth.uid())`
+- Public + owner: `USING (is_public OR user_id = auth.uid())`
+- Membership-gated (buddy reads, reading rooms, workshops): `EXISTS (SELECT 1 FROM <members_table> WHERE ... AND user_id = auth.uid())`
+- Financial data (payouts, referral_commissions, event_revenue): strict owner-only SELECT; no user DELETE/UPDATE on ledger rows
+
+**Direct PostgreSQL mode (DigitalOcean / Railway)**: `auth.uid()` is undefined in a direct PostgreSQL connection, so Supabase RLS policies do not run. Data isolation is enforced at the application layer: every API route calls `getCurrentUser()` and explicitly scopes queries with `.eq('user_id', user.id)` (or the relevant ownership column) before executing. There is no database-side backstop in the default configuration.
+
+`withUserContext(userId, fn)` in `src/lib/db/pg.ts` (re-exported from `src/lib/db/unified-client.ts`) wraps queries in a PostgreSQL transaction with `SET LOCAL app.current_user_id = '<userId>'`. This enables optional database-level enforcement by adding policies that check `current_setting('app.current_user_id', true)::uuid` — no changes to existing query code required. It also groups related queries into a single transaction for atomicity.
 
 ### CSRF
 SameSite=Strict cookies. CSRF token on state-changing API routes.
