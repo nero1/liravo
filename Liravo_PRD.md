@@ -1,8 +1,8 @@
 # Liravo — Product Requirements Document (PRD)
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Draft for Developer  
 **URL:** liravo.org  
-**Last Updated:** 12 May 2026
+**Last Updated:** 1 June 2026
 
 ---
 
@@ -143,11 +143,11 @@ All tiers are prioritised by the existence and quality of their Amazon Associate
 | Language | TypeScript throughout |
 | Deployment | Vercel (Hobby Plan for MVP) |
 | CI/CD | GitHub Actions auto-deploy to Vercel |
-| Database | Supabase (PostgreSQL) |
-| Auth | Supabase Auth + Google OAuth + Telegram OAuth |
+| Database | PostgreSQL — provider-selectable via `DATABASE_PROVIDER` env var (Supabase · DigitalOcean · Railway) |
+| Auth | Supabase Auth (Supabase mode) or custom Redis/cookie sessions (direct PostgreSQL mode) + Google OAuth + Telegram OAuth |
 | Cache / Sessions | Redis — ioredis (self-hosted) or Upstash, selected by `REDIS_PROVIDER` env var |
 | Payments | Paystack (Nigeria) + Dodopayments (global) |
-| Storage | Supabase Storage (images, assets) |
+| Storage | Supabase Storage (Supabase mode) or S3-compatible object store — Cloudflare R2, DigitalOcean Spaces, AWS S3, Backblaze B2 (direct PostgreSQL mode) |
 | AI (primary) | DeepSeek API |
 | AI (fallback) | Gemini API |
 | On-device AI | Transformers.js or ONNX Runtime Web (target: 2–4 GB RAM mobile devices) |
@@ -168,6 +168,81 @@ export const AI_MODELS = {
   ONDEVICE_MODEL: process.env.ONDEVICE_MODEL || 'Xenova/distilbert-base-uncased',
 } as const;
 ```
+
+### Database Abstraction Layer
+
+The database layer is provider-agnostic. All application code talks to a single abstraction; the concrete PostgreSQL provider is selected at runtime via the `DATABASE_PROVIDER` environment variable. Switching providers requires only environment variable changes — no application code changes.
+
+**Supported providers**
+
+| Provider | `DATABASE_PROVIDER` value | Notes |
+|---|---|---|
+| Supabase | `supabase` | Default. Managed PostgreSQL + built-in auth + Supabase Storage. Easiest setup for MVP. |
+| DigitalOcean App Platform | `digitalocean` | Direct PostgreSQL with PgBouncer connection pooling, SSL required. Auth via custom Redis/cookie sessions. Storage via S3-compatible object store. |
+| Railway | `railway` | PostgreSQL with PgBouncer transaction pooling (`DATABASE_URL`) and direct URL for migrations (`DATABASE_DIRECT_URL`). Auth and storage same as DigitalOcean mode. |
+
+**Architecture files (all in `src/lib/db/`)**
+
+| File | Responsibility |
+|---|---|
+| `provider.ts` | Reads `DATABASE_PROVIDER` env var. Exports `getProvider()`, `isDirectPostgres()`, `isSupabase()`, `isDigitalOcean()`, `isRailway()`. All provider-branching logic routes through this file. |
+| `pg.ts` | Singleton `postgres` client (npm `postgres` package) used in direct PostgreSQL mode. |
+| `query-builder.ts` | `PgQueryBuilder<T>` — fluent query builder that mirrors the Supabase client API surface: `.select()`, `.eq()`, `.neq()`, `.gt()`, `.gte()`, `.lt()`, `.lte()`, `.in()`, `.is()`, `.or()`, `.insert()`, `.update()`, `.delete()`, `.upsert()`, `.order()`, `.limit()`, `.range()`, `.single()`, `.maybeSingle()`, `.returning()`. Returned builders are Thenable (`await builder` works). Factory: `getPgQueryBuilderFactory()` returns an object with `.from(table)` and `.rpc(fnName, params)`. |
+| `unified-client.ts` | Drop-in Supabase server client for direct PostgreSQL mode. `createDoClient()`, `createDoServiceClient()`, `createDoSession()`, `destroySession()`. Used so the Supabase client interface is satisfied in non-Supabase environments. |
+
+**Supabase client layer (`src/lib/supabase/`)**
+
+`server.ts` and `client.ts` inspect `isDirectPostgres()` and return either the real Supabase SDK client or the unified-client drop-in. The rest of the application imports from `src/lib/supabase/` and never knows which is active.
+
+**Auth abstraction (`src/lib/auth/getCurrentUser.ts`)**
+
+- Supabase mode: delegates to Supabase Auth (supports Google and Telegram OAuth out of the box).
+- Direct PostgreSQL mode: custom session management using Redis + signed httpOnly cookies. Google and Telegram OAuth still works; session is written to Redis rather than Supabase's session store.
+
+**Storage abstraction (`src/lib/storage/provider.ts`)**
+
+`StorageProvider` interface with `upload(bucket, path, body, opts)`, `remove(bucket, paths)`, and `getPublicUrl(bucket, path)`. Factory: `getStorageProvider()` returns either the Supabase Storage adapter or the S3-compatible adapter based on the active database provider.
+
+S3-compatible storage is configured by `S3_ENDPOINT`, `S3_REGION`, `S3_KEY`, `S3_SECRET`, and `S3_CDN_URL`. Any S3-compatible service (Cloudflare R2, DigitalOcean Spaces, Backblaze B2, AWS S3) works without code changes.
+
+**Environment variables for the three supported providers**
+
+```bash
+# Provider selection
+DATABASE_PROVIDER=supabase          # or: digitalocean | railway
+NEXT_PUBLIC_DATABASE_PROVIDER=supabase
+
+# Supabase only
+NEXT_PUBLIC_SUPABASE_URL=https://...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
+# DigitalOcean / Railway — direct PostgreSQL
+DATABASE_URL=postgresql://user:pass@host:PORT/dbname?sslmode=require
+DATABASE_DIRECT_URL=...             # Railway only: non-pooled URL for migrations
+DATABASE_POOL_MAX=5
+DATABASE_SSL=true
+
+# S3-compatible storage (direct PostgreSQL mode)
+S3_ENDPOINT=https://...
+S3_REGION=auto
+S3_KEY=...
+S3_SECRET=...
+S3_CDN_URL=https://cdn.example.com
+```
+
+**Adding a new database provider**
+
+To add a fourth provider (e.g. Neon, PlanetScale, Render):
+
+1. Add a detection helper in `src/lib/db/provider.ts` (e.g. `isNeon()`).
+2. Add a branch in `src/lib/db/pg.ts` if the connection string format or SSL options differ.
+3. Add a case in `src/lib/supabase/server.ts` to return `createDoServiceClient()` for the new provider.
+4. Add auth session handling in `src/lib/auth/getCurrentUser.ts` if the provider has its own auth SDK; otherwise the existing direct-PostgreSQL Redis session path works unchanged.
+5. Add a storage branch in `src/lib/storage/provider.ts` if the provider ships its own storage SDK; otherwise the existing S3 adapter works.
+6. Document the required environment variables in SETUP.md.
+
+No query-builder code needs to change — `PgQueryBuilder` speaks standard PostgreSQL and works with any provider that accepts standard SQL over a `postgres` (npm) connection.
 
 ### Redis Configuration
 
@@ -1095,7 +1170,9 @@ A dedicated system account with username `@liravo` and display name "Liravo Edit
 
 ### 15.9 Row Level Security (RLS)
 
-All Supabase tables have RLS enabled. Default deny. Explicit allow policies per use case. Service role key used only in server-side API routes (never exposed to the client).
+**Supabase mode:** All tables have RLS enabled. Default deny. Explicit allow policies per use case. Service role key used only in server-side API routes (never exposed to the client).
+
+**Direct PostgreSQL mode (DigitalOcean / Railway):** PostgreSQL RLS policies are still defined in the migration files and apply identically. The service role concept is replaced by server-side ownership checks: every mutation route verifies that the authenticated user (from the Redis session) owns the resource before executing the query. The service-side `postgres` client connects with a restricted application database user, not a superuser.
 
 ### 15.10 Data Privacy
 
@@ -1265,9 +1342,9 @@ Distinctive display font for headings. System-friendly variable font for body (s
 
 **Goal:** Deployable skeleton with authentication, user profiles, and basic book data.
 
-- Project scaffold: Next.js 14, TypeScript, Supabase, Redis client abstraction (ioredis/Upstash).
+- Project scaffold: Next.js 14, TypeScript, database abstraction layer (`DATABASE_PROVIDER` — Supabase · DigitalOcean · Railway), Redis client abstraction (ioredis/Upstash), S3-compatible storage abstraction.
 - GitHub Actions CI/CD to Vercel.
-- Authentication: Google OAuth and Telegram OAuth. Auth provider toggle in admin.
+- Authentication: Google OAuth and Telegram OAuth (Supabase Auth in Supabase mode; Redis/cookie sessions in direct PostgreSQL mode). Auth provider toggle in admin.
 - User onboarding: username, user type selection, genre selection.
 - Post-onboarding email and 2FA prompt system (periodic, non-blocking).
 - User profile: create, edit, avatar upload.
@@ -1438,7 +1515,11 @@ Assume a developer who has not deployed a Next.js app before. Cover in full:
 - Project overview and architecture summary.
 - Complete environment variable reference: every variable, what it does, where to get the value, required vs optional.
 - Where to place env vars: `.env.local` for local dev, Vercel dashboard for production.
-- Supabase project setup: create project, run migrations, configure RLS, configure Google and Telegram auth providers.
+- **Database provider selection:** how to choose between Supabase, DigitalOcean, and Railway; the `DATABASE_PROVIDER` env var; which other env vars are required for each provider.
+- **Supabase setup:** create project, run migrations, configure RLS, configure Google and Telegram auth providers, Supabase Storage setup.
+- **DigitalOcean setup:** create managed PostgreSQL cluster, configure PgBouncer connection pooling, set `DATABASE_URL` with SSL, run migrations via `DATABASE_DIRECT_URL`, configure S3-compatible storage bucket.
+- **Railway setup:** provision PostgreSQL service, obtain `DATABASE_URL` (PgBouncer) and `DATABASE_DIRECT_URL` (direct), run migrations, configure S3-compatible storage.
+- **Adding a new database provider:** walkthrough of the five-step process in Section 5 (provider.ts → pg.ts → server.ts → getCurrentUser.ts → storage/provider.ts).
 - Redis setup: ioredis (self-hosted on Railway or Render free tier) and Upstash (free tier).
 - Google OAuth setup (Google Cloud Console walkthrough, step by step).
 - Telegram OAuth setup (BotFather walkthrough, step by step).
@@ -1478,6 +1559,7 @@ Detail every feature, technical decision, and operational process. Cover:
 - Feature flag system.
 - i18n architecture: how to add a new locale, how to add a new Amazon affiliate region.
 - Database schema overview with key relationships.
+- **Multi-database architecture:** how the abstraction layer works, the role of each file in `src/lib/db/`, how provider detection flows through the supabase client layer, auth, and storage, and the step-by-step process for adding a new provider.
 - How to add a new theme.
 - How to add a new badge type.
 - How to add a new affiliate store.
@@ -1501,7 +1583,9 @@ Detail every feature, technical decision, and operational process. Cover:
 | Email only for paid tiers | All transactional email infrastructure still needed (email verification link, recovery links). Use Resend free tier which covers transactional volume. Marketing/digest email gated behind paid tier in the product logic. |
 | AI cost management | All AI features are pre-computed in batch (nightly cron) wherever possible. Per-request AI calls limited to paid tier features. On-device models used for free-tier inference where quality is acceptable. |
 | Books not on Amazon | Non-affiliate external link system covers this from day one. Click data on non-affiliate links informs future affiliate program priorities. Admin can add new affiliate stores via the registry without code changes. |
+| Database vendor lock-in | Database abstraction layer (`src/lib/db/`) isolates all provider-specific code. Supabase is the default and lowest-friction starting point. Switching to DigitalOcean or Railway requires only environment variable changes. Adding a further provider (Neon, Render, PlanetScale) requires editing five files and no application-layer code. |
+| Supabase free tier PostgreSQL limits | The database abstraction means the team can migrate to a paid managed PostgreSQL provider (DigitalOcean, Railway) by changing `DATABASE_PROVIDER` — no code changes and no data migration (same PostgreSQL schema). |
 
 ---
 
-*End of Liravo PRD v2.0*
+*End of Liravo PRD v1.1*
