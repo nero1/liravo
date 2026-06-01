@@ -168,7 +168,7 @@ S3_CDN_URL=https://cdn.example.com        # Public CDN/download base URL for the
 | OAuth | Google + Telegram | Not supported | Not supported |
 | Connection pooling | Built-in | Built-in PgBouncer (port 25061) | PgBouncer service from Railway template |
 | Cost notes | Free tier available; scales by usage | Pay for DB cluster + object storage separately | Pay for Railway services + object storage |
-| RLS | Row-Level Security via Postgres | Application-level auth filtering | Application-level auth filtering |
+| RLS | PostgreSQL RLS — all tables covered, default deny, `auth.uid()` policies | Application-level ownership checks in every API route. Use `withUserContext` for optional DB-level session variable. See Section 3c. | Same as DigitalOcean |
 
 ### Object Storage Provider Comparison
 
@@ -221,6 +221,54 @@ S3_REGION=us-east-1
 S3_CDN_URL=https://liravo-avatars.s3.us-east-1.amazonaws.com
 ```
 
+### Section 3c — Row Level Security (RLS) Model Per Provider
+
+Understanding how data isolation works in each mode is important before deploying.
+
+#### Supabase mode
+
+RLS is enforced at the **database layer** by PostgreSQL itself. Every table has RLS enabled with `default deny`. The migrations define explicit allow policies keyed on `auth.uid()` (the Supabase-injected function that returns the authenticated user's UUID from the JWT). No authenticated user can read or write another user's private data, even if a bug in application code accidentally omits a filter — the database itself will reject the query.
+
+Two system tables are intentionally **default deny with no user policies**:
+- `outbox_events` — internal event queue; only the service_role can access it.
+
+Service role (`SUPABASE_SERVICE_ROLE_KEY`) bypasses RLS automatically. It is used only in server-side API routes and cron jobs — never exposed to the client.
+
+**Coverage summary** (after migration 012): 50+ tables have complete RLS policies. See `supabase/migrations/012_rls_enforcement.sql` for the full list.
+
+#### DigitalOcean / Railway mode
+
+PostgreSQL RLS is **not enforced** in these modes because:
+1. `auth.uid()` is a Supabase-specific function that reads from a Supabase JWT; it returns `null` in a direct PostgreSQL connection.
+2. The app typically connects with a privileged database role that bypasses RLS at the PostgreSQL level.
+
+Access control is enforced at the **application layer**: every API route calls `getCurrentUser()` and then scopes all queries with `.eq('user_id', user.id)` (or the equivalent ownership column) before executing. If a route omits a filter, all rows for that table would be visible to that user.
+
+**`withUserContext` (optional hardening):** `src/lib/db/pg.ts` exports `withUserContext(userId, fn)`. Wrapping route handler queries in this function groups them in a single PostgreSQL transaction and sets `SET LOCAL app.current_user_id = '<userId>'`. This provides a foundation for future database-level enforcement (by adding PostgreSQL RLS policies that check `current_setting('app.current_user_id', true)::uuid`) without requiring code changes to existing queries. Example usage:
+
+```typescript
+import { withUserContext } from '@/lib/db/unified-client';
+
+// Inside a DO/Railway route handler:
+const user = await getCurrentUser(supabase);
+if (!user) return unauthorized();
+
+const data = await withUserContext(user.id, async () => {
+  const { data } = await supabase.from('shelves').select('*').eq('user_id', user.id);
+  return data;
+});
+```
+
+**Hardening DO/Railway to database-level enforcement (advanced):** Create a dedicated low-privilege application database role with `BYPASSRLS` revoked:
+```sql
+CREATE ROLE liravo_app WITH LOGIN PASSWORD '...';
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO liravo_app;
+REVOKE BYPASSRLS ON SCHEMA public FROM liravo_app; -- or simply don't grant it
+```
+Then add RLS policies that use `current_setting('app.current_user_id', true)::uuid` instead of `auth.uid()`. With `withUserContext` already setting this variable in every request, the database will enforce isolation automatically.
+
+---
+
 ### Section 3b — DATABASE_URL and PgBouncer (Most Commonly Missed Step)
 
 Both DigitalOcean and Railway use PgBouncer in **transaction pooling mode**. The app must
@@ -264,7 +312,7 @@ running migrations (optionally document it as `DATABASE_DIRECT_URL` for your own
    - **Google**: add your Google OAuth credentials (see Section 6).
    - **Telegram**: add your Telegram bot token (see Section 7).
 5. In Storage, create a bucket named `avatars` with public read access.
-6. RLS is automatically configured by the migration. Default deny. Allow policies are explicit.
+6. RLS is automatically configured by the migration files. Default deny on every table. Explicit allow policies cover all 50+ user-facing tables. Two system tables (`outbox_events`, `financial_audit_log`) intentionally have no user-facing policies — they are service-role-only. See Section 3c for the full model.
 
 ---
 
@@ -448,6 +496,7 @@ Vercel Hobby Plan allows only 1 cron trigger per day. Sub-daily jobs use [cron-j
 - [ ] Auth providers (Google, Telegram) configured in Supabase dashboard
 - [ ] `avatars` storage bucket created with public read access
 - [ ] OAuth redirect URI updated to production domain
+- [ ] Verify RLS is active: `SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity=false;` — should return zero rows
 
 ### DigitalOcean mode additional checklist
 
@@ -459,6 +508,7 @@ Vercel Hobby Plan allows only 1 cron trigger per day. Sub-daily jobs use [cron-j
 - [ ] CDN enabled on the storage bucket
 - [ ] `S3_*` env vars set and verified
 - [ ] `DATABASE_PROVIDER=digitalocean` and `NEXT_PUBLIC_DATABASE_PROVIDER=digitalocean` set
+- [ ] (Optional hardening) Dedicated low-privilege app DB role created (see Section 3c) so PostgreSQL-level RLS is enforced in addition to application-layer checks
 
 ### Railway mode additional checklist
 
@@ -471,6 +521,7 @@ Vercel Hobby Plan allows only 1 cron trigger per day. Sub-daily jobs use [cron-j
 - [ ] `S3_*` env vars set and verified
 - [ ] `DATABASE_URL` set to the **PgBouncer** service URL (not the Postgres service URL)
 - [ ] `DATABASE_PROVIDER=railway` and `NEXT_PUBLIC_DATABASE_PROVIDER=railway` set
+- [ ] (Optional hardening) Dedicated low-privilege app DB role created (see Section 3c) so PostgreSQL-level RLS is enforced in addition to application-layer checks
 
 ---
 
@@ -501,6 +552,7 @@ psql "$DIRECT_URL" -f supabase/migrations/008_missing_tables.sql
 psql "$DIRECT_URL" -f supabase/migrations/009_themes_and_email_tokens.sql
 psql "$DIRECT_URL" -f supabase/migrations/010_payout_methods_and_audiobook.sql
 psql "$DIRECT_URL" -f supabase/migrations/011_password_hash_for_do.sql
+psql "$DIRECT_URL" -f supabase/migrations/012_rls_enforcement.sql
 ```
 
 ### Migration order
@@ -518,9 +570,16 @@ psql "$DIRECT_URL" -f supabase/migrations/011_password_hash_for_do.sql
 | `009_themes_and_email_tokens.sql` | Theme management & email tokens |
 | `010_payout_methods_and_audiobook.sql` | Payout methods & audiobook flag |
 | `011_password_hash_for_do.sql` | `password_hash` column — required for DigitalOcean and Railway modes |
+| `012_rls_enforcement.sql` | RLS policies for all tables that were missing them; enables RLS on `financial_audit_log` and `outbox_events` |
 
 > **Note**: Migration 011 is safe to apply in Supabase mode too — the column stays NULL for
 > OAuth-only users and has no effect on Supabase Auth.
+
+> **Note**: Migration 012 contains `auth.uid()` calls and is Supabase-specific. When running
+> migrations on DigitalOcean or Railway mode, this migration can be skipped or applied
+> selectively — the `auth.uid()` policies have no effect in direct PostgreSQL mode (the
+> function is undefined and policies are bypassed by the privileged connecting role). Access
+> control in those modes is handled by application-layer ownership checks. See Section 3c.
 
 ---
 
@@ -679,6 +738,11 @@ Both direct-PostgreSQL modes (DigitalOcean and Railway) share these limitations:
   with email + password only.
 - **No Supabase Realtime**: Live updates use SSE polling instead of Supabase's WebSocket
   connection. Updates appear within ~5–30 seconds rather than instantly.
+- **No database-level RLS by default**: `auth.uid()` is a Supabase function and returns
+  `null` in a direct PostgreSQL connection, so Supabase RLS policies do not enforce access
+  control in these modes. Data isolation is enforced by application-layer ownership checks in
+  every API route. To add database-level enforcement, create a low-privilege app role and use
+  `withUserContext` — see Section 3c.
 - **Migrating from Supabase**: If you switch an existing Supabase deployment to DigitalOcean
   or Railway, users who signed in via OAuth will have no `password_hash`. Their first
   email+password login will return `PASSWORD_RESET_REQUIRED`. See Section 21 (Troubleshooting)

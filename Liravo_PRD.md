@@ -1128,7 +1128,7 @@ A dedicated system account with username `@liravo` and display name "Liravo Edit
 - **Injection:** Parameterised queries exclusively. No raw SQL construction.
 - **Broken Auth:** Short-lived JWTs, refresh token rotation, Redis invalidation.
 - **Sensitive Data Exposure:** Passwords hashed with bcrypt (cost 12). No PII in logs. User IDs hashed in analytics tables.
-- **Broken Access Control:** RLS on all Supabase tables. Server-side ownership checks before every mutation.
+- **Broken Access Control:** RLS enabled with complete policies on all Supabase tables (migration 012). Server-side ownership checks before every mutation in all database modes.
 - **Security Misconfiguration:** All secrets in env vars. Security headers (CSP, HSTS, X-Content-Type-Options, X-Frame-Options) set in Next.js config.
 - **XSS:** CSP header. DOMPurify on all user content.
 - **Insecure Deserialisation:** No object deserialisation from user input.
@@ -1170,9 +1170,13 @@ A dedicated system account with username `@liravo` and display name "Liravo Edit
 
 ### 15.9 Row Level Security (RLS)
 
-**Supabase mode:** All tables have RLS enabled. Default deny. Explicit allow policies per use case. Service role key used only in server-side API routes (never exposed to the client).
+**Supabase mode:** All tables have RLS enabled with default deny. Explicit allow policies cover all 50+ user-facing tables. Policies are keyed on `auth.uid()` — the Supabase-injected function that extracts the authenticated user's UUID from the request JWT. Two system tables (`outbox_events`, `financial_audit_log`) are intentionally policy-free (default deny) and accessible only via the service_role. The service role key is used exclusively in server-side API routes and cron jobs — never exposed to the client. Full policy definitions are in `supabase/migrations/012_rls_enforcement.sql`.
 
-**Direct PostgreSQL mode (DigitalOcean / Railway):** PostgreSQL RLS policies are still defined in the migration files and apply identically. The service role concept is replaced by server-side ownership checks: every mutation route verifies that the authenticated user (from the Redis session) owns the resource before executing the query. The service-side `postgres` client connects with a restricted application database user, not a superuser.
+**Direct PostgreSQL mode (DigitalOcean / Railway):** `auth.uid()` is a Supabase-specific function and returns `null` in a direct PostgreSQL connection. Consequently, Supabase RLS policies do not enforce access control in these modes. The connecting database role also typically holds superuser or BYPASSRLS privileges in default managed PostgreSQL configurations, meaning PostgreSQL-level enforcement is bypassed even if policies are technically present.
+
+Data isolation in these modes is enforced at the **application layer**: every API route calls `getCurrentUser()` (which reads the Redis session) and explicitly scopes all queries with ownership filters (`.eq('user_id', user.id)`, etc.) before executing.
+
+**`withUserContext` (DO/Railway hardening):** `src/lib/db/pg.ts` exports `withUserContext(userId, fn)` which wraps queries in a PostgreSQL transaction and sets `SET LOCAL app.current_user_id = '<userId>'`. To achieve database-level enforcement in these modes: (1) create a low-privilege application database role with BYPASSRLS revoked, and (2) add PostgreSQL RLS policies that check `current_setting('app.current_user_id', true)::uuid`. With `withUserContext` already setting this session variable in every route, the database will enforce isolation automatically — no further application-code changes required.
 
 ### 15.10 Data Privacy
 
