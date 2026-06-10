@@ -62,6 +62,37 @@
     "streak": "{days}-Tage-Serie",
     "level": "Level"
   },
+  "discover": {
+    "newReleasesFromAuthors": "Neuerscheinungen von Autoren, denen du folgst",
+    "readersLikeYou": "Leser wie du mochten auch",
+    "noNewReleases": "Noch keine Neuerscheinungen von Autoren, denen du folgst"
+  },
+  "wrapped": {
+    "favouriteAuthor": "Lieblingsautor",
+    "longestBook": "Längstes Buch",
+    "shortestBook": "Kürzestes Buch",
+    "mostActiveMonth": "Aktivster Monat",
+    "readerTitle": "Dein Lesertitel"
+  },
+  "book": {
+    "affiliateLinks": "Dieses Buch kaufen",
+    "ratingDistribution": "Bewertungsübersicht",
+    "readingLists": "Leselisten mit diesem Buch",
+    "similarBooks": "Leser mochten auch",
+    "helpfulVote": "Hilfreich",
+    "unhelpfulVote": "Nicht hilfreich",
+    "replyCount": "{count} Antworten"
+  },
+  "badges": {
+    "earned": "Abzeichen erhalten",
+    "connector": "Verbinder",
+    "ambassador": "Botschafter",
+    "liravoBuilder": "Liravo-Erbauer"
+  },
+  "notifications": {
+    "readingGoalMilestone": "Du hast {percent}% deines jährlichen Leseziels erreicht!",
+    "accountHardening": "Sichre dein Konto — füge eine E-Mail-Adresse hinzu"
+  },
   "common": {
     "loading": "Laden...",
     "error": "Etwas ist schiefgelaufen",

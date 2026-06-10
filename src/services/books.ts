@@ -64,6 +64,60 @@ export function googleVolumeToBookData(volume: GoogleBooksVolume) {
   };
 }
 
+interface OpenLibraryDoc {
+  key: string;
+  title: string;
+  author_name?: string[];
+  isbn?: string[];
+  cover_i?: number;
+  number_of_pages_median?: number;
+  subject?: string[];
+  language?: string[];
+  first_publish_year?: number;
+}
+
+export async function searchOpenLibrary(query: string, maxResults = 10) {
+  const url = new URL('https://openlibrary.org/search.json');
+  url.searchParams.set('q', query);
+  url.searchParams.set('limit', String(maxResults));
+  url.searchParams.set('fields', 'key,title,author_name,isbn,cover_i,number_of_pages_median,subject,language,first_publish_year');
+
+  try {
+    const res = await fetch(url.toString(), { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return ((data.docs ?? []) as OpenLibraryDoc[]).map((doc) => ({
+      google_books_id: null as string | null,
+      open_library_id: doc.key,
+      title: doc.title,
+      subtitle: null as string | null,
+      author_name: doc.author_name?.[0] ?? 'Unknown',
+      author_names: doc.author_name ?? [],
+      publisher: null as string | null,
+      published_year: doc.first_publish_year ?? null,
+      description: null as string | null,
+      cover_url: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null,
+      page_count: doc.number_of_pages_median ?? null,
+      genres: doc.subject?.slice(0, 5) ?? [],
+      language: doc.language?.[0] ?? 'en',
+      isbn_13: doc.isbn?.find((i) => i.length === 13) ?? null,
+      isbn_10: doc.isbn?.find((i) => i.length === 10) ?? null,
+      average_rating: null as number | null,
+      ratings_count: 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function searchBooks(query: string, maxResults = 10) {
+  const googleVolumes = await searchGoogleBooks(query, maxResults);
+  const googleResults = googleVolumes.map((v) => ({ ...googleVolumeToBookData(v), google_books_id: v.id }));
+  if (googleResults.length >= 3) return googleResults;
+  const olResults = await searchOpenLibrary(query, maxResults);
+  return [...googleResults, ...olResults].slice(0, maxResults);
+}
+
 export async function getOrCreateBook(googleBooksId: string): Promise<BookRow | null> {
   const supabase = createServiceClient();
   const redis = getRedisClient();

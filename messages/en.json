@@ -62,6 +62,37 @@
     "streak": "{days} day streak",
     "level": "Level"
   },
+  "discover": {
+    "newReleasesFromAuthors": "New Releases from Authors You Follow",
+    "readersLikeYou": "Readers Like You Also Loved",
+    "noNewReleases": "No new releases yet from authors you follow"
+  },
+  "wrapped": {
+    "favouriteAuthor": "Favourite Author",
+    "longestBook": "Longest Book",
+    "shortestBook": "Shortest Book",
+    "mostActiveMonth": "Most Active Month",
+    "readerTitle": "Your Reader Title"
+  },
+  "book": {
+    "affiliateLinks": "Get This Book",
+    "ratingDistribution": "Rating Breakdown",
+    "readingLists": "Reading Lists Featuring This Book",
+    "similarBooks": "Readers Also Enjoyed",
+    "helpfulVote": "Helpful",
+    "unhelpfulVote": "Not Helpful",
+    "replyCount": "{count} replies"
+  },
+  "badges": {
+    "earned": "Badge Earned",
+    "connector": "Connector",
+    "ambassador": "Ambassador",
+    "liravoBuilder": "Liravo Builder"
+  },
+  "notifications": {
+    "readingGoalMilestone": "You've hit {percent}% of your annual reading goal!",
+    "accountHardening": "Secure your account — add an email address"
+  },
   "common": {
     "loading": "Loading...",
     "error": "Something went wrong",

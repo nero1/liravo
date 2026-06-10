@@ -62,6 +62,37 @@
     "streak": "Série de {days} jours",
     "level": "Niveau"
   },
+  "discover": {
+    "newReleasesFromAuthors": "Nouvelles sorties des auteurs que vous suivez",
+    "readersLikeYou": "Les lecteurs comme vous ont aussi aimé",
+    "noNewReleases": "Pas encore de nouvelles sorties des auteurs que vous suivez"
+  },
+  "wrapped": {
+    "favouriteAuthor": "Auteur favori",
+    "longestBook": "Livre le plus long",
+    "shortestBook": "Livre le plus court",
+    "mostActiveMonth": "Mois le plus actif",
+    "readerTitle": "Votre titre de lecteur"
+  },
+  "book": {
+    "affiliateLinks": "Obtenir ce livre",
+    "ratingDistribution": "Répartition des notes",
+    "readingLists": "Listes de lecture incluant ce livre",
+    "similarBooks": "Les lecteurs ont aussi aimé",
+    "helpfulVote": "Utile",
+    "unhelpfulVote": "Pas utile",
+    "replyCount": "{count} réponses"
+  },
+  "badges": {
+    "earned": "Badge obtenu",
+    "connector": "Connecteur",
+    "ambassador": "Ambassadeur",
+    "liravoBuilder": "Bâtisseur Liravo"
+  },
+  "notifications": {
+    "readingGoalMilestone": "Vous avez atteint {percent}% de votre objectif de lecture annuel !",
+    "accountHardening": "Sécurisez votre compte — ajoutez une adresse e-mail"
+  },
   "common": {
     "loading": "Chargement...",
     "error": "Une erreur s'est produite",

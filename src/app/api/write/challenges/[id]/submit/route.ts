@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { awardXP } from '@/services/xp';
-import { checkAndAwardBadges } from '@/services/badges';
+import { checkAndAwardBadges, incrementWritingStreak } from '@/services/badges';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -65,7 +65,8 @@ export async function POST(
   // Award 25 XP
   await awardXP(user.id, 25, 'challenge_submission');
 
-  // Check completion badges
+  // Increment writing streak and check badges
+  await incrementWritingStreak(user.id);
   await checkAndAwardBadges(user.id, 'challenge_submit');
   await checkAndAwardBadges(user.id, 'prolific_writer');
 
