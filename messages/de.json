@@ -175,5 +175,26 @@
     "offline": "Sie sind offline. Einige Funktionen sind möglicherweise nicht verfügbar.",
     "darkMode": "Dunkelmodus",
     "lightMode": "Hellmodus"
+  },
+  "auth": {
+    "signInWithGoogle": "Mit Google anmelden",
+    "signInWithTelegram": "Mit Telegram anmelden",
+    "continueWithGoogle": "Mit Google fortfahren",
+    "continueWithTelegram": "Mit Telegram fortfahren",
+    "orContinueWith": "oder fortfahren mit"
+  },
+  "pushNotifications": {
+    "enable": "Benachrichtigungen aktivieren",
+    "enabled": "Benachrichtigungen aktiviert",
+    "denied": "Benachrichtigungen blockiert. Aktivieren Sie sie in den Browsereinstellungen.",
+    "prompt": "Erhalten Sie Benachrichtigungen über neue Follower, Antworten und Leseziele."
+  },
+  "communityNotes": {
+    "title": "Community-Notizen",
+    "addNote": "Notiz hinzufügen",
+    "placeholder": "Fügen Sie Kontext oder eine Korrektur hinzu (10–500 Zeichen)…",
+    "submitted": "Ihre Notiz wurde zur Überprüfung eingereicht.",
+    "eligibility": "Sie benötigen 50+ Rezensionen, um Community-Notizen beizutragen.",
+    "noNotes": "Noch keine Community-Notizen."
   }
 }

@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, Search, BookOpen, Bell, User } from 'lucide-react-native';
+import { Home, Search, Feather, BookOpen, User } from 'lucide-react-native';
 import { Platform } from 'react-native';
 
 export default function TabsLayout() {
@@ -21,7 +21,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="feed"
         options={{
-          title: 'Feed',
+          title: 'Home',
           tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
         }}
       />
@@ -33,6 +33,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="write"
+        options={{
+          title: 'Write',
+          tabBarIcon: ({ color, size }) => <Feather size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="shelf"
         options={{
           title: 'Shelf',
@@ -40,17 +47,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="notifications"
-        options={{
-          title: 'Notifications',
-          tabBarIcon: ({ color, size }) => <Bell size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+        }}
+      />
+      {/* Notifications accessible from profile quick links and header bell */}
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

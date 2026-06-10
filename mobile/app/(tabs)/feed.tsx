@@ -1,11 +1,14 @@
-import { FlatList, View, Text, RefreshControl, ActivityIndicator } from 'react-native';
+import { FlatList, View, Text, RefreshControl, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Bell } from 'lucide-react-native';
 import { useFeed } from '@/hooks/useFeed';
 import { FeedItem } from '@/components/social/FeedItem';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { FeedItem as FeedItemType } from '@/types';
 
 export default function FeedScreen() {
+  const router = useRouter();
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage, refetch } = useFeed();
 
   const items = data?.pages.flatMap((p) => p.items) ?? [];
@@ -22,8 +25,11 @@ export default function FeedScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <View className="px-4 py-3 border-b border-border">
+      <View className="px-4 py-3 border-b border-border flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-foreground">Feed</Text>
+        <TouchableOpacity onPress={() => router.push('/notifications')} className="p-1">
+          <Bell size={22} color="#6b7280" />
+        </TouchableOpacity>
       </View>
 
       <FlatList

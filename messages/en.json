@@ -175,5 +175,26 @@
     "offline": "You're offline. Some features may not work.",
     "darkMode": "Dark mode",
     "lightMode": "Light mode"
+  },
+  "auth": {
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithTelegram": "Sign in with Telegram",
+    "continueWithGoogle": "Continue with Google",
+    "continueWithTelegram": "Continue with Telegram",
+    "orContinueWith": "or continue with"
+  },
+  "pushNotifications": {
+    "enable": "Enable notifications",
+    "enabled": "Notifications enabled",
+    "denied": "Notifications blocked. Enable them in browser settings.",
+    "prompt": "Get notified about new followers, replies, and reading milestones."
+  },
+  "communityNotes": {
+    "title": "Community notes",
+    "addNote": "Add a note",
+    "placeholder": "Add context or a correction (10–500 chars)…",
+    "submitted": "Your note has been submitted for review.",
+    "eligibility": "You need 50+ reviews to contribute community notes.",
+    "noNotes": "No community notes yet."
   }
 }

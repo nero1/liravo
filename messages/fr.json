@@ -175,5 +175,26 @@
     "offline": "Vous êtes hors ligne. Certaines fonctionnalités peuvent ne pas fonctionner.",
     "darkMode": "Mode sombre",
     "lightMode": "Mode clair"
+  },
+  "auth": {
+    "signInWithGoogle": "Se connecter avec Google",
+    "signInWithTelegram": "Se connecter avec Telegram",
+    "continueWithGoogle": "Continuer avec Google",
+    "continueWithTelegram": "Continuer avec Telegram",
+    "orContinueWith": "ou continuer avec"
+  },
+  "pushNotifications": {
+    "enable": "Activer les notifications",
+    "enabled": "Notifications activées",
+    "denied": "Notifications bloquées. Activez-les dans les paramètres du navigateur.",
+    "prompt": "Soyez informé des nouveaux abonnés, réponses et jalons de lecture."
+  },
+  "communityNotes": {
+    "title": "Notes communautaires",
+    "addNote": "Ajouter une note",
+    "placeholder": "Ajoutez du contexte ou une correction (10–500 caractères)…",
+    "submitted": "Votre note a été soumise pour examen.",
+    "eligibility": "Vous avez besoin de 50+ critiques pour contribuer des notes communautaires.",
+    "noNotes": "Pas encore de notes communautaires."
   }
 }

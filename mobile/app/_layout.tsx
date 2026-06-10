@@ -9,12 +9,14 @@ import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/stores/auth';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isLoading } = useAuth();
   const { user, token } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
+  usePushNotifications();
 
   useEffect(() => {
     if (isLoading) return;
@@ -104,6 +106,9 @@ export default function RootLayout() {
               <Stack.Screen name="earnings" options={{ headerShown: true, title: 'Earnings' }} />
               <Stack.Screen name="premium" options={{ headerShown: true, title: 'Premium' }} />
               <Stack.Screen name="referral" options={{ headerShown: true, title: 'Referral' }} />
+              <Stack.Screen name="reading-goals" options={{ headerShown: true, title: 'Reading Goal' }} />
+              <Stack.Screen name="arcs" options={{ headerShown: true, title: 'ARC Library' }} />
+              <Stack.Screen name="arcs/[id]" options={{ headerShown: true, title: '' }} />
               <Stack.Screen name="moderation/reports" options={{ headerShown: true, title: 'Reports' }} />
               <Stack.Screen name="moderation/appeals" options={{ headerShown: true, title: 'Appeals' }} />
               <Stack.Screen name="moderation/log" options={{ headerShown: true, title: 'Moderation Log' }} />
