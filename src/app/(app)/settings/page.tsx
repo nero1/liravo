@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText, ShieldCheck, Download } from 'lucide-react';
+import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText, ShieldCheck, Download, Bell } from 'lucide-react';
 import { SettingsDataActions } from './SettingsDataActions';
 import type { Metadata } from 'next';
 
@@ -15,6 +15,7 @@ export default async function SettingsPage() {
   if (!user) redirect('/login');
 
   const settingsLinks = [
+    { href: '/settings/notifications', icon: Bell, label: 'Notifications', desc: 'Control which notifications you receive' },
     { href: '/settings/email', icon: Mail, label: 'Email Recovery', desc: 'Add email for account recovery' },
     { href: '/settings/pin', icon: Lock, label: '4-Digit PIN', desc: 'Extra security for sensitive actions' },
     { href: '/settings/2fa', icon: ShieldCheck, label: 'Two-Factor Auth', desc: 'Authenticator app (no SMS)' },

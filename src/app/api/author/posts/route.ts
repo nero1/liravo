@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('is_verified_author, user_types')
+    .select('is_verified_author, user_types, display_name, username')
     .eq('id', user.id)
     .single();
 
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  const { data: post, error } = await supabase
     .from('author_posts')
     .insert({
       author_id: user.id,
@@ -80,5 +80,35 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ post: data }, { status: 201 });
+  // For announcements, notify all followers in-app (emails handled by cron)
+  if (parsed.data.type === 'announcement') {
+    const serviceSupabase = createServiceClient();
+    const { data: followers } = await serviceSupabase
+      .from('follows')
+      .select('follower_id')
+      .eq('following_id', user.id)
+      .limit(500);
+
+    const authorName = profile?.display_name ?? profile?.username ?? 'An author';
+    if (followers && followers.length > 0) {
+      const notifications = followers.map((f) => ({
+        user_id: f.follower_id,
+        type: 'author_announcement',
+        actor_id: user.id,
+        entity_type: 'author_post',
+        entity_id: post.id,
+        message: `${authorName} posted: ${parsed.data.title}`,
+      }));
+      // Fire-and-forget — don't block the response
+      serviceSupabase.from('notifications').insert(notifications).then(() => {
+        serviceSupabase
+          .from('author_posts')
+          .update({ followers_notified: true })
+          .eq('id', post.id)
+          .then(() => {});
+      });
+    }
+  }
+
+  return NextResponse.json({ post }, { status: 201 });
 }

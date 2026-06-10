@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ReadingProgressBar } from '@/components/shelf/ReadingProgressBar';
+import { LogReadingSessionButton } from '@/components/shelf/LogReadingSessionButton';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
@@ -105,10 +106,22 @@ export default async function ShelfDetailPage({ params }: ShelfPageProps) {
                     />
                   )}
 
-                  <div className="flex items-center gap-2 mt-1.5">
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <span className="text-xs text-muted-foreground">
                       Added {new Date(item.added_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
+                    {shelf.default_type === 'currently_reading' && (
+                      <LogReadingSessionButton bookId={book.id} />
+                    )}
+                    {shelf.default_type === 'have_read' && (
+                      <Link
+                        href={`/share/finished/${user.id}/${book.id}`}
+                        target="_blank"
+                        className="text-xs text-muted-foreground hover:text-accent transition-colors"
+                      >
+                        Share card
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>

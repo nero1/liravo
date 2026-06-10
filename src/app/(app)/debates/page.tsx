@@ -83,12 +83,21 @@ export default function DebatesPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium">{debate.question}</p>
-                  <Link
-                    href={`/book/${debate.book_id}`}
-                    className="text-xs text-accent hover:underline flex-shrink-0"
-                  >
-                    View Book
-                  </Link>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Link
+                      href={`/share/debate/${debate.id}`}
+                      target="_blank"
+                      className="text-xs text-muted-foreground hover:text-accent transition-colors"
+                    >
+                      Share
+                    </Link>
+                    <Link
+                      href={`/book/${debate.book_id}`}
+                      className="text-xs text-accent hover:underline"
+                    >
+                      View Book
+                    </Link>
+                  </div>
                 </div>
 
                 {/* Vote buttons */}

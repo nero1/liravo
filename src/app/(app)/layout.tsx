@@ -12,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const moderator = user ? await isModerator(user.id) : false;
 
+  let isAuthor = false;
   let hasEmail = false;
   let emailVerified = false;
   let showBanner = false;
@@ -19,12 +20,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (user) {
     const { data: profile } = await supabase
       .from('users')
-      .select('email, email_verified, created_at')
+      .select('email, email_verified, created_at, is_verified_author, user_types')
       .eq('id', user.id)
       .single();
 
     hasEmail = !!profile?.email;
     emailVerified = profile?.email_verified ?? false;
+    isAuthor =
+      profile?.is_verified_author ||
+      (profile?.user_types ?? []).includes('author') ||
+      false;
 
     // Show banner if account is older than 7 days and email not set or not verified
     const accountAge = profile?.created_at
@@ -36,7 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <SideNav isModerator={moderator} />
+      <SideNav isModerator={moderator} isAuthor={isAuthor} />
       <main className="flex-1 pb-20 md:pb-0 min-w-0">
         {showBanner && (
           <div className="px-4 pt-4 max-w-2xl mx-auto">

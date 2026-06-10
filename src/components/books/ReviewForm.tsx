@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Star } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Star, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MOOD_TAGS } from '@/constants/config';
+import type { ClientToneResult } from '@/lib/client/tone-classifier';
 
 interface ReviewFormProps {
   bookId: string;
@@ -26,9 +27,28 @@ export function ReviewForm({ bookId, onSubmit }: ReviewFormProps) {
   const [body, setBody] = useState('');
   const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
   const [spoilerWarning, setSpoilerWarning] = useState(false);
+  const [readDate, setReadDate] = useState('');
+  const [editionRead, setEditionRead] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toneResult, setToneResult] = useState<ClientToneResult | null>(null);
+  const [toneChecking, setToneChecking] = useState(false);
+
+  const checkTone = useCallback(async (text: string) => {
+    if (text.trim().length < 30) { setToneResult(null); return; }
+    setToneChecking(true);
+    try {
+      // Lazy import — loads model only on first use
+      const { classifyReviewTone } = await import('@/lib/client/tone-classifier');
+      const result = await classifyReviewTone(text);
+      setToneResult(result);
+    } catch {
+      setToneResult(null);
+    } finally {
+      setToneChecking(false);
+    }
+  }, []);
 
   const maxChars = REVIEW_TYPES.find((t) => t.value === reviewType)?.maxChars ?? 280;
 
@@ -60,6 +80,8 @@ export function ReviewForm({ bookId, onSubmit }: ReviewFormProps) {
           review_type: reviewType,
           mood_tags: selectedMoods,
           spoiler_warning: spoilerWarning,
+          read_date: readDate || undefined,
+          edition_read: editionRead || undefined,
         }),
       });
       if (res.ok) {
@@ -144,7 +166,12 @@ export function ReviewForm({ bookId, onSubmit }: ReviewFormProps) {
         <label className="text-sm font-medium mb-1.5 block">Your review</label>
         <textarea
           value={body}
-          onChange={(e) => setBody(e.target.value.slice(0, maxChars))}
+          onChange={(e) => {
+            const val = e.target.value.slice(0, maxChars);
+            setBody(val);
+            // Debounce tone check on blur/change
+          }}
+          onBlur={(e) => { if (e.target.value.length >= 30) checkTone(e.target.value); }}
           rows={reviewType === 'long' ? 6 : 3}
           placeholder={
             reviewType === 'one_line'
@@ -154,13 +181,31 @@ export function ReviewForm({ bookId, onSubmit }: ReviewFormProps) {
               : 'Write your full review...'
           }
           className={cn(
-            'w-full px-3 py-2 border border-border rounded-lg text-sm bg-background resize-none',
-            'focus:outline-none focus:ring-1 focus:ring-amber-500'
+            'w-full px-3 py-2 border rounded-lg text-sm bg-background resize-none',
+            'focus:outline-none focus:ring-1 focus:ring-amber-500',
+            toneResult === 'toxic' ? 'border-red-400' : toneResult === 'warning' ? 'border-amber-400' : 'border-border'
           )}
         />
-        <p className="text-xs text-muted-foreground text-right mt-0.5">
-          {body.length}/{maxChars}
-        </p>
+        <div className="flex items-center justify-between mt-0.5">
+          <div>
+            {toneChecking && (
+              <span className="text-xs text-muted-foreground">Checking tone…</span>
+            )}
+            {!toneChecking && toneResult === 'warning' && (
+              <span className="flex items-center gap-1 text-xs text-amber-600">
+                <AlertTriangle size={12} /> Tone may be harsh — please review
+              </span>
+            )}
+            {!toneChecking && toneResult === 'toxic' && (
+              <span className="flex items-center gap-1 text-xs text-red-500">
+                <AlertTriangle size={12} /> Potentially harmful language detected — reviews may be removed
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {body.length}/{maxChars}
+          </p>
+        </div>
       </div>
 
       {/* Mood Tags */}
@@ -182,6 +227,31 @@ export function ReviewForm({ bookId, onSubmit }: ReviewFormProps) {
               {tag}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Optional metadata */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium mb-1 block text-muted-foreground">Date read (optional)</label>
+          <input
+            type="date"
+            value={readDate}
+            onChange={(e) => setReadDate(e.target.value)}
+            max={new Date().toISOString().slice(0, 10)}
+            className="w-full px-3 py-1.5 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-1 focus:ring-amber-500"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium mb-1 block text-muted-foreground">Edition (optional)</label>
+          <input
+            type="text"
+            value={editionRead}
+            onChange={(e) => setEditionRead(e.target.value)}
+            maxLength={100}
+            placeholder="e.g. Kindle 2023"
+            className="w-full px-3 py-1.5 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-1 focus:ring-amber-500"
+          />
         </div>
       </div>
 

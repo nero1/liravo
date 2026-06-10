@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Compass, Feather, BookOpen, User, Bell, Rss, Shield } from 'lucide-react';
+import { Home, Compass, Feather, BookOpen, User, Bell, Rss, Shield, BarChart2, MessageCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
@@ -20,9 +20,10 @@ const NAV_ITEMS = [
 
 interface SideNavProps {
   isModerator?: boolean;
+  isAuthor?: boolean;
 }
 
-export function SideNav({ isModerator = false }: SideNavProps) {
+export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps) {
   const pathname = usePathname();
   const t = useTranslations('nav');
 
@@ -50,6 +51,35 @@ export function SideNav({ isModerator = false }: SideNavProps) {
           </Link>
         );
       })}
+
+      {isAuthor && (
+        <>
+          <Link
+            href="/author/analytics"
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              pathname.startsWith('/author/analytics')
+                ? 'bg-accent/10 text-accent'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <BarChart2 size={20} strokeWidth={pathname.startsWith('/author/analytics') ? 2.5 : 1.75} />
+            Analytics
+          </Link>
+          <Link
+            href="/author/qa"
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              pathname.startsWith('/author/qa')
+                ? 'bg-accent/10 text-accent'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <MessageCircle size={20} strokeWidth={pathname.startsWith('/author/qa') ? 2.5 : 1.75} />
+            Reader Q&A
+          </Link>
+        </>
+      )}
 
       {isModerator && (
         <Link

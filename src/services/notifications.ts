@@ -8,7 +8,11 @@ export type NotificationType =
   | 'mention'
   | 'challenge_complete'
   | 'buddy_read_invite'
-  | 'author_qa_answer';
+  | 'author_qa_answer'
+  | 'author_announcement'
+  | 'arc_granted'
+  | 'reading_goal_milestone'
+  | 'account_hardening';
 
 export async function createNotification(params: {
   userId: string;

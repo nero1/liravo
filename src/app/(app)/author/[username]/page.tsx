@@ -119,16 +119,40 @@ export default async function AuthorProfilePage({
 
   const posts: AuthorPost[] = postsRaw ?? [];
 
-  // Q&A section (using author_posts with type 'qa')
+  // Q&A section
   const { data: qaRaw } = await supabase
     .from('author_qa')
     .select('id, question, answer, asked_by, created_at, answered_at')
     .eq('author_id', author.id)
+    .eq('is_public', true)
     .not('answer', 'is', null)
     .order('answered_at', { ascending: false })
     .limit(5);
 
   const qaItems = qaRaw ?? [];
+
+  // "Books that inspired me" shelf (reading list with list_type = 'inspired_by')
+  const { data: inspiredListRaw } = await supabase
+    .from('reading_lists')
+    .select('id, title')
+    .eq('user_id', author.id)
+    .eq('list_type', 'inspired_by')
+    .eq('is_public', true)
+    .limit(1)
+    .single();
+
+  let inspiredBooks: Array<{ id: string; title: string; cover_url: string | null }> = [];
+  if (inspiredListRaw) {
+    const { data: listBooks } = await supabase
+      .from('reading_list_books')
+      .select('books:book_id(id, title, cover_url)')
+      .eq('list_id', inspiredListRaw.id)
+      .order('position')
+      .limit(10);
+    inspiredBooks = (listBooks ?? [])
+      .map((lb) => lb.books as { id: string; title: string; cover_url: string | null } | null)
+      .filter(Boolean) as Array<{ id: string; title: string; cover_url: string | null }>;
+  }
 
   // Active ARCs
   const { data: arcsRaw } = await supabase
@@ -215,13 +239,23 @@ export default async function AuthorProfilePage({
               {followerCount ?? 0} followers
             </p>
           </div>
-          {currentUser && currentUser.id !== author.id && (
-            <FollowButton
-              targetUserId={author.id}
-              currentUserId={currentUser.id}
-              initialFollowing={isFollowing}
-            />
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {currentUser && currentUser.id !== author.id && (
+              <>
+                <FollowButton
+                  targetUserId={author.id}
+                  currentUserId={currentUser.id}
+                  initialFollowing={isFollowing}
+                />
+                <Link
+                  href={`/author/${author.username}/ask`}
+                  className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  Ask
+                </Link>
+              </>
+            )}
+          </div>
         </div>
         {author.bio && (
           <p className="text-sm text-neutral-700 dark:text-neutral-300">{author.bio}</p>
@@ -322,6 +356,45 @@ export default async function AuthorProfilePage({
         </section>
       )}
 
+      {/* Books that inspired me */}
+      {inspiredBooks.length > 0 && (
+        <section>
+          <h2 className="font-display text-xl font-bold mb-4">Books That Inspired Me</h2>
+          <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+            {inspiredBooks.map((book) => (
+              <Link
+                key={book.id}
+                href={`/book/${book.id}`}
+                className="flex flex-col gap-1 hover:opacity-80 transition-opacity"
+              >
+                <div className="relative w-full aspect-[2/3] rounded overflow-hidden bg-neutral-200 dark:bg-neutral-700">
+                  {book.cover_url ? (
+                    <Image
+                      src={book.cover_url}
+                      alt={book.title}
+                      fill
+                      className="object-cover"
+                      sizes="120px"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-2xl">📚</div>
+                  )}
+                </div>
+                <p className="text-xs font-medium line-clamp-2 leading-tight">{book.title}</p>
+              </Link>
+            ))}
+          </div>
+          {inspiredListRaw && (
+            <Link
+              href={`/lists/${inspiredListRaw.id}`}
+              className="mt-2 inline-block text-xs text-accent hover:underline"
+            >
+              View full list →
+            </Link>
+          )}
+        </section>
+      )}
+
       {/* Q&A */}
       {(qaItems as Array<{
         id: string;
@@ -330,7 +403,17 @@ export default async function AuthorProfilePage({
         answered_at: string | null;
       }>).length > 0 && (
         <section>
-          <h2 className="font-display text-xl font-bold mb-4">Q&amp;A</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-xl font-bold">Q&amp;A</h2>
+            {currentUser && currentUser.id !== author.id && (
+              <Link
+                href={`/author/${author.username}/ask`}
+                className="text-sm text-accent hover:underline"
+              >
+                Ask a question →
+              </Link>
+            )}
+          </div>
           <div className="space-y-4">
             {(qaItems as Array<{
               id: string;

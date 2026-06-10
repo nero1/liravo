@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { GENRES, USER_TYPES, USER_TYPE_LABELS } from '@/constants/config';
 import { cn } from '@/lib/utils';
-import { Check, Upload } from 'lucide-react';
+import { Check, Upload, UserPlus } from 'lucide-react';
+import Image from 'next/image';
 
 interface OnboardingFlowProps {
   userId: string;
@@ -13,9 +14,9 @@ interface OnboardingFlowProps {
   initialDisplayName: string;
 }
 
-type Step = 'username' | 'user_type' | 'genres' | 'import' | 'pin';
+type Step = 'username' | 'user_type' | 'genres' | 'import' | 'follow' | 'pin';
 
-const STEPS: Step[] = ['username', 'user_type', 'genres', 'import', 'pin'];
+const STEPS: Step[] = ['username', 'user_type', 'genres', 'import', 'follow', 'pin'];
 
 export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: OnboardingFlowProps) {
   const router = useRouter();
@@ -37,6 +38,12 @@ export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: 
   // PIN step state
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
+
+  // Suggested follows step state
+  interface SuggestedUser { id: string; display_name: string; username: string; avatar_url: string | null; is_verified_author: boolean; }
+  const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
+  const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+  const [loadingSuggested, setLoadingSuggested] = useState(false);
 
   // Honeypot: bots fill this, humans don't see it
   const [honeypot, setHoneypot] = useState('');
@@ -78,8 +85,34 @@ export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: 
       prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]
     );
 
+  const loadSuggestedUsers = async () => {
+    setLoadingSuggested(true);
+    try {
+      const res = await fetch('/api/users/suggested');
+      if (res.ok) {
+        const data = await res.json() as { users?: SuggestedUser[] };
+        setSuggestedUsers(data.users ?? []);
+      }
+    } catch { /* non-critical */ }
+    setLoadingSuggested(false);
+  };
+
+  const handleFollowToggle = async (targetId: string) => {
+    const isFollowing = followedIds.has(targetId);
+    setFollowedIds((prev) => {
+      const next = new Set(Array.from(prev));
+      if (isFollowing) next.delete(targetId); else next.add(targetId);
+      return next;
+    });
+    await fetch('/api/follows', {
+      method: isFollowing ? 'DELETE' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_user_id: targetId }),
+    });
+  };
+
   const handleImport = async () => {
-    if (!importFile) { setStep('pin'); return; }
+    if (!importFile) { setLoadingSuggested(true); loadSuggestedUsers(); setStep('follow'); return; }
     setImporting(true);
     setImportMessage(null);
     try {
@@ -349,7 +382,7 @@ export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: 
               <div className="flex gap-3">
                 <button onClick={() => setStep('genres')} className="flex-1 py-3 border border-border rounded-lg font-medium hover:bg-muted transition-colors">Back</button>
                 <button
-                  onClick={importFile ? handleImport : () => setStep('pin')}
+                  onClick={importFile ? handleImport : () => { loadSuggestedUsers(); setStep('follow'); }}
                   disabled={importing}
                   className="flex-1 py-3 bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent/90 transition-colors disabled:opacity-60"
                 >
@@ -363,13 +396,81 @@ export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: 
                 {importMessage}
               </div>
               <button
-                onClick={() => setStep('pin')}
+                onClick={() => { loadSuggestedUsers(); setStep('follow'); }}
                 className="w-full py-3 bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent/90 transition-colors"
               >
                 Continue
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Step: Suggested Follows */}
+      {step === 'follow' && (
+        <div className="space-y-6">
+          <div className="text-center">
+            <h1 className="font-display text-2xl font-bold mb-2">Follow some readers & authors</h1>
+            <p className="text-muted-foreground text-sm">Personalise your feed by following people you&apos;re interested in.</p>
+          </div>
+
+          {loadingSuggested ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-border">
+                  <div className="w-10 h-10 rounded-full bg-muted animate-pulse" />
+                  <div className="flex-1 space-y-1">
+                    <div className="h-3 bg-muted rounded animate-pulse w-24" />
+                    <div className="h-2.5 bg-muted rounded animate-pulse w-16" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : suggestedUsers.length > 0 ? (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {suggestedUsers.map((su) => (
+                <div key={su.id} className="flex items-center gap-3 p-3 rounded-xl border border-border">
+                  <div className="w-10 h-10 rounded-full overflow-hidden bg-muted flex-shrink-0">
+                    {su.avatar_url ? (
+                      <Image src={su.avatar_url} alt={su.display_name} width={40} height={40} className="object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-accent/20 flex items-center justify-center text-sm font-bold text-accent">
+                        {su.display_name[0]}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{su.display_name}</p>
+                    <p className="text-xs text-muted-foreground">@{su.username}{su.is_verified_author ? ' · Verified Author' : ''}</p>
+                  </div>
+                  <button
+                    onClick={() => handleFollowToggle(su.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex-shrink-0',
+                      followedIds.has(su.id)
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-border hover:border-accent text-muted-foreground hover:text-accent'
+                    )}
+                  >
+                    <UserPlus size={12} />
+                    {followedIds.has(su.id) ? 'Following' : 'Follow'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground text-sm py-6">No suggestions available yet.</p>
+          )}
+
+          <div className="flex gap-3">
+            <button onClick={() => setStep('import')} className="flex-1 py-3 border border-border rounded-lg font-medium hover:bg-muted transition-colors">Back</button>
+            <button
+              onClick={() => setStep('pin')}
+              className="flex-1 py-3 bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent/90 transition-colors"
+            >
+              {followedIds.size > 0 ? `Continue (${followedIds.size} followed)` : 'Skip'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -415,7 +516,7 @@ export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div className="flex gap-3">
-            <button onClick={() => setStep('import')} className="flex-1 py-3 border border-border rounded-lg font-medium hover:bg-muted transition-colors">Back</button>
+            <button onClick={() => setStep('follow')} className="flex-1 py-3 border border-border rounded-lg font-medium hover:bg-muted transition-colors">Back</button>
             <button
               onClick={handleFinish}
               disabled={saving || (pin.length > 0 && pin.length < 4)}
