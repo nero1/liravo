@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { searchGoogleBooks, googleVolumeToBookData } from '@/services/books';
+import { searchBooks } from '@/services/books';
 import { createServiceClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -26,13 +26,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ books: localBooks, source: 'local' });
   }
 
-  // Fall back to Google Books
-  const volumes = await searchGoogleBooks(q);
-  const books = volumes.map((v) => ({
-    ...googleVolumeToBookData(v),
-    google_books_id: v.id,
-    _external: true,
-  }));
+  // Fall back to external APIs (Google Books → Open Library)
+  const results = await searchBooks(q);
+  const books = results.map((b) => ({ ...b, _external: true }));
 
   return NextResponse.json({ books, source: 'google' });
 }

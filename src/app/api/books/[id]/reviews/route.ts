@@ -8,6 +8,7 @@ import { classifyTone } from '@/lib/tone-classifier';
 import { checkSpam } from '@/lib/spam-detection';
 import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { getRedisClient } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,8 @@ const reviewSchema = z.object({
   review_type: z.enum(['short', 'long', 'one_line']),
   mood_tags: z.array(z.string()).default([]),
   spoiler_warning: z.boolean().default(false),
+  read_date: z.string().date().optional(),
+  edition_read: z.string().max(100).optional(),
 });
 
 export async function GET(
@@ -87,6 +90,8 @@ export async function POST(
       review_type,
       mood_tags,
       has_spoilers: spoiler_warning,
+      read_date: parsed.data.read_date ?? null,
+      edition_read: parsed.data.edition_read ?? null,
       moderation_status: 'published',
     })
     .select()
@@ -98,6 +103,14 @@ export async function POST(
 
   // Award XP for writing a review
   await awardXP(user.id, XP_CONFIG.SHORT_REVIEW, 'write_review');
+
+  // Invalidate taste profile cache so next request regenerates with fresh data
+  try {
+    const redis = getRedisClient();
+    await redis.del(`taste_profile:${user.id}`);
+  } catch {
+    // Non-critical
+  }
 
   // Upsert book_community_stats if table exists — best effort
   try {

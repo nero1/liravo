@@ -1,10 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
-import type { Metadata } from 'next';
+'use client';
 
-export const dynamic = 'force-dynamic';
-
-export const metadata: Metadata = { title: 'Cron Status — Admin' };
+import { useState, useEffect } from 'react';
 
 const CRON_JOBS = [
   {
@@ -65,24 +61,42 @@ const CRON_JOBS = [
   },
 ];
 
-export default async function CronStatusPage() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+interface OutboxStats {
+  pending: number;
+  failed: number;
+}
 
-  const { data: profile } = await supabase.from('users').select('is_admin').eq('id', user.id).single();
-  if (!profile?.is_admin) redirect('/');
+export default function CronStatusPage() {
+  const [stats, setStats] = useState<OutboxStats | null>(null);
+  const [triggering, setTriggering] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, { ok: boolean; message: string }>>({});
 
-  // Get pending outbox count as a proxy for system health
-  const { count: pendingOutbox } = await supabase
-    .from('outbox_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'pending');
+  useEffect(() => {
+    fetch('/api/admin/cron-status')
+      .then((r) => r.json())
+      .then((d) => setStats(d))
+      .catch(() => null);
+  }, []);
 
-  const { count: failedOutbox } = await supabase
-    .from('outbox_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'failed');
+  async function triggerJob(job: typeof CRON_JOBS[0]) {
+    setTriggering(job.id);
+    try {
+      const res = await fetch(job.endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET ?? ''}` },
+      });
+      const ok = res.ok;
+      let message = ok ? 'Triggered successfully' : `Failed (${res.status})`;
+      try {
+        const d = await res.json() as { message?: string; error?: string };
+        message = d.message ?? d.error ?? message;
+      } catch { /* ignore */ }
+      setResults((prev) => ({ ...prev, [job.id]: { ok, message } }));
+    } catch {
+      setResults((prev) => ({ ...prev, [job.id]: { ok: false, message: 'Network error' } }));
+    }
+    setTriggering(null);
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
@@ -91,12 +105,12 @@ export default async function CronStatusPage() {
       <div className="grid grid-cols-2 gap-3 mb-8">
         <div className="p-4 border border-border rounded-xl">
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Pending Outbox Events</p>
-          <p className="text-2xl font-bold">{pendingOutbox ?? 0}</p>
+          <p className="text-2xl font-bold">{stats?.pending ?? '–'}</p>
         </div>
         <div className="p-4 border border-border rounded-xl">
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Failed Outbox Events</p>
-          <p className={`text-2xl font-bold ${(failedOutbox ?? 0) > 0 ? 'text-destructive' : ''}`}>
-            {failedOutbox ?? 0}
+          <p className={`text-2xl font-bold ${(stats?.failed ?? 0) > 0 ? 'text-destructive' : ''}`}>
+            {stats?.failed ?? '–'}
           </p>
         </div>
       </div>
@@ -106,23 +120,36 @@ export default async function CronStatusPage() {
         {CRON_JOBS.map((job) => (
           <div key={job.id} className="p-4 border border-border rounded-xl">
             <div className="flex items-start justify-between gap-4">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm">{job.label}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{job.description}</p>
                 <code className="text-xs text-muted-foreground mt-1 block">{job.endpoint}</code>
+                {results[job.id] && (
+                  <p className={`text-xs mt-1 font-medium ${results[job.id].ok ? 'text-green-600' : 'text-red-500'}`}>
+                    {results[job.id].message}
+                  </p>
+                )}
               </div>
-              <span className="shrink-0 text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">
-                {job.schedule}
-              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                  {job.schedule}
+                </span>
+                <button
+                  onClick={() => triggerJob(job)}
+                  disabled={triggering === job.id}
+                  className="text-xs bg-accent text-white px-3 py-1 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {triggering === job.id ? '…' : 'Run'}
+                </button>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
       <p className="text-xs text-muted-foreground mt-6">
-        To manually trigger a cron job, send a POST request to its endpoint with the <code>Authorization: Bearer $CRON_SECRET</code> header.
-        All sub-daily cron jobs should be configured on cron-job.org pointing to these endpoints.
-        See <code>docs/SETUP.md</code> for full cron configuration instructions.
+        Use the <strong>Run</strong> button to manually trigger any job (requires <code>CRON_SECRET</code> env var to be set as <code>NEXT_PUBLIC_CRON_SECRET</code> for admin use).
+        All sub-daily cron jobs should be configured on cron-job.org. See <code>docs/SETUP.md</code> for full cron configuration.
       </p>
     </div>
   );

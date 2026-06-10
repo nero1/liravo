@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { awardXP } from '@/services/xp';
-import { checkAndAwardBadges } from '@/services/badges';
+import { checkAndAwardBadges, incrementWritingStreak } from '@/services/badges';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -47,16 +47,20 @@ export async function POST(
     return NextResponse.json({ error: 'Challenge has ended' }, { status: 409 });
   }
 
-  // Insert entry
+  // Insert into writing_challenge_submissions (unique per user per challenge)
   const { data: entry, error } = await supabase
-    .from('writing_challenge_entries')
-    .insert({
-      user_id: user.id,
-      challenge_id: params.id,
-      title: parsed.data.title,
-      body: parsed.data.body,
-      word_count: parsed.data.word_count,
-    })
+    .from('writing_challenge_submissions')
+    .upsert(
+      {
+        user_id: user.id,
+        challenge_id: params.id,
+        title: parsed.data.title,
+        content: parsed.data.body,
+        body: parsed.data.body,
+        word_count: parsed.data.word_count,
+      },
+      { onConflict: 'challenge_id,user_id', ignoreDuplicates: false }
+    )
     .select()
     .single();
 
@@ -65,7 +69,8 @@ export async function POST(
   // Award 25 XP
   await awardXP(user.id, 25, 'challenge_submission');
 
-  // Check completion badges
+  // Increment writing streak and check badges
+  await incrementWritingStreak(user.id);
   await checkAndAwardBadges(user.id, 'challenge_submit');
   await checkAndAwardBadges(user.id, 'prolific_writer');
 

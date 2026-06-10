@@ -11,7 +11,7 @@ export async function GET() {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('reading_streak, xp')
+    .select('writing_streak, xp')
     .eq('id', user.id)
     .single();
 
@@ -44,7 +44,7 @@ export async function GET() {
     prompts_completed: (promptSubs ?? []).length,
     challenges_completed: (challengeEntries ?? []).length,
     workshop_critiques: workshopCount ?? 0,
-    writing_streak: profile?.reading_streak ?? 0,
+    writing_streak: profile?.writing_streak ?? 0,
     xp: profile?.xp ?? 0,
   });
 }

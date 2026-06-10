@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import Decimal from 'decimal.js';
 import { createServiceClient } from '@/lib/supabase/server';
+import { verifyProviderSignature } from '@/lib/webhook-security';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +18,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing x-payment-provider header' }, { status: 400 });
   }
 
-  const body = await req.json();
+  const signature = req.headers.get('x-webhook-signature') ?? req.headers.get('x-paystack-signature');
+  const timestamp = req.headers.get('x-webhook-timestamp');
+  const expectedSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+
+  if (!expectedSecret || !signature) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rawBody = await req.text();
+  const validSig = verifyProviderSignature({
+    provider,
+    body: rawBody,
+    secret: expectedSecret,
+    signature,
+    timestamp,
+  });
+  if (!validSig) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -38,7 +66,7 @@ export async function POST(req: Request) {
   }
 
   if (status === 'completed') {
-    // Create payout record (scaffold)
+    // Create payout record
     await supabase
       .from('payouts')
       .insert({
@@ -49,6 +77,32 @@ export async function POST(req: Request) {
         status: 'pending',
         provider,
       });
+
+    // Credit 10% referral commission to the tipper's referrer, if any
+    const { data: tipperUser } = await supabase
+      .from('users')
+      .select('referred_by')
+      .eq('id', tip.tipper_id)
+      .single();
+
+    if (tipperUser?.referred_by) {
+      const gross = new Decimal(tip.amount);
+      const commissionAmount = gross.times('0.10').toDecimalPlaces(2);
+
+      await supabase
+        .from('referral_commissions')
+        .insert({
+          referrer_id: tipperUser.referred_by,
+          referred_user_id: tip.tipper_id,
+          transaction_type: 'tip',
+          transaction_id: tipId,
+          gross_amount: gross.toFixed(2),
+          commission_rate: 0.10,
+          commission_amount: commissionAmount.toFixed(2),
+          currency: tip.currency,
+          status: 'pending',
+        });
+    }
   }
 
   return NextResponse.json({ received: true, tipId, status });

@@ -62,6 +62,103 @@
     "streak": "Série de {days} jours",
     "level": "Niveau"
   },
+  "discover": {
+    "newReleasesFromAuthors": "Nouvelles sorties des auteurs que vous suivez",
+    "readersLikeYou": "Les lecteurs comme vous ont aussi aimé",
+    "noNewReleases": "Pas encore de nouvelles sorties des auteurs que vous suivez"
+  },
+  "wrapped": {
+    "favouriteAuthor": "Auteur favori",
+    "longestBook": "Livre le plus long",
+    "shortestBook": "Livre le plus court",
+    "mostActiveMonth": "Mois le plus actif",
+    "readerTitle": "Votre titre de lecteur"
+  },
+  "book": {
+    "affiliateLinks": "Obtenir ce livre",
+    "ratingDistribution": "Répartition des notes",
+    "readingLists": "Listes de lecture incluant ce livre",
+    "similarBooks": "Les lecteurs ont aussi aimé",
+    "helpfulVote": "Utile",
+    "unhelpfulVote": "Pas utile",
+    "replyCount": "{count} réponses"
+  },
+  "badges": {
+    "earned": "Badge obtenu",
+    "connector": "Connecteur",
+    "ambassador": "Ambassadeur",
+    "liravoBuilder": "Bâtisseur Liravo"
+  },
+  "notifications": {
+    "readingGoalMilestone": "Vous avez atteint {percent}% de votre objectif de lecture annuel !",
+    "accountHardening": "Sécurisez votre compte — ajoutez une adresse e-mail",
+    "newFollower": "{name} vous suit",
+    "likedReview": "{name} a aimé votre critique",
+    "repliedToReview": "{name} a répondu à votre critique",
+    "mentioned": "{name} vous a mentionné",
+    "authorAnnouncement": "{name} a fait une annonce",
+    "arcGranted": "Votre demande d'ARC a été {status}",
+    "bookPassed": "{name} vous a passé un livre",
+    "newQuestion": "{name} vous a posé une question"
+  },
+  "readingRoom": {
+    "title": "Salon de lecture",
+    "discussion": "Discussion",
+    "milestones": "Jalons",
+    "addMilestone": "Ajouter un jalon",
+    "milestoneLocked": "Verrouillé jusqu'au {date}",
+    "milestoneUnlocked": "Déverrouillé",
+    "joinRoom": "Rejoindre le salon",
+    "postPlaceholder": "Dites quelque chose…",
+    "milestonePlaceholder": "Nom du chapitre ou plage de pages…",
+    "general": "Général",
+    "chatComingSoon": "Chat bientôt disponible"
+  },
+  "passTheBook": {
+    "title": "Passer le livre",
+    "subtitle": "Passez des livres dans une chaîne de lecteurs.",
+    "chains": "Chaînes",
+    "directPasses": "Passages directs",
+    "startChain": "Démarrer une chaîne",
+    "passNext": "Passer →",
+    "nominate": "Passer au prochain lecteur",
+    "noChains": "Pas encore de chaînes. Commencez-en une avec un livre que vous avez aimé !",
+    "received": "Reçus",
+    "sent": "Envoyés"
+  },
+  "authorQA": {
+    "title": "Q&A des lecteurs",
+    "ask": "Poser une question",
+    "askQuestion": "Poser une question",
+    "submitQuestion": "Soumettre",
+    "questionPlaceholder": "Qu'est-ce qui vous a inspiré à écrire… ?",
+    "questionSubmitted": "Question soumise ! L'auteur sera notifié.",
+    "answerPlaceholder": "Votre réponse…",
+    "publishAnswer": "Publier la réponse",
+    "pendingQuestions": "Questions en attente",
+    "noQuestions": "Aucune question sans réponse."
+  },
+  "writingChallenge": {
+    "aiFeedbackTitle": "Retour IA sur votre écriture",
+    "aiFeedbackSubtitle": "Obtenez des retours personnalisés sur votre soumission (premium).",
+    "getFeedback": "Obtenir un retour",
+    "analysing": "Analyse en cours…",
+    "communityEntries": "Participations de la communauté",
+    "submitEntry": "Soumettre (+25 XP)",
+    "entrySubmitted": "Participation soumise ! +25 XP gagnés."
+  },
+  "leaderboard": {
+    "title": "Classement",
+    "global": "Mondial",
+    "national": "National",
+    "friends": "Amis",
+    "topReviewers": "Meilleurs critiques",
+    "weekly": "Hebdomadaire",
+    "monthly": "Mensuel",
+    "allTime": "Tout le temps",
+    "helpfulVotes": "{count} votes utiles",
+    "reviews": "{count} critiques"
+  },
   "common": {
     "loading": "Chargement...",
     "error": "Une erreur s'est produite",
@@ -78,5 +175,26 @@
     "offline": "Vous êtes hors ligne. Certaines fonctionnalités peuvent ne pas fonctionner.",
     "darkMode": "Mode sombre",
     "lightMode": "Mode clair"
+  },
+  "auth": {
+    "signInWithGoogle": "Se connecter avec Google",
+    "signInWithTelegram": "Se connecter avec Telegram",
+    "continueWithGoogle": "Continuer avec Google",
+    "continueWithTelegram": "Continuer avec Telegram",
+    "orContinueWith": "ou continuer avec"
+  },
+  "pushNotifications": {
+    "enable": "Activer les notifications",
+    "enabled": "Notifications activées",
+    "denied": "Notifications bloquées. Activez-les dans les paramètres du navigateur.",
+    "prompt": "Soyez informé des nouveaux abonnés, réponses et jalons de lecture."
+  },
+  "communityNotes": {
+    "title": "Notes communautaires",
+    "addNote": "Ajouter une note",
+    "placeholder": "Ajoutez du contexte ou une correction (10–500 caractères)…",
+    "submitted": "Votre note a été soumise pour examen.",
+    "eligibility": "Vous avez besoin de 50+ critiques pour contribuer des notes communautaires.",
+    "noNotes": "Pas encore de notes communautaires."
   }
 }

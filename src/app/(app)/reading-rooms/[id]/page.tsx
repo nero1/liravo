@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { RoomBoard } from '@/components/reading-rooms/RoomBoard';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,14 +29,14 @@ export default async function ReadingRoomPage({
 
   if (!room) notFound();
 
-  const { data: participantsRaw } = await supabase
-    .from('room_participants')
-    .select('user_id, joined_at')
-    .eq('room_id', params.id);
+  const [{ data: participantsRaw }, { data: book }] = await Promise.all([
+    supabase.from('room_participants').select('user_id, joined_at').eq('room_id', params.id),
+    room.book_id
+      ? supabase.from('books').select('id, title, author_name, cover_url').eq('id', room.book_id).single()
+      : Promise.resolve({ data: null }),
+  ]);
 
-  const participantIds = ((participantsRaw ?? []) as Array<{ user_id: string }>).map(
-    (p) => p.user_id
-  );
+  const participantIds = ((participantsRaw ?? []) as Array<{ user_id: string }>).map((p) => p.user_id);
 
   let participants: Array<{
     id: string;
@@ -52,25 +53,23 @@ export default async function ReadingRoomPage({
     participants = profiles ?? [];
   }
 
-  const { data: book } = room.book_id
-    ? await supabase
-        .from('books')
-        .select('id, title, author_name, cover_url')
-        .eq('id', room.book_id)
-        .single()
-    : { data: null };
-
-  const isParticipant = participantIds.includes(user.id);
+  const isCreator = room.created_by === user.id;
+  const isMember = participantIds.includes(user.id);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+      {/* Back link */}
+      <Link href="/reading-rooms" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+        ← Reading Rooms
+      </Link>
+
       {/* Room header */}
       <div className="flex items-start gap-4">
-        {book?.cover_url && (
+        {(book as { cover_url?: string | null } | null)?.cover_url && (
           <div className="relative w-16 h-24 flex-shrink-0">
             <Image
-              src={book.cover_url}
-              alt={book.title}
+              src={(book as { cover_url: string }).cover_url}
+              alt={(book as { title: string }).title}
               fill
               className="object-cover rounded-md"
               sizes="64px"
@@ -81,13 +80,13 @@ export default async function ReadingRoomPage({
           <h1 className="font-display text-2xl font-bold">{room.name}</h1>
           {book && (
             <Link
-              href={`/book/${book.id}`}
+              href={`/book/${(book as { id: string }).id}`}
               className="text-sm text-accent hover:underline"
             >
-              {book.title} by {book.author_name}
+              {(book as { title: string; author_name: string }).title} by {(book as { title: string; author_name: string }).author_name}
             </Link>
           )}
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span
               className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                 room.is_active
@@ -97,6 +96,11 @@ export default async function ReadingRoomPage({
             >
               {room.is_active ? 'Active' : 'Closed'}
             </span>
+            {isCreator && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                Creator
+              </span>
+            )}
             <span className="text-xs text-neutral-500">
               {participants.length} participant{participants.length !== 1 ? 's' : ''}
             </span>
@@ -137,19 +141,9 @@ export default async function ReadingRoomPage({
         )}
       </section>
 
-      {/* Chat placeholder */}
-      <section>
-        <h2 className="font-display text-lg font-bold mb-3">Room Chat</h2>
-        <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 p-8 text-center">
-          <p className="text-neutral-500 dark:text-neutral-400 font-medium">Chat coming soon</p>
-          <p className="text-neutral-400 dark:text-neutral-500 text-sm mt-1">
-            Real-time reading room chat is under development.
-          </p>
-        </div>
-      </section>
-
-      {!isParticipant && room.is_active && (
-        <div className="text-center">
+      {/* Join button for non-members */}
+      {!isMember && !isCreator && room.is_active && (
+        <div>
           <form action={`/api/reading-rooms/${params.id}/join`} method="POST">
             <button
               type="submit"
@@ -160,6 +154,17 @@ export default async function ReadingRoomPage({
           </form>
         </div>
       )}
+
+      {/* Interactive discussion + milestones board */}
+      <section>
+        <h2 className="font-display text-lg font-bold mb-4">Room Discussion</h2>
+        <RoomBoard
+          roomId={params.id}
+          isCreator={isCreator}
+          isMember={isMember || isCreator}
+          currentUserId={user.id}
+        />
+      </section>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { awardXP, incrementStreak } from '@/services/xp';
-import { checkAndAwardBadges } from '@/services/badges';
+import { awardXP } from '@/services/xp';
+import { checkAndAwardBadges, incrementWritingStreak } from '@/services/badges';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -64,13 +64,10 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Award XP and update streak
   await awardXP(user.id, 10, 'prompt_submission');
-  await incrementStreak(user.id);
+  await incrementWritingStreak(user.id);
 
-  // Check badges
   await checkAndAwardBadges(user.id, 'prompt_submit');
-  await checkAndAwardBadges(user.id, 'writing_streak');
   await checkAndAwardBadges(user.id, 'prolific_writer');
 
   return NextResponse.json({ submission }, { status: 201 });

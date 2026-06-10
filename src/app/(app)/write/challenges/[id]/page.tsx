@@ -23,28 +23,56 @@ interface LeaderboardEntry {
   users: { display_name: string; username: string } | null;
 }
 
+interface CommunitySubmission {
+  id: string;
+  content: string;
+  word_count: number | null;
+  community_votes: number;
+  submitted_at: string;
+  users: { display_name: string; username: string; avatar_url: string | null } | null;
+}
+
 export default function ChallengeDetailPage() {
   const params = useParams();
   const id = params.id as string;
 
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [submissions, setSubmissions] = useState<CommunitySubmission[]>([]);
+  const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ title: '', body: '' });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
+  const [aiFeedbackLoading, setAiFeedbackLoading] = useState(false);
+  const [submittedBody, setSubmittedBody] = useState('');
 
   useEffect(() => {
-    fetch(`/api/write/challenges/${id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setChallenge(data.challenge);
-        setLeaderboard(data.leaderboard ?? []);
-      })
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch(`/api/write/challenges/${id}`).then((r) => r.json()),
+      fetch(`/api/write/challenges/${id}/submissions`).then((r) => r.json()),
+    ]).then(([data, sData]) => {
+      setChallenge(data.challenge);
+      setLeaderboard(data.leaderboard ?? []);
+      setSubmissions((sData as { submissions?: CommunitySubmission[] }).submissions ?? []);
+    }).finally(() => setLoading(false));
   }, [id]);
+
+  async function handleVote(submissionId: string) {
+    const isVoted = votedIds.has(submissionId);
+    setVotedIds((prev) => {
+      const next = new Set(Array.from(prev));
+      if (isVoted) next.delete(submissionId); else next.add(submissionId);
+      return next;
+    });
+    setSubmissions((prev) =>
+      prev.map((s) => s.id === submissionId ? { ...s, community_votes: s.community_votes + (isVoted ? -1 : 1) } : s)
+    );
+    await fetch(`/api/write/challenges/submissions/${submissionId}/vote`, { method: 'POST' });
+  }
 
   async function handleJoin() {
     setJoining(true);
@@ -67,8 +95,28 @@ export default function ChallengeDetailPage() {
       setSubmitError(data.error ?? 'Submission failed');
     } else {
       setSubmitSuccess(true);
+      setSubmittedBody(form.body);
     }
     setSubmitting(false);
+  }
+
+  async function handleGetAiFeedback() {
+    if (!submittedBody) return;
+    setAiFeedbackLoading(true);
+    setAiFeedback(null);
+    try {
+      const res = await fetch('/api/write/ai-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: submittedBody, type: 'overall' }),
+      });
+      const data = await res.json() as { feedback?: string; error?: string };
+      if (res.ok) setAiFeedback(data.feedback ?? null);
+      else setAiFeedback(`Could not get feedback: ${data.error ?? 'Unknown error'}`);
+    } catch {
+      setAiFeedback('Failed to load AI feedback. Please try again.');
+    }
+    setAiFeedbackLoading(false);
   }
 
   if (loading) {
@@ -166,14 +214,77 @@ export default function ChallengeDetailPage() {
         )}
       </div>
 
+      {/* Community submissions */}
+      {submissions.length > 0 && (
+        <div className="mb-8">
+          <h2 className="font-semibold text-lg mb-3">Community Entries</h2>
+          <div className="space-y-3">
+            {submissions.slice(0, 10).map((sub) => (
+              <div key={sub.id} className="p-4 rounded-xl border border-border space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/user/${sub.users?.username ?? ''}`}
+                    className="text-sm font-medium hover:underline"
+                  >
+                    {sub.users?.display_name ?? 'Unknown'}
+                  </Link>
+                  <span className="text-xs text-muted-foreground">
+                    {sub.word_count?.toLocaleString() ?? 0} words
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground line-clamp-3">{sub.content}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleVote(sub.id)}
+                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors ${
+                      votedIds.has(sub.id)
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-border text-muted-foreground hover:border-accent hover:text-accent'
+                    }`}
+                  >
+                    ♥ {sub.community_votes}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Submit entry */}
       <div>
         <h2 className="font-semibold text-lg mb-3">Submit Entry (+25 XP)</h2>
         {submitSuccess ? (
-          <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
-            <p className="text-green-800 dark:text-green-200 font-medium">
-              Entry submitted! +25 XP earned.
-            </p>
+          <div className="space-y-4">
+            <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
+              <p className="text-green-800 dark:text-green-200 font-medium">
+                Entry submitted! +25 XP earned.
+              </p>
+            </div>
+
+            {/* AI Feedback section */}
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-semibold text-sm">AI Writing Feedback</p>
+                  <p className="text-xs text-muted-foreground">Get personalised feedback on your submission (premium).</p>
+                </div>
+                {!aiFeedback && (
+                  <button
+                    onClick={handleGetAiFeedback}
+                    disabled={aiFeedbackLoading}
+                    className="rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 transition-colors flex-shrink-0"
+                  >
+                    {aiFeedbackLoading ? 'Analysing…' : 'Get Feedback'}
+                  </button>
+                )}
+              </div>
+              {aiFeedback && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 p-3">
+                  <p className="text-sm text-amber-900 dark:text-amber-100 whitespace-pre-wrap">{aiFeedback}</p>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">

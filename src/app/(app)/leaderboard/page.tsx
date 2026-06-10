@@ -21,9 +21,11 @@ interface LeaderboardEntry {
   avatar_url: string | null;
   xp: number;
   level_title: string;
+  helpful_votes?: number;
+  review_count?: number;
 }
 
-type LeaderboardType = 'global' | 'national' | 'friends';
+type LeaderboardType = 'global' | 'national' | 'friends' | 'reviewers';
 type LeaderboardPeriod = 'weekly' | 'monthly' | 'alltime';
 
 export default function LeaderboardPage() {
@@ -61,6 +63,7 @@ export default function LeaderboardPage() {
     global: 'Global',
     national: 'National',
     friends: 'Friends',
+    reviewers: 'Top Reviewers',
   };
 
   const periodLabels: Record<LeaderboardPeriod, string> = {
@@ -96,23 +99,25 @@ export default function LeaderboardPage() {
         ))}
       </div>
 
-      {/* Period Tabs */}
-      <div className="flex gap-2">
-        {(Object.keys(periodLabels) as LeaderboardPeriod[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={cn(
-              'px-3 py-1 text-sm rounded-full border transition-colors',
-              period === p
-                ? 'border-accent text-accent bg-amber-50 dark:bg-amber-950'
-                : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:border-neutral-400'
-            )}
-          >
-            {periodLabels[p]}
-          </button>
-        ))}
-      </div>
+      {/* Period Tabs — hidden for reviewers leaderboard */}
+      {type !== 'reviewers' && (
+        <div className="flex gap-2">
+          {(Object.keys(periodLabels) as LeaderboardPeriod[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={cn(
+                'px-3 py-1 text-sm rounded-full border transition-colors',
+                period === p
+                  ? 'border-accent text-accent bg-amber-50 dark:bg-amber-950'
+                  : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:border-neutral-400'
+              )}
+            >
+              {periodLabels[p]}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Leaderboard */}
       {loading ? (
@@ -181,10 +186,19 @@ export default function LeaderboardPage() {
                 <span className="text-xs text-neutral-500 dark:text-neutral-400">{entry.level_title}</span>
               </div>
 
-              {/* XP */}
+              {/* Score */}
               <div className="text-right flex-shrink-0">
-                <p className="font-bold text-sm text-accent">{entry.xp.toLocaleString()}</p>
-                <p className="text-xs text-neutral-500">XP</p>
+                {type === 'reviewers' ? (
+                  <>
+                    <p className="font-bold text-sm text-accent">{(entry.helpful_votes ?? 0).toLocaleString()}</p>
+                    <p className="text-xs text-neutral-500">{entry.review_count ?? 0} reviews</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold text-sm text-accent">{entry.xp.toLocaleString()}</p>
+                    <p className="text-xs text-neutral-500">XP</p>
+                  </>
+                )}
               </div>
             </div>
           ))}

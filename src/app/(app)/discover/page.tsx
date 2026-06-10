@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { BookSearch } from '@/components/books/BookSearch';
 import { MOOD_TAGS } from '@/constants/config';
+import { getRedisClient } from '@/lib/redis';
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Metadata } from 'next';
@@ -229,6 +230,86 @@ async function getRecommendedBooks(userId: string) {
   }));
 }
 
+interface FollowedAuthorBook {
+  id: string;
+  title: string;
+  author_name: string;
+  cover_url: string | null;
+}
+
+async function getNewReleasesFromFollowedAuthors(userId?: string): Promise<FollowedAuthorBook[]> {
+  if (!userId) return [];
+
+  const supabase = createClient();
+
+  const { data: follows } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', userId);
+
+  if (!follows || follows.length === 0) return [];
+
+  const followingIds = follows.map((f) => f.following_id);
+
+  const { data: authors } = await supabase
+    .from('users')
+    .select('display_name')
+    .in('id', followingIds)
+    .eq('is_verified_author', true);
+
+  if (!authors || authors.length === 0) return [];
+
+  const authorNames = authors.map((a) => a.display_name).filter(Boolean) as string[];
+
+  // Use ilike ANY with a manual OR approach — Supabase doesn't expose ilike any directly,
+  // so we build a filter string for the PostgREST `or` operator.
+  const orFilter = authorNames
+    .map((name) => `author_name.ilike.${name}`)
+    .join(',');
+
+  const { data: books } = await supabase
+    .from('books')
+    .select('id, title, author_name, cover_url')
+    .or(orFilter)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  return books ?? [];
+}
+
+async function getShelfOverlapRecommendations(userId?: string): Promise<FollowedAuthorBook[]> {
+  if (!userId) return [];
+
+  try {
+    const redis = getRedisClient();
+    const cacheKey = `recommendations:user:${userId}`;
+    const raw = await redis.get(cacheKey);
+    if (!raw) return [];
+
+    let bookIds: string[];
+    try {
+      bookIds = JSON.parse(raw) as string[];
+    } catch {
+      return [];
+    }
+
+    if (!Array.isArray(bookIds) || bookIds.length === 0) return [];
+
+    const supabase = createClient();
+    const { data: books } = await supabase
+      .from('books')
+      .select('id, title, author_name, cover_url')
+      .in('id', bookIds);
+
+    // Preserve order from Redis
+    return bookIds
+      .map((id) => books?.find((b) => b.id === id))
+      .filter((b): b is FollowedAuthorBook => b != null);
+  } catch {
+    return [];
+  }
+}
+
 function BookCard({ item }: { item: TrendingBook }) {
   if (!item.book) return null;
   return (
@@ -274,12 +355,14 @@ export default async function DiscoverPage() {
     recommendedBooks = await getRecommendedBooks(user.id);
   }
 
-  const [trendingGlobal, trendingNational, promotedBooks, hiddenGems, topCreators] = await Promise.all([
+  const [trendingGlobal, trendingNational, promotedBooks, hiddenGems, topCreators, newReleasesFromFollowed, shelfOverlapRecs] = await Promise.all([
     getTrendingBooks(),
     userCountry ? getTrendingBooks(userCountry) : Promise.resolve([]),
     getPromotedBooks(),
     getHiddenGems(),
     getTopCreators(),
+    getNewReleasesFromFollowedAuthors(user?.id),
+    getShelfOverlapRecommendations(user?.id),
   ]);
 
   return (
@@ -403,7 +486,12 @@ export default async function DiscoverPage() {
 
       {/* Browse by Mood */}
       <section>
-        <h2 className="font-display text-xl font-bold mb-4">Browse by Mood</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-xl font-bold">Browse by Mood</h2>
+          <Link href="/discover/mood-ai" className="text-sm text-accent hover:underline flex items-center gap-1">
+            ✨ AI Mood Search
+          </Link>
+        </div>
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
           {MOOD_TAGS.map((tag) => (
             <Link
@@ -446,6 +534,62 @@ export default async function DiscoverPage() {
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-semibold text-accent">{creator.want_to_read_score}</p>
                   <p className="text-xs text-muted-foreground">want-to-reads</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* New Releases from Authors You Follow */}
+      {user && newReleasesFromFollowed.length > 0 && (
+        <section>
+          <h2 className="font-display text-xl font-bold mb-4">New Releases from Authors You Follow</h2>
+          <div className="grid grid-cols-5 gap-3">
+            {newReleasesFromFollowed.map((book) => (
+              <Link
+                key={book.id}
+                href={`/book/${book.id}`}
+                className="flex flex-col gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="relative w-full aspect-[2/3] rounded-md overflow-hidden bg-neutral-200 dark:bg-neutral-700">
+                  {book.cover_url ? (
+                    <Image src={book.cover_url} alt={book.title} fill className="object-cover" sizes="120px" />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-4xl">📖</div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold leading-tight line-clamp-2">{book.title}</p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-1">{book.author_name}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Readers Like You Also Loved */}
+      {user && shelfOverlapRecs.length > 0 && (
+        <section>
+          <h2 className="font-display text-xl font-bold mb-4">Readers Like You Also Loved</h2>
+          <div className="grid grid-cols-5 gap-3">
+            {shelfOverlapRecs.map((book) => (
+              <Link
+                key={book.id}
+                href={`/book/${book.id}`}
+                className="flex flex-col gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="relative w-full aspect-[2/3] rounded-md overflow-hidden bg-neutral-200 dark:bg-neutral-700">
+                  {book.cover_url ? (
+                    <Image src={book.cover_url} alt={book.title} fill className="object-cover" sizes="120px" />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-4xl">📚</div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold leading-tight line-clamp-2">{book.title}</p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-1">{book.author_name}</p>
                 </div>
               </Link>
             ))}

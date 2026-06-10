@@ -62,6 +62,103 @@
     "streak": "{days}-Tage-Serie",
     "level": "Level"
   },
+  "discover": {
+    "newReleasesFromAuthors": "Neuerscheinungen von Autoren, denen du folgst",
+    "readersLikeYou": "Leser wie du mochten auch",
+    "noNewReleases": "Noch keine Neuerscheinungen von Autoren, denen du folgst"
+  },
+  "wrapped": {
+    "favouriteAuthor": "Lieblingsautor",
+    "longestBook": "Längstes Buch",
+    "shortestBook": "Kürzestes Buch",
+    "mostActiveMonth": "Aktivster Monat",
+    "readerTitle": "Dein Lesertitel"
+  },
+  "book": {
+    "affiliateLinks": "Dieses Buch kaufen",
+    "ratingDistribution": "Bewertungsübersicht",
+    "readingLists": "Leselisten mit diesem Buch",
+    "similarBooks": "Leser mochten auch",
+    "helpfulVote": "Hilfreich",
+    "unhelpfulVote": "Nicht hilfreich",
+    "replyCount": "{count} Antworten"
+  },
+  "badges": {
+    "earned": "Abzeichen erhalten",
+    "connector": "Verbinder",
+    "ambassador": "Botschafter",
+    "liravoBuilder": "Liravo-Erbauer"
+  },
+  "notifications": {
+    "readingGoalMilestone": "Du hast {percent}% deines jährlichen Leseziels erreicht!",
+    "accountHardening": "Sichre dein Konto — füge eine E-Mail-Adresse hinzu",
+    "newFollower": "{name} folgt dir jetzt",
+    "likedReview": "{name} hat deine Rezension gemocht",
+    "repliedToReview": "{name} hat auf deine Rezension geantwortet",
+    "mentioned": "{name} hat dich erwähnt",
+    "authorAnnouncement": "{name} hat eine Ankündigung gemacht",
+    "arcGranted": "Deine ARC-Anfrage wurde {status}",
+    "bookPassed": "{name} hat dir ein Buch weitergegeben",
+    "newQuestion": "{name} hat dir eine Frage gestellt"
+  },
+  "readingRoom": {
+    "title": "Leseraum",
+    "discussion": "Diskussion",
+    "milestones": "Meilensteine",
+    "addMilestone": "Meilenstein hinzufügen",
+    "milestoneLocked": "Gesperrt bis {date}",
+    "milestoneUnlocked": "Entsperrt",
+    "joinRoom": "Raum beitreten",
+    "postPlaceholder": "Sag etwas…",
+    "milestonePlaceholder": "Kapitelname oder Seitenbereich…",
+    "general": "Allgemein",
+    "chatComingSoon": "Chat demnächst verfügbar"
+  },
+  "passTheBook": {
+    "title": "Das Buch weitergeben",
+    "subtitle": "Gib Bücher in einer Leserkette weiter.",
+    "chains": "Ketten",
+    "directPasses": "Direkte Weitergaben",
+    "startChain": "Kette starten",
+    "passNext": "Weitergeben →",
+    "nominate": "An nächsten Leser weitergeben",
+    "noChains": "Noch keine Ketten. Starte eine mit einem Buch, das du geliebt hast!",
+    "received": "Empfangen",
+    "sent": "Gesendet"
+  },
+  "authorQA": {
+    "title": "Leser-Q&A",
+    "ask": "Frage stellen",
+    "askQuestion": "Eine Frage stellen",
+    "submitQuestion": "Absenden",
+    "questionPlaceholder": "Was hat Sie inspiriert, … zu schreiben?",
+    "questionSubmitted": "Frage eingereicht! Der Autor wird benachrichtigt.",
+    "answerPlaceholder": "Ihre Antwort…",
+    "publishAnswer": "Antwort veröffentlichen",
+    "pendingQuestions": "Ausstehende Fragen",
+    "noQuestions": "Keine unbeantworteten Fragen."
+  },
+  "writingChallenge": {
+    "aiFeedbackTitle": "KI-Schreibfeedback",
+    "aiFeedbackSubtitle": "Erhalte personalisiertes Feedback zu deiner Einreichung (Premium).",
+    "getFeedback": "Feedback erhalten",
+    "analysing": "Wird analysiert…",
+    "communityEntries": "Community-Einträge",
+    "submitEntry": "Eintrag einreichen (+25 XP)",
+    "entrySubmitted": "Eintrag eingereicht! +25 XP verdient."
+  },
+  "leaderboard": {
+    "title": "Bestenliste",
+    "global": "Global",
+    "national": "National",
+    "friends": "Freunde",
+    "topReviewers": "Top-Rezensenten",
+    "weekly": "Wöchentlich",
+    "monthly": "Monatlich",
+    "allTime": "Gesamtzeit",
+    "helpfulVotes": "{count} hilfreiche Stimmen",
+    "reviews": "{count} Rezensionen"
+  },
   "common": {
     "loading": "Laden...",
     "error": "Etwas ist schiefgelaufen",
@@ -78,5 +175,26 @@
     "offline": "Sie sind offline. Einige Funktionen sind möglicherweise nicht verfügbar.",
     "darkMode": "Dunkelmodus",
     "lightMode": "Hellmodus"
+  },
+  "auth": {
+    "signInWithGoogle": "Mit Google anmelden",
+    "signInWithTelegram": "Mit Telegram anmelden",
+    "continueWithGoogle": "Mit Google fortfahren",
+    "continueWithTelegram": "Mit Telegram fortfahren",
+    "orContinueWith": "oder fortfahren mit"
+  },
+  "pushNotifications": {
+    "enable": "Benachrichtigungen aktivieren",
+    "enabled": "Benachrichtigungen aktiviert",
+    "denied": "Benachrichtigungen blockiert. Aktivieren Sie sie in den Browsereinstellungen.",
+    "prompt": "Erhalten Sie Benachrichtigungen über neue Follower, Antworten und Leseziele."
+  },
+  "communityNotes": {
+    "title": "Community-Notizen",
+    "addNote": "Notiz hinzufügen",
+    "placeholder": "Fügen Sie Kontext oder eine Korrektur hinzu (10–500 Zeichen)…",
+    "submitted": "Ihre Notiz wurde zur Überprüfung eingereicht.",
+    "eligibility": "Sie benötigen 50+ Rezensionen, um Community-Notizen beizutragen.",
+    "noNotes": "Noch keine Community-Notizen."
   }
 }

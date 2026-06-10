@@ -40,7 +40,9 @@
     "expo-document-picker": "~13.0.0",
     "date-fns": "^4.1.0",
     "react-native-webview": "13.12.5",
-    "react-native-iap": "^12.16.1"
+    "react-native-iap": "^12.16.1",
+    "expo-notifications": "~0.29.0",
+    "expo-device": "~7.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",

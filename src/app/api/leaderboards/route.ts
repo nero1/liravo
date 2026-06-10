@@ -15,7 +15,7 @@ const LOCALE_TO_COUNTRY_CODE: Record<string, string> = {
 };
 
 const QuerySchema = z.object({
-  type: z.enum(['global', 'national', 'friends']).default('global'),
+  type: z.enum(['global', 'national', 'friends', 'reviewers']).default('global'),
   period: z.enum(['weekly', 'monthly', 'alltime']).default('weekly'),
   locale: z.string().optional(),
 });
@@ -28,6 +28,8 @@ interface LeaderboardEntry {
   avatar_url: string | null;
   xp: number;
   level_title: string;
+  helpful_votes?: number;
+  review_count?: number;
 }
 
 function getLevelTitle(xp: number): string {
@@ -150,6 +152,56 @@ export async function GET(request: NextRequest) {
       xp: u.xp,
       level_title: getLevelTitle(u.xp),
     }));
+  }
+
+  if (type === 'reviewers') {
+    // Top reviewers ranked by total helpful_votes across all their reviews
+    const { data: reviewStats } = await supabase
+      .from('reviews')
+      .select('user_id, helpful_votes')
+      .order('helpful_votes', { ascending: false });
+
+    // Aggregate per user
+    const userMap = new Map<string, { helpful_votes: number; review_count: number }>();
+    for (const row of reviewStats ?? []) {
+      const uid = row.user_id as string;
+      const prev = userMap.get(uid) ?? { helpful_votes: 0, review_count: 0 };
+      userMap.set(uid, {
+        helpful_votes: prev.helpful_votes + ((row.helpful_votes as number) ?? 0),
+        review_count: prev.review_count + 1,
+      });
+    }
+
+    const sorted = [...userMap.entries()]
+      .sort((a, b) => b[1].helpful_votes - a[1].helpful_votes)
+      .slice(0, 50);
+
+    if (sorted.length > 0) {
+      const userIds = sorted.map(([id]) => id);
+      const { data: profiles } = await supabase
+        .from('users')
+        .select('id, username, display_name, avatar_url, xp')
+        .in('id', userIds);
+
+      const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+      entries = sorted
+        .map(([uid, stats], i) => {
+          const p = profileMap.get(uid);
+          if (!p) return null;
+          return {
+            rank: i + 1,
+            id: p.id,
+            username: p.username,
+            display_name: p.display_name,
+            avatar_url: p.avatar_url,
+            xp: p.xp,
+            level_title: getLevelTitle(p.xp),
+            helpful_votes: stats.helpful_votes,
+            review_count: stats.review_count,
+          };
+        })
+        .filter((e): e is LeaderboardEntry => e !== null);
+    }
   }
 
   await redis.set(cacheKey, JSON.stringify(entries), { ex: CACHE_TTL });

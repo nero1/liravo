@@ -12,7 +12,24 @@ export const dynamic = 'force-dynamic';
 const BodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+  hcaptchaToken: z.string().optional(),
 });
+
+async function verifyHcaptcha(token: string): Promise<boolean> {
+  const secret = process.env.HCAPTCHA_SECRET_KEY;
+  if (!secret) return true; // Skip if not configured
+  try {
+    const res = await fetch('https://hcaptcha.com/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret, response: token }),
+    });
+    const data = await res.json() as { success: boolean };
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request: Request) {
   if (!isDirectPostgres()) {
@@ -37,7 +54,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Email and password (min 8 chars) are required' }, { status: 400 });
   }
 
-  const { email, password } = parsed.data;
+  const { email, password, hcaptchaToken } = parsed.data;
+
+  // Verify hCaptcha if secret is configured
+  if (process.env.HCAPTCHA_SECRET_KEY) {
+    if (!hcaptchaToken) {
+      return NextResponse.json({ error: 'Human verification required' }, { status: 400 });
+    }
+    const captchaOk = await verifyHcaptcha(hcaptchaToken);
+    if (!captchaOk) {
+      return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 400 });
+    }
+  }
   const supabase = createServiceClient();
 
   // Check email not already taken
@@ -54,10 +82,29 @@ export async function POST(request: Request) {
   const password_hash = await bcrypt.hash(password, 12);
   const id = crypto.randomUUID();
 
+  // Generate unique 12-digit referral code
+  let referralCode: string;
+  do {
+    referralCode = String(Math.floor(Math.random() * 1_000_000_000_000)).padStart(12, '0');
+    const { data: codeCheck } = await supabase
+      .from('users')
+      .select('id')
+      .eq('referral_code', referralCode)
+      .maybeSingle();
+    if (!codeCheck) break;
+  } while (true);
+
+  // Derive username from email prefix
+  const emailPrefix = email.split('@')[0].replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+  const username = `${emailPrefix}_${id.slice(0, 6)}`;
+
   const { error } = await supabase.from('users').insert({
     id,
     email,
     password_hash,
+    username,
+    display_name: emailPrefix,
+    referral_code: referralCode,
     created_at: new Date().toISOString(),
   });
 
