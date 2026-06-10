@@ -141,7 +141,7 @@ export async function POST(req: Request) {
           const Decimal = (await import('decimal.js')).default;
           const gross = new Decimal(sub.amount);
           const platformFee = gross.times('0.10'); // 10% platform fee
-          const commission = platformFee.times('0.10'); // 10% of platform's gross take
+          const commission = gross.times('0.10'); // 10% of gross transaction amount
 
           // Use upsert with onConflict to achieve idempotent insert
           await (supabase.from('referral_commissions') as unknown as {

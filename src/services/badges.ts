@@ -89,6 +89,19 @@ const SPEED_BADGES: BadgeDefinition[] = [
 const REVIEW_BADGES: BadgeDefinition[] = [
   { id: 'first_review', name: 'First Review', description: 'Wrote your first review', xp_reward: 50, icon: '✍️', trigger: 'review' },
   { id: 'shelf_builder', name: 'Shelf Builder', description: 'Created 5 custom shelves', xp_reward: 75, icon: '🗂️', trigger: 'create_shelf' },
+  { id: 'critic_10', name: 'Junior Critic', description: 'Wrote 10 reviews', xp_reward: 100, icon: '🖊️', trigger: 'review' },
+  { id: 'critic_50', name: 'Senior Critic', description: 'Wrote 50 reviews', xp_reward: 300, icon: '📋', trigger: 'review' },
+  { id: 'helpful_10', name: 'Helpful Reader', description: 'Received 10 helpful votes on reviews', xp_reward: 100, icon: '👍', trigger: 'review' },
+  { id: 'helpful_50', name: 'Trusted Voice', description: 'Received 50 helpful votes on reviews', xp_reward: 300, icon: '🗣️', trigger: 'review' },
+];
+
+// ─── Seasonal badges ──────────────────────────────────────────────────────────
+export const SEASONAL_BADGE_DEFINITIONS: BadgeDefinition[] = [
+  { id: 'winter_reader_2024', name: 'Winter Reader 2024', description: 'Read 3 books during Winter Reading Challenge 2024', xp_reward: 200, icon: '❄️', trigger: 'seasonal' },
+  { id: 'summer_bookworm_2025', name: 'Summer Bookworm 2025', description: 'Read 5 books during Summer Reading Challenge 2025', xp_reward: 250, icon: '☀️', trigger: 'seasonal' },
+  { id: 'readathon_2025', name: 'Readathon Champion 2025', description: 'Completed the 2025 annual readathon', xp_reward: 500, icon: '🏅', trigger: 'seasonal' },
+  { id: 'spooky_reader_oct', name: 'Spooky Reader', description: 'Read 2 horror books during October', xp_reward: 150, icon: '🎃', trigger: 'seasonal' },
+  { id: 'cozy_winter_reader', name: 'Cozy Winter Reader', description: 'Read during the holiday cozy reading event', xp_reward: 150, icon: '🕯️', trigger: 'seasonal' },
 ];
 
 export const BADGE_DEFINITIONS: BadgeDefinition[] = [
@@ -99,6 +112,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   ...WRITING_BADGES,
   ...SPEED_BADGES,
   ...REVIEW_BADGES,
+  ...SEASONAL_BADGE_DEFINITIONS,
 ];
 
 // ─── Helper types ─────────────────────────────────────────────────────────────
@@ -157,6 +171,24 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
       case 'first_review': {
         const { count } = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
         qualifies = (count ?? 0) >= 1; break;
+      }
+      case 'critic_10': {
+        const { count } = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        qualifies = (count ?? 0) >= 10; break;
+      }
+      case 'critic_50': {
+        const { count } = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        qualifies = (count ?? 0) >= 50; break;
+      }
+      case 'helpful_10': {
+        const { data: rv } = await supabase.from('reviews').select('helpful_votes').eq('user_id', userId);
+        const total = (rv ?? []).reduce((s: number, r: { helpful_votes?: number }) => s + (r.helpful_votes ?? 0), 0);
+        qualifies = total >= 10; break;
+      }
+      case 'helpful_50': {
+        const { data: rv } = await supabase.from('reviews').select('helpful_votes').eq('user_id', userId);
+        const total = (rv ?? []).reduce((s: number, r: { helpful_votes?: number }) => s + (r.helpful_votes ?? 0), 0);
+        qualifies = total >= 50; break;
       }
 
       // ── Social: following ──
@@ -223,7 +255,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Writing: first draft (writing challenge) ──
       case 'first_draft': {
-        const { count } = await supabase.from('writing_challenge_entries').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count } = await supabase.from('writing_challenge_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
         qualifies = (count ?? 0) >= 1; break;
       }
 
@@ -236,7 +268,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
       // ── Prolific Writer (10k words) ──
       case 'prolific_writer': {
         const { data: pSubs } = await supabase.from('prompt_submissions').select('word_count').eq('user_id', userId);
-        const { data: cEntries } = await supabase.from('writing_challenge_entries').select('word_count').eq('user_id', userId);
+        const { data: cEntries } = await supabase.from('writing_challenge_submissions').select('word_count').eq('user_id', userId);
         const total = (pSubs ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0)
           + (cEntries ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0);
         qualifies = total >= 10000; break;
@@ -374,4 +406,23 @@ export async function incrementWritingStreak(userId: string): Promise<void> {
 
   await supabase.from('users').update(updates as never).eq('id', userId);
   await checkAndAwardBadges(userId, 'writing_streak');
+}
+
+// ── Award a seasonal badge to a specific user (called from admin endpoint) ────
+export async function awardSeasonalBadge(userId: string, badgeId: string): Promise<{ ok: boolean; error?: string }> {
+  const badge = SEASONAL_BADGE_DEFINITIONS.find((b) => b.id === badgeId);
+  if (!badge) return { ok: false, error: 'Unknown seasonal badge' };
+  const supabase = createServiceClient();
+  await awardBadge(supabase, userId, badge);
+  return { ok: true };
+}
+
+// ── Bulk-award a seasonal badge to all qualifying users (called from admin) ───
+export async function bulkAwardSeasonalBadge(badgeId: string, userIds: string[]): Promise<{ awarded: number }> {
+  let awarded = 0;
+  for (const uid of userIds) {
+    const result = await awardSeasonalBadge(uid, badgeId);
+    if (result.ok) awarded++;
+  }
+  return { awarded };
 }

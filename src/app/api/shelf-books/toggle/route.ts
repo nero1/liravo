@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { getRedisClient } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,16 @@ export async function POST(request: NextRequest) {
       book_id: bookId,
       user_id: user.id,
     }, { onConflict: 'shelf_id,book_id' });
+  }
+
+  // Invalidate taste profile cache when a book is added to have_read shelf
+  if (action === 'add' && shelf.default_type === 'have_read') {
+    try {
+      const redis = getRedisClient();
+      await redis.del(`taste_profile:${user.id}`);
+    } catch {
+      // Non-critical
+    }
   }
 
   return NextResponse.json({ ok: true, defaultType: shelf.default_type });

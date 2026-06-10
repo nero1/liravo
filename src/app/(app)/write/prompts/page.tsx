@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 interface WritingPrompt {
   id: string;
@@ -17,6 +18,18 @@ interface SubmitState {
   success: boolean;
 }
 
+interface LeaderEntry {
+  rank: number;
+  user_id: string;
+  display_name: string;
+  username: string;
+  avatar_url: string | null;
+  xp: number;
+  submissions_count: number;
+}
+
+type LBPeriod = 'weekly' | 'monthly' | 'all_time';
+
 export default function PromptsPage() {
   const [todayPrompt, setTodayPrompt] = useState<WritingPrompt | null>(null);
   const [pastPrompts, setPastPrompts] = useState<WritingPrompt[]>([]);
@@ -29,6 +42,10 @@ export default function PromptsPage() {
     success: false,
   });
 
+  const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
+  const [lbPeriod, setLbPeriod] = useState<LBPeriod>('monthly');
+  const [lbLoading, setLbLoading] = useState(false);
+
   useEffect(() => {
     fetch('/api/write/prompts')
       .then((r) => r.json())
@@ -38,6 +55,14 @@ export default function PromptsPage() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    setLbLoading(true);
+    fetch(`/api/write/prompts/leaderboard?period=${lbPeriod}`)
+      .then((r) => r.json())
+      .then((d) => setLeaderboard(d.leaderboard ?? []))
+      .finally(() => setLbLoading(false));
+  }, [lbPeriod]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,6 +91,12 @@ export default function PromptsPage() {
       </div>
     );
   }
+
+  const PERIODS: { key: LBPeriod; label: string }[] = [
+    { key: 'weekly', label: 'This Week' },
+    { key: 'monthly', label: 'This Month' },
+    { key: 'all_time', label: 'All Time' },
+  ];
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
@@ -149,6 +180,59 @@ export default function PromptsPage() {
           </p>
         </div>
       )}
+
+      {/* Leaderboard */}
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold">Top Writers</h2>
+          <div className="flex gap-1">
+            {PERIODS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setLbPeriod(key)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${lbPeriod === key ? 'bg-accent text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {lbLoading ? (
+          <div className="animate-pulse space-y-2">
+            {[1, 2, 3].map((i) => <div key={i} className="h-12 bg-muted rounded-lg" />)}
+          </div>
+        ) : leaderboard.length === 0 ? (
+          <p className="text-muted-foreground text-sm text-center py-6">No submissions yet this period.</p>
+        ) : (
+          <div className="space-y-2">
+            {leaderboard.map((entry) => (
+              <div key={entry.user_id} className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+                <span className={`w-6 text-center text-sm font-bold ${entry.rank === 1 ? 'text-yellow-500' : entry.rank === 2 ? 'text-gray-400' : entry.rank === 3 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                  {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
+                </span>
+                {entry.avatar_url ? (
+                  <Image src={entry.avatar_url} alt={entry.display_name} width={32} height={32} className="rounded-full object-cover" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent font-bold text-sm">
+                    {entry.display_name[0]}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <Link href={`/user/${entry.username}`} className="text-sm font-medium hover:underline truncate block">
+                    {entry.display_name}
+                  </Link>
+                  <p className="text-xs text-muted-foreground">{entry.xp.toLocaleString()} XP</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-accent">{entry.submissions_count}</p>
+                  <p className="text-xs text-muted-foreground">prompt{entry.submissions_count !== 1 ? 's' : ''}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Past prompts */}
       {pastPrompts.length > 0 && (

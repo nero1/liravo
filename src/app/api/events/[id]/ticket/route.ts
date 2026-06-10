@@ -137,7 +137,7 @@ export async function POST(
       .single();
 
     if (buyerUser?.referred_by) {
-      const commissionAmount = platformFee.times('0.10').toDecimalPlaces(2);
+      const commissionAmount = price.times('0.10').toDecimalPlaces(2);
       await supabase.from('referral_commissions').insert({
         referrer_id: buyerUser.referred_by,
         referred_user_id: user.id,

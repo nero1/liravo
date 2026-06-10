@@ -8,6 +8,7 @@ import { classifyTone } from '@/lib/tone-classifier';
 import { checkSpam } from '@/lib/spam-detection';
 import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { getRedisClient } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,6 +103,14 @@ export async function POST(
 
   // Award XP for writing a review
   await awardXP(user.id, XP_CONFIG.SHORT_REVIEW, 'write_review');
+
+  // Invalidate taste profile cache so next request regenerates with fresh data
+  try {
+    const redis = getRedisClient();
+    await redis.del(`taste_profile:${user.id}`);
+  } catch {
+    // Non-critical
+  }
 
   // Upsert book_community_stats if table exists — best effort
   try {

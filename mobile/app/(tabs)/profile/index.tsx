@@ -77,10 +77,13 @@ export default function ProfileScreen() {
           <View className="gap-1">
             {[
               { label: '📊 Reading Stats', path: '/stats' },
+              { label: '🎯 Reading Goal', path: '/reading-goals' },
+              { label: '📚 ARCs', path: '/arcs' },
               { label: '🏆 Leaderboard', path: '/leaderboard' },
               { label: '📝 My Lists', path: '/lists' },
               { label: '💬 My Quotes', path: '/quotes' },
               { label: '🎁 Referral', path: '/referral' },
+              ...(user.is_verified_author ? [{ label: '📖 My ARCs', path: '/author/arcs' }] : []),
               ...(user.is_creator ? [{ label: '💰 Earnings', path: '/earnings' }] : []),
               ...(user.is_moderator ? [{ label: '🛡️ Moderation', path: '/moderation/reports' }] : []),
               ...(user.is_admin ? [{ label: '⚙️ Admin Panel', path: '/admin' }] : []),
