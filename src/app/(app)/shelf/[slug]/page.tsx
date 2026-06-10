@@ -40,10 +40,22 @@ export default async function ShelfDetailPage({ params }: ShelfPageProps) {
     .from('shelf_books')
     .select(`
       id, progress_pages, progress_percent, started_at, finished_at, added_at,
-      books:book_id (id, title, author_name, cover_url, page_count, average_rating)
+      books:book_id (id, title, author_name, cover_url, page_count, average_rating, isbn_13)
     `)
     .eq('shelf_id', shelf.id)
     .order('added_at', { ascending: false });
+
+  // Build "Buy All on Amazon" URL for want_to_read shelves with ISBN-13s
+  const booksWithIsbn = (items ?? [])
+    .map((i) => (i.books as unknown as { isbn_13?: string | null } | null)?.isbn_13)
+    .filter((isbn): isbn is string => !!isbn);
+  const buyAllUrl =
+    shelf.default_type === 'want_to_read' &&
+    booksWithIsbn.length > 0 &&
+    booksWithIsbn.length <= 10 &&
+    booksWithIsbn.length === (items?.length ?? 0)
+      ? `https://www.amazon.com/s?k=${booksWithIsbn.join('+')}&tag=liravo-20`
+      : null;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
@@ -56,6 +68,16 @@ export default async function ShelfDetailPage({ params }: ShelfPageProps) {
         <p className="text-xs text-muted-foreground mt-1">
           {items?.length ?? 0} books · {shelf.is_public ? 'Public' : 'Private'}
         </p>
+        {buyAllUrl && (
+          <a
+            href={buyAllUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 transition-colors"
+          >
+            🛒 Buy All on Amazon
+          </a>
+        )}
       </div>
 
       {(!items || items.length === 0) ? (

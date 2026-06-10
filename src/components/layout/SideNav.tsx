@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Compass, Feather, BookOpen, User, Bell, Rss, Shield, BarChart2, MessageCircle } from 'lucide-react';
+import { Home, Compass, Feather, BookOpen, User, Bell, Rss, Shield, BarChart2, MessageCircle, Target, BookMarked } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
@@ -79,6 +79,47 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
             Reader Q&A
           </Link>
         </>
+      )}
+
+      {/* Reader utilities */}
+      <Link
+        href="/reading-goals"
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+          pathname.startsWith('/reading-goals')
+            ? 'bg-accent/10 text-accent'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        )}
+      >
+        <Target size={20} strokeWidth={pathname.startsWith('/reading-goals') ? 2.5 : 1.75} />
+        Reading Goal
+      </Link>
+      <Link
+        href="/arcs"
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+          pathname.startsWith('/arcs')
+            ? 'bg-accent/10 text-accent'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        )}
+      >
+        <BookMarked size={20} strokeWidth={pathname.startsWith('/arcs') ? 2.5 : 1.75} />
+        ARCs
+      </Link>
+
+      {isAuthor && (
+        <Link
+          href="/author/arcs"
+          className={cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+            pathname.startsWith('/author/arcs')
+              ? 'bg-accent/10 text-accent'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          )}
+        >
+          <BookMarked size={20} strokeWidth={pathname.startsWith('/author/arcs') ? 2.5 : 1.75} />
+          My ARCs
+        </Link>
       )}
 
       {isModerator && (
