@@ -46,6 +46,9 @@ export default function ChallengeDetailPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
+  const [aiFeedbackLoading, setAiFeedbackLoading] = useState(false);
+  const [submittedBody, setSubmittedBody] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -92,8 +95,28 @@ export default function ChallengeDetailPage() {
       setSubmitError(data.error ?? 'Submission failed');
     } else {
       setSubmitSuccess(true);
+      setSubmittedBody(form.body);
     }
     setSubmitting(false);
+  }
+
+  async function handleGetAiFeedback() {
+    if (!submittedBody) return;
+    setAiFeedbackLoading(true);
+    setAiFeedback(null);
+    try {
+      const res = await fetch('/api/write/ai-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: submittedBody, type: 'overall' }),
+      });
+      const data = await res.json() as { feedback?: string; error?: string };
+      if (res.ok) setAiFeedback(data.feedback ?? null);
+      else setAiFeedback(`Could not get feedback: ${data.error ?? 'Unknown error'}`);
+    } catch {
+      setAiFeedback('Failed to load AI feedback. Please try again.');
+    }
+    setAiFeedbackLoading(false);
   }
 
   if (loading) {
@@ -232,10 +255,36 @@ export default function ChallengeDetailPage() {
       <div>
         <h2 className="font-semibold text-lg mb-3">Submit Entry (+25 XP)</h2>
         {submitSuccess ? (
-          <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
-            <p className="text-green-800 dark:text-green-200 font-medium">
-              Entry submitted! +25 XP earned.
-            </p>
+          <div className="space-y-4">
+            <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
+              <p className="text-green-800 dark:text-green-200 font-medium">
+                Entry submitted! +25 XP earned.
+              </p>
+            </div>
+
+            {/* AI Feedback section */}
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-semibold text-sm">AI Writing Feedback</p>
+                  <p className="text-xs text-muted-foreground">Get personalised feedback on your submission (premium).</p>
+                </div>
+                {!aiFeedback && (
+                  <button
+                    onClick={handleGetAiFeedback}
+                    disabled={aiFeedbackLoading}
+                    className="rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 transition-colors flex-shrink-0"
+                  >
+                    {aiFeedbackLoading ? 'Analysing…' : 'Get Feedback'}
+                  </button>
+                )}
+              </div>
+              {aiFeedback && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 p-3">
+                  <p className="text-sm text-amber-900 dark:text-amber-100 whitespace-pre-wrap">{aiFeedback}</p>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">

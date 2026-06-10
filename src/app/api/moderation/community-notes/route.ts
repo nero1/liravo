@@ -55,6 +55,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
   }
 
+  // Eligibility: 50+ reviews, 30+ days old account, no active warnings
+  const [{ count: reviewCount }, { data: profile }] = await Promise.all([
+    supabase.from('reviews').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+    supabase.from('users').select('created_at, is_suspended').eq('id', user.id).single(),
+  ]);
+
+  if ((reviewCount ?? 0) < 50) {
+    return NextResponse.json(
+      { error: 'You need at least 50 reviews to submit community notes.' },
+      { status: 403 }
+    );
+  }
+
+  if (profile?.is_suspended) {
+    return NextResponse.json({ error: 'Your account is suspended.' }, { status: 403 });
+  }
+
+  const accountAgeDays = profile?.created_at
+    ? (Date.now() - new Date(profile.created_at).getTime()) / 86400000
+    : 0;
+
+  if (accountAgeDays < 30) {
+    return NextResponse.json(
+      { error: 'Your account must be at least 30 days old to submit community notes.' },
+      { status: 403 }
+    );
+  }
+
   const serviceSupabase = createServiceClient();
 
   // community_notes table may not be in DB type

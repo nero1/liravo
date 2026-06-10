@@ -91,7 +91,73 @@
   },
   "notifications": {
     "readingGoalMilestone": "You've hit {percent}% of your annual reading goal!",
-    "accountHardening": "Secure your account — add an email address"
+    "accountHardening": "Secure your account — add an email address",
+    "newFollower": "{name} followed you",
+    "likedReview": "{name} liked your review",
+    "repliedToReview": "{name} replied to your review",
+    "mentioned": "{name} mentioned you",
+    "authorAnnouncement": "{name} made an announcement",
+    "arcGranted": "Your ARC application was {status}",
+    "bookPassed": "{name} passed you a book",
+    "newQuestion": "{name} asked you a question"
+  },
+  "readingRoom": {
+    "title": "Reading Room",
+    "discussion": "Discussion",
+    "milestones": "Milestones",
+    "addMilestone": "Add Milestone",
+    "milestoneLocked": "Locked until {date}",
+    "milestoneUnlocked": "Unlocked",
+    "joinRoom": "Join Room",
+    "postPlaceholder": "Say something…",
+    "milestonePlaceholder": "Chapter name or page range…",
+    "general": "General",
+    "chatComingSoon": "Chat coming soon"
+  },
+  "passTheBook": {
+    "title": "Pass the Book",
+    "subtitle": "Pass books along a chain of readers.",
+    "chains": "Chains",
+    "directPasses": "Direct Passes",
+    "startChain": "Start Chain",
+    "passNext": "Pass →",
+    "nominate": "Pass to next reader",
+    "noChains": "No chains yet. Start one by picking a book you loved!",
+    "received": "Received",
+    "sent": "Sent"
+  },
+  "authorQA": {
+    "title": "Reader Q&A",
+    "ask": "Ask",
+    "askQuestion": "Ask a question",
+    "submitQuestion": "Submit",
+    "questionPlaceholder": "What inspired you to write…?",
+    "questionSubmitted": "Question submitted! The author will be notified.",
+    "answerPlaceholder": "Your answer…",
+    "publishAnswer": "Publish Answer",
+    "pendingQuestions": "Pending Questions",
+    "noQuestions": "No unanswered questions."
+  },
+  "writingChallenge": {
+    "aiFeedbackTitle": "AI Writing Feedback",
+    "aiFeedbackSubtitle": "Get personalised feedback on your submission (premium).",
+    "getFeedback": "Get Feedback",
+    "analysing": "Analysing…",
+    "communityEntries": "Community Entries",
+    "submitEntry": "Submit Entry (+25 XP)",
+    "entrySubmitted": "Entry submitted! +25 XP earned."
+  },
+  "leaderboard": {
+    "title": "Leaderboard",
+    "global": "Global",
+    "national": "National",
+    "friends": "Friends",
+    "topReviewers": "Top Reviewers",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "allTime": "All Time",
+    "helpfulVotes": "{count} helpful votes",
+    "reviews": "{count} reviews"
   },
   "common": {
     "loading": "Loading...",

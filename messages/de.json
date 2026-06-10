@@ -91,7 +91,73 @@
   },
   "notifications": {
     "readingGoalMilestone": "Du hast {percent}% deines jährlichen Leseziels erreicht!",
-    "accountHardening": "Sichre dein Konto — füge eine E-Mail-Adresse hinzu"
+    "accountHardening": "Sichre dein Konto — füge eine E-Mail-Adresse hinzu",
+    "newFollower": "{name} folgt dir jetzt",
+    "likedReview": "{name} hat deine Rezension gemocht",
+    "repliedToReview": "{name} hat auf deine Rezension geantwortet",
+    "mentioned": "{name} hat dich erwähnt",
+    "authorAnnouncement": "{name} hat eine Ankündigung gemacht",
+    "arcGranted": "Deine ARC-Anfrage wurde {status}",
+    "bookPassed": "{name} hat dir ein Buch weitergegeben",
+    "newQuestion": "{name} hat dir eine Frage gestellt"
+  },
+  "readingRoom": {
+    "title": "Leseraum",
+    "discussion": "Diskussion",
+    "milestones": "Meilensteine",
+    "addMilestone": "Meilenstein hinzufügen",
+    "milestoneLocked": "Gesperrt bis {date}",
+    "milestoneUnlocked": "Entsperrt",
+    "joinRoom": "Raum beitreten",
+    "postPlaceholder": "Sag etwas…",
+    "milestonePlaceholder": "Kapitelname oder Seitenbereich…",
+    "general": "Allgemein",
+    "chatComingSoon": "Chat demnächst verfügbar"
+  },
+  "passTheBook": {
+    "title": "Das Buch weitergeben",
+    "subtitle": "Gib Bücher in einer Leserkette weiter.",
+    "chains": "Ketten",
+    "directPasses": "Direkte Weitergaben",
+    "startChain": "Kette starten",
+    "passNext": "Weitergeben →",
+    "nominate": "An nächsten Leser weitergeben",
+    "noChains": "Noch keine Ketten. Starte eine mit einem Buch, das du geliebt hast!",
+    "received": "Empfangen",
+    "sent": "Gesendet"
+  },
+  "authorQA": {
+    "title": "Leser-Q&A",
+    "ask": "Frage stellen",
+    "askQuestion": "Eine Frage stellen",
+    "submitQuestion": "Absenden",
+    "questionPlaceholder": "Was hat Sie inspiriert, … zu schreiben?",
+    "questionSubmitted": "Frage eingereicht! Der Autor wird benachrichtigt.",
+    "answerPlaceholder": "Ihre Antwort…",
+    "publishAnswer": "Antwort veröffentlichen",
+    "pendingQuestions": "Ausstehende Fragen",
+    "noQuestions": "Keine unbeantworteten Fragen."
+  },
+  "writingChallenge": {
+    "aiFeedbackTitle": "KI-Schreibfeedback",
+    "aiFeedbackSubtitle": "Erhalte personalisiertes Feedback zu deiner Einreichung (Premium).",
+    "getFeedback": "Feedback erhalten",
+    "analysing": "Wird analysiert…",
+    "communityEntries": "Community-Einträge",
+    "submitEntry": "Eintrag einreichen (+25 XP)",
+    "entrySubmitted": "Eintrag eingereicht! +25 XP verdient."
+  },
+  "leaderboard": {
+    "title": "Bestenliste",
+    "global": "Global",
+    "national": "National",
+    "friends": "Freunde",
+    "topReviewers": "Top-Rezensenten",
+    "weekly": "Wöchentlich",
+    "monthly": "Monatlich",
+    "allTime": "Gesamtzeit",
+    "helpfulVotes": "{count} hilfreiche Stimmen",
+    "reviews": "{count} Rezensionen"
   },
   "common": {
     "loading": "Laden...",
