@@ -135,6 +135,26 @@ export default async function BookPage({ params }: BookPageProps) {
     .order('created_at', { ascending: false })
     .limit(5);
 
+  // Community notes for this book's reviews (feature-flag gated)
+  const { data: communityNotesFlag } = await serviceSupabase
+    .from('feature_flags')
+    .select('enabled')
+    .eq('name', 'community_notes')
+    .single();
+  const communityNotesEnabled = communityNotesFlag?.enabled === true;
+  const { data: communityNotes } = communityNotesEnabled
+    ? await serviceSupabase
+        .from('community_notes')
+        .select('id, note, content_id, created_at')
+        .eq('content_type', 'review')
+        .in('content_id', (reviews ?? []).map((r) => r.id))
+        .eq('status', 'approved')
+        .limit(30)
+    : { data: [] };
+  const notesByReviewId = Object.fromEntries(
+    (communityNotes ?? []).map((n: { id: string; note: string; content_id: string; created_at: string }) => [n.content_id, n])
+  );
+
   // Reading lists that include this book
   const { data: listBooks } = await serviceSupabase
     .from('reading_list_books')
@@ -422,6 +442,14 @@ export default async function BookPage({ params }: BookPageProps) {
                       {review.mood_tags.map((tag: string) => (
                         <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300">{tag}</span>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Community note */}
+                  {communityNotesEnabled && notesByReviewId[review.id] && (
+                    <div className="mt-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Community Note</p>
+                      <p className="text-xs text-amber-800 dark:text-amber-300">{notesByReviewId[review.id].note}</p>
                     </div>
                   )}
 
