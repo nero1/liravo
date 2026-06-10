@@ -12,7 +12,24 @@ export const dynamic = 'force-dynamic';
 const BodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+  hcaptchaToken: z.string().optional(),
 });
+
+async function verifyHcaptcha(token: string): Promise<boolean> {
+  const secret = process.env.HCAPTCHA_SECRET_KEY;
+  if (!secret) return true; // Skip if not configured
+  try {
+    const res = await fetch('https://hcaptcha.com/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret, response: token }),
+    });
+    const data = await res.json() as { success: boolean };
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request: Request) {
   if (!isDirectPostgres()) {
@@ -37,7 +54,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Email and password (min 8 chars) are required' }, { status: 400 });
   }
 
-  const { email, password } = parsed.data;
+  const { email, password, hcaptchaToken } = parsed.data;
+
+  // Verify hCaptcha if secret is configured
+  if (process.env.HCAPTCHA_SECRET_KEY) {
+    if (!hcaptchaToken) {
+      return NextResponse.json({ error: 'Human verification required' }, { status: 400 });
+    }
+    const captchaOk = await verifyHcaptcha(hcaptchaToken);
+    if (!captchaOk) {
+      return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 400 });
+    }
+  }
   const supabase = createServiceClient();
 
   // Check email not already taken

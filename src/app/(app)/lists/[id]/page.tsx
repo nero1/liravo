@@ -52,15 +52,21 @@ export default async function ListDetailPage({ params }: Props) {
     .order('added_at', { ascending: false });
 
   const bookIds = ((listBooks ?? []) as { book_id: string }[]).map((b) => b.book_id);
-  let books: Array<{ id: string; title: string; author_name: string; cover_url: string | null }> = [];
+  let books: Array<{ id: string; title: string; author_name: string; cover_url: string | null; isbn_13: string | null }> = [];
   if (bookIds.length > 0) {
     const { data } = await supabase
       .from('books')
-      .select('id, title, author_name, cover_url')
+      .select('id, title, author_name, cover_url, isbn_13')
       .in('id', bookIds);
     books = data ?? [];
     books.sort((a, b) => bookIds.indexOf(a.id) - bookIds.indexOf(b.id));
   }
+
+  // Build "Buy all on Amazon" URL if all books have ISBNs
+  const booksWithIsbn = books.filter((b) => b.isbn_13);
+  const buyAllAmazonUrl = booksWithIsbn.length === books.length && books.length > 0 && books.length <= 10
+    ? `https://www.amazon.com/s?k=${booksWithIsbn.map((b) => b.isbn_13).join('+')}&tag=liravo-20`
+    : null;
 
   // Is the current user the owner?
   const isOwner = user?.id === list.user_id;
@@ -113,6 +119,21 @@ export default async function ListDetailPage({ params }: Props) {
           </div>
         )}
       </div>
+
+      {/* Buy All on Amazon CTA */}
+      {buyAllAmazonUrl && (
+        <a
+          href={buyAllAmazonUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-[#FF9900] text-black font-semibold text-sm hover:opacity-90 transition-opacity mb-4"
+          onClick={async () => {
+            await fetch('/api/books/click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ linkType: 'amazon_bulk_list', storeName: 'Amazon', isAffiliate: true }) });
+          }}
+        >
+          🛒 Buy All on Amazon
+        </a>
+      )}
 
       {/* Books */}
       {books.length === 0 ? (

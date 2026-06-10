@@ -128,7 +128,31 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Scaffold: return mock payment redirect URL
+  // Credit 10% referral commission to the buyer's referrer, if any
+  if (price.greaterThan(0)) {
+    const { data: buyerUser } = await supabase
+      .from('users')
+      .select('referred_by')
+      .eq('id', user.id)
+      .single();
+
+    if (buyerUser?.referred_by) {
+      const commissionAmount = platformFee.times('0.10').toDecimalPlaces(2);
+      await supabase.from('referral_commissions').insert({
+        referrer_id: buyerUser.referred_by,
+        referred_user_id: user.id,
+        transaction_type: 'event_ticket',
+        transaction_id: ticket.id,
+        gross_amount: price.toFixed(2),
+        commission_rate: 0.10,
+        commission_amount: commissionAmount.toFixed(2),
+        currency: event.currency ?? 'USD',
+        status: 'pending',
+      });
+    }
+  }
+
+  // Return payment redirect URL
   return NextResponse.json({
     ticketId: ticket.id,
     redirectUrl: `/events/${params.id}/payment-pending?ticket=${ticket.id}`,

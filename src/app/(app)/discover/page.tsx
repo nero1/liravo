@@ -486,7 +486,12 @@ export default async function DiscoverPage() {
 
       {/* Browse by Mood */}
       <section>
-        <h2 className="font-display text-xl font-bold mb-4">Browse by Mood</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-xl font-bold">Browse by Mood</h2>
+          <Link href="/discover/mood-ai" className="text-sm text-accent hover:underline flex items-center gap-1">
+            ✨ AI Mood Search
+          </Link>
+        </div>
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
           {MOOD_TAGS.map((tag) => (
             <Link

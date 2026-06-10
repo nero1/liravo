@@ -6,13 +6,34 @@ import { createDoSession, SESSION_COOKIE, SESSION_TTL } from '@/lib/db/unified-c
 import { isDirectPostgres } from '@/lib/db/provider';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
+import { getRedisClient } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
+
+const FAILED_ATTEMPTS_TTL = 15 * 60; // 15 minutes
+const CAPTCHA_THRESHOLD = 3;
 
 const BodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  hcaptchaToken: z.string().optional(),
 });
+
+async function verifyHcaptcha(token: string): Promise<boolean> {
+  const secret = process.env.HCAPTCHA_SECRET_KEY;
+  if (!secret) return true;
+  try {
+    const res = await fetch('https://hcaptcha.com/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret, response: token }),
+    });
+    const data = await res.json() as { success: boolean };
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request: Request) {
   if (!isDirectPostgres()) {
@@ -37,7 +58,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
 
-  const { email, password } = parsed.data;
+  const { email, password, hcaptchaToken } = parsed.data;
+
+  // Check failed attempts count; require captcha if >= CAPTCHA_THRESHOLD
+  const redis = getRedisClient();
+  const failKey = `auth:fail:${ip}`;
+  const failCountStr = await redis.get(failKey);
+  const failCount = failCountStr ? parseInt(failCountStr, 10) : 0;
+
+  if (process.env.HCAPTCHA_SECRET_KEY && failCount >= CAPTCHA_THRESHOLD) {
+    if (!hcaptchaToken) {
+      return NextResponse.json({ error: 'Human verification required', requireCaptcha: true }, { status: 400 });
+    }
+    const captchaOk = await verifyHcaptcha(hcaptchaToken);
+    if (!captchaOk) {
+      return NextResponse.json({ error: 'Human verification failed. Please try again.', requireCaptcha: true }, { status: 400 });
+    }
+  }
+
   const supabase = createServiceClient();
 
   const { data: user } = await supabase
@@ -49,22 +87,35 @@ export async function POST(request: Request) {
   // Timing-safe: always hash compare even on not-found to prevent enumeration
   if (!user || user.deleted_at) {
     await bcrypt.compare(password, '$2b$12$invalidhashfortimingnormalization000000000000000000');
-    return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    await redis.incr(failKey);
+    await redis.expire(failKey, FAILED_ATTEMPTS_TTL);
+    const newFail = failCount + 1;
+    return NextResponse.json({
+      error: 'Invalid email or password',
+      requireCaptcha: process.env.HCAPTCHA_SECRET_KEY ? newFail >= CAPTCHA_THRESHOLD : false,
+    }, { status: 401 });
   }
 
   if (!user.password_hash) {
-    // Existing Supabase user migrated to DO mode without a password set
     return NextResponse.json({ error: 'PASSWORD_RESET_REQUIRED' }, { status: 403 });
   }
 
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
-    return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    await redis.incr(failKey);
+    await redis.expire(failKey, FAILED_ATTEMPTS_TTL);
+    const newFail = failCount + 1;
+    return NextResponse.json({
+      error: 'Invalid email or password',
+      requireCaptcha: process.env.HCAPTCHA_SECRET_KEY ? newFail >= CAPTCHA_THRESHOLD : false,
+    }, { status: 401 });
   }
+
+  // Successful login — clear fail counter
+  await redis.del(failKey);
 
   const token = await createDoSession({ id: user.id, email: user.email });
 
-  // Fetch the full user row so mobile clients can bootstrap their state in one round-trip.
   const supabaseForProfile = createServiceClient();
   const { data: profile } = await supabaseForProfile
     .from('users')
@@ -72,7 +123,6 @@ export async function POST(request: Request) {
     .eq('id', user.id)
     .maybeSingle();
 
-  // Return the token in the body so mobile (Bearer-token) clients can store it.
   const response = NextResponse.json({ ok: true, token, user: profile });
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
