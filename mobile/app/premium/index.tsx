@@ -15,14 +15,11 @@ const FEATURES = [
 
 export default function PremiumScreen() {
   const { user } = useAuthStore();
-  const { premiumProduct, purchasing, restoring, subscribe, restorePurchases } = useGooglePlayBilling();
+  const { premiumPrice, purchasing, restoring, subscribe, restorePurchases } = useGooglePlayBilling();
 
   const isPremium = user?.is_premium ?? false;
 
-  // Price comes from the Play Store so it auto-localises to the user's currency
-  const priceLabel = premiumProduct?.subscriptionOfferDetails?.[0]?.pricingPhases?.pricingPhaseList?.[0]?.formattedPrice
-    ?? premiumProduct?.localizedPrice
-    ?? '$4.99';
+  const priceLabel = premiumPrice ?? 'Price unavailable';
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
@@ -47,7 +44,7 @@ export default function PremiumScreen() {
         ) : (
           <Card className="gap-3">
             <Text className="text-2xl font-bold text-foreground text-center">
-              {priceLabel} / month
+              {premiumPrice ? `${premiumPrice} / month` : priceLabel}
             </Text>
             {FEATURES.map((f) => (
               <Text key={f} className="text-foreground">✓ {f}</Text>
@@ -59,7 +56,7 @@ export default function PremiumScreen() {
           <>
             <TouchableOpacity
               onPress={subscribe}
-              disabled={purchasing || restoring}
+              disabled={!premiumPrice || purchasing || restoring}
               className="bg-accent rounded-xl py-4 items-center"
               activeOpacity={0.85}
             >
@@ -67,7 +64,7 @@ export default function PremiumScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text className="text-white font-bold text-base">
-                  Subscribe — {priceLabel} / month
+                  Subscribe — {premiumPrice ? `${premiumPrice} / month` : priceLabel}
                 </Text>
               )}
             </TouchableOpacity>

@@ -11,6 +11,8 @@ async function run(req: Request) {
   const batch = Number(req.headers.get('x-outbox-batch') ?? '50');
   const batchSize = Number.isFinite(batch) ? Math.min(200, Math.max(1, batch)) : 50;
 
+  const {error:expiryError}=await createServiceClient().rpc('expire_subscription_entitlements' as never,{p_limit:200} as never);
+  if (expiryError) throw new Error('Subscription expiry reconciliation failed');
   const [result, cancellations] = await Promise.all([drainOutbox(batchSize), drainSubscriptionCancellations()]);
   const { data, error } = await createServiceClient().rpc('financial_integrity_snapshot' as never);
   if (error) throw new Error('Financial reconciliation failed');

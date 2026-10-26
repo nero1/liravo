@@ -140,11 +140,12 @@ Your backend needs to verify purchase tokens with Google Play's API. This requir
 1. **Google Cloud Console** → select (or create) the same project as your Play Console → **IAM & Admin** → **Service accounts** → **Create service account**.
 2. Name it `play-billing`. Grant it no Cloud IAM roles (not needed). Click **Done**.
 3. Click the service account → **Keys** → **Add key** → **JSON**. Download the key file.
-4. Back in **Play Console** → **Setup** → **API access** → **Link to Google Cloud project** (link the same project). Then under **Service accounts**, grant the play-billing account **Financial data viewer** access.
+4. Back in **Play Console** → **Setup** → **API access** → **Link to Google Cloud project** (link the same project). Then under **Service accounts**, grant the play-billing account **View financial data** and **Manage orders and subscriptions** permissions.
 5. Copy the entire contents of the JSON key file. Open `.env.local` on your server and add:
    ```
    GOOGLE_PLAY_SERVICE_ACCOUNT_KEY={"type":"service_account", ... paste the entire JSON on one line ... }
    GOOGLE_PLAY_PACKAGE_NAME=org.liravo.app
+   GOOGLE_PLAY_PRODUCT_ID=liravo_premium_monthly
    ```
 
 ### Step 4 — Real-time Developer Notifications (RTDN)
@@ -154,21 +155,25 @@ RTDN keeps your database in sync when subscriptions renew, cancel, or expire —
 1. **Google Cloud Console** → **Pub/Sub** → **Topics** → **Create topic**. Name it `play-rtdn`. Copy the full topic name (looks like `projects/your-project/topics/play-rtdn`).
 2. Click the topic → **Subscriptions** → **Create subscription**:
    - Delivery type: **Push**
-   - Endpoint URL: `https://liravo.org/api/mobile/rtdn?secret=YOUR_RTDN_SECRET`
+   - Endpoint URL: `https://liravo.org/api/mobile/rtdn`
+   - Enable **Authentication** with a dedicated push service account. Set its audience to the exact endpoint URL and grant the Pub/Sub service agent permission to mint its OIDC token.
    - Expiration: **Never expire**
 3. **Play Console** → your app → **Monetize** → **Subscriptions** → **Real-time developer notifications** → paste the full Pub/Sub topic name → **Save**.
 4. Add to your server `.env.local`:
    ```
-   GOOGLE_PLAY_RTDN_SECRET=YOUR_RTDN_SECRET
+   GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT_EMAIL=play-push@your-project.iam.gserviceaccount.com
+   GOOGLE_PLAY_RTDN_AUDIENCE=https://liravo.org/api/mobile/rtdn
    ```
-   Use any long random string as the secret (e.g., `openssl rand -hex 32`).
+   Grant `google-play-developer-notifications@system.gserviceaccount.com` Pub/Sub Publisher on the topic. Keep the push identity separate from the Play API service account. Query-string secrets are no longer accepted.
 
-The backend endpoint `POST /api/mobile/rtdn` is already implemented. It handles all subscription lifecycle events (renewed, cancelled, expired, grace period, etc.) and keeps `users.is_premium` accurate automatically.
+Apply migration 039 before enabling billing. The backend validates Google OIDC identity, fetches authoritative V2 state and expiry, checks receipt/account ownership, and acknowledges only after the entitlement transaction commits. Transient failures return 503 for Pub/Sub retry; configure retry retention and monitor dead letters. A cancelled subscription retains its paid period. Premium access combines active providers and explicit admin grants; expiry is checked when gated APIs run and cleaned by outbox drain. Receipt hashes and opaque account bindings are private; Google settlement amounts are not inferred from entitlement notifications.
 
 ### How it all works end-to-end
 
 ```
-User taps "Subscribe" in app
+User taps "Subscribe"; backend registers an opaque account binding
+        ↓
+App selects the monthly base-plan offer and passes its token/account ID
         ↓
 Google Play Billing sheet appears (Google's native UI — Google handles payment)
         ↓
@@ -180,15 +185,15 @@ App calls POST /api/mobile/verify-purchase with the token
         ↓
 Backend verifies token with Google Play API using the service account
         ↓
-Backend sets users.is_premium = true, creates subscription record
+Backend commits owned entitlement, then acknowledges the purchase
         ↓
-App updates UI immediately — user has Premium
+App refreshes the verified profile; pending purchases remain pending
         ↓
 (Later, when subscription renews or cancels...)
         ↓
 Google sends RTDN notification to POST /api/mobile/rtdn
         ↓
-Backend updates is_premium automatically
+Backend verifies ownership/state/expiry and recomputes combined access
 ```
 
 ---
@@ -251,7 +256,7 @@ adb shell am start -W -a android.intent.action.VIEW -d "https://liravo.org/user/
 | Problem | Fix |
 |---|---|
 | "Item not found" when subscribing | The subscription product isn't activated in Play Console, or you're testing with a development build (billing only works in signed release builds on a real device) |
-| Purchase goes through but Premium not activated | Check that `GOOGLE_PLAY_SERVICE_ACCOUNT_KEY` is set on the server and the service account has **Financial data viewer** in Play Console |
+| Purchase goes through but Premium not activated | Check that `GOOGLE_PLAY_SERVICE_ACCOUNT_KEY` is set on the server and the service account has **View financial data** and **Manage orders and subscriptions** permissions in Play Console |
 | RTDN not firing | Verify the Pub/Sub topic name is correct in Play Console, and that the push subscription endpoint URL is publicly reachable |
 | Build fails with "missing credentials" | Run `eas credentials --platform android` to generate or import a keystore |
 | Deep links open browser instead of app | `assetlinks.json` must be served with `Content-Type: application/json` and no redirect |

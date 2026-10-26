@@ -10,6 +10,7 @@ interface AdminUser {
   email: string | null;
   user_types: string[];
   is_premium: boolean;
+  premium_override: boolean;
   is_moderator: boolean;
   is_admin: boolean;
   is_suspended: boolean;
@@ -56,13 +57,14 @@ export default function AdminUsersPage() {
   const handleAction = async (userId: string, field: string, value: boolean) => {
     setActionLoading(`${userId}-${field}`);
     try {
-      await fetch('/api/admin/users', {
+      const response = await fetch('/api/admin/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, [field]: value }),
       });
+      if (!response.ok) throw new Error(t('actionFailed'));
       await fetchUsers();
-    } finally {
+    } catch { setError(t('actionFailed')); } finally {
       setActionLoading(null);
     }
   };
@@ -140,11 +142,11 @@ export default function AdminUsersPage() {
                         {u.is_moderator ? t('revokeMod') : t('grantMod')}
                       </button>
                       <button
-                        onClick={() => handleAction(u.id, 'is_premium', !u.is_premium)}
+                        onClick={() => handleAction(u.id, 'is_premium', !u.premium_override)}
                         disabled={actionLoading === `${u.id}-is_premium`}
                         className="px-2 py-1 text-xs border border-border rounded hover:bg-muted transition-colors disabled:opacity-50"
                       >
-                        {u.is_premium ? t('revokePremium') : t('grantPremium')}
+                        {u.premium_override ? t('revokePremium') : t('grantPremium')}
                       </button>
                       <button
                         onClick={() => handleAction(u.id, 'is_suspended', !u.is_suspended)}

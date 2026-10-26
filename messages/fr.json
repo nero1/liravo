@@ -255,7 +255,9 @@
     "cancel": "Résilier l’abonnement",
     "cancelling": "Résiliation…",
     "cancelPending": "La résiliation est en attente. Votre abonnement reste actif jusqu’à confirmation du prestataire.",
-    "cancelError": "La confirmation est indisponible. Réessayez ; les demandes existantes sont conservées."
+    "cancelError": "La confirmation est indisponible. Réessayez ; les demandes existantes sont conservées.",
+    "managedByGoogle": "Gérez votre abonnement Google Play dans le Play Store.",
+    "manageGoogle": "Gérer dans Google Play"
   },
   "admin": {
     "cron": {
@@ -275,7 +277,9 @@
         "payoutsWithoutAudit": "Demandes de versement sans trace d’audit",
         "failedOutbox": "Envois en échec",
         "stalledOutbox": "Envois bloqués",
-        "uncertainDigests": "E-mails à vérifier auprès du prestataire"
+        "uncertainDigests": "E-mails à vérifier auprès du prestataire",
+        "unacknowledgedPurchases": "Achats Google Play non acquittés",
+        "stalledBillingDeliveries": "Notifications de facturation bloquées"
       },
       "jobs": {
         "outbox-drain": {
@@ -456,8 +460,8 @@
     "no": "Non",
     "revokeMod": "Retirer la modération",
     "grantMod": "Accorder la modération",
-    "revokePremium": "Retirer Premium",
-    "grantPremium": "Accorder Premium",
+    "revokePremium": "Retirer Premium offert",
+    "grantPremium": "Offrir Premium",
     "unsuspend": "Réactiver",
     "suspend": "Suspendre",
     "previous": "Précédent",

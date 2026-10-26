@@ -1,3 +1,4 @@
+import { hasPremiumAccess } from '@/lib/premium-access';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import Decimal from 'decimal.js';
@@ -19,7 +20,9 @@ export async function GET() {
     .eq('id', user.id)
     .single();
 
-  const isPremium = await checkPremium(supabase, user.id);
+  let isPremium: boolean;
+  try { isPremium=await hasPremiumAccess(user.id); }
+  catch { return NextResponse.json({error:'Premium access verification unavailable'},{status:503}); }
   if (!isPremium) {
     return NextResponse.json({ error: 'Premium required' }, { status: 403 });
   }
@@ -113,16 +116,4 @@ export async function GET() {
     readingStreakMax,
     year: currentYear,
   });
-}
-
-async function checkPremium(
-  supabase: ReturnType<typeof createClient>,
-  userId: string
-): Promise<boolean> {
-  const { data } = await supabase
-    .from('users')
-    .select('is_premium')
-    .eq('id', userId)
-    .single();
-  return (data as { is_premium?: boolean } | null)?.is_premium ?? false;
 }

@@ -255,7 +255,9 @@
     "cancel": "Cancel subscription",
     "cancelling": "Cancelling…",
     "cancelPending": "Cancellation is queued. Your subscription remains active until the provider confirms.",
-    "cancelError": "Cancellation confirmation is unavailable. Try again; existing requests are retained."
+    "cancelError": "Cancellation confirmation is unavailable. Try again; existing requests are retained.",
+    "managedByGoogle": "Manage your Google Play subscription in the Play Store.",
+    "manageGoogle": "Manage in Google Play"
   },
   "admin": {
     "cron": {
@@ -275,7 +277,9 @@
         "payoutsWithoutAudit": "Payout requests without audit records",
         "failedOutbox": "Failed deliveries",
         "stalledOutbox": "Stalled deliveries",
-        "uncertainDigests": "Email deliveries awaiting reconciliation"
+        "uncertainDigests": "Email deliveries awaiting reconciliation",
+        "unacknowledgedPurchases": "Unacknowledged Google Play purchases",
+        "stalledBillingDeliveries": "Stalled billing notifications"
       },
       "jobs": {
         "outbox-drain": {
@@ -456,8 +460,8 @@
     "no": "No",
     "revokeMod": "Revoke Mod",
     "grantMod": "Grant Mod",
-    "revokePremium": "Revoke Premium",
-    "grantPremium": "Grant Premium",
+    "revokePremium": "Revoke complimentary Premium",
+    "grantPremium": "Grant complimentary Premium",
     "unsuspend": "Unsuspend",
     "suspend": "Suspend",
     "previous": "Previous",

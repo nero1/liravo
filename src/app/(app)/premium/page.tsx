@@ -1,3 +1,4 @@
+import { hasPremiumAccess } from '@/lib/premium-access';
 import { getTranslations, getFormatter } from 'next-intl/server';
 import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
@@ -30,7 +31,7 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
     .eq('id', user.id)
     .single();
 
-  const isPremium = (profile as { is_premium?: boolean } | null)?.is_premium ?? false;
+  const isPremium = await hasPremiumAccess(user.id);
 
   return (
     <div className="max-w-xl mx-auto px-4 py-8">

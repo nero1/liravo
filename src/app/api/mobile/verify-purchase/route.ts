@@ -3,93 +3,44 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { getSubscriptionPurchase, isSubscriptionActive } from '@/lib/google-play';
-import { checkCriticalRateLimit } from '@/lib/rate-limit';
-import { getClientIp } from '@/lib/utils';
+import { getSubscriptionPurchase, googlePlayConfiguration } from '@/lib/google-play';
+import { reconcileGooglePlayPurchase, PurchaseBindingError } from '@/lib/google-play-reconciliation';
+import { checkMoneyRateLimit } from '@/lib/rate-limit';
+import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
+import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
-const BodySchema = z.object({
-  purchaseToken: z.string().min(1),
-  productId: z.string().min(1),
-  packageName: z.string().min(1),
-});
+const schema = z.object({purchaseToken:z.string().min(1).max(4096),productId:z.string().min(1).max(150),packageName:z.string().min(1).max(200)});
 
 export async function POST(request: Request) {
-  const session = await getCurrentUser();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const ip = getClientIp(request);
-  const rate = await checkCriticalRateLimit(ip);
-  if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({error:'Unauthorized'},{status:401});
+  const correlationId = getRequestCorrelationId(request);
+  const rate = await checkMoneyRateLimit(user.id,getClientIp(request));
+  if (!rate.allowed) return NextResponse.json({error:'Too many requests',correlationId},{status:429});
+  const raw = await request.text();
+  if (Buffer.byteLength(raw,'utf8')>16_384) return NextResponse.json({error:'Payload too large',correlationId},{status:413});
   let body: unknown;
-  try { body = await request.json(); } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-
-  const parsed = BodySchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const { purchaseToken, productId } = parsed.data;
-  const supabase = createServiceClient();
-
-  // Verify the purchase token with Google Play
-  let playState;
+  try { body=JSON.parse(raw); } catch { return NextResponse.json({error:'Invalid JSON',correlationId},{status:400}); }
+  const parsed=schema.safeParse(body);
+  const configuration=googlePlayConfiguration();
+  if (!parsed.success || parsed.data.productId!==configuration.productId || parsed.data.packageName!==configuration.packageName) return NextResponse.json({error:'Invalid purchase product',code:'INVALID_PURCHASE_PRODUCT',correlationId},{status:400});
   try {
-    playState = await getSubscriptionPurchase(purchaseToken);
-  } catch (err) {
-    recordMetric('google_play_verify_error', { error: (err as Error).message }, 'warn');
-    return NextResponse.json({ error: 'Could not verify purchase with Google Play' }, { status: 502 });
+    const verifiedAt = new Date().toISOString();
+    const state = await getSubscriptionPurchase(parsed.data.purchaseToken);
+    const result = await reconcileGooglePlayPurchase(user.id,parsed.data.purchaseToken,state,verifiedAt,correlationId);
+    const {data:profile,error} = await createServiceClient().from('users').select('*').eq('id',user.id).single();
+    if (error || !profile) throw new Error('Profile refresh unavailable');
+    const pending=result.providerState==='SUBSCRIPTION_STATE_PENDING';
+    return NextResponse.json({ok:!pending,pending,active:result.active,acknowledged:result.acknowledged,user:clientUser(profile),correlationId},{status:pending?202:200});
+  } catch (error) {
+    await observeOperationalSignal('paymentFailures',correlationId);
+    const status=error instanceof PurchaseBindingError?error.status:502;
+    const code=error instanceof PurchaseBindingError?error.code:'GOOGLE_PLAY_VERIFICATION_UNAVAILABLE';
+    recordMetric('google_play_verify_error',{correlationId,code},'error');
+    return NextResponse.json({error:'Purchase verification failed',code,correlationId},{status});
   }
-
-  const active = isSubscriptionActive(playState);
-
-  // Upsert subscription record using purchase token as the stable identifier
-  const { data: existing } = await supabase
-    .from('subscriptions')
-    .select('id')
-    .eq('provider_event_id', purchaseToken)
-    .maybeSingle();
-
-  if (!existing) {
-    await supabase.from('subscriptions').insert({
-      user_id: session.id,
-      provider: 'google_play',
-      status: active ? 'active' : 'expired',
-      amount: '4.99',
-      currency: 'USD',
-      provider_event_id: purchaseToken,
-    });
-  } else {
-    await supabase
-      .from('subscriptions')
-      .update({ status: active ? 'active' : 'expired' })
-      .eq('id', existing.id);
-  }
-
-  // Update the user's premium flag
-  await supabase.from('users').update({ is_premium: active }).eq('id', session.id);
-
-  await supabase.from('financial_audit_log').insert({
-    actor_user_id: session.id,
-    target_user_id: session.id,
-    action: active ? 'google_play_subscription_activated' : 'google_play_subscription_expired',
-    amount: '4.99',
-    currency: 'USD',
-    provider: 'google_play',
-    idempotency_key: purchaseToken.slice(0, 64),
-    metadata: { productId, purchaseToken: purchaseToken.slice(0, 32) + '…' },
-  });
-
-  // Return fresh user row so the app can update local state immediately
-  const { data: user } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', session.id)
-    .single();
-
-  recordMetric('google_play_verify_success', { active: String(active), productId });
-  return NextResponse.json({ ok: true, active, user: clientUser(user) });
 }
