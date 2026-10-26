@@ -4,6 +4,7 @@ import { HttpError, isTransientError, withExponentialBackoff } from '../src/lib/
 import { getClientIp } from '../src/lib/utils';
 import { safeModelText } from '../src/lib/ai-safety';
 
+vi.mock('@/lib/operational-alerts',()=>({observeOperationalSignal:vi.fn()}));
 vi.mock('@/lib/locks', () => ({ withRedisLock: vi.fn() }));
 import { withRedisLock } from '../src/lib/locks';
 import { cron } from '../src/lib/cron';

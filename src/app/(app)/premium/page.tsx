@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { CancelSubscriptionButton } from '@/components/creator/CancelSubscriptionButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,7 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
           <p className="text-muted-foreground text-sm mt-1">
             {t('activeMessage', { name: profile?.display_name ?? t('reader') })}
           </p>
+          <CancelSubscriptionButton />
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card p-6 text-center mb-8">
@@ -82,7 +84,7 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
 
       <p className="text-center text-xs text-muted-foreground mt-6">
         {t('terms')}{' '}
-        <Link href="/settings" className="underline">
+        <Link href="/premium" className="underline">
           {t('manage')}
         </Link>
       </p>

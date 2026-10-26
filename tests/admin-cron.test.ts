@@ -14,6 +14,7 @@ import de from '../messages/de.json';
 vi.mock('@/lib/supabase/server', () => ({createServiceClient:vi.fn()}));
 vi.mock('@/lib/auth/getCurrentUser', () => ({getCurrentUser:vi.fn()}));
 vi.mock('@/lib/moderation', () => ({isAdmin:vi.fn()}));
+vi.mock('@/lib/operational-alerts',()=>({operationalSnapshot:vi.fn().mockResolvedValue(null)}));
 vi.mock('@/lib/metrics', () => ({recordMetric:vi.fn()}));
 vi.mock('@/app/api/cron/outbox-drain/route', () => ({POST:vi.fn()}));
 

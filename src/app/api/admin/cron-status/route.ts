@@ -6,6 +6,7 @@ import { getRequestCorrelationId } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
 import { INTEGRITY_SIGNALS, type CronJobId } from '@/constants/cron';
 import { z } from 'zod';
+import { operationalSnapshot } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -30,14 +31,15 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!await isAdmin(user.id)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const client = createServiceClient();
-  const [pending, failed, snapshot] = await Promise.all([
+  const [pending, failed, snapshot, operations] = await Promise.all([
     client.from('outbox_events').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     client.from('outbox_events').select('id', { count: 'exact', head: true }).eq('status', 'failed'),
     client.rpc('financial_integrity_snapshot' as never),
+    operationalSnapshot().catch(() => null),
   ]);
   const anomalies = z.record(z.enum(INTEGRITY_SIGNALS),z.number().int().nonnegative()).safeParse(snapshot.data);
   if (pending.error || failed.error || snapshot.error || !Number.isInteger(pending.count) || !Number.isInteger(failed.count) || !anomalies.success) return NextResponse.json({ error: 'Status unavailable', correlationId: getRequestCorrelationId(request) }, { status: 503 });
-  return NextResponse.json({ pending: pending.count ?? 0, failed: failed.count ?? 0, anomalies: anomalies.data });
+  return NextResponse.json({ pending: pending.count ?? 0, failed: failed.count ?? 0, anomalies: anomalies.data, operations });
 }
 
 export async function POST(request: Request) {

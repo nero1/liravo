@@ -42,7 +42,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         has_column_privilege(${role},'public.users','recovery_codes','SELECT') as recovery`;
       expect(access).toEqual({ profile: true, email: false, pin: false, totp: false, recovery: false });
       const routines = await sql`select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic')`;
+        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation')`;
       for (const routine of routines) {
         const [permissions] = await sql`select has_function_privilege(${role},${routine.oid}::oid,'EXECUTE') as allowed`;
         expect(permissions.allowed, `${role}:${routine.proname}`).toBe(false);
@@ -243,6 +243,22 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await tx`select set_config('request.jwt.claim.role','authenticated',true)`;
       await tx`update users set referred_by=null where id=${referred}`;
     })).rejects.toThrow('Referral identity');
+    await sql`insert into subscriptions(user_id,provider,status,amount,currency,provider_subscription_id) values
+      (${recipient},'dodopayments','active',4.99,'USD','sub_cancel_rehearsal'),
+      (${recipient},'paystack','active',7500,'NGN',null)`;
+    await sql`update users set is_premium=true where id=${recipient}`;
+    await Promise.all(Array.from({length:4},()=>sql`select request_subscription_cancellation(${recipient},'cancel-rehearsal')`));
+    expect((await sql`select count(*)::int as count from subscription_cancellations`)[0].count).toBe(2);
+    expect((await sql`select is_premium from users where id=${recipient}`)[0].is_premium).toBe(true);
+    const cancellationClaims=(await Promise.all([sql`select * from claim_subscription_cancellations(${recipient},3)`,sql`select * from claim_subscription_cancellations(${recipient},3)`])).flat();
+    expect(cancellationClaims).toHaveLength(2);
+    for(const job of cancellationClaims) await Promise.all([sql`select complete_subscription_cancellation(${job.subscription_id})`,sql`select complete_subscription_cancellation(${job.subscription_id})`]);
+    expect((await sql`select is_premium from users where id=${recipient}`)[0].is_premium).toBe(false);
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='subscription_cancelled'`)[0].count).toBe(2);
+    await sql`update subscription_cancellations set status='processing',attempts=10,claimed_at=now()-interval '3 minutes'`;
+    await sql`select * from claim_subscription_cancellations(null,3)`;
+    expect((await sql`select financial_integrity_snapshot() as snapshot`)[0].snapshot.failedOutbox).toBe(2);
+    expect((await sql`select has_function_privilege('service_role','cancel_subscriptions_atomic(uuid,text)','EXECUTE') as allowed`)[0].allowed).toBe(false);
     await sql`update users set reading_streak=6,last_streak_date='2026-10-25',streak_freeze_tokens=0 where id=${sender}`;
     await expect(sql.begin(async tx => {
       await tx`select set_config('request.jwt.claim.role','authenticated',true)`;

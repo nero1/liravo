@@ -4,18 +4,19 @@ import { getRequestCorrelationId } from '@/lib/utils';
 import { cron } from '@/lib/cron';
 import { NextResponse } from 'next/server';
 import { drainOutbox } from '@/lib/outbox-worker';
+import { drainSubscriptionCancellations } from '@/lib/subscription-cancellations';
 
 async function run(req: Request) {
 
   const batch = Number(req.headers.get('x-outbox-batch') ?? '50');
   const batchSize = Number.isFinite(batch) ? Math.min(200, Math.max(1, batch)) : 50;
 
-  const result = await drainOutbox(batchSize);
+  const [result, cancellations] = await Promise.all([drainOutbox(batchSize), drainSubscriptionCancellations()]);
   const { data, error } = await createServiceClient().rpc('financial_integrity_snapshot' as never);
   if (error) throw new Error('Financial reconciliation failed');
   const anomalies = data as Record<string, number>;
   recordMetric('financial_integrity_snapshot', { ...anomalies, correlationId: getRequestCorrelationId(req) }, Object.values(anomalies).some(value => value > 0) ? 'error' : 'info');
-  return NextResponse.json({ ...result, anomalies });
+  return NextResponse.json({ ...result, failed: result.failed + cancellations.failed, cancellations, anomalies });
 }
 
 export const GET = cron('outbox-drain', run);

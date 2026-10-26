@@ -58,3 +58,5 @@ Add to your GitHub Actions workflow:
 The PostgreSQL rehearsal also exercises content intent races, rollback/deleted-record replay, buddy capacity, vote counters, adapter mutation/count contracts and streak rewards. `mobile-api.test.ts` executes native transport against mocked fetch/store dependencies; it does not replace an Expo build. `i18n-usage.test.ts` checks source translation references and localized login labels.
 
 Admin contract suites cover the cron broker, unavailable/partial statuses and flag requests. The migration rehearsal executes real admin query models, FK/nested relationships, provider-toggle races and referral attribution races. Localized admin labels join the i18n source checks.
+
+Payment tests cover checked tip-product pricing, stable checkout references, cancellation confirmation/recovery, concurrent cancellation claims and audit replay. Operational counter tests cover alert thresholds, window boundaries and unavailable Redis; middleware tests verify correlation propagation on accepted and rejected requests.

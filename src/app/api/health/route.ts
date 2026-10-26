@@ -6,47 +6,23 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const timestamp = new Date().toISOString();
-  const version = '1.0.0';
-
-  // Check database
   let databaseStatus: 'ok' | 'error' = 'ok';
   try {
-    const supabase = createServiceClient();
-    const { error } = await supabase.rpc('pg_sleep', { seconds: 0 }).maybeSingle();
-    if (error && error.code !== 'PGRST202') {
-      // Try simpler query
-      const { error: err2 } = await supabase
-        .from('feature_flags')
-        .select('id', { count: 'exact', head: true })
-        .limit(1);
-      if (err2) databaseStatus = 'error';
-    }
-  } catch {
-    databaseStatus = 'error';
-  }
+    const { error } = await createServiceClient().from('feature_flags').select('name').limit(1);
+    if (error) databaseStatus = 'error';
+  } catch { databaseStatus = 'error'; }
 
-  // Check Redis
   let redisStatus: 'ok' | 'error' = 'ok';
   try {
     const redis = getRedisClient();
-    const testKey = `health_check:${Date.now()}`;
+    const testKey = `health_check:${crypto.randomUUID()}`;
     await redis.set(testKey, '1', { ex: 10 });
-    const val = await redis.get(testKey);
-    if (val !== '1') redisStatus = 'error';
+    if (await redis.get(testKey) !== '1') redisStatus = 'error';
     await redis.del(testKey);
-  } catch {
-    redisStatus = 'error';
-  }
-
-  const status = databaseStatus === 'ok' && redisStatus === 'ok' ? 'ok' : 'degraded';
+  } catch { redisStatus = 'error'; }
 
   return NextResponse.json({
-    status,
-    timestamp,
-    version,
-    services: {
-      database: databaseStatus,
-      redis: redisStatus,
-    },
+    status: databaseStatus === 'ok' && redisStatus === 'ok' ? 'ok' : 'degraded',
+    timestamp, version: '1.0.0', services: { database: databaseStatus, redis: redisStatus },
   });
 }

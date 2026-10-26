@@ -6,6 +6,7 @@ import { checkMoneyRateLimit } from '@/lib/rate-limit';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,7 +85,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ requested: true, mode: 'rpc' }, { status: 201 });
   }
 
-  recordMetric('payout_request_error', { correlationId, code: rpcReserve.error.code }, 'error');
   const status = rpcReserve.error.code === 'P0001' ? 409 : 503;
-  return NextResponse.json({ error: status === 409 ? 'Insufficient balance or conflicting request' : 'Payout service unavailable', correlationId }, { status });
+  recordMetric('payout_request_error', { correlationId, code: rpcReserve.error.code }, status === 409 ? 'warn' : 'error');
+  if (status === 503) await observeOperationalSignal('payoutFailures',correlationId);
+  return NextResponse.json({ error: status === 409 ? 'Insufficient balance or conflicting request' : 'Payout service unavailable', code: status === 409 ? 'PAYOUT_RESERVATION_REJECTED' : 'PAYOUT_DEPENDENCY_FAILURE', correlationId }, { status });
 }

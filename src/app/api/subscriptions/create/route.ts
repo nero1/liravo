@@ -6,8 +6,11 @@ import { checkMoneyRateLimit } from '@/lib/rate-limit';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { validateCheckoutUrl } from '@/lib/payment-providers';
+import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const bodySchema = z.object({
   provider: z.enum(['dodopayments', 'paystack']),
@@ -31,6 +34,7 @@ async function createPaystackCheckout(opts: {
 
   const res = await fetch('https://api.paystack.co/transaction/initialize', {
     method: 'POST',
+    signal: AbortSignal.timeout(8_000),
     headers: {
       Authorization: `Bearer ${secret}`,
       'Content-Type': 'application/json',
@@ -77,6 +81,7 @@ async function createDodoCheckout(opts: {
   const base = mode === 'test_mode' ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
   const res = await fetch(`${base}/checkouts`, {
     method: 'POST',
+    signal: AbortSignal.timeout(8_000),
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
@@ -85,6 +90,7 @@ async function createDodoCheckout(opts: {
     body: JSON.stringify({
       customer: { email: opts.email },
       billing_currency: 'USD',
+      feature_flags: { allow_currency_selection: false, allow_discount_code: false },
       product_cart: [
         {
           product_id: productId,
@@ -162,9 +168,8 @@ export async function POST(req: Request) {
       : new Response(null, { status: 303, headers: { Location: sub.checkout_url } });
   }
 
-  // Get user email for payment providers
-  const { data: profile } = await supabase.from('users').select('email').eq('id', user.id).single();
-  const email = profile?.email ?? `user_${user.id}@liravo.org`;
+  const email = user.email;
+  if (!z.email().safeParse(email).success) return NextResponse.json({ error: 'Payment contact email is required', correlationId }, { status: 400 });
 
   let checkoutUrl: string;
   try {
@@ -191,16 +196,13 @@ export async function POST(req: Request) {
       });
     }
   } catch (err) {
+    await observeOperationalSignal('paymentFailures',correlationId);
     recordMetric('subscription_checkout_error', { provider, correlationId, name: err instanceof Error ? err.name : 'Unknown' }, 'error');
     return NextResponse.json({ error: 'Payment provider unavailable; retry with the same key', correlationId }, { status: 502 });
   }
 
-  const validCheckout = z.string().url().safeParse(checkoutUrl);
-  if (!validCheckout.success) return NextResponse.json({ error: 'Invalid checkout destination', correlationId }, { status: 503 });
-  const checkout = new URL(validCheckout.data);
-  if (checkout.protocol !== 'https:' || (provider === 'paystack' ? checkout.hostname !== 'checkout.paystack.com' : !/(^|\.)dodopayments\.com$/.test(checkout.hostname))) {
-    return NextResponse.json({ error: 'Invalid checkout destination', correlationId }, { status: 503 });
-  }
+  try { checkoutUrl = validateCheckoutUrl(provider,checkoutUrl); }
+  catch { return NextResponse.json({ error: 'Invalid checkout destination', correlationId }, { status: 503 }); }
 
   // Persist checkout URL for retries; the reference was reserved with the intent.
   const { error: checkoutError } = await supabase.from('subscriptions').update({ checkout_url: checkoutUrl }).eq('id', sub.id);

@@ -43,9 +43,9 @@ Updated 26 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Add indexes aligned with cursor sort columns.
 - ✅ Cap page sizes and include deterministic sort keys.
 
-🟡 9. Observability, monitoring, and ops readiness (Medium/Low)
+✅ 9. Observability, monitoring, and ops readiness (Medium/Low)
 - ✅ Require correlation IDs on sensitive operations.
-- 🟡 Create dashboards/alerts for webhook replay conflicts, payout failures, cron overlaps.
+- ✅ Create dashboards/alerts for webhook replay conflicts, payout failures, cron overlaps.
 - ✅ Add restore-drill SOP and backup verification checklist.
 
 🟡 10. Validation rollout

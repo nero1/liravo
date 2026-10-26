@@ -247,7 +247,11 @@
         "label": "Badge Premium",
         "value": "Sur le profil"
       }
-    }
+    },
+    "cancel": "Résilier l’abonnement",
+    "cancelling": "Résiliation…",
+    "cancelPending": "La résiliation est en attente. Votre abonnement reste actif jusqu’à confirmation du prestataire.",
+    "cancelError": "La confirmation est indisponible. Réessayez ; les demandes existantes sont conservées."
   },
   "admin": {
     "cron": {
@@ -319,7 +323,19 @@
           "description": "Vérifier l’activité des liens d’affiliation des livres populaires."
         }
       },
-      "partial": "Exécution terminée avec des erreurs ou des alertes. Consultez l’état du système."
+      "partial": "Exécution terminée avec des erreurs ou des alertes. Consultez l’état du système.",
+      "operations": "Indicateurs de sécurité et de paiement",
+      "operationsUnavailable": "Les compteurs opérationnels sont indisponibles. Vérifiez Redis et les journaux de déploiement.",
+      "windowStart": "La fenêtre actuelle de 15 minutes a commencé à {time}.",
+      "signals": {
+        "webhooks": "Livraisons de webhooks vérifiées",
+        "webhookReplays": "Événements de paiement répétés",
+        "webhookConflicts": "Événements de paiement contradictoires",
+        "paymentFailures": "Échecs de traitement des paiements",
+        "payoutFailures": "Échecs de versement",
+        "cronFailures": "Exécutions cron échouées",
+        "cronOverlaps": "Exécutions cron simultanées"
+      }
     },
     "affiliateStoreRegistry": "Registre des boutiques partenaires",
     "addStore": "Ajouter une boutique",
@@ -473,5 +489,24 @@
     "activationHelp": "Pour activer une annonce, envoyez son identifiant et ses dates d’activation à {endpoint}.",
     "dailyPromptsHint": "Générés par {endpoint}. Les {count, number} plus récents sont affichés.",
     "loadThemesFailed": "Impossible de charger les thèmes."
+  },
+  "tips": {
+    "tip": "Pourboire",
+    "title": "Soutenir {name}",
+    "close": "Fermer",
+    "custom": "Montant personnalisé (USD)",
+    "placeholder": "Saisir un montant",
+    "error": "Le paiement est indisponible. Réessayez avec le même montant.",
+    "processing": "Ouverture du paiement…",
+    "checkout": "Continuer vers le paiement",
+    "checkoutAmount": "Continuer vers le paiement — {amount}",
+    "fee": "Des frais de plateforme de 10 % s’appliquent. Minimum {minimum}. Le paiement est confirmé après le règlement.",
+    "statusTitle": "Paiement du pourboire",
+    "refresh": "Actualiser le statut",
+    "status": {
+      "completed": "Votre pourboire de {amount} est confirmé. Merci !",
+      "failed": "Le paiement de votre pourboire de {amount} a échoué.",
+      "pending": "Votre pourboire de {amount} est en attente de confirmation du paiement."
+    }
   }
 }
