@@ -1,78 +1,25 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { awardXP } from '@/services/xp';
-import { checkAndAwardBadges, incrementWritingStreak } from '@/services/badges';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { applyWritingIntent } from '@/lib/writing-intents';
+import { ContentIntentError } from '@/lib/content-intents';
+import { z } from 'zod';
+import { checkAndAwardBadges } from '@/services/badges';
 
 export const dynamic = 'force-dynamic';
 
-const SubmitSchema = z.object({
-  title: z.string().min(1).max(200),
-  body: z.string().min(1),
-  word_count: z.number().int().min(1),
-});
+const schema = z.object({ title: z.string().trim().min(1).max(200), body: z.string().trim().min(1).max(50000), word_count: z.number().int().min(1).optional() });
 
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
+export async function POST(request: Request, { params }: { params: { id: string } }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  let body: unknown;
+  const parsed = schema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    const result = await applyWritingIntent(request,user.id,'challenge',params.id,{ title: parsed.data.title, content: parsed.data.body });
+    await checkAndAwardBadges(user.id,'challenge_submit');
+    await checkAndAwardBadges(user.id,'prolific_writer');
+    return NextResponse.json({ entry: result }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Writing service unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
-
-  const parsed = SubmitSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
-  }
-
-  // Check challenge exists and is active
-  const { data: challenge } = await supabase
-    .from('writing_challenges')
-    .select('id, end_date')
-    .eq('id', params.id)
-    .single();
-
-  if (!challenge) return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
-
-  const today = new Date().toISOString().split('T')[0];
-  if (challenge.end_date < today) {
-    return NextResponse.json({ error: 'Challenge has ended' }, { status: 409 });
-  }
-
-  // Insert into writing_challenge_submissions (unique per user per challenge)
-  const { data: entry, error } = await supabase
-    .from('writing_challenge_submissions')
-    .upsert(
-      {
-        user_id: user.id,
-        challenge_id: params.id,
-        title: parsed.data.title,
-        content: parsed.data.body,
-        body: parsed.data.body,
-        word_count: parsed.data.word_count,
-      },
-      { onConflict: 'challenge_id,user_id', ignoreDuplicates: false }
-    )
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Award 25 XP
-  await awardXP(user.id, 25, 'challenge_submission', `challenge:${params.id}`);
-
-  // Increment writing streak and check badges
-  await incrementWritingStreak(user.id);
-  await checkAndAwardBadges(user.id, 'challenge_submit');
-  await checkAndAwardBadges(user.id, 'prolific_writer');
-
-  return NextResponse.json({ entry }, { status: 201 });
 }

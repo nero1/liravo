@@ -1,49 +1,17 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { applyWritingIntent } from '@/lib/writing-intents';
+import { ContentIntentError } from '@/lib/content-intents';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
+export async function POST(request: Request, { params }: { params: { id: string } }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  // Check challenge exists
-  const { data: challenge } = await supabase
-    .from('writing_challenges')
-    .select('id, participant_count')
-    .eq('id', params.id)
-    .single();
-
-  if (!challenge) return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
-
-  // Check already joined
-  const { data: existing } = await supabase
-    .from('writing_challenge_participants')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('challenge_id', params.id)
-    .maybeSingle();
-
-  if (existing) {
-    return NextResponse.json({ message: 'Already joined' });
+  try {
+    const result = await applyWritingIntent(request,user.id,'join',params.id,{});
+    return NextResponse.json(result, { status: 200 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Writing service unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
-
-  const { error } = await supabase
-    .from('writing_challenge_participants')
-    .insert({ user_id: user.id, challenge_id: params.id });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Increment participant count
-  await supabase
-    .from('writing_challenges')
-    .update({ participant_count: (challenge.participant_count ?? 0) + 1 })
-    .eq('id', params.id);
-
-  return NextResponse.json({ success: true });
 }

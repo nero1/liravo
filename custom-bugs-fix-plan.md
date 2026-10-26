@@ -12,6 +12,7 @@ Updated 26 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Implement transactional payout reserve RPC (check available balance + reserve + create payout atomically).
 - ✅ Enforce unique idempotency constraints for payouts/tips/webhook events.
 - ✅ Move financial audit/event writes into same transaction (transactional outbox).
+- 🟡 Complete provider settlement/refund reconciliation and verify staging bindings.
 
 ✅ 3. Cron hardening and Vercel Hobby compliance (Critical/High)
 - ✅ Standardize cron auth helper (`Authorization: Bearer <CRON_SECRET>`).

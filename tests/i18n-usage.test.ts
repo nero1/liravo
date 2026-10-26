@@ -60,7 +60,7 @@ it('resolves literal translation calls against the English catalog', () => {
 it('keeps localized sign-in and admin screens free of untranslated text and labels', () => {
   const literals: string[] = [];
   const adminFiles=(directory:string):string[]=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?adminFiles(join(directory,entry.name)):entry.name.endsWith('.tsx')?[join(directory,entry.name)]:[]);
-  for(const file of ['src/components/auth/LoginForm.tsx','src/app/login/page.tsx','src/components/creator/TipButton.tsx','src/components/creator/CancelSubscriptionButton.tsx','src/app/(app)/tips/[id]/page.tsx',...adminFiles('src/app/(app)/admin')]) {
+  for(const file of ['src/components/auth/LoginForm.tsx','src/app/login/page.tsx','src/components/creator/TipButton.tsx','src/components/creator/CancelSubscriptionButton.tsx','src/app/(app)/tips/[id]/page.tsx','src/app/(app)/write/prompts/page.tsx','src/app/(app)/write/prompts/[id]/page.tsx','src/app/(app)/write/challenges/page.tsx','src/app/(app)/write/challenges/[id]/page.tsx','src/components/writing/ChallengeJoinButton.tsx','src/app/(app)/share/writing-challenge/[id]/route.tsx',...adminFiles('src/app/(app)/admin')]) {
     const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
     const check=(node: ts.Node) => {
       let value: string | undefined;
@@ -68,7 +68,7 @@ it('keeps localized sign-in and admin screens free of untranslated text and labe
       if(ts.isJsxAttribute(node) && ['title','placeholder','aria-label','alt'].includes(node.name.getText()) && node.initializer && ts.isStringLiteral(node.initializer)) value=node.initializer.text;
       const technical = ts.isJsxText(node) && ts.isJsxElement(node.parent) && node.parent.openingElement.tagName.getText()==='code';
       const example = value && (/^https?:\/\//.test(value) || /^(?:[A-Z]{2}, )+[A-Z]{2}$/.test(value));
-      if(value && /[A-Za-z]{2}/.test(value) && value!=='Liravo' && !technical && !example) literals.push(`${file}: ${value}`);
+      if(value && /[A-Za-z]{2}/.test(value) && !['Liravo','liravo.org'].includes(value) && !technical && !example) literals.push(`${file}: ${value}`);
       ts.forEachChild(node,check);
     };
     check(source);

@@ -1,4 +1,4 @@
-import { CSRF_COOKIE, CSRF_HEADER, validCsrf, sameOrigin } from '@/lib/csrf';
+import { CSRF_COOKIE, CSRF_HEADER, validCsrf, sameOrigin, getRequestOrigin } from '@/lib/csrf';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { Database } from '@/types/database';
@@ -16,7 +16,8 @@ export async function middleware(request: NextRequest) {
   const locale = LOCALES.find(value => value === preferred) ?? 'en';
   request.headers.set('x-liravo-locale', locale);
   let response = NextResponse.next({ request: { headers: request.headers } });
-  const { pathname, origin } = request.nextUrl;
+  const { pathname } = request.nextUrl;
+  const origin = getRequestOrigin(request);
 
   // Bearer handlers authenticate independently and must not fall back to cookies.
   const hasBearerToken = request.headers.get('authorization')?.startsWith('Bearer ');
@@ -36,6 +37,7 @@ export async function middleware(request: NextRequest) {
     && !['/api/subscriptions/webhook', '/api/tips/webhook'].includes(pathname)
     && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)
   ) {
+    if (!origin) return finish(NextResponse.json({ error: 'Invalid request origin', code: 'ORIGIN_REJECTED', correlationId }, { status: 403 }));
     const cookie = request.cookies.get(CSRF_COOKIE)?.value;
     if (!cookie) return finish(NextResponse.json({ error: 'Invalid CSRF token', code: 'CSRF_REJECTED', correlationId }, { status: 403 }));
     let token = request.headers.get(CSRF_HEADER);

@@ -3,17 +3,20 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { AI_MODELS } from '@/constants/ai';
+import { fetchWithRetry } from '@/lib/retry';
+import { safeModelText } from '@/lib/ai-safety';
+import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
-const IDEMPOTENCY_KEY_PREFIX = 'cron:generate_prompts:';
+const IDEMPOTENCY_KEY_PREFIX = 'cron:generate_prompts:v2:';
 
 async function callDeepSeek(prompt: string): Promise<string | null> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return null;
 
-  const res = await fetch('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
+  const res = await fetchWithRetry('https://api.deepseek.com/chat/completions', {
+    method: 'POST', signal: AbortSignal.timeout(8_000),
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: AI_MODELS.DEEPSEEK_MODEL,
@@ -38,10 +41,10 @@ async function callGemini(prompt: string): Promise<string | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const res = await fetch(
+  const res = await fetchWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_MODEL}:generateContent?key=${apiKey}`,
     {
-      method: 'POST',
+      method: 'POST', signal: AbortSignal.timeout(8_000),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
@@ -58,9 +61,9 @@ async function callGemini(prompt: string): Promise<string | null> {
 function getNextSevenDays(): string[] {
   const dates: string[] = [];
   const today = new Date();
-  for (let i = 1; i <= 7; i++) {
+  for (let i = 0; i < 7; i++) {
     const d = new Date(today);
-    d.setDate(d.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     dates.push(d.toISOString().split('T')[0]);
   }
   return dates;
@@ -86,16 +89,6 @@ function parsePromptsFromAI(text: string, dates: string[]): { date: string; prom
     }
   }
 
-  // If parsing failed or incomplete, fill in with generic prompts
-  while (results.length < dates.length) {
-    const idx = results.length;
-    results.push({
-      date: dates[idx],
-      theme: 'General',
-      prompt_text: `Write about a character who discovers something unexpected. Let your imagination guide the story.`,
-    });
-  }
-
   return results.slice(0, dates.length);
 }
 
@@ -104,13 +97,16 @@ async function run() {
   const redis = getRedisClient();
   const weekKey = `${IDEMPOTENCY_KEY_PREFIX}${new Date().toISOString().slice(0, 10)}`;
 
-  // Idempotency check
-  const alreadyRan = await redis.get(weekKey);
-  if (alreadyRan) {
-    return NextResponse.json({ message: 'Already generated prompts this week', cached: true });
-  }
-
   const dates = getNextSevenDays();
+  const schema = z.array(z.object({ date: z.iso.date(), prompt_text: z.string().min(10).max(500).refine(safeModelText), theme: z.string().min(1).max(100).refine(safeModelText) })).length(7);
+  let prompts: z.infer<typeof schema> | null = null;
+  const cached = await redis.get(weekKey);
+  if (cached) {
+    try {
+      const parsed = schema.safeParse(JSON.parse(cached));
+      if (parsed.success && parsed.data.every((prompt,index)=>prompt.date===dates[index])) prompts=parsed.data;
+    } catch { /* Invalid cache entries are regenerated. */ }
+  }
   const themes = [
     'Adventure',
     'Loss & Grief',
@@ -127,43 +123,29 @@ Themes in order: ${themeList}.
 Each prompt should be 1-3 sentences, vivid, and suitable for a short story or creative writing exercise.
 Example: 1. [Adventure] A cartographer discovers a map that leads not to a place, but to a feeling they thought they had lost forever.`;
 
-  let rawText = await callDeepSeek(userPrompt);
-  if (!rawText) {
-    rawText = await callGemini(userPrompt);
+  if (!prompts) {
+    const rawText = await callDeepSeek(userPrompt).catch(()=>null) ?? await callGemini(userPrompt).catch(()=>null);
+    if (!rawText) return NextResponse.json({ error: 'AI service unavailable' }, { status: 503 });
+    const parsed = schema.safeParse(parsePromptsFromAI(rawText,dates));
+    if (!parsed.success) return NextResponse.json({ error: 'AI returned incomplete or invalid prompts' }, { status: 502 });
+    prompts=parsed.data;
+    await redis.set(weekKey,JSON.stringify(prompts),{ex:60*60*24*8});
   }
-
-  if (!rawText) {
-    return NextResponse.json({ error: 'AI service unavailable' }, { status: 503 });
-  }
-
-  // Cache raw AI output for idempotency
-  await redis.set(weekKey, rawText, { ex: 60 * 60 * 24 * 8 }); // 8 days
-
-  const prompts = parsePromptsFromAI(rawText, dates);
   const supabase = createServiceClient();
 
-  // Upsert prompts (skip if date already exists)
   const inserted: string[] = [];
   const skipped: string[] = [];
-
-  for (const p of prompts) {
-    const { error } = await supabase
-      .from('writing_prompts')
-      .upsert(p, { onConflict: 'date', ignoreDuplicates: true });
-
-    if (error) {
-      skipped.push(p.date);
-    } else {
-      inserted.push(p.date);
-    }
+  const errors: string[] = [];
+  for (const prompt of prompts) {
+    const { data, error } = await supabase.rpc('publish_writing_prompt' as never, {
+      p_date: prompt.date, p_text: prompt.prompt_text, p_theme: prompt.theme,
+    } as never);
+    const result = data as { created?: boolean } | null;
+    if (error || typeof result?.created !== 'boolean') errors.push(prompt.date);
+    else if (result.created) inserted.push(prompt.date);
+    else skipped.push(prompt.date);
   }
-
-  return NextResponse.json({
-    success: true,
-    inserted,
-    skipped,
-    total: prompts.length,
-  });
+  return NextResponse.json({ success: errors.length===0, inserted, skipped, errors, total:prompts.length }, {status:errors.length?503:200});
 }
 
 export const GET = cron('generate-prompts', run);

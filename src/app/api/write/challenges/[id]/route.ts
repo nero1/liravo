@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { writingChallengeResponse } from '@/lib/writing-intents';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,10 +22,12 @@ export async function GET(
   }
 
   // Leaderboard: aggregate entries per user
-  const { data: entries } = await supabase
-    .from('writing_challenge_entries')
+  const { data: entries, error: entriesError } = await supabase
+    .from('writing_challenge_submissions')
     .select('user_id, word_count, users:user_id(display_name, username)')
     .eq('challenge_id', params.id);
+
+  if (entriesError) return NextResponse.json({ error: 'Leaderboard unavailable' }, { status: 503 });
 
   // Group by user
   const userMap = new Map<
@@ -49,5 +53,8 @@ export async function GET(
     (a, b) => b.total_words - a.total_words
   );
 
-  return NextResponse.json({ challenge, leaderboard });
+  const viewer = await getCurrentUser();
+  const membership = viewer ? await supabase.from('writing_challenge_participants').select('user_id').eq('challenge_id',params.id).eq('user_id',viewer.id).maybeSingle() : null;
+  if (membership?.error) return NextResponse.json({ error: 'Membership unavailable' }, { status: 503 });
+  return NextResponse.json({ joined: !!membership?.data, challenge: writingChallengeResponse(challenge), leaderboard });
 }

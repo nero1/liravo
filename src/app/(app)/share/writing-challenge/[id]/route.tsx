@@ -1,6 +1,8 @@
 import { ImageResponse } from 'next/og';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { getTranslations } from 'next-intl/server';
+import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,40 +16,22 @@ export async function GET(
   const searchParams = new URL(request.url).searchParams;
   const userId = searchParams.get('userId');
 
-  let challengeName = 'Writing Challenge';
+  if (!z.string().uuid().safeParse(params.id).success || (userId && !z.string().uuid().safeParse(userId).success)) return NextResponse.json({error:'Invalid share target'},{status:400});
+  const t = await getTranslations('writing');
+  const { data: challenge, error: challengeError } = await supabase.from('writing_challenges').select('title').eq('id',params.id).maybeSingle();
+  if (challengeError) return NextResponse.json({error:'Challenge unavailable'},{status:503});
+  if (!challenge) return NextResponse.json({error:'Challenge not found'},{status:404});
+  const challengeName = challenge.title;
   let submissionCount = 0;
-  let userName = 'A Writer';
-
-  try {
-    const { data: challenge } = await supabase
-      .from('writing_challenges')
-      .select('name')
-      .eq('id', params.id)
-      .single();
-
-    if (challenge) {
-      challengeName = challenge.name;
-    }
-
-    if (userId) {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('display_name')
-        .eq('id', userId)
-        .single();
-
-      if (profile) userName = profile.display_name;
-
-      const { count } = await supabase
-        .from('writing_challenge_entries')
-        .select('*', { count: 'exact', head: true })
-        .eq('challenge_id', params.id)
-        .eq('user_id', userId);
-
-      submissionCount = count ?? 0;
-    }
-  } catch {
-    // Use defaults
+  let userName = t('writer');
+  if (userId) {
+    const { data: profile, error: profileError } = await supabase.from('users').select('display_name').eq('id',userId).eq('is_banned',false).maybeSingle();
+    if (profileError) return NextResponse.json({error:'Profile unavailable'},{status:503});
+    if (!profile) return NextResponse.json({error:'Profile not found'},{status:404});
+    userName = profile.display_name || t('writer');
+    const {count,error} = await supabase.from('writing_challenge_submissions').select('id',{count:'exact',head:true}).eq('challenge_id',params.id).eq('user_id',userId);
+    if (error || count == null) return NextResponse.json({error:'Submissions unavailable'},{status:503});
+    submissionCount=count;
   }
 
   return new ImageResponse(
@@ -87,7 +71,7 @@ export async function GET(
               display: 'flex',
             }}
           >
-            I completed the
+            {t('shareIntro')}
           </div>
           <div
             style={{
@@ -109,7 +93,7 @@ export async function GET(
               display: 'flex',
             }}
           >
-            writing challenge on Liravo!
+            {t('shareMessage')}
           </div>
 
           {submissionCount > 0 && (
@@ -123,7 +107,7 @@ export async function GET(
               }}
             >
               <span style={{ color: '#ffffff', fontSize: '22px', display: 'flex' }}>
-                {submissionCount} submission{submissionCount !== 1 ? 's' : ''} submitted
+                {t('submissionCount',{count:submissionCount})}
               </span>
             </div>
           )}
