@@ -118,22 +118,25 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
 // ─── Helper types ─────────────────────────────────────────────────────────────
 type Supabase = ReturnType<typeof createServiceClient>;
 
-async function awardBadge(supabase: Supabase, userId: string, badge: BadgeDefinition): Promise<void> {
-  const {error}=await supabase.rpc('award_badge_atomic' as never,{p_user_id:userId,p_badge_id:badge.id,p_xp:badge.xp_reward,p_name:badge.name,p_icon:badge.icon} as never);
+async function awardBadge(supabase: Supabase, userId: string, badge: BadgeDefinition): Promise<boolean> {
+  const {data,error}=await supabase.rpc('award_badge_atomic' as never,{p_user_id:userId,p_badge_id:badge.id,p_xp:badge.xp_reward,p_name:badge.name,p_icon:badge.icon} as never);
   if(error)throw new Error('Badge award unavailable');
+  return data===true;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-export async function checkAndAwardBadges(userId: string, trigger: string): Promise<void> {
+export async function checkAndAwardBadges(userId: string, trigger: string): Promise<string[]> {
   const supabase = createServiceClient();
 
-  const { data: profile } = await supabase
+  const { data: profile, error:profileError} = await supabase
     .from('users')
     .select('books_read_count, reading_streak, writing_streak, xp')
     .eq('id', userId)
     .single();
+  if(profileError)throw new Error('Badge eligibility unavailable');
 
-  if (!profile) return;
+  if (!profile) return [];
+  const awarded:string[]=[];
   if(trigger==='finish_book'){
     const {data:completed,error}=await supabase.rpc('count_verified_books' as never,{p_user_id:userId} as never);
     if(error||typeof completed!=='number')throw new Error('Reading milestones unavailable');
@@ -163,93 +166,110 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Reviews ──
       case 'first_review': {
-        const { count } = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count, error:countError} = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 1; break;
       }
       case 'critic_10': {
-        const { count } = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count, error:countError} = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 10; break;
       }
       case 'critic_50': {
-        const { count } = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count, error:countError} = await supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 50; break;
       }
       case 'helpful_10': {
-        const { data: rv } = await supabase.from('reviews').select('helpful_votes').eq('user_id', userId);
+        const { data: rv, error:rvError} = await supabase.from('reviews').select('helpful_votes').eq('user_id', userId);
+        if(rvError)throw new Error('Badge eligibility unavailable');
         const total = (rv ?? []).reduce((s: number, r: { helpful_votes?: number }) => s + (r.helpful_votes ?? 0), 0);
         qualifies = total >= 10; break;
       }
       case 'helpful_50': {
-        const { data: rv } = await supabase.from('reviews').select('helpful_votes').eq('user_id', userId);
+        const { data: rv, error:rvError} = await supabase.from('reviews').select('helpful_votes').eq('user_id', userId);
+        if(rvError)throw new Error('Badge eligibility unavailable');
         const total = (rv ?? []).reduce((s: number, r: { helpful_votes?: number }) => s + (r.helpful_votes ?? 0), 0);
         qualifies = total >= 50; break;
       }
 
       // ── Social: following ──
       case 'social_butterfly': {
-        const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId);
+        const { count, error:countError} = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 10; break;
       }
 
       // ── Social: followers ──
       case 'popular_reader': {
-        const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId);
+        const { count, error:countError} = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 100; break;
       }
 
       // ── Referral badges (CORRECT thresholds: 10, 50, 200) ──
       case 'connector': {
-        const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
+        const { count, error:countError} = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 10; break;
       }
       case 'ambassador': {
-        const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
+        const { count, error:countError} = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 50; break;
       }
       case 'liravo_builder': {
-        const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
+        const { count, error:countError} = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 200; break;
       }
 
       // ── Influencer: 100 want-to-reads triggered ──
       case 'influencer': {
-        const { count } = await supabase.from('shelf_books').select('*', { count: 'exact', head: true }).eq('added_by_reviewer_id', userId);
+        const { count, error:countError} = await supabase.from('shelf_books').select('*', { count: 'exact', head: true }).eq('added_by_reviewer_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 100; break;
       }
 
       // ── Spark: first want-to-read triggered ──
       case 'spark': {
-        const { count } = await supabase.from('shelf_books').select('*', { count: 'exact', head: true }).eq('added_by_reviewer_id', userId);
+        const { count, error:countError} = await supabase.from('shelf_books').select('*', { count: 'exact', head: true }).eq('added_by_reviewer_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 1; break;
       }
 
       // ── Bookclub Host ──
       case 'bookclub_host': {
-        const { count } = await supabase.from('reading_rooms').select('*', { count: 'exact', head: true }).eq('created_by', userId);
+        const { count, error:countError} = await supabase.from('reading_rooms').select('*', { count: 'exact', head: true }).eq('created_by', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 1; break;
       }
 
       // ── Shelf Builder ──
       case 'shelf_builder': {
-        const { count } = await supabase.from('shelves').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_default', false);
+        const { count, error:countError} = await supabase.from('shelves').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_default', false);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 5; break;
       }
 
       // ── Writing: first prompt ──
       case 'first_prompt': {
-        const { count } = await supabase.from('writing_prompt_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count, error:countError} = await supabase.from('writing_prompt_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 1; break;
       }
 
       // ── Writing: prompt runner (30 prompts) ──
       case 'prompt_runner': {
-        const { count } = await supabase.from('writing_prompt_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count, error:countError} = await supabase.from('writing_prompt_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 30; break;
       }
 
       // ── Writing: first draft (writing challenge) ──
       case 'first_draft': {
-        const { count } = await supabase.from('writing_challenge_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count, error:countError} = await supabase.from('writing_challenge_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 1; break;
       }
 
@@ -262,8 +282,10 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Prolific Writer (10k words) ──
       case 'prolific_writer': {
-        const { data: pSubs } = await supabase.from('writing_prompt_submissions').select('word_count').eq('user_id', userId);
-        const { data: cEntries } = await supabase.from('writing_challenge_submissions').select('word_count').eq('user_id', userId);
+        const { data: pSubs, error:pSubsError} = await supabase.from('writing_prompt_submissions').select('word_count').eq('user_id', userId);
+        if(pSubsError)throw new Error('Badge eligibility unavailable');
+        const { data: cEntries, error:cEntriesError} = await supabase.from('writing_challenge_submissions').select('word_count').eq('user_id', userId);
+        if(cEntriesError)throw new Error('Badge eligibility unavailable');
         const total = (pSubs ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0)
           + (cEntries ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0);
         qualifies = total >= 10000; break;
@@ -272,13 +294,15 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
       // ── Craft Scholar: shelved 10 craft books ──
       case 'craft_scholar': {
         const craftGenres = ['Writing', 'Craft', 'Creative Writing', 'How to Write'];
-        const { data: shelves } = await supabase.from('shelves').select('id').eq('user_id', userId);
+        const { data: shelves, error:shelvesError} = await supabase.from('shelves').select('id').eq('user_id', userId);
+        if(shelvesError)throw new Error('Badge eligibility unavailable');
         if (shelves && shelves.length > 0) {
-          const { data: sb } = await supabase
+          const { data: sb, error:sbError} = await supabase
             .from('shelf_books')
             .select('book_id, books:book_id(genres)')
             .in('shelf_id', shelves.map((s) => s.id))
             .limit(500);
+          if(sbError)throw new Error('Badge eligibility unavailable');
           const craftCount = (sb ?? []).filter((row) =>
             singleRelation(row.books)?.genres?.some((g: string) => craftGenres.some((cg) => g.toLowerCase().includes(cg.toLowerCase())))
           ).length;
@@ -291,10 +315,12 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
       case 'speed_reader_month': {
         const oneMonthAgo = new Date();
         oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-        const { data: shelves } = await supabase.from('shelves').select('id').eq('user_id', userId).eq('default_type', 'have_read');
+        const { data: shelves, error:shelvesError} = await supabase.from('shelves').select('id').eq('user_id', userId).eq('default_type', 'have_read');
+        if(shelvesError)throw new Error('Badge eligibility unavailable');
         if (shelves && shelves.length > 0) {
-          const { count } = await supabase.from('shelf_books').select('*', { count: 'exact', head: true })
+          const { count, error:countError} = await supabase.from('shelf_books').select('*', { count: 'exact', head: true })
             .in('shelf_id', shelves.map((s) => s.id)).gte('finished_at', oneMonthAgo.toISOString());
+          if(countError)throw new Error('Badge eligibility unavailable');
           qualifies = (count ?? 0) >= 5;
         }
         break;
@@ -302,10 +328,12 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Sprint Reader: book finished in < 3 days ──
       case 'sprint_reader': {
-        const { data: shelves } = await supabase.from('shelves').select('id').eq('user_id', userId).eq('default_type', 'have_read');
+        const { data: shelves, error:shelvesError} = await supabase.from('shelves').select('id').eq('user_id', userId).eq('default_type', 'have_read');
+        if(shelvesError)throw new Error('Badge eligibility unavailable');
         if (shelves && shelves.length > 0) {
-          const { data: recent } = await supabase.from('shelf_books').select('added_at, finished_at')
+          const { data: recent, error:recentError} = await supabase.from('shelf_books').select('added_at, finished_at')
             .in('shelf_id', shelves.map((s) => s.id)).not('finished_at', 'is', null).order('finished_at', { ascending: false }).limit(20);
+          if(recentError)throw new Error('Badge eligibility unavailable');
           qualifies = (recent ?? []).some((b: { added_at: string; finished_at: string }) => {
             const diff = new Date(b.finished_at).getTime() - new Date(b.added_at).getTime();
             return diff >= 0 && diff <= 3 * 24 * 60 * 60 * 1000;
@@ -316,10 +344,12 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Weekend Warrior: finished over a weekend ──
       case 'weekend_warrior_speed': {
-        const { data: shelves } = await supabase.from('shelves').select('id').eq('user_id', userId).eq('default_type', 'have_read');
+        const { data: shelves, error:shelvesError} = await supabase.from('shelves').select('id').eq('user_id', userId).eq('default_type', 'have_read');
+        if(shelvesError)throw new Error('Badge eligibility unavailable');
         if (shelves && shelves.length > 0) {
-          const { data: recent } = await supabase.from('shelf_books').select('added_at, finished_at')
+          const { data: recent, error:recentError} = await supabase.from('shelf_books').select('added_at, finished_at')
             .in('shelf_id', shelves.map((s) => s.id)).not('finished_at', 'is', null).order('finished_at', { ascending: false }).limit(20);
+          if(recentError)throw new Error('Badge eligibility unavailable');
           qualifies = (recent ?? []).some((b: { added_at: string; finished_at: string }) => {
             const start = new Date(b.added_at);
             const end = new Date(b.finished_at);
@@ -337,16 +367,18 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
         for (const g of GENRE_BADGES_DEF) {
           for (const t of GENRE_BADGE_TIERS) {
             if (badge.id === `${g.id}${t.suffix}`) {
-              const { data: shelves } = await supabase.from('shelves').select('id').eq('user_id', userId);
+              const { data: shelves, error:shelvesError} = await supabase.from('shelves').select('id').eq('user_id', userId).eq('default_type','have_read');
+              if(shelvesError)throw new Error('Badge eligibility unavailable');
               if (shelves && shelves.length > 0) {
-                const { data: sb } = await supabase
+                const { data: sb, error:sbError} = await supabase
                   .from('shelf_books')
                   .select('book_id, books:book_id(genres)')
-                  .in('shelf_id', shelves.map((s) => s.id))
+                  .in('shelf_id', shelves.map((s) => s.id)).not('finished_at','is',null)
                   .limit(2000);
-                const genreCount = (sb ?? []).filter((row) =>
+                if(sbError)throw new Error('Badge eligibility unavailable');
+                const genreCount = new Set((sb ?? []).filter((row) =>
                   singleRelation(row.books)?.genres?.some((gn: string) => gn.toLowerCase().includes(g.genre.toLowerCase()))
-                ).length;
+                ).map(row=>row.book_id)).size;
                 qualifies = genreCount >= t.count;
               }
             }
@@ -356,9 +388,10 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
     }
 
     if (qualifies) {
-      await awardBadge(supabase, userId, badge);
+      if(await awardBadge(supabase,userId,badge))awarded.push(badge.id);
     }
   }
+  return awarded;
 }
 
 // ── Writing streak increment (separate from reading streak) ──────────────────
@@ -369,12 +402,12 @@ export async function incrementWritingStreak(userId: string): Promise<void> {
 }
 
 // ── Award a seasonal badge to a specific user (called from admin endpoint) ────
-export async function awardSeasonalBadge(userId: string, badgeId: string): Promise<{ ok: boolean; error?: string }> {
+export async function awardSeasonalBadge(userId: string, badgeId: string): Promise<{ ok: boolean; awarded?:boolean; error?: string }> {
   const badge = SEASONAL_BADGE_DEFINITIONS.find((b) => b.id === badgeId);
   if (!badge) return { ok: false, error: 'Unknown seasonal badge' };
   const supabase = createServiceClient();
-  await awardBadge(supabase, userId, badge);
-  return { ok: true };
+  const awarded=await awardBadge(supabase,userId,badge);
+  return {ok:true,awarded};
 }
 
 // ── Bulk-award a seasonal badge to all qualifying users (called from admin) ───
@@ -382,7 +415,7 @@ export async function bulkAwardSeasonalBadge(badgeId: string, userIds: string[])
   let awarded = 0;
   for (const uid of userIds) {
     const result = await awardSeasonalBadge(uid, badgeId);
-    if (result.ok) awarded++;
+    if(result.awarded)awarded++;
   }
   return { awarded };
 }

@@ -90,11 +90,12 @@ export async function DELETE(
     return NextResponse.json({ error: 'List not found or not authorized' }, { status: 404 });
   }
 
-  await supabase 
+  const {error}=await supabase
     .from('reading_list_books')
     .delete()
     .eq('list_id', params.id)
     .eq('book_id', parsed.data.book_id);
 
+  if(error)return NextResponse.json({error:'Failed to remove book'},{status:503});
   return NextResponse.json({ success: true });
 }

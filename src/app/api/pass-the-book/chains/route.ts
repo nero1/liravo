@@ -1,3 +1,5 @@
+import { applyCommunityIntent } from '@/lib/community-intents';
+import { ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -35,35 +37,12 @@ export async function GET() {
 }
 
 // POST /api/pass-the-book/chains — start a new chain
-export async function POST(req: Request) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
-
-  const parsed = CreateChainSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
-
-  const { data: book } = await supabase.from('books').select('id, title').eq('id', parsed.data.book_id).single();
-  if (!book) return NextResponse.json({ error: 'Book not found' }, { status: 404 });
-
-  // Create chain
-  const { data: chain, error: chainError } = await supabase
-    .from('pass_the_book_chains')
-    .insert({ book_id: parsed.data.book_id, creator_id: user.id })
-    .select()
-    .single();
-
-  if (chainError) return NextResponse.json({ error: chainError.message }, { status: 500 });
-
-  // Add creator as first node
-  const { error: nodeError } = await supabase
-    .from('pass_the_book_nodes')
-    .insert({ chain_id: chain.id, user_id: user.id, position: 0, note: parsed.data.note ?? null });
-
-  if (nodeError) return NextResponse.json({ error: nodeError.message }, { status: 500 });
-
-  return NextResponse.json({ chain }, { status: 201 });
+export async function POST(request:Request) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  let body;try{body=await request.json();}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
+  const parsed=CreateChainSchema.safeParse(body);if(!parsed.success)return NextResponse.json({error:'Invalid input'},{status:400});
+  try{return NextResponse.json(await applyCommunityIntent(request,user.id,'chain_create',parsed.data.book_id,{note:parsed.data.note??null}),{status:201});
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 }

@@ -22,7 +22,7 @@ export default function ARCsScreen() {
       <FlatList data={arcs} keyExtractor={(a) => a.id} renderItem={({ item }) => (
         <TouchableOpacity className="px-4 py-4 border-b border-border" onPress={() => router.push(`/author/arcs/${item.id}`)} activeOpacity={0.7}>
           <Text className="font-semibold text-foreground">{item.title}</Text>
-          <Text className="text-sm text-muted-foreground">{item.application_count ?? 0} applications</Text>
+          <Text className="text-sm text-muted-foreground">{item.reader_slots} reader slots</Text>
         </TouchableOpacity>
       )} ListEmptyComponent={<EmptyState title="No ARCs yet" description="Create an ARC to distribute advance copies." />} contentContainerStyle={{ paddingBottom: 24 }} />
     </SafeAreaView>

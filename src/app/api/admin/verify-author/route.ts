@@ -1,68 +1,19 @@
-import { createClient } from '@/lib/supabase/server';
+import { applyCommunityIntent } from '@/lib/community-intents';
+import { ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/moderation';
 import { z } from 'zod';
-import { createNotification } from '@/services/notifications';
-import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
-export const dynamic = 'force-dynamic';
+export const dynamic='force-dynamic';
 
-const schema = z.object({
-  userId: z.string().uuid(),
-  approved: z.boolean(),
-});
+const schema=z.object({userId:z.string().uuid(),approved:z.boolean()});
 
-export async function POST(req: Request) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { data: admin } = await supabase
-    .from('users')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
-
-  if (!admin?.is_admin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const body = await req.json();
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const { userId, approved } = parsed.data;
-
-  if (approved) {
-    const { data: updated, error } = await supabase
-      .from('users')
-      .update({ is_verified_author: true } as never)
-      .eq('id', userId)
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    await createNotification({
-      userId,
-      type: 'author_qa_answer',
-      message: 'Your author verification has been approved! You now have a verified author badge.',
-    });
-
-    return NextResponse.json({ user: updated });
-  } else {
-    await createNotification({
-      userId,
-      type: 'author_qa_answer',
-      message: 'Your author verification request was not approved at this time.',
-    });
-
-    return NextResponse.json({ message: 'Verification rejected' });
+export async function POST(request:Request) {
+  const auth=await requireAdmin();if(auth instanceof NextResponse)return auth;
+  let body;try{body=await request.json();}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
+  const parsed=schema.safeParse(body);if(!parsed.success)return NextResponse.json({error:'Invalid input'},{status:400});
+  try{return NextResponse.json(await applyCommunityIntent(request,auth.userId,'author_verify',parsed.data.userId,{approved:parsed.data.approved}));
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 }

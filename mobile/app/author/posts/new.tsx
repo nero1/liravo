@@ -13,7 +13,7 @@ export default function NewAuthorPostScreen() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const create = useMutation({
-    mutationFn: () => api.post(ENDPOINTS.author.createPost, { title, content }),
+    mutationFn: () => api.post(ENDPOINTS.author.createPost, {title,body:content,type:'announcement'}),
     onSuccess: () => { router.back(); },
     onError: (err) => Alert.alert('Error', (err as Error).message),
   });
@@ -22,7 +22,7 @@ export default function NewAuthorPostScreen() {
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 16 }}>
           <Input label="Post Title" value={title} onChangeText={setTitle} placeholder="e.g. New book announcement" maxLength={120} />
-          <Input label="Content" value={content} onChangeText={setContent} placeholder="Share an update with your readers..." multiline numberOfLines={8} maxLength={5000} style={{ minHeight: 160, textAlignVertical: 'top' }} />
+          <Input label="Content" value={content} onChangeText={setContent} placeholder="Share an update with your readers..." multiline numberOfLines={8} maxLength={2000} style={{ minHeight: 160, textAlignVertical: 'top' }} />
           <Button onPress={() => create.mutate()} loading={create.isPending} disabled={!title.trim() || !content.trim()} size="lg">Publish Post</Button>
         </ScrollView>
       </KeyboardAvoidingView>

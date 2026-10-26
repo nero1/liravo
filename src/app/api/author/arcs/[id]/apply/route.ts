@@ -1,71 +1,15 @@
-import { createClient } from '@/lib/supabase/server';
+import { applyCommunityIntent } from '@/lib/community-intents';
+import { ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
-import { createNotification } from '@/services/notifications';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
-export const dynamic = 'force-dynamic';
+export const dynamic='force-dynamic';
 
-export async function POST(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
 
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function POST(request:Request,{params}:{params:{id:string}}) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  try{return NextResponse.json(await applyCommunityIntent(request,user.id,'arc_apply',params.id,{}));
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
-
-  const { data: arc } = await supabase
-    .from('arcs')
-    .select('id, author_id, reader_slots, is_active')
-    .eq('id', params.id)
-    .single();
-
-  if (!arc) {
-    return NextResponse.json({ error: 'ARC not found' }, { status: 404 });
-  }
-
-  if (!arc.is_active) {
-    return NextResponse.json({ error: 'This ARC is no longer active' }, { status: 400 });
-  }
-
-  if (arc.author_id === user.id) {
-    return NextResponse.json({ error: 'You cannot apply to your own ARC' }, { status: 400 });
-  }
-
-  // Check if already applied
-  const { data: existing } = await supabase
-    .from('arc_applications')
-    .select('id')
-    .eq('arc_id', params.id)
-    .eq('reader_id', user.id)
-    .single();
-
-  if (existing) {
-    return NextResponse.json({ error: 'Already applied' }, { status: 409 });
-  }
-
-  const { error } = await supabase
-    .from('arc_applications')
-    .insert({
-      arc_id: params.id,
-      reader_id: user.id,
-      status: 'pending',
-    });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  await createNotification({
-    userId: arc.author_id,
-    type: 'buddy_read_invite',
-    actorId: user.id,
-    entityType: 'arc',
-    entityId: params.id,
-    message: 'A reader applied for your ARC.',
-  });
-
-  return NextResponse.json({ applied: true });
 }

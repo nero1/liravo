@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -27,8 +27,8 @@ interface Arc {
   books: { id: string; title: string; author_name: string; cover_url: string | null } | null;
 }
 
-export default function ArcDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ArcDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const [arc, setArc] = useState<Arc | null>(null);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);

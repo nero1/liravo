@@ -1,3 +1,4 @@
+import { applyCommunityIntent } from '@/lib/community-intents';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -103,40 +104,13 @@ export async function POST(request: Request) {
   return NextResponse.json({ note: data }, { status: 201 });
 }
 
-export async function PATCH(request: Request) {
-  const auth = await requireModerator();
-  if (auth instanceof NextResponse) return auth;
-
-  const { searchParams } = new URL(request.url);
-  const noteId = searchParams.get('noteId');
-  if (!noteId) {
-    return NextResponse.json({ error: 'noteId is required' }, { status: 400 });
+export async function PATCH(request:Request) {
+  const auth=await requireModerator();if(auth instanceof NextResponse)return auth;
+  const noteId=new URL(request.url).searchParams.get('noteId');if(!noteId)return NextResponse.json({error:'noteId required'},{status:400});
+  let body;try{body=await request.json();}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
+  const parsed=notePatchSchema.safeParse(body);if(!parsed.success)return NextResponse.json({error:'Invalid decision'},{status:400});
+  try{return NextResponse.json(await applyCommunityIntent(request,auth.userId,'community_note_review',noteId,parsed.data));
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
-
-  const raw = await request.json();
-  const parsed = notePatchSchema.safeParse(raw);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
-  }
-
-  const supabase = createServiceClient();
-
-  // community_notes table may not be in DB type
-  const { data, error } = await supabase
-    .from('community_notes')
-    .update({
-      status: parsed.data.status,
-      is_visible:parsed.data.status==='approved',
-      reviewed_by: auth.userId,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq('id', noteId)
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ note: data });
 }
