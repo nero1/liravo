@@ -1,17 +1,19 @@
+import { ChallengeJoinButton } from '@/components/writing/ChallengeJoinButton';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Writing Challenges — Liravo' };
+export async function generateMetadata(): Promise<Metadata> { return { title: (await getTranslations('writing'))('challengeTitle') }; }
 
 interface Challenge {
   id: string;
-  name: string;
+  title: string;
   description: string | null;
-  challenge_type: string;
+  type: string;
   goal_type: string;
   goal_value: number;
   start_date: string;
@@ -27,45 +29,44 @@ function daysRemaining(endDate: string): number {
 }
 
 export default async function WritingChallengesPage() {
+  const t = await getTranslations('writing');
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString();
 
-  const { data: challenges } = await supabase
+  const { data: challenges, error: challengesError } = await supabase
     .from('writing_challenges')
     .select('*')
+    .eq('is_active',true)
     .lte('start_date', today)
     .gte('end_date', today)
     .order('end_date', { ascending: true });
 
-  const { data: joined } = await supabase
+  const { data: joined, error: joinedError } = await supabase
     .from('writing_challenge_participants')
     .select('challenge_id')
     .eq('user_id', user.id);
 
+  if (challengesError || joinedError) throw new Error('Writing challenges unavailable');
   const joinedIds = new Set((joined ?? []).map((j: { challenge_id: string }) => j.challenge_id));
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="font-display text-2xl font-bold">Writing Challenges</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Weekly and monthly challenges with leaderboards and badges.
-          </p>
+          <h1 className="font-display text-2xl font-bold">{t('challengeTitle')}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t('challengeSubtitle')}</p>
         </div>
-        <Link href="/write" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Write Hub
-        </Link>
+        <Link href="/write" className="text-sm text-muted-foreground hover:text-foreground">{t('writeHub')}</Link>
       </div>
 
       {(challenges ?? []).length === 0 ? (
         <div className="rounded-xl border bg-muted p-8 text-center">
-          <p className="text-muted-foreground">No active challenges right now. Check back soon!</p>
+          <p className="text-muted-foreground">{t('noChallenges')}</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -78,13 +79,13 @@ export default async function WritingChallengesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-medium bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded-full">
-                        {c.challenge_type === 'weekly' ? 'Weekly' : 'Monthly'}
+                        {c.type === 'weekly' ? t('weekly') : t('monthly')}
                       </span>
                       {days <= 3 && days > 0 && (
-                        <span className="text-xs text-red-500 font-medium">Ending soon!</span>
+                        <span className="text-xs text-red-500 font-medium">{t('endingSoon')}</span>
                       )}
                     </div>
-                    <h2 className="font-semibold text-lg">{c.name}</h2>
+                    <h2 className="font-semibold text-lg">{c.title}</h2>
                     {c.description && (
                       <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                         {c.description}
@@ -92,28 +93,18 @@ export default async function WritingChallengesPage() {
                     )}
                     <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
                       <span>
-                        Goal: {c.goal_value.toLocaleString()}{' '}
-                        {c.goal_type === 'word_count' ? 'words' : 'submissions'}
+                        {t(c.goal_type === 'word_count' ? 'goalWords' : 'goalSubmissions',{count:c.goal_value})}
                       </span>
-                      <span>{days} days remaining</span>
-                      <span>{c.participant_count} participants</span>
+                      <span>{t('daysRemaining',{count:days})}</span>
+                      <span>{t('participants',{count:c.participant_count})}</span>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 shrink-0">
                     <Link
                       href={`/write/challenges/${c.id}`}
                       className="rounded-lg border px-3 py-1.5 text-sm hover:bg-muted transition-colors text-center"
-                    >
-                      View
-                    </Link>
-                    {!isJoined && (
-                      <JoinButton challengeId={c.id} />
-                    )}
-                    {isJoined && (
-                      <span className="text-xs text-green-600 dark:text-green-400 font-medium text-center">
-                        ✓ Joined
-                      </span>
-                    )}
+                    >{t('view')}</Link>
+                    <ChallengeJoinButton challengeId={c.id} initialJoined={isJoined} />
                   </div>
                 </div>
               </div>
@@ -122,53 +113,5 @@ export default async function WritingChallengesPage() {
         </div>
       )}
     </div>
-  );
-}
-
-function JoinButton({ challengeId }: { challengeId: string }) {
-  return (
-    <form
-      action={async () => {
-        'use server';
-        const supabase = createClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data: existing } = await supabase
-          .from('writing_challenge_participants')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('challenge_id', challengeId)
-          .maybeSingle();
-
-        if (existing) return;
-
-        await supabase
-          .from('writing_challenge_participants')
-          .insert({ user_id: user.id, challenge_id: challengeId });
-
-        const { data: challenge } = await supabase
-          .from('writing_challenges')
-          .select('participant_count')
-          .eq('id', challengeId)
-          .single();
-
-        if (challenge) {
-          await supabase
-            .from('writing_challenges')
-            .update({ participant_count: (challenge.participant_count ?? 0) + 1 })
-            .eq('id', challengeId);
-        }
-      }}
-    >
-      <button
-        type="submit"
-        className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-3 py-1.5 transition-colors w-full"
-      >
-        Join
-      </button>
-    </form>
   );
 }

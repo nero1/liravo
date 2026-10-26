@@ -29,8 +29,8 @@ export default function PromptDetailScreen() {
           <View className="bg-accent/10 border border-accent/30 rounded-xl p-4">
             <Text className="text-foreground font-medium">{prompt.prompt}</Text>
           </View>
-          <Input label="Your Response" value={response} onChangeText={setResponse} placeholder="Write your response here..." multiline numberOfLines={8} maxLength={5000} style={{ minHeight: 160, textAlignVertical: 'top' }} />
-          <Button onPress={() => submit.mutate()} loading={submit.isPending} disabled={response.trim().length < 10} size="lg">Submit</Button>
+          <Input label="Your Response" value={response} onChangeText={setResponse} placeholder="Write your response here..." multiline numberOfLines={8} maxLength={2000} style={{ minHeight: 160, textAlignVertical: 'top' }} />
+          <Button onPress={() => submit.mutate()} loading={submit.isPending} disabled={response.trim().length < 50} size="lg">Submit</Button>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

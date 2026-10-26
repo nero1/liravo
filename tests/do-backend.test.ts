@@ -394,3 +394,12 @@ describe('audit — zero raw supabase.auth.getUser() calls in API routes', () =>
     expect(src).toContain('getDoUser');
   });
 });
+
+it('normalizes PostgreSQL DATE objects and PostgREST date strings to the same prompt contract', async () => {
+  const { writingPromptResponse } = await import('@/lib/writing-intents');
+  for (const date of [new Date('2026-10-26T00:00:00Z'),'2026-10-26']) {
+    const response=writingPromptResponse({prompt_date:date,prompt_text:'Daily prompt',topic_seed:'Adventure'});
+    expect(response).toMatchObject({date:'2026-10-26',prompt_date:'2026-10-26',prompt:'Daily prompt',genre:'Adventure'});
+  }
+  expect(writingPromptResponse({prompt_date:null}).date).toBeNull();
+});

@@ -5,7 +5,7 @@ import { SEED_PROMPTS } from '../data/prompts.js';
 
 function toDateString(daysFromNow: number): string {
   const d = new Date();
-  d.setDate(d.getDate() + daysFromNow);
+  d.setUTCDate(d.getUTCDate() + daysFromNow);
   return d.toISOString().split('T')[0]; // YYYY-MM-DD
 }
 
@@ -21,29 +21,15 @@ export async function seedPrompts(client: SeedClient): Promise<SeedResult> {
     const p = SEED_PROMPTS[i];
     const promptDate = toDateString(i + 1); // starts tomorrow
 
-    // writing_prompts has no unique constraint on prompt_date — check manually
-    const { data: existing } = await client
-      .from('writing_prompts')
-      .select('id')
-      .eq('prompt_date', promptDate)
-      .maybeSingle();
-
-    if (existing) {
-      result.skipped++;
-      continue;
-    }
-
-    const { error } = await client.from('writing_prompts').insert({
-      prompt_text: p.prompt_text,
-      topic_seed: p.topic_seed,
-      is_active: true,
-      prompt_date: promptDate,
+    const { data, error: error } = await client.rpc('publish_writing_prompt', {
+      p_date: promptDate, p_text: p.prompt_text, p_theme: p.topic_seed,
     });
-
     if (error) {
       result.errors.push(`Prompt day ${i + 1} (${promptDate}): ${error.message}`);
-    } else {
+    } else if (data?.created) {
       result.inserted++;
+    } else {
+      result.skipped++;
     }
   }
 

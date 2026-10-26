@@ -1609,3 +1609,5 @@ Content retry handling: primary content creation now commits a durable replay sn
 Admin operations now keep cron credentials server-side, show integrity alerts, and use localized controls. Concurrent provider changes preserve one enabled sign-in provider. Referral binding/reward/notification commit together, and browser profile writes cannot replace referral identity. These paths are included in the database rehearsal.
 
 Tip checkout redirects to the payment provider and displays pending/failed/confirmed status from verified webhooks. Subscription cancellation remains pending until provider confirmation; durable retries retain premium access until cancellation commits. Admin operations show financial integrity alerts and thresholded security/payment/cron counters in all supported locales.
+
+Writer submissions, joins, votes and best-answer selection now commit durable replay results with their counters and rewards. Daily prompt publication recovers partial saves. Prompt/challenge pages use all supported locales and expose pending, error and selected states accessibly.

@@ -1,11 +1,13 @@
 import { createClient } from '@/lib/supabase/server';
+import { z } from 'zod';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations, getFormatter } from 'next-intl/server';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Prompt Responses' };
+export async function generateMetadata(): Promise<Metadata> { return { title: (await getTranslations('writing'))('responsesTitle') }; }
 
 const PAGE_SIZE = 20;
 
@@ -15,40 +17,46 @@ interface PageProps {
 }
 
 export default async function PromptResponsesPage({ params, searchParams }: PageProps) {
+  const t = await getTranslations('writing');
+  const formatter = await getFormatter();
+  if (!z.string().uuid().safeParse(params.id).success) notFound();
   const supabase = createClient();
 
-  const { data: prompt } = await supabase
+  const { data: prompt, error: promptError } = await supabase
     .from('writing_prompts')
     .select('*')
-    .eq('id', params.id)
-    .single();
+    .eq('id', params.id).eq('is_active',true)
+    .maybeSingle();
 
+  if (promptError) throw new Error('Prompt unavailable');
   if (!prompt) notFound();
 
-  const page = Math.max(1, parseInt(searchParams.page ?? '1', 10));
+  const parsedPage=z.coerce.number().int().min(1).max(10000).safeParse(searchParams.page??1);
+  if (!parsedPage.success) notFound();
+  const page=parsedPage.data;
   const from = (page - 1) * PAGE_SIZE;
 
-  const { data: submissions, count } = await supabase
+  const { data: submissions, count, error: submissionsError } = await supabase
     .from('writing_prompt_submissions')
     .select('id, content, word_count, created_at, user_id, users:user_id(display_name, username, avatar_url)', { count: 'exact' })
     .eq('prompt_id', params.id)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false }).order('id',{ascending:false})
     .range(from, from + PAGE_SIZE - 1);
 
+  if (submissionsError || count == null) throw new Error('Responses unavailable');
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
 
+  if (page > Math.max(1,totalPages)) notFound();
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="mb-6">
-        <Link href="/write/prompts" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Daily Prompts
-        </Link>
+        <Link href="/write/prompts" className="text-sm text-muted-foreground hover:text-foreground">{t('dailyPrompts')}</Link>
         <div className="mt-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-5">
-          <p className="text-xs text-muted-foreground mb-1">{prompt.date}</p>
+          <p className="text-xs text-muted-foreground mb-1">{prompt.prompt_date ? formatter.dateTime(new Date(prompt.prompt_date),{dateStyle:'medium'}) : ''}</p>
           <p className="text-lg font-medium text-amber-900 dark:text-amber-100">{prompt.prompt_text}</p>
         </div>
         <p className="text-sm text-muted-foreground mt-2">
-          {count ?? 0} response{(count ?? 0) !== 1 ? 's' : ''}
+          {t('responseCount',{count:count??0})}
         </p>
       </div>
 
@@ -72,12 +80,12 @@ export default async function PromptResponsesPage({ params, searchParams }: Page
                   href={`/user/${profile?.username ?? ''}`}
                   className="text-sm font-medium hover:underline"
                 >
-                  {profile?.display_name ?? 'Unknown'}
+                  {profile?.display_name ?? t('unknown')}
                 </Link>
-                <span className="text-xs text-muted-foreground ml-2">{sub.word_count} words</span>
+                <span className="text-xs text-muted-foreground ml-2">{t('wordCount',{count:sub.word_count??0})}</span>
               </div>
               <span className="ml-auto text-xs text-muted-foreground">
-                {new Date(sub.created_at).toLocaleDateString()}
+                {formatter.dateTime(new Date(sub.created_at),{dateStyle:'medium'})}
               </span>
             </div>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{sub.content}</p>
@@ -91,20 +99,16 @@ export default async function PromptResponsesPage({ params, searchParams }: Page
             <Link
               href={`/write/prompts/${params.id}?page=${page - 1}`}
               className="rounded-lg border px-3 py-1.5 text-sm hover:bg-muted"
-            >
-              Previous
-            </Link>
+            >{t('previous')}</Link>
           )}
           <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
+            {t('pageInfo',{page,total:totalPages})}
           </span>
           {page < totalPages && (
             <Link
               href={`/write/prompts/${params.id}?page=${page + 1}`}
               className="rounded-lg border px-3 py-1.5 text-sm hover:bg-muted"
-            >
-              Next
-            </Link>
+            >{t('next')}</Link>
           )}
         </div>
       )}

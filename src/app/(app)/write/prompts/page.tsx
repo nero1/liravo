@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useRequestIntent } from '@/lib/client/useRequestIntent';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useTranslations, useFormatter } from 'next-intl';
 import Image from 'next/image';
 
 interface WritingPrompt {
@@ -31,9 +33,14 @@ interface LeaderEntry {
 type LBPeriod = 'weekly' | 'monthly' | 'all_time';
 
 export default function PromptsPage() {
+  const t = useTranslations('writing');
+  const formatter = useFormatter();
+  const intent = useRequestIntent();
+  const busy = useRef(false);
   const [todayPrompt, setTodayPrompt] = useState<WritingPrompt | null>(null);
   const [pastPrompts, setPastPrompts] = useState<WritingPrompt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError,setLoadError] = useState(false);
   const [charCount, setCharCount] = useState(0);
   const [submit, setSubmit] = useState<SubmitState>({
     content: '',
@@ -48,37 +55,44 @@ export default function PromptsPage() {
 
   useEffect(() => {
     fetch('/api/write/prompts')
-      .then((r) => r.json())
+      .then(r => { if (!r.ok) throw new Error('Writing request failed'); return r.json(); })
       .then((data) => {
         setTodayPrompt(data.today ?? null);
         setPastPrompts(data.past ?? []);
       })
+      .catch(()=>setLoadError(true))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     setLbLoading(true);
     fetch(`/api/write/prompts/leaderboard?period=${lbPeriod}`)
-      .then((r) => r.json())
+      .then(r => { if (!r.ok) throw new Error('Writing request failed'); return r.json(); })
       .then((d) => setLeaderboard(d.leaderboard ?? []))
+      .catch(()=>setLoadError(true))
       .finally(() => setLbLoading(false));
   }, [lbPeriod]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!todayPrompt) return;
+    if (!todayPrompt || busy.current) return;
+    busy.current = true;
     setSubmit((s) => ({ ...s, loading: true, error: null }));
-    const res = await fetch(`/api/write/prompts/${todayPrompt.id}/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: submit.content }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setSubmit((s) => ({ ...s, loading: false, error: data.error?.formErrors?.[0] ?? data.error ?? 'Submission failed' }));
-    } else {
-      setSubmit((s) => ({ ...s, loading: false, success: true }));
-    }
+    try {
+      const res = await fetch(`/api/write/prompts/${todayPrompt.id}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...intent.headers({content:submit.content}) },
+        body: JSON.stringify({ content: submit.content }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.submission?.id) {
+        setSubmit((s) => ({ ...s, loading: false, error: res.status===409 ? t('alreadySubmitted') : t('submitFailure') }));
+      } else {
+        intent.complete();
+        setSubmit((s) => ({ ...s, loading: false, success: true }));
+      }
+    } catch { setSubmit(s=>({...s,error:t('submitFailure')})); }
+    finally { busy.current = false; setSubmit(s=>({...s,loading:false})); }
   }
 
   if (loading) {
@@ -93,32 +107,28 @@ export default function PromptsPage() {
   }
 
   const PERIODS: { key: LBPeriod; label: string }[] = [
-    { key: 'weekly', label: 'This Week' },
-    { key: 'monthly', label: 'This Month' },
-    { key: 'all_time', label: 'All Time' },
+    { key: 'weekly', label: t('periodWeekly') },
+    { key: 'monthly', label: t('periodMonthly') },
+    { key: 'all_time', label: t('periodAll') },
   ];
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="font-display text-2xl font-bold">Daily Prompt</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            A new prompt every day — submit your response to earn 10 XP.
-          </p>
+          <h1 className="font-display text-2xl font-bold">{t('promptTitle')}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t('promptSubtitle')}</p>
         </div>
-        <Link href="/write" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Write Hub
-        </Link>
+        <Link href="/write" className="text-sm text-muted-foreground hover:text-foreground">{t('writeHub')}</Link>
       </div>
+
+      {loadError && <p role="alert" className="text-destructive mb-4">{t('loadFailure')}</p>}
 
       {/* Today's prompt */}
       {todayPrompt ? (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-6 mb-6">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-medium bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 px-2 py-0.5 rounded-full">
-              Today
-            </span>
+            <span className="text-xs font-medium bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 px-2 py-0.5 rounded-full">{t('today')}</span>
             {todayPrompt.theme && (
               <span className="text-xs text-muted-foreground">{todayPrompt.theme}</span>
             )}
@@ -129,29 +139,23 @@ export default function PromptsPage() {
           <Link
             href={`/write/prompts/${todayPrompt.id}`}
             className="text-xs text-amber-700 dark:text-amber-400 hover:underline"
-          >
-            View all responses →
-          </Link>
+          >{t('viewResponses')}</Link>
         </div>
       ) : (
-        <div className="rounded-xl border bg-muted p-6 mb-6 text-center text-muted-foreground">
-          No prompt for today yet — check back soon!
-        </div>
+        <div className="rounded-xl border bg-muted p-6 mb-6 text-center text-muted-foreground">{t('promptMissing')}</div>
       )}
 
       {/* Submit form */}
       {todayPrompt && !submit.success && (
         <form onSubmit={handleSubmit} className="mb-8">
-          <label className="block text-sm font-medium mb-2" htmlFor="response">
-            Your Response
-          </label>
+          <label className="block text-sm font-medium mb-2" htmlFor="response">{t('responseLabel')}</label>
           <textarea
             id="response"
             rows={8}
             minLength={50}
             maxLength={2000}
             required
-            placeholder="Write at least 50 characters..."
+            placeholder={t('responsePlaceholder')}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-500"
             value={submit.content}
             onChange={(e) => {
@@ -160,7 +164,7 @@ export default function PromptsPage() {
             }}
           />
           <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-muted-foreground">{charCount}/2000 chars</span>
+            <span className="text-xs text-muted-foreground">{t('charCount',{count:charCount})}</span>
             {submit.error && <span className="text-xs text-red-500">{submit.error}</span>}
           </div>
           <button
@@ -168,28 +172,27 @@ export default function PromptsPage() {
             disabled={submit.loading || charCount < 50}
             className="mt-3 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 transition-colors"
           >
-            {submit.loading ? 'Submitting…' : 'Submit Response (+10 XP)'}
+            {submit.loading ? t('submitting') : t('submitResponse')}
           </button>
         </form>
       )}
 
       {submit.success && (
         <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 mb-8">
-          <p className="text-green-800 dark:text-green-200 font-medium">
-            Response submitted! +10 XP earned.
-          </p>
+          <p role="status" className="text-green-800 dark:text-green-200 font-medium">{t('responseSubmitted')}</p>
         </div>
       )}
 
       {/* Leaderboard */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold">Top Writers</h2>
+          <h2 className="font-semibold">{t('topWriters')}</h2>
           <div className="flex gap-1">
             {PERIODS.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setLbPeriod(key)}
+                aria-pressed={lbPeriod === key}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${lbPeriod === key ? 'bg-accent text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
               >
                 {label}
@@ -203,7 +206,7 @@ export default function PromptsPage() {
             {[1, 2, 3].map((i) => <div key={i} className="h-12 bg-muted rounded-lg" />)}
           </div>
         ) : leaderboard.length === 0 ? (
-          <p className="text-muted-foreground text-sm text-center py-6">No submissions yet this period.</p>
+          <p className="text-muted-foreground text-sm text-center py-6">{t('emptyLeaderboard')}</p>
         ) : (
           <div className="space-y-2">
             {leaderboard.map((entry) => (
@@ -222,11 +225,11 @@ export default function PromptsPage() {
                   <Link href={`/user/${entry.username}`} className="text-sm font-medium hover:underline truncate block">
                     {entry.display_name}
                   </Link>
-                  <p className="text-xs text-muted-foreground">{entry.xp.toLocaleString()} XP</p>
+                  <p className="text-xs text-muted-foreground">{t('xpCount',{count:entry.xp})}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-accent">{entry.submissions_count}</p>
-                  <p className="text-xs text-muted-foreground">prompt{entry.submissions_count !== 1 ? 's' : ''}</p>
+                  <p className="text-sm font-semibold text-accent">{formatter.number(entry.submissions_count)}</p>
+                  <p className="text-xs text-muted-foreground">{t('promptCount',{count:entry.submissions_count})}</p>
                 </div>
               </div>
             ))}
@@ -237,7 +240,7 @@ export default function PromptsPage() {
       {/* Past prompts */}
       {pastPrompts.length > 0 && (
         <div>
-          <h2 className="font-semibold mb-3">Recent Prompts</h2>
+          <h2 className="font-semibold mb-3">{t('recentPrompts')}</h2>
           <div className="space-y-2">
             {pastPrompts.map((p) => (
               <Link
@@ -246,7 +249,7 @@ export default function PromptsPage() {
                 className="flex items-start gap-3 rounded-lg border bg-card p-4 hover:shadow-sm transition-shadow"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground mb-1">{p.date}</p>
+                  <p className="text-xs text-muted-foreground mb-1">{formatter.dateTime(new Date(p.date),{dateStyle:'medium'})}</p>
                   <p className="text-sm line-clamp-2">{p.prompt_text}</p>
                 </div>
                 <span className="text-muted-foreground text-sm">→</span>

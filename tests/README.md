@@ -60,3 +60,5 @@ The PostgreSQL rehearsal also exercises content intent races, rollback/deleted-r
 Admin contract suites cover the cron broker, unavailable/partial statuses and flag requests. The migration rehearsal executes real admin query models, FK/nested relationships, provider-toggle races and referral attribution races. Localized admin labels join the i18n source checks.
 
 Payment tests cover checked tip-product pricing, stable checkout references, cancellation confirmation/recovery, concurrent cancellation claims and audit replay. Operational counter tests cover alert thresholds, window boundaries and unavailable Redis; middleware tests verify correlation propagation on accepted and rejected requests.
+
+Writer rehearsals cover concurrent publish/join/submit/vote/best-answer requests, edited-entry replay, deletion replay, computed word counts, ownership and one reward per question. Cron tests exercise cached partial-save recovery, malformed output and provider fallback; browser request-intent tests isolate concurrent controls.

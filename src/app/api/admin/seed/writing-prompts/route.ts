@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 function toDateString(daysFromNow: number): string {
   const d = new Date();
-  d.setDate(d.getDate() + daysFromNow);
+  d.setUTCDate(d.getUTCDate() + daysFromNow);
   return d.toISOString().split('T')[0];
 }
 
@@ -22,28 +22,15 @@ export async function POST() {
     const p = SEED_PROMPTS[i];
     const promptDate = toDateString(i + 1);
 
-    const { data: existing } = await service
-      .from('writing_prompts')
-      .select('id')
-      .eq('prompt_date', promptDate)
-      .maybeSingle();
-
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
-    const { error: insertErr } = await service.from('writing_prompts').insert({
-      prompt_text: p.prompt_text,
-      topic_seed: p.topic_seed,
-      is_active: true,
-      prompt_date: promptDate,
+    const { data, error: insertErr } = await service.rpc('publish_writing_prompt', {
+      p_date: promptDate, p_text: p.prompt_text, p_theme: p.topic_seed,
     });
-
     if (insertErr) {
       errors.push(`Day ${i + 1}: ${insertErr.message}`);
-    } else {
+    } else if (data?.created) {
       inserted++;
+    } else {
+      skipped++;
     }
   }
 
