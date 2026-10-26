@@ -255,7 +255,9 @@
     "cancel": "Abonnement kündigen",
     "cancelling": "Wird gekündigt…",
     "cancelPending": "Die Kündigung wurde vorgemerkt. Dein Abonnement bleibt bis zur Bestätigung des Zahlungsanbieters aktiv.",
-    "cancelError": "Die Bestätigung ist nicht verfügbar. Bitte erneut versuchen; bestehende Anfragen bleiben erhalten."
+    "cancelError": "Die Bestätigung ist nicht verfügbar. Bitte erneut versuchen; bestehende Anfragen bleiben erhalten.",
+    "managedByGoogle": "Verwalte dein Google-Play-Abonnement im Play Store.",
+    "manageGoogle": "In Google Play verwalten"
   },
   "admin": {
     "cron": {
@@ -275,7 +277,9 @@
         "payoutsWithoutAudit": "Auszahlungsanträge ohne Prüfprotokoll",
         "failedOutbox": "Fehlgeschlagene Zustellungen",
         "stalledOutbox": "Festhängende Zustellungen",
-        "uncertainDigests": "E-Mails mit ungeklärtem Zustellstatus"
+        "uncertainDigests": "E-Mails mit ungeklärtem Zustellstatus",
+        "unacknowledgedPurchases": "Unbestätigte Google-Play-Käufe",
+        "stalledBillingDeliveries": "Festhängende Abrechnungsbenachrichtigungen"
       },
       "jobs": {
         "outbox-drain": {
@@ -456,8 +460,8 @@
     "no": "Nein",
     "revokeMod": "Moderatorrechte entziehen",
     "grantMod": "Moderatorrechte erteilen",
-    "revokePremium": "Premium entziehen",
-    "grantPremium": "Premium gewähren",
+    "revokePremium": "Kostenloses Premium entziehen",
+    "grantPremium": "Premium kostenlos gewähren",
     "unsuspend": "Entsperren",
     "suspend": "Sperren",
     "previous": "Zurück",

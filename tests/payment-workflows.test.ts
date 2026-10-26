@@ -21,15 +21,17 @@ const tip='00000000-0000-4000-8000-000000000003';
 const job={subscription_id:tip,provider:'dodopayments',provider_subscription_id:'sub_remote',attempts:1,correlation_id:'test-request'};
 const rpc=vi.fn();
 const update=vi.fn();
+let googleSubscriptions: {id:string}[]=[];
 const filters: [string,unknown][]=[];
 const builder={
   select:()=>builder,eq:(key:string,value:unknown)=>{filters.push([key,value]);return builder;},
+  gt:()=>builder,limit:()=>builder,
   update:(value:unknown)=>{update(value);return builder;},
   single:async()=>({data:{id:tip,amount:'3.00',currency:'USD',status:'pending',checkout_url:null},error:null}),
-  then:(resolve:(value:unknown)=>unknown)=>Promise.resolve({data:null,error:null}).then(resolve),
+  then:(resolve:(value:unknown)=>unknown)=>Promise.resolve({data:googleSubscriptions,error:null}).then(resolve),
 };
 beforeEach(()=>{
-  vi.clearAllMocks();filters.length=0;
+  vi.clearAllMocks();filters.length=0;googleSubscriptions=[];
   vi.mocked(getCurrentUser).mockResolvedValue({id:user,email:'authenticated@example.test'});
   vi.mocked(createServiceClient).mockReturnValue({rpc,from:()=>builder} as unknown as ReturnType<typeof createServiceClient>);
   rpc.mockReset();
@@ -96,4 +98,11 @@ it('alerts on payout dependencies rather than ordinary insufficient-balance reje
   expect(response.status).toBe(503);
   expect(await response.json()).toMatchObject({code:'PAYOUT_DEPENDENCY_FAILURE'});
   expect(observeOperationalSignal).toHaveBeenCalledWith('payoutFailures',expect.any(String));
+});
+
+it('does not claim a Google-managed subscription was cancelled on the web',async()=>{
+  rpc.mockImplementation(async(name:string)=>({data:name==='claim_subscription_cancellations'?[]:0,error:null}));
+  googleSubscriptions=[{id:tip}];
+  const response=await cancel(request());
+  expect(response.status).toBe(409);expect(await response.json()).toMatchObject({cancelled:false,pending:false,managedExternally:true,managementUrl:expect.stringContaining('https://play.google.com/store/account/subscriptions?')});
 });

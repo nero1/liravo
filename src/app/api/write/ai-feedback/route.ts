@@ -1,6 +1,6 @@
+import { hasPremiumAccess } from '@/lib/premium-access';
 import { checkRouteRateLimit } from '@/lib/rate-limit';
 import { safeModelText } from '@/lib/ai-safety';
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getRedisClient } from '@/lib/redis';
@@ -70,19 +70,13 @@ async function callGemini(prompt: string, text: string): Promise<string | null> 
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!await checkRouteRateLimit(user.id, 'ai')) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
 
-  // Premium check
-  const { data: profile } = await supabase
-    .from('users')
-    .select('is_premium')
-    .eq('id', user.id)
-    .single();
-
-  const isPremium = profile?.is_premium === true;
+  let isPremium: boolean;
+  try { isPremium=await hasPremiumAccess(user.id); }
+  catch { return NextResponse.json({error:'Premium access verification unavailable'},{status:503}); }
 
   if (!isPremium) {
     return NextResponse.json(

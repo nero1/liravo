@@ -12,18 +12,22 @@ import {
   type SubscriptionPurchase,
   type ProductPurchase,
   type Subscription,
+  type SubscriptionAndroid,
   PurchaseStateAndroid,
 } from 'react-native-iap';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { SUBSCRIPTION_SKUS, PREMIUM_MONTHLY_SKU } from '@/constants/iap';
+import { monthlyGooglePlayOffer } from '@/lib/google-play-offer';
 
 export function useGooglePlayBilling() {
   const [connected, setConnected] = useState(false);
   const [products, setProducts] = useState<Subscription[]>([]);
   const [purchasing, setPurchasing] = useState(false);
+  const [verifying,setVerifying] = useState(false);
+  const inFlight = useRef(new Set<string>());
   const [restoring, setRestoring] = useState(false);
-  const { setUser } = useAuthStore();
+
   const purchaseListenerRef = useRef<ReturnType<typeof purchaseUpdatedListener> | null>(null);
   const errorListenerRef = useRef<ReturnType<typeof purchaseErrorListener> | null>(null);
 
@@ -38,10 +42,6 @@ export function useGooglePlayBilling() {
         if (!mounted || !ok) return;
         setConnected(true);
 
-        // Load subscription metadata from Play Store
-        const subs = await getSubscriptions({ skus: [...SUBSCRIPTION_SKUS] });
-        if (mounted) setProducts(subs);
-
         // Listen for completed purchases (fires after user approves billing sheet)
         purchaseListenerRef.current = purchaseUpdatedListener(
           async (purchase: SubscriptionPurchase | ProductPurchase) => {
@@ -52,25 +52,32 @@ export function useGooglePlayBilling() {
               sub.purchaseStateAndroid !== PurchaseStateAndroid.PURCHASED
             ) return;
 
-            if (!sub.purchaseToken) return;
+            if (!sub.purchaseToken || !SUBSCRIPTION_SKUS.includes(sub.productId as typeof SUBSCRIPTION_SKUS[number]) || inFlight.current.has(sub.purchaseToken)) return;
+            inFlight.current.add(sub.purchaseToken);
+            if (mounted) setVerifying(true);
 
             try {
-              const res = await api.post<{ user: Record<string, unknown> }>('/api/mobile/verify-purchase', {
+              const res = await api.post<{ user: Record<string, unknown>; active:boolean; pending:boolean; acknowledged:boolean }>('/api/mobile/verify-purchase', {
                 purchaseToken: sub.purchaseToken,
                 productId: sub.productId,
                 packageName: 'org.liravo.app',
               });
 
-              // Acknowledge the purchase — required within 3 days or Google refunds it
-              await finishTransaction({ purchase, isConsumable: false });
-
-              // Update local user state with fresh data from backend
-              if (res.user) setUser(res.user as Parameters<typeof setUser>[0]);
+              if (res.user && useAuthStore.getState().user?.id === res.user.id) useAuthStore.getState().setUser(res.user as Parameters<ReturnType<typeof useAuthStore.getState>['setUser']>[0]);
+              if (res.pending) {
+                Alert.alert('Verification pending','Your subscription is awaiting Google Play confirmation. Try restoring purchases shortly.');
+                return;
+              }
+              if (res.active && !res.acknowledged) await finishTransaction({purchase,isConsumable:false});
+              if (!res.active) Alert.alert('Subscription inactive','No active Google Play subscription was found. Your account has been refreshed.');
             } catch (err) {
               Alert.alert(
                 'Purchase verification failed',
-                'Your payment was received but we could not activate Premium. Please contact support with your order ID.',
+                'We could not confirm your subscription. Your purchase is retained by Google Play; try restoring purchases or contact support with your order ID.',
               );
+            } finally {
+              inFlight.current.delete(sub.purchaseToken);
+              if (mounted) setVerifying(false);
             }
           },
         );
@@ -80,6 +87,8 @@ export function useGooglePlayBilling() {
             Alert.alert('Purchase error', err.message ?? 'Something went wrong. Please try again.');
           }
         });
+        const subs = await getSubscriptions({ skus: [...SUBSCRIPTION_SKUS] });
+        if (mounted) setProducts(subs);
       } catch (err) {
         console.warn('IAP setup failed', err);
       }
@@ -102,7 +111,11 @@ export function useGooglePlayBilling() {
     }
     setPurchasing(true);
     try {
-      await requestSubscription({ sku: PREMIUM_MONTHLY_SKU });
+      const product=products.find(item=>item.productId===PREMIUM_MONTHLY_SKU) as SubscriptionAndroid | undefined;
+      const offer=monthlyGooglePlayOffer(product,PREMIUM_MONTHLY_SKU);
+      if (!offer) throw new Error('The monthly subscription offer is unavailable. Please try again later.');
+      const {accountId}=await api.post<{accountId:string}>('/api/mobile/billing-account');
+      await requestSubscription({ subscriptionOffers:[{sku:offer.sku,offerToken:offer.offerToken}],obfuscatedAccountIdAndroid:accountId });
       // Result comes through purchaseUpdatedListener, not here
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
@@ -112,7 +125,7 @@ export function useGooglePlayBilling() {
     } finally {
       setPurchasing(false);
     }
-  }, [connected]);
+  }, [connected,products]);
 
   const restorePurchases = useCallback(async () => {
     setRestoring(true);
@@ -127,14 +140,15 @@ export function useGooglePlayBilling() {
         return;
       }
 
-      const res = await api.post<{ user: Record<string, unknown> }>('/api/mobile/verify-purchase', {
+      const res = await api.post<{ user: Record<string, unknown>; active:boolean; pending:boolean; acknowledged:boolean }>('/api/mobile/verify-purchase', {
         purchaseToken: premiumPurchase.purchaseToken,
         productId: premiumPurchase.productId,
         packageName: 'org.liravo.app',
       });
 
-      if (res.user) setUser(res.user as Parameters<typeof setUser>[0]);
-      Alert.alert('Subscription restored!', 'Your Premium access has been restored.');
+      if (res.user && useAuthStore.getState().user?.id === res.user.id) useAuthStore.getState().setUser(res.user as Parameters<ReturnType<typeof useAuthStore.getState>['setUser']>[0]);
+      if (res.active) Alert.alert('Subscription restored!', 'Your Premium access has been restored.');
+      else Alert.alert(res.pending?'Verification pending':'Subscription inactive',res.pending?'Google Play has not confirmed this purchase yet.':'No active Google Play subscription was found.');
     } catch (err) {
       Alert.alert('Restore failed', (err as Error).message ?? 'Please try again.');
     } finally {
@@ -144,5 +158,6 @@ export function useGooglePlayBilling() {
 
   const premiumProduct = products.find((p) => p.productId === PREMIUM_MONTHLY_SKU);
 
-  return { connected, premiumProduct, purchasing, restoring, subscribe, restorePurchases };
+  const premiumOffer=monthlyGooglePlayOffer(premiumProduct as SubscriptionAndroid|undefined,PREMIUM_MONTHLY_SKU);
+  return { connected, premiumProduct, premiumPrice:premiumOffer?.formattedPrice??null, purchasing:purchasing||verifying, restoring, subscribe, restorePurchases };
 }

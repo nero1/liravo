@@ -42,7 +42,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         has_column_privilege(${role},'public.users','recovery_codes','SELECT') as recovery`;
       expect(access).toEqual({ profile: true, email: false, pin: false, totp: false, recovery: false });
       const routines = await sql`select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt')`;
+        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy')`;
       for (const routine of routines) {
         const [permissions] = await sql`select has_function_privilege(${role},${routine.oid}::oid,'EXECUTE') as allowed`;
         expect(permissions.allowed, `${role}:${routine.proname}`).toBe(false);
@@ -303,6 +303,58 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     await sql`delete from ask_writer_answers where id=${selectedAnswer.best_answer_id}`;
     await sql`select apply_writing_intent(${sender},'best_answer',${bestQuestion.id},'replacement-best-answer',${sql.json({answer_id:remainingAnswer.id})})`;
     expect((await sql`select count(*)::int as count from xp_ledger where event_key=${'best-answer:'+bestQuestion.id}`)[0].count).toBe(1);
+    const playUser='00000000-0000-4000-8000-000000008901',otherPlayUser='00000000-0000-4000-8000-000000008902';
+    await sql`insert into auth.users(id,email,raw_user_meta_data) values(${playUser},'play@example.test','{"username":"audit_play"}'),(${otherPlayUser},'play2@example.test','{"username":"audit_play_two"}')`;
+    const accountId='a'.repeat(64),otherAccountId='e'.repeat(64),playToken='gplay_'+'b'.repeat(64),linkedToken='gplay_'+'c'.repeat(64),otherPlayToken='gplay_'+'f'.repeat(64);
+    await sql`select register_billing_account(${playUser},${accountId})`;
+    await sql`select register_billing_account(${otherPlayUser},${otherAccountId})`;
+    await expect(sql`select register_billing_account(${otherPlayUser},${accountId})`).rejects.toThrow('binding conflict');
+    const [playClock]=await sql`select now() as verified,now()+interval '30 days' as expiry`;
+    const verifyPlay=(actor:string,token:string,account:string|null,state='SUBSCRIPTION_STATE_ACTIVE',verified=playClock.verified,delivery:string|null=null,fingerprint:string|null=null,linked:string|null=null)=>sql`select reconcile_google_play_purchase(${actor},${token},'liravo_premium_monthly',${state},${playClock.expiry},${account},${linked},${verified},false,'play-rehearsal',${delivery},${fingerprint}) as result`;
+    const playResults=await Promise.all(Array.from({length:4},()=>verifyPlay(playUser,playToken,accountId)));
+    expect(new Set(playResults.map(rows=>rows[0].result.id)).size).toBe(1);
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='google_play_entitlement_verified' and target_user_id=${playUser}`)[0].count).toBe(1);
+    expect((await sql`select is_premium from users where id=${playUser}`)[0].is_premium).toBe(true);
+    await expect(verifyPlay(otherPlayUser,playToken,otherAccountId)).rejects.toThrow('another account');
+    expect((await sql`select is_premium from users where id=${otherPlayUser}`)[0].is_premium).toBe(false);
+    await expect(verifyPlay(otherPlayUser,otherPlayToken,null,'SUBSCRIPTION_STATE_ACTIVE',playClock.verified,null,null,playToken)).rejects.toThrow('Linked purchase');
+    await verifyPlay(playUser,linkedToken,null,'SUBSCRIPTION_STATE_ACTIVE',playClock.verified,null,null,playToken);
+    const [stalePlay]=await verifyPlay(playUser,playToken,accountId,'SUBSCRIPTION_STATE_EXPIRED',new Date(playClock.verified.getTime()-60000));
+    expect(stalePlay.result).toMatchObject({active:true,providerState:'SUBSCRIPTION_STATE_ACTIVE'});
+    expect((await sql`select status from subscriptions where provider_event_id=${playToken}`)[0].status).toBe('active');
+    await verifyPlay(playUser,playToken,accountId,'SUBSCRIPTION_STATE_CANCELED',new Date(playClock.verified.getTime()+1));
+    expect((await sql`select is_premium from users where id=${playUser}`)[0].is_premium).toBe(true);
+    await verifyPlay(playUser,playToken,accountId,'SUBSCRIPTION_STATE_ACTIVE',new Date(playClock.verified.getTime()+2),'google-delivery-test','d'.repeat(64));
+    expect((await sql`select status from billing_webhook_receipts where delivery_id='google-delivery-test'`)[0].status).toBe('pending_ack');
+    await sql`select complete_google_play_delivery(${playUser},${playToken},true,'google-delivery-test',${'d'.repeat(64)},'play-rehearsal')`;
+    await sql`select complete_google_play_delivery(${playUser},${playToken},true,'google-delivery-test',${'d'.repeat(64)},'play-rehearsal')`;
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='google_play_purchase_acknowledged' and target_user_id=${playUser}`)[0].count).toBe(1);
+    await expect(verifyPlay(otherPlayUser,otherPlayToken,otherAccountId,'SUBSCRIPTION_STATE_ACTIVE',playClock.verified,'google-delivery-test','1'.repeat(64))).rejects.toThrow('delivery conflict');
+    const deliveryRace=await Promise.allSettled([
+      verifyPlay(playUser,playToken,accountId,'SUBSCRIPTION_STATE_ACTIVE',new Date(playClock.verified.getTime()+3),'google-delivery-race','2'.repeat(64)),
+      verifyPlay(otherPlayUser,otherPlayToken,otherAccountId,'SUBSCRIPTION_STATE_ACTIVE',playClock.verified,'google-delivery-race','3'.repeat(64)),
+    ]);
+    expect(deliveryRace.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    const [webSubscription]=await sql`select create_subscription_intent(${playUser},'paystack','USD',4.99,'play-web-intent','play-rehearsal') as result`;
+    const webId=webSubscription.result.id;
+    await sql`select process_payment_event('paystack','play-web-payment',${sql.json({event:'subscription.activated',subscription_id:webId,user_id:playUser,paid_amount_minor:499,currency:'USD',provider_reference:'sub_'+webId})},'play-rehearsal')`;
+    expect((await sql`select request_subscription_cancellation(${playUser},'play-rehearsal') as count`)[0].count).toBe(1);
+    const webClaims=await sql`select * from claim_subscription_cancellations(${playUser},3)`;
+    expect(webClaims).toHaveLength(1);expect(webClaims[0].provider).toBe('paystack');
+    await sql`select complete_subscription_cancellation(${webId})`;
+    expect((await sql`select is_premium from users where id=${playUser}`)[0].is_premium).toBe(true);
+    await sql`select set_premium_override_atomic(${recipient},${playUser},true,'play-rehearsal')`;
+    for(const token of [playToken,linkedToken]) await verifyPlay(playUser,token,token===playToken?accountId:null,'SUBSCRIPTION_STATE_EXPIRED',new Date(playClock.verified.getTime()+10));
+    expect((await sql`select is_premium from users where id=${playUser}`)[0].is_premium).toBe(true);
+    await sql`select set_premium_override_atomic(${recipient},${playUser},false,'play-rehearsal')`;
+    expect((await sql`select has_premium_access(${playUser}) as active`)[0].active).toBe(false);
+    await expect(sql.begin(async tx=>{await tx`select set_config('request.jwt.claim.role','authenticated',true)`;await tx`update users set premium_override=true where id=${playUser}`;})).rejects.toThrow('service authorization');
+    await verifyPlay(playUser,playToken,accountId,'SUBSCRIPTION_STATE_ACTIVE',new Date(playClock.verified.getTime()+20));
+    await sql`update subscriptions set current_period_end=now()-interval '1 second' where provider_event_id=${playToken}`;
+    expect((await sql`select has_premium_access(${playUser}) as active`)[0].active).toBe(false);
+    await sql`select expire_subscription_entitlements(200)`;
+    expect((await sql`select status from subscriptions where provider_event_id=${playToken}`)[0].status).toBe('expired');
+    for(const role of ['anon','authenticated']) expect((await sql`select has_column_privilege(${role},'public.users','premium_override','SELECT') as allowed`)[0].allowed).toBe(false);
     await sql`update users set reading_streak=6,last_streak_date='2026-10-25',streak_freeze_tokens=0 where id=${sender}`;
     await expect(sql.begin(async tx => {
       await tx`select set_config('request.jwt.claim.role','authenticated',true)`;

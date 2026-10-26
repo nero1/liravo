@@ -1,3 +1,4 @@
+import { hasPremiumAccess } from '@/lib/premium-access';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
@@ -13,13 +14,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Premium check
-  const { data: profile } = await supabase
-    .from('users')
-    .select('is_premium')
-    .eq('id', user.id)
-    .single();
-  const isPremium = (profile as { is_premium?: boolean } | null)?.is_premium ?? false;
+  let isPremium: boolean;
+  try { isPremium=await hasPremiumAccess(user.id); }
+  catch { return NextResponse.json({error:'Premium access verification unavailable'},{status:503}); }
+
   if (!isPremium) {
     return NextResponse.json({ error: 'Premium required' }, { status: 403 });
   }
