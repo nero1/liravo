@@ -1,3 +1,4 @@
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -84,7 +85,7 @@ export default async function TasteProfilePage() {
 
 function RegenerateButton() {
   return (
-    <form action="/api/ai/taste-profile" method="POST">
+    <form action="/api/ai/taste-profile" method="POST"><CsrfInput />
       <button
         type="submit"
         className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors font-medium"
@@ -97,7 +98,7 @@ function RegenerateButton() {
 
 function GenerateButton() {
   return (
-    <form action="/api/ai/taste-profile" method="POST">
+    <form action="/api/ai/taste-profile" method="POST"><CsrfInput />
       <button
         type="submit"
         className="px-6 py-3 bg-accent text-accent-foreground rounded-lg font-semibold hover:bg-accent/90 transition-colors"

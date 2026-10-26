@@ -1,3 +1,5 @@
+import { languageAlternates } from '@/lib/metadata';
+import { PUBLIC_USER_COLUMNS } from '@/lib/user-profile';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -16,18 +18,17 @@ export async function generateMetadata({ params }: ProfilePageProps): Promise<Me
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('users')
-    .select('display_name, bio, avatar_url')
+    .select('display_name, bio, avatar_url, profile_visibility, is_banned')
     .eq('username', params.username)
     .single();
 
-  if (!data) return { title: 'Profile not found' };
+  if (!data || data.is_banned || data.profile_visibility !== 'public') return { title: 'Profile', robots: { index: false, follow: false } };
 
   return {
     title: `${data.display_name} (@${params.username})`,
     description: data.bio ?? `${data.display_name}'s reading profile on Liravo`,
-    alternates: {
-      canonical: `${APP_URL}/user/${params.username}`,
-    },
+    alternates: languageAlternates(`/user/${encodeURIComponent(params.username)}`),
+    twitter: { card: 'summary', title: `${data.display_name} (@${params.username})`, description: data.bio ?? '', images: data.avatar_url ? [data.avatar_url] : [] },
     openGraph: {
       title: `${data.display_name} on Liravo`,
       description: data.bio ?? '',
@@ -41,7 +42,7 @@ export default async function PublicProfilePage({ params }: ProfilePageProps) {
   const supabase = createServiceClient();
   const { data: profile } = await supabase
     .from('users')
-    .select('*')
+    .select(PUBLIC_USER_COLUMNS)
     .eq('username', params.username)
     .eq('is_banned', false)
     .single();
@@ -92,7 +93,7 @@ export default async function PublicProfilePage({ params }: ProfilePageProps) {
   const earnedBadges = (userBadges ?? []).map((ub: { badge_id: string }) => {
     const def = BADGE_DEFINITIONS.find((b) => b.id === ub.badge_id);
     return def ? { icon: def.icon, name: def.name } : null;
-  }).filter(Boolean);
+  }).filter((badge): badge is NonNullable<typeof badge> => badge !== null);
 
   const profileWithBadges = { ...profile, badges: earnedBadges };
 

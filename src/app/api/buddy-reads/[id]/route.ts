@@ -21,7 +21,7 @@ export async function GET(
   if (!buddyRead) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const { data: participantsRaw } = await supabase
-    .from('buddy_read_participants')
+    .from('buddy_read_members')
     .select('user_id')
     .eq('buddy_read_id', params.id);
 

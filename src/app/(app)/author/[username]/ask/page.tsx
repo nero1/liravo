@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function AskAuthorPage({
@@ -9,7 +8,6 @@ export default function AskAuthorPage({
 }: {
   params: { username: string };
 }) {
-  const router = useRouter();
   const [question, setQuestion] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

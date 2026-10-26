@@ -52,7 +52,6 @@ export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -102,7 +101,7 @@ export async function POST(
   }
 
   // Award XP for writing a review
-  await awardXP(user.id, XP_CONFIG.SHORT_REVIEW, 'write_review');
+  await awardXP(user.id, XP_CONFIG.SHORT_REVIEW, 'write_review', `review:${params.id}`);
 
   // Invalidate taste profile cache so next request regenerates with fresh data
   try {

@@ -77,7 +77,7 @@ export default function ArcsPage() {
       <div>
         <h1 className="font-display text-2xl font-bold">Advance Reader Copies</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Apply to read books before they're published and share your honest feedback.
+          Apply to read books before they&apos;re published and share your honest feedback.
         </p>
       </div>
 

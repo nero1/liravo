@@ -1,31 +1,33 @@
 import { NextResponse } from 'next/server';
-import { awardXP } from '@/services/xp';
+import { z } from 'zod';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { XP_CONFIG } from '@/constants/config';
+import { singleRelation } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
-
-const XP_AMOUNTS: Record<string, number> = {
-  finish_book: 50,
-  write_review: 20,
-  like_review: 2,
-  daily_login: 10,
-  add_book: 5,
-  follow_user: 3,
-};
+const schema = z.object({ action: z.enum(['daily_login','finish_book','add_book']), bookId: z.string().uuid().optional() });
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const body = await request.json() as { action?: string };
-  const action = body.action;
-
-  if (!action || !(action in XP_AMOUNTS)) {
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+  const parsed = schema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+  const { action, bookId } = parsed.data;
+  const service = createServiceClient();
+  if (action !== 'daily_login') {
+    if (!bookId) return NextResponse.json({ error: 'Book required' }, { status: 400 });
+    const { data } = await service.from('shelf_books').select('shelves:shelf_id(default_type)').eq('user_id', user.id).eq('book_id', bookId);
+    if (!data?.some(row => action === 'add_book' || singleRelation(row.shelves)?.default_type === 'have_read')) {
+      return NextResponse.json({ error: 'Reading activity not found' }, { status: 403 });
+    }
   }
-
-  const amount = XP_AMOUNTS[action];
-  const newTotal = await awardXP(user.id, amount, action);
-
-  return NextResponse.json({ xp_awarded: amount, new_total: newTotal });
+  const amount = action === 'daily_login' ? XP_CONFIG.DAILY_LOGIN : action === 'finish_book' ? XP_CONFIG.FINISH_BOOK : XP_CONFIG.WANT_TO_READ_REACTION;
+  const { data, error } = await service.rpc('award_xp_once' as never, {
+    p_user_id: user.id, p_amount: amount, p_reason: action,
+    p_event_key: `${action}:${action === 'daily_login' ? new Date().toISOString().slice(0, 10) : bookId}`,
+  } as never);
+  if (error) return NextResponse.json({ error: 'Reward unavailable' }, { status: 503 });
+  const reward = data as { xp: number; awarded: number };
+  return NextResponse.json({ xp_awarded: reward.awarded, new_total: reward.xp });
 }

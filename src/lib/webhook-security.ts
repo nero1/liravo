@@ -1,3 +1,4 @@
+import { Webhook } from 'standardwebhooks';
 import crypto from 'crypto';
 import { getRedisClient } from '@/lib/redis';
 
@@ -29,10 +30,7 @@ export function normalizeProviderSignature(provider: string, signature: string):
     return signature.trim().toLowerCase();
   }
   if (provider === 'dodopayments') {
-    const normalized = signature.trim().toLowerCase();
-    const parts = normalized.split('=');
-    if (parts.length === 2 && ['sha256', 'v1'].includes(parts[0])) return parts[1];
-    return normalized;
+    return signature.trim();
   }
   return null;
 }
@@ -43,28 +41,27 @@ export function verifyProviderSignature(params: {
   secret: string;
   signature: string;
   timestamp?: string | null;
+  webhookId?: string;
 }): boolean {
   const normalizedSignature = normalizeProviderSignature(params.provider, params.signature);
   if (!normalizedSignature) return false;
 
   if (params.provider === 'dodopayments') {
-    // Bugfix: enforce timestamp-bound signatures for dodo-style canonical payloads.
-    if (!params.timestamp || !isFreshTimestamp(params.timestamp)) return false;
-    return verifyHmacSha256({
-      body: params.body,
-      secret: params.secret,
-      signature: normalizedSignature,
-      timestamp: params.timestamp,
-    });
+    if (!params.timestamp || !params.webhookId) return false;
+    try {
+      new Webhook(params.secret).verify(params.body, {
+        'webhook-id': params.webhookId,
+        'webhook-timestamp': params.timestamp,
+        'webhook-signature': params.signature,
+      });
+      return true;
+    } catch { return false; }
   }
 
   if (params.provider === 'paystack') {
     // Bugfix: paystack verification uses raw request body without timestamp prefix.
-    return verifyHmacSha256({
-      body: params.body,
-      secret: params.secret,
-      signature: normalizedSignature,
-    });
+    const digest = crypto.createHmac('sha512', params.secret).update(params.body).digest('hex');
+    return safeCompare(digest, normalizedSignature);
   }
 
   return false;

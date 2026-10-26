@@ -1,6 +1,7 @@
 import { getRedisClient } from '@/lib/redis';
 import crypto from 'crypto';
 
+/** Renewable lease in seconds; ownership checks and expiry/release are atomic. */
 export async function withRedisLock<T>(
   key: string,
   ttlSeconds: number,
@@ -22,10 +23,7 @@ export async function withRedisLock<T>(
   // Bugfix: heartbeat lock TTL during long critical sections to reduce accidental expiry/races.
   const heartbeat = setInterval(async () => {
     try {
-      const currentOwner = await redis.get(lockKey);
-      if (currentOwner === ownerToken) {
-        await redis.expire(lockKey, ttlSeconds);
-      }
+      await redis.compareExpire(lockKey, ownerToken, ttlSeconds);
     } catch {
       // best-effort heartbeat
     }
@@ -35,9 +33,6 @@ export async function withRedisLock<T>(
   } finally {
     clearInterval(heartbeat);
     // Bugfix: release only if this worker still owns the lock token.
-    const currentOwner = await redis.get(lockKey);
-    if (currentOwner === ownerToken) {
-      await redis.del(lockKey);
-    }
+    await redis.compareDelete(lockKey, ownerToken);
   }
 }

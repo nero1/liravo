@@ -26,7 +26,7 @@ function getPool(): SqlInstance {
     idle_timeout: 20,
     max_lifetime: 1800,
     connect_timeout: 15,
-    ssl: sslEnabled ? { rejectUnauthorized: false } : false,
+    ssl: sslEnabled ? { rejectUnauthorized: true } : false,
   });
 
   return _pool;
@@ -54,8 +54,8 @@ export async function withUserContext<T>(
   fn: () => Promise<T>
 ): Promise<T> {
   const pool = getPool();
-  return pool.begin(async (txSql: TxSql) => {
+  return await pool.begin(async (txSql: TxSql) => {
     await txSql`SELECT set_config('app.current_user_id', ${userId}, true)`;
     return txStorage.run(txSql as unknown as TxSql, fn);
-  });
+  }) as T;
 }

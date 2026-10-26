@@ -1,3 +1,4 @@
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -120,7 +121,7 @@ export default async function EarningsPage() {
 
 function PayoutButton() {
   return (
-    <form action="/api/earnings/request-payout" method="POST">
+    <form action="/api/earnings/request-payout" method="POST"><CsrfInput />
       <button
         type="submit"
         className="px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors"

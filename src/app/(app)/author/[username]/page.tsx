@@ -1,3 +1,6 @@
+import { languageAlternates } from '@/lib/metadata';
+import { singleRelation } from '@/lib/utils';
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
@@ -18,9 +21,11 @@ export async function generateMetadata({
   const supabase = createClient();
   const { data: author } = await supabase
     .from('users')
-    .select('display_name, bio, avatar_url')
+    .select('display_name, bio, avatar_url, profile_visibility, is_banned')
     .eq('username', params.username)
     .single();
+
+  if (!author || author.is_banned || author.profile_visibility !== 'public') return { title: 'Author', robots: { index: false, follow: false } };
 
   const name = author?.display_name ?? params.username;
   const description = author?.bio ?? `Discover books by ${name} on Liravo.`;
@@ -28,6 +33,7 @@ export async function generateMetadata({
   return {
     title: `${name} — Author on Liravo`,
     description,
+    twitter: { card: 'summary', title: `${name} on Liravo`, description, images: author.avatar_url ? [author.avatar_url] : [] },
     openGraph: {
       title: `${name} on Liravo`,
       description,
@@ -35,7 +41,7 @@ export async function generateMetadata({
       url: `${APP_URL}/author/${params.username}`,
       type: 'profile',
     },
-    alternates: { canonical: `${APP_URL}/author/${params.username}` },
+    alternates: languageAlternates(`/author/${encodeURIComponent(params.username)}`),
   };
 }
 
@@ -150,7 +156,7 @@ export default async function AuthorProfilePage({
       .order('position')
       .limit(10);
     inspiredBooks = (listBooks ?? [])
-      .map((lb) => lb.books as { id: string; title: string; cover_url: string | null } | null)
+      .map((lb) => singleRelation(lb.books))
       .filter(Boolean) as Array<{ id: string; title: string; cover_url: string | null }>;
   }
 
@@ -319,7 +325,7 @@ export default async function AuthorProfilePage({
                     <form
                       action={`/api/author/arcs/${arc.id}/apply`}
                       method="POST"
-                    >
+                    ><CsrfInput />
                       <button
                         type="submit"
                         className="px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-semibold hover:opacity-90 transition-opacity flex-shrink-0"

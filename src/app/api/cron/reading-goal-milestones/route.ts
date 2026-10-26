@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { cron } from '@/lib/cron';
+import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -6,11 +7,7 @@ export const dynamic = 'force-dynamic';
 const MILESTONES = [25, 50, 75, 100];
 const BATCH_SIZE = 50;
 
-export async function GET(request: NextRequest) {
-  const secret = request.headers.get('x-cron-secret');
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+async function run() {
 
   const supabase = createServiceClient();
   const currentYear = new Date().getFullYear();
@@ -84,3 +81,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ checked, milestonesAwarded });
 }
+
+export const GET = cron('reading-goal-milestones', run);
+export const POST = GET;
+
+export const maxDuration = 60;

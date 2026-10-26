@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { UserRow } from '@/types/database';
+import type { PublicUserRow } from '@/lib/user-profile';
 import { cn } from '@/lib/utils';
 
 const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supabase') !== 'supabase';
 
 interface ProfileEditFormProps {
-  profile: UserRow;
+  profile: PublicUserRow;
 }
 
 export function ProfileEditForm({ profile }: ProfileEditFormProps) {

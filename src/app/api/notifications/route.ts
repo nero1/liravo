@@ -1,26 +1,34 @@
+import { decodeCursor, encodeCursor, cursorFilter } from '@/lib/pagination';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: notifications, error } = await supabase
+  let cursor;
+  try { cursor = decodeCursor(new URL(request.url).searchParams.get('cursor')); }
+  catch { return NextResponse.json({ error: 'Invalid cursor' }, { status: 400 }); }
+  const query = supabase
     .from('notifications')
     .select('id, type, actor_id, entity_type, entity_id, message, is_read, created_at')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(50);
+    .order('created_at', { ascending: false }).order('id', { ascending: false })
+    .limit(51);
+  if (cursor) query.or(cursorFilter('created_at', cursor));
+  const { data: notifications, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ notifications: notifications ?? [] });
+  const rows = (notifications ?? []).slice(0, 50);
+  const last = rows.at(-1);
+  return NextResponse.json({ notifications: rows, nextCursor: notifications?.length === 51 && last ? encodeCursor({ at: last.created_at, id: last.id }) : null });
 }
 
 export async function PATCH() {

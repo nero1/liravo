@@ -1,13 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { cron } from '@/lib/cron';
+import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
-  const secret = request.headers.get('x-cron-secret');
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+async function run() {
 
   const supabase = createServiceClient();
   const now = new Date();
@@ -57,3 +54,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ notified });
 }
+
+export const GET = cron('account-hardening', run);
+export const POST = GET;
+
+export const maxDuration = 60;

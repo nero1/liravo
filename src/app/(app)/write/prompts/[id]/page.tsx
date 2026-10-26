@@ -29,7 +29,7 @@ export default async function PromptResponsesPage({ params, searchParams }: Page
   const from = (page - 1) * PAGE_SIZE;
 
   const { data: submissions, count } = await supabase
-    .from('prompt_submissions')
+    .from('writing_prompt_submissions')
     .select('id, content, word_count, created_at, user_id, users:user_id(display_name, username, avatar_url)', { count: 'exact' })
     .eq('prompt_id', params.id)
     .order('created_at', { ascending: false })

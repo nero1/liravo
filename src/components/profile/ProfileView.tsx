@@ -1,11 +1,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { getLevelInfo } from '@/lib/utils';
-import type { UserRow } from '@/types/database';
+import type { PublicUserRow } from '@/lib/user-profile';
 import { USER_TYPE_LABELS } from '@/constants/config';
 
 interface ProfileViewProps {
-  profile: UserRow;
+  profile: PublicUserRow;
   isOwner: boolean;
 }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import bcrypt from 'bcryptjs';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
@@ -15,7 +15,7 @@ const verifyPinSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = createServiceClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = createServiceClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

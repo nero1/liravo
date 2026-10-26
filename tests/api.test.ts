@@ -11,7 +11,7 @@ interface EndpointCheck {
 const endpoints: EndpointCheck[] = [
   { method: 'GET', path: '/api/health', expectedStatus: 200 },
   { method: 'GET', path: '/api/auth/callback', expectedStatus: 302 },
-  { method: 'GET', path: '/api/books/search?q=test', expectedStatus: 200 },
+  { method: 'GET', path: '/api/books/search?q=test', expectedStatus: 401 },
   { method: 'GET', path: '/api/stats/reading', expectedStatus: 401 },
   { method: 'POST', path: '/api/subscriptions/create', expectedStatus: 401 },
   { method: 'POST', path: '/api/subscriptions/cancel', expectedStatus: 401 },
@@ -22,19 +22,17 @@ const endpoints: EndpointCheck[] = [
   { method: 'POST', path: '/api/subscriptions/webhook', expectedStatus: 401 },
 ];
 
-describe('API endpoint contract checks', () => {
+describe.skipIf(!process.env.LIRAVO_BASE_URL)('API endpoint contract checks', () => {
   it('validates expected status codes for public/auth-gated endpoints', async () => {
     const probe = await fetch(`${BASE_URL}/api/health`, { method: 'GET' }).catch(() => null);
-    if (!probe) {
-      // Bugfix: avoid false negatives in CI/dev when local server is intentionally not running.
-      return;
-    }
+    if (!probe) throw new Error('Configured API server must be reachable');
+    expect(await probe.json()).toMatchObject({ status: 'ok', services: { database: 'ok', redis: 'ok' } });
 
     const checks = await Promise.all(
       endpoints.map(async (endpoint) => {
         const response = await fetch(`${BASE_URL}${endpoint.path}`, {
           method: endpoint.method,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer invalid-test-token' },
           redirect: 'manual',
         });
         return { endpoint, status: response.status };

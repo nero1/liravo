@@ -89,7 +89,7 @@ export async function POST(req: Request) {
   }
 
   // Award 5 XP for logging a session
-  await awardXP(user.id, 5, 'reading_session');
+  await awardXP(user.id, 5, 'reading_session', `reading-session:${session.id}`);
 
   return NextResponse.json({ session }, { status: 201 });
 }

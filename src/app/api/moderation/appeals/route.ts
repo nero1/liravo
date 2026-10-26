@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { requireModerator } from '@/lib/moderation';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -15,7 +14,6 @@ const appealSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

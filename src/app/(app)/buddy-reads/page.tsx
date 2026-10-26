@@ -1,3 +1,4 @@
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -28,7 +29,7 @@ export default async function BuddyReadsPage() {
 
   // Get buddy reads user is part of
   const { data: participating } = await supabase
-    .from('buddy_read_participants')
+    .from('buddy_read_members')
     .select('buddy_read_id')
     .eq('user_id', user.id);
 
@@ -123,7 +124,7 @@ export default async function BuddyReadsPage() {
               View
             </Link>
             {showJoinButton && (
-              <form action={`/api/buddy-reads/${read.id}/join`} method="POST">
+              <form action={`/api/buddy-reads/${read.id}/join`} method="POST"><CsrfInput />
                 <button
                   type="submit"
                   className="px-3 py-1 rounded-lg text-xs font-medium bg-accent text-white hover:opacity-90 transition-opacity"

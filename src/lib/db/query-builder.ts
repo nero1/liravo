@@ -1,6 +1,14 @@
+import type { PendingQuery, Row, ParameterOrJSON, SerializableParameter } from 'postgres';
 import { getSql } from './pg';
 
-type QueryResult<T> = { data: T | null; error: { message: string } | null; count?: number };
+type QueryResult<T> = { data: T | null; error: { message: string; code?: string } | null; count?: number };
+
+function queryError(error: unknown): { message: string; code?: string } {
+  if (error && typeof error === 'object' && 'message' in error) {
+    return { message: String(error.message), ...('code' in error && typeof error.code === 'string' ? { code: error.code } : {}) };
+  }
+  return { message: String(error) };
+}
 
 type FilterOp = { col: string; op: string; val: unknown };
 
@@ -19,7 +27,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
   private _filters: FilterOp[] = [];
   private _orFragment: unknown = null;
   private _orderCol: string | null = null;
-  private _orderAsc: boolean = true;
+  private _orders: Array<{ column: string; ascending: boolean }> = [];
   private _limit: number | null = null;
   private _offset: number | null = null;
   private _isSingle: boolean = false;
@@ -86,7 +94,8 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
   order(column: string, options?: { ascending?: boolean }) {
     this._orderCol = column;
-    this._orderAsc = options?.ascending !== false;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(column)) throw new Error('Invalid sort column');
+    this._orders.push({ column, ascending: options?.ascending !== false });
     return this;
   }
 
@@ -150,17 +159,17 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
   private buildWhere() {
     const sql = getSql();
-    const parts: ReturnType<typeof sql>[] = [];
+    const parts: PendingQuery<Row[]>[] = [];
 
     for (const f of this._filters) {
       switch (f.op) {
-        case '=':   parts.push(sql`${sql(f.col)} = ${f.val}`); break;
-        case '!=':  parts.push(sql`${sql(f.col)} != ${f.val}`); break;
-        case '>':   parts.push(sql`${sql(f.col)} > ${f.val}`); break;
-        case '>=':  parts.push(sql`${sql(f.col)} >= ${f.val}`); break;
-        case '<':   parts.push(sql`${sql(f.col)} < ${f.val}`); break;
-        case '<=':  parts.push(sql`${sql(f.col)} <= ${f.val}`); break;
-        case 'IN':  parts.push(sql`${sql(f.col)} = ANY(${f.val as unknown[]})`); break;
+        case '=':   parts.push(sql`${sql(f.col)} = ${f.val as SerializableParameter<never>}`); break;
+        case '!=':  parts.push(sql`${sql(f.col)} != ${f.val as SerializableParameter<never>}`); break;
+        case '>':   parts.push(sql`${sql(f.col)} > ${f.val as SerializableParameter<never>}`); break;
+        case '>=':  parts.push(sql`${sql(f.col)} >= ${f.val as SerializableParameter<never>}`); break;
+        case '<':   parts.push(sql`${sql(f.col)} < ${f.val as SerializableParameter<never>}`); break;
+        case '<=':  parts.push(sql`${sql(f.col)} <= ${f.val as SerializableParameter<never>}`); break;
+        case 'IN':  parts.push(sql`${sql(f.col)} = ANY(${f.val as SerializableParameter<never>[]})`); break;
         case 'IS':
           if (f.val === null)       parts.push(sql`${sql(f.col)} IS NULL`);
           else if (f.val === true)  parts.push(sql`${sql(f.col)} IS TRUE`);
@@ -178,23 +187,30 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
   }
 
   private _buildOrSql(filter: string): string {
-    return filter.split(',').map((part) => {
-      const [rawCol, op, ...rest] = part.split('.');
-      // Sanitize column name — only allow valid SQL identifier chars
-      const col = `"${rawCol.replace(/[^a-zA-Z0-9_]/g, '')}"`;
-      const val = rest.join('.');
-      const escaped = val.replace(/'/g, "''");
-      switch (op) {
-        case 'eq':  return `${col} = '${escaped}'`;
-        case 'neq': return `${col} != '${escaped}'`;
-        case 'gt':  return `${col} > '${escaped}'`;
-        case 'gte': return `${col} >= '${escaped}'`;
-        case 'lt':  return `${col} < '${escaped}'`;
-        case 'lte': return `${col} <= '${escaped}'`;
-        case 'is':  return val === 'null' ? `${col} IS NULL` : `${col} IS ${val === 'true' ? 'TRUE' : 'FALSE'}`;
-        default:    return `${col} = '${escaped}'`;
+    const split = (value: string) => {
+      const parts: string[] = [];
+      let depth = 0, start = 0;
+      for (let i = 0; i < value.length; i++) {
+        if (value[i] === '(') depth++;
+        if (value[i] === ')') depth--;
+        if (depth < 0) throw new Error('Invalid filter');
+        if (value[i] === ',' && depth === 0) { parts.push(value.slice(start, i)); start = i + 1; }
       }
-    }).join(' OR ');
+      if (depth !== 0) throw new Error('Invalid filter');
+      return [...parts, value.slice(start)];
+    };
+    const parse = (part: string): string => {
+      const group = part.match(/^(and|or)\((.*)\)$/);
+      if (group) return `(${split(group[2]).map(parse).join(group[1] === 'and' ? ' AND ' : ' OR ')})`;
+      const [column, op, ...rest] = part.split('.');
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(column)) throw new Error('Invalid filter column');
+      const value = rest.join('.');
+      const operators: Record<string, string> = { eq: '=', neq: '!=', gt: '>', gte: '>=', lt: '<', lte: '<=' };
+      if (op === 'is' && ['null','true','false'].includes(value)) return `"${column}" IS ${value.toUpperCase()}`;
+      if (!operators[op]) throw new Error('Invalid filter operator');
+      return `"${column}" ${operators[op]} '${value.replace(/'/g, "''")}'`;
+    };
+    return split(filter).map(parse).join(' OR ');
   }
 
   // Parse Supabase join syntax: "alias:table!fk(cols)" or "alias:table!fk(count)"
@@ -281,11 +297,11 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
       if (hasWhere) {
         if (this._orderCol && this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit} OFFSET ${this._offset}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))} LIMIT ${this._limit} OFFSET ${this._offset}`;
         } else if (this._orderCol && this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))} LIMIT ${this._limit}`;
         } else if (this._orderCol) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))}`;
         } else if (this._limit !== null && this._offset !== null) {
           query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} WHERE ${where} LIMIT ${this._limit} OFFSET ${this._offset}`;
         } else if (this._limit !== null) {
@@ -295,11 +311,11 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         }
       } else {
         if (this._orderCol && this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit} OFFSET ${this._offset}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))} LIMIT ${this._limit} OFFSET ${this._offset}`;
         } else if (this._orderCol && this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')} LIMIT ${this._limit}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))} LIMIT ${this._limit}`;
         } else if (this._orderCol) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql(this._orderCol)} ${sql.unsafe(this._orderAsc ? 'ASC' : 'DESC')}`;
+          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))}`;
         } else if (this._limit !== null && this._offset !== null) {
           query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}${sql.unsafe(fromJoinSql)} LIMIT ${this._limit} OFFSET ${this._offset}`;
         } else if (this._limit !== null) {
@@ -321,7 +337,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
       }
       return { data: rows as unknown as T, error: null };
     } catch (err) {
-      return { data: null, error: { message: String(err) } };
+      return { data: null, error: queryError(err) };
     }
   }
 
@@ -361,13 +377,13 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
           if (m.returning) {
             const result = await sql.unsafe(
               `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr} RETURNING *`,
-              rows.flatMap((r) => keys.map((k) => r[k]))
+              rows.flatMap((r) => keys.map((k) => r[k])) as ParameterOrJSON<never>[]
             );
             return { data: (rows.length === 1 ? result[0] : result) as unknown as T, error: null };
           }
           await sql.unsafe(
             `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr}`,
-            rows.flatMap((r) => keys.map((k) => r[k]))
+            rows.flatMap((r) => keys.map((k) => r[k])) as ParameterOrJSON<never>[]
           );
           return { data: null, error: null };
         }
@@ -389,7 +405,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         }
       }
     } catch (err) {
-      return { data: null, error: { message: String(err) } };
+      return { data: null, error: queryError(err) };
     }
     return { data: null, error: null };
   }
@@ -413,21 +429,15 @@ export function getPgQueryBuilderFactory() {
     ): Promise<QueryResult<T>> {
       const sql = getSql();
       try {
-        if (params && Object.keys(params).length > 0) {
-          const paramStr = Object.entries(params)
-            .map(([k, v]) => {
-              if (v === null) return `${k} := NULL`;
-              if (typeof v === 'string') return `${k} := '${v.replace(/'/g, "''")}'`;
-              return `${k} := ${v}`;
-            })
-            .join(', ');
-          const rows = await sql.unsafe(`SELECT * FROM ${fnName}(${paramStr})`);
-          return { data: rows as unknown as T, error: null };
-        }
-        const rows = await sql`SELECT * FROM ${sql(fnName)}()`;
-        return { data: rows as unknown as T, error: null };
+        const entries = Object.entries(params ?? {});
+        if (![fnName, ...entries.map(([key]) => key)].every(name => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name))) throw new Error('Invalid RPC identifier');
+        const args = entries.map(([key], i) => `"${key}" => $${i + 1}`).join(', ');
+        const values = entries.map(([, value]) => value);
+        const rows = await sql.unsafe(`SELECT * FROM "${fnName}"(${args})`, values as ParameterOrJSON<never>[]);
+        const scalar = rows.length === 1 && Object.prototype.hasOwnProperty.call(rows[0], fnName);
+        return { data: (scalar ? rows[0][fnName] : rows) as T, error: null };
       } catch (err) {
-        return { data: null, error: { message: String(err) } };
+        return { data: null, error: queryError(err) };
       }
     },
   };

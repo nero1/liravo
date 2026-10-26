@@ -1,6 +1,5 @@
+import { sendPushToUser } from '@/lib/push-notifications';
 import { createServiceClient } from '@/lib/supabase/server';
-import { createNotification } from '@/services/notifications';
-import { awardXP } from '@/services/xp';
 import { recordMetric } from '@/lib/metrics';
 
 const MAX_ATTEMPTS = 10;
@@ -20,34 +19,19 @@ function nextDelaySeconds(attempts: number): number {
 }
 
 async function processEvent(event: OutboxEventRow) {
-  if (event.event_type === 'notify_recipient') {
-    const payload = event.payload as {
-      userId: string;
-      actorId: string;
-      tipId?: string;
-      amount: string;
-      currency?: string;
-    };
-    await createNotification({
-      userId: payload.userId,
-      type: 'like',
-      actorId: payload.actorId,
-      entityType: 'tip',
-      entityId: payload.tipId,
-      message: `You received a ${payload.currency ?? 'USD'} ${payload.amount} tip!`,
-    });
-    return;
+  const { data, error } = await createServiceClient().rpc('process_outbox_event_atomic' as never, { p_event_id: event.id } as never);
+  if (error) throw new Error(`Outbox processing failed: ${error.message}`);
+  if (data && ['push_notification', 'notify_recipient'].includes(event.event_type)) {
+    const payload = event.payload;
+    sendPushToUser(String(payload.userId), {
+      title: String(payload.title ?? 'New tip'),
+      body: String(payload.body ?? `You received a ${payload.currency ?? 'USD'} ${payload.amount} tip!`),
+      url: String(payload.url ?? '/notifications'), tag: `outbox:${event.id}`,
+    }).catch(() => recordMetric('push_delivery_error', { eventId: event.id }, 'warn'));
   }
-
-  if (event.event_type === 'award_xp') {
-    const payload = event.payload as { userId: string; amount: number; reason: string };
-    await awardXP(payload.userId, payload.amount, payload.reason);
-    return;
-  }
-
-  throw new Error(`Unknown outbox event type: ${event.event_type}`);
 }
 
+/** Claims up to 200 events; stale claims recover after five minutes and DB effects commit once. */
 export async function drainOutbox(batchSize = 50) {
   const supabase = createServiceClient();
 
@@ -65,17 +49,12 @@ export async function drainOutbox(batchSize = 50) {
   for (const event of events) {
     try {
       await processEvent(event);
-      await supabase
-        .from('outbox_events')
-        .update({ status: 'processed', processed_at: new Date().toISOString() })
-        .eq('id', event.id)
-        .eq('status', 'processing');
       processed += 1;
     } catch (err) {
       failed += 1;
       const terminal = event.attempts >= MAX_ATTEMPTS;
       const nextAttemptAt = new Date(Date.now() + nextDelaySeconds(event.attempts) * 1000).toISOString();
-      await supabase
+      const { error: retryError } = await supabase
         .from('outbox_events')
         .update({
           status: terminal ? 'failed' : 'pending',
@@ -84,6 +63,7 @@ export async function drainOutbox(batchSize = 50) {
         })
         .eq('id', event.id)
         .eq('status', 'processing');
+      if (retryError) throw new Error(`Outbox retry scheduling failed: ${retryError.message}`);
     }
   }
 

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import EmailSettingsForm from './EmailSettingsForm';
@@ -12,7 +12,7 @@ export default async function EmailSettingsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
+  const { data: profile } = await createServiceClient()
     .from('users')
     .select('email, email_verified')
     .eq('id', user.id)

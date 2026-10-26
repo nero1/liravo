@@ -23,7 +23,7 @@ export async function GET() {
 
   // Get buddy reads the user is part of, or open ones they can join
   const { data: participating } = await supabase
-    .from('buddy_read_participants')
+    .from('buddy_read_members')
     .select('buddy_read_id')
     .eq('user_id', user.id);
 
@@ -93,14 +93,14 @@ export async function POST(req: Request) {
 
   // Add creator as first participant
   await supabase
-    .from('buddy_read_participants')
+    .from('buddy_read_members')
     .insert({
       buddy_read_id: buddyRead.id,
       user_id: user.id,
     });
 
   // Award XP for starting buddy read
-  await awardXP(user.id, XP_CONFIG.START_BUDDY_READ, 'start_buddy_read');
+  await awardXP(user.id, XP_CONFIG.START_BUDDY_READ, 'start_buddy_read', `buddy-read:${buddyRead.id}`);
 
   return NextResponse.json({ buddyRead }, { status: 201 });
 }

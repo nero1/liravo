@@ -53,7 +53,7 @@ export async function GET(request: Request) {
               .eq('id', user.id);
 
             // Award XP to the referrer
-            await awardXP(referrer.id, XP_CONFIG.REFER_SIGNUP, 'referral_signup');
+            await awardXP(referrer.id, XP_CONFIG.REFER_SIGNUP, 'referral_signup', `referral-signup:${user.id}`);
 
             // Create notification for referrer
             await serviceClient.from('notifications').insert({

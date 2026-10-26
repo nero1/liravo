@@ -71,7 +71,7 @@ export async function POST(
   }
 
   // Award XP
-  await awardXP(user.id, XP_CONFIG.WANT_TO_READ_REACTION, 'want_to_read');
+  await awardXP(user.id, XP_CONFIG.WANT_TO_READ_REACTION, 'want_to_read', `want-to-read:${bookId}`);
 
   // Update book want_to_read_count — best effort
   try {

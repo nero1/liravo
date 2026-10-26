@@ -6,35 +6,13 @@ export function getLevelTitle(xp: number): string {
   return level?.title ?? 'Legend of the Shelf';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function awardXP(userId: string, amount: number, reason: string): Promise<number> {
-  const supabase = createServiceClient();
-
-  const { data, error } = await supabase.rpc('increment_xp' as never, {
-    p_user_id: userId,
-    p_amount: amount,
+/** A stable business event key makes retries safe; missing RPCs fail closed. */
+export async function awardXP(userId: string, amount: number, reason: string, eventKey: string): Promise<number> {
+  const { data, error } = await createServiceClient().rpc('award_xp_once' as never, {
+    p_user_id: userId, p_amount: amount, p_reason: reason, p_event_key: eventKey,
   } as never);
-
-  if (error) {
-    // Bugfix: fallback checks errors to avoid silent XP accounting corruption.
-    const { data: user, error: userFetchError } = await supabase
-      .from('users')
-      .select('xp')
-      .eq('id', userId)
-      .single();
-    if (userFetchError) {
-      throw new Error(`awardXP fallback read failed (${reason}): ${userFetchError.message}`);
-    }
-
-    const newXp = (user?.xp ?? 0) + amount;
-    const { error: updateError } = await supabase.from('users').update({ xp: newXp }).eq('id', userId);
-    if (updateError) {
-      throw new Error(`awardXP fallback write failed (${reason}): ${updateError.message}`);
-    }
-    return newXp;
-  }
-
-  return (data as number) ?? 0;
+  if (error) throw new Error(`XP reward failed (${reason}): ${error.message}`);
+  return (data as { xp: number }).xp;
 }
 
 export async function incrementStreak(userId: string) {

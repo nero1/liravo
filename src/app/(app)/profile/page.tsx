@@ -1,3 +1,4 @@
+import { PUBLIC_USER_COLUMNS } from '@/lib/user-profile';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { ProfileView } from '@/components/profile/ProfileView';
@@ -14,7 +15,7 @@ export default async function ProfilePage() {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('*')
+    .select(PUBLIC_USER_COLUMNS)
     .eq('id', user.id)
     .single();
 

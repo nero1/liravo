@@ -29,6 +29,23 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS telegram_id text UNIQUE;
 CREATE INDEX IF NOT EXISTS users_telegram_id_idx ON public.users (telegram_id)
   WHERE telegram_id IS NOT NULL;
 
--- 5. Add target_user_id to moderation_log if missing
-ALTER TABLE public.moderation_log ADD COLUMN IF NOT EXISTS target_user_id uuid
-  REFERENCES public.users(id) ON DELETE SET NULL;
+-- 5. Durable moderation audit, shared by reports and role management.
+CREATE TABLE IF NOT EXISTS public.moderation_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  moderator_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  target_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  report_id uuid REFERENCES content_reports(id) ON DELETE SET NULL,
+  action text NOT NULL,
+  reason text,
+  notes text,
+  entity_type text,
+  entity_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.moderation_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Staff read moderation log" ON public.moderation_log FOR SELECT USING (
+  EXISTS (SELECT 1 FROM users WHERE id=auth.uid() AND (is_admin OR is_moderator))
+);
+CREATE POLICY "Staff append moderation log" ON public.moderation_log FOR INSERT WITH CHECK (
+  moderator_id=auth.uid() AND EXISTS (SELECT 1 FROM users WHERE id=auth.uid() AND (is_admin OR is_moderator))
+);

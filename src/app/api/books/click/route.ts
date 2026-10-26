@@ -1,5 +1,6 @@
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ ok: false }, { status: 400 });
 
-  const { data: { user } } = await createClient().auth.getUser();
+  const user = await getCurrentUser();
   const userIdHash = user
     ? crypto.createHash('sha256').update(user.id).digest('hex')
     : null;

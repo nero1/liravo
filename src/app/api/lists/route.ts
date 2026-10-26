@@ -1,5 +1,6 @@
+import { decodeCursor, encodeCursor, cursorFilter } from '@/lib/pagination';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
@@ -14,7 +15,7 @@ const CreateListSchema = z.object({
   is_public: z.boolean().default(true),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = createClient();
   const user = await getCurrentUser();
 
@@ -22,37 +23,38 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  let cursor, followedCursor;
+  try {
+    const query = new URL(request.url).searchParams;
+    cursor = decodeCursor(query.get('cursor'));
+    followedCursor = decodeCursor(query.get('followedCursor'));
+  }
+  catch { return NextResponse.json({ error: 'Invalid cursor' }, { status: 400 }); }
   // Get user's own lists
-  const { data: ownLists, error: ownError } = await supabase 
+  const ownQuery = supabase
     .from('reading_lists')
     .select('id, user_id, name, description, is_public, created_at, updated_at')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(51);
+  if (cursor) ownQuery.or(cursorFilter('created_at', cursor));
+  const { data: ownLists, error: ownError } = await ownQuery;
 
   if (ownError) {
     return NextResponse.json({ error: 'Failed to fetch lists' }, { status: 500 });
   }
 
-  // Get followed lists
-  const { data: followedRelations } = await supabase 
-    .from('reading_list_follows')
-    .select('list_id')
-    .eq('user_id', user.id);
-
-  const followedIds = (followedRelations ?? []).map((r: { list_id: string }) => r.list_id);
-  let followedLists: unknown[] = [];
-
-  if (followedIds.length > 0) {
-    const { data } = await supabase 
-      .from('reading_lists')
-      .select('id, user_id, name, description, is_public, created_at, updated_at')
-      .in('id', followedIds);
-    followedLists = data ?? [];
-  }
+  const { data, error: followedError } = await createServiceClient().rpc('page_followed_lists' as never, {
+    p_user_id: user.id, p_before: followedCursor?.at ?? null,
+    p_before_id: followedCursor?.id ?? null, p_limit: 51,
+  } as never);
+  if (followedError) return NextResponse.json({ error: 'Failed to fetch followed lists' }, { status: 503 });
+  const followedLists = (data ?? []) as Array<{ id: string; created_at: string }>;
 
   return NextResponse.json({
-    lists: ownLists ?? [],
-    followedLists,
+    lists: (ownLists ?? []).slice(0, 50),
+    nextCursor: ownLists?.length === 51 ? encodeCursor({ at: ownLists[49].created_at, id: ownLists[49].id }) : null,
+    followedLists: followedLists.slice(0, 50),
+    nextFollowedCursor: followedLists.length === 51 ? encodeCursor({ at: followedLists[49].created_at, id: followedLists[49].id }) : null,
   });
 }
 
@@ -76,7 +78,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: list, error } = await supabase 
+  const { data: list, error } = await supabase
     .from('reading_lists')
     .insert({
       user_id: user.id,

@@ -1,3 +1,4 @@
+import { clientUser } from '@/lib/user-profile';
 import { NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
 
   const token = await createDoSession({ id: user.id, email: user.email ?? '' });
 
-  const response = NextResponse.json({ ok: true, token, user });
+  const response = NextResponse.json({ ok: true, token, user: clientUser(user) });
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

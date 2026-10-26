@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { cron } from '@/lib/cron';
+import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient } from '@/lib/redis';
 
@@ -7,12 +8,8 @@ export const dynamic = 'force-dynamic';
 const CHUNK_SIZE = 100;
 const RECO_TTL = 86400; // 24 hours
 
-export async function GET(request: NextRequest) {
+async function run() {
   // Protect with CRON_SECRET header
-  const secret = request.headers.get('x-cron-secret');
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   const supabase = createServiceClient();
   const redis = getRedisClient();
@@ -121,3 +118,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ processed: totalProcessed, total: users.length });
 }
+
+export const GET = cron('shelf-recommendations', run);
+export const POST = GET;
+
+export const maxDuration = 60;

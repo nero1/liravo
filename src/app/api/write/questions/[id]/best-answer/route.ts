@@ -53,7 +53,7 @@ export async function POST(
 
   // Award 20 XP to the answer author for having the best answer chosen
   if (answer.user_id && answer.user_id !== user.id) {
-    await awardXP(answer.user_id, 20, 'best_answer_chosen');
+    await awardXP(answer.user_id, 20, 'best_answer_chosen', `best-answer:${params.id}`);
   }
 
   return NextResponse.json({ ok: true });

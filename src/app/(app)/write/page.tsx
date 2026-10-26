@@ -62,7 +62,7 @@ export default async function WritePage() {
 
   // Fetch writing stats
   const { data: promptStats } = await supabase
-    .from('prompt_submissions')
+    .from('writing_prompt_submissions')
     .select('id, word_count', { count: 'exact' })
     .eq('user_id', user.id);
 

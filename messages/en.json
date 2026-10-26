@@ -9,12 +9,11 @@
     "notifications": "Notifications"
   },
   "auth": {
-    "loginTitle": "Welcome to Liravo",
-    "loginSubtitle": "Your book discovery social network",
-    "signInGoogle": "Continue with Google",
-    "signInTelegram": "Continue with Telegram",
-    "signOut": "Sign out",
-    "loading": "Signing in..."
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithTelegram": "Sign in with Telegram",
+    "continueWithGoogle": "Continue with Google",
+    "continueWithTelegram": "Continue with Telegram",
+    "orContinueWith": "or continue with"
   },
   "onboarding": {
     "title": "Let's set up your profile",
@@ -49,7 +48,7 @@
     "wantToRead": "Want to Read",
     "search": "Search books...",
     "noResults": "No books found",
-    "ratings": "{count} ratings",
+    "ratings": "{count, plural, one {# rating} other {# ratings}}",
     "reviews": "Reviews",
     "quotes": "Quotes",
     "writtenBy": "by {author}"
@@ -59,7 +58,7 @@
     "followers": "Followers",
     "following": "Following",
     "booksRead": "Books Read",
-    "streak": "{days} day streak",
+    "streak": "{days, plural, one {# day streak} other {# day streak}}",
     "level": "Level"
   },
   "discover": {
@@ -81,7 +80,7 @@
     "similarBooks": "Readers Also Enjoyed",
     "helpfulVote": "Helpful",
     "unhelpfulVote": "Not Helpful",
-    "replyCount": "{count} replies"
+    "replyCount": "{count, plural, one {# reply} other {# replies}}"
   },
   "badges": {
     "earned": "Badge Earned",
@@ -156,8 +155,8 @@
     "weekly": "Weekly",
     "monthly": "Monthly",
     "allTime": "All Time",
-    "helpfulVotes": "{count} helpful votes",
-    "reviews": "{count} reviews"
+    "helpfulVotes": "{count, plural, one {# helpful vote} other {# helpful votes}}",
+    "reviews": "{count, plural, one {# review} other {# reviews}}"
   },
   "common": {
     "loading": "Loading...",
@@ -176,13 +175,6 @@
     "darkMode": "Dark mode",
     "lightMode": "Light mode"
   },
-  "auth": {
-    "signInWithGoogle": "Sign in with Google",
-    "signInWithTelegram": "Sign in with Telegram",
-    "continueWithGoogle": "Continue with Google",
-    "continueWithTelegram": "Continue with Telegram",
-    "orContinueWith": "or continue with"
-  },
   "pushNotifications": {
     "enable": "Enable notifications",
     "enabled": "Notifications enabled",
@@ -196,5 +188,53 @@
     "submitted": "Your note has been submitted for review.",
     "eligibility": "You need 50+ reviews to contribute community notes.",
     "noNotes": "No community notes yet."
+  },
+  "premium": {
+    "pageTitle": "Go Premium",
+    "title": "Liravo Premium",
+    "subtitle": "Unlock the full reading and writing experience.",
+    "activeTitle": "You're Premium!",
+    "activeMessage": "Enjoy all premium features, {name}.",
+    "reader": "reader",
+    "perMonth": "per month",
+    "feature": "Feature",
+    "free": "Free",
+    "premium": "Premium",
+    "terms": "Cancel anytime. No hidden fees.",
+    "manage": "Manage subscription",
+    "payCard": "Pay with Card (Global)",
+    "payPaystack": "Pay with Paystack (Nigeria)",
+    "paymentPending": "Payment confirmation is pending. Refresh this page shortly.",
+    "freeShelves": "10 shelves",
+    "features": {
+      "shelves": {
+        "label": "Unlimited custom shelves",
+        "value": "Unlimited"
+      },
+      "stats": {
+        "label": "Reading statistics dashboard",
+        "value": "Full dashboard"
+      },
+      "taste": {
+        "label": "AI taste profile",
+        "value": "Personalised"
+      },
+      "feedback": {
+        "label": "AI writing feedback",
+        "value": "On every piece"
+      },
+      "plan": {
+        "label": "AI writing plan",
+        "value": "Weekly plan"
+      },
+      "digest": {
+        "label": "Email digests",
+        "value": "Weekly digest"
+      },
+      "badge": {
+        "label": "Premium badge",
+        "value": "On profile"
+      }
+    }
   }
 }

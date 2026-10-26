@@ -1,3 +1,4 @@
+import { clientUser } from '@/lib/user-profile';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -90,5 +91,5 @@ export async function POST(request: Request) {
     .single();
 
   recordMetric('google_play_verify_success', { active: String(active), productId });
-  return NextResponse.json({ ok: true, active, user });
+  return NextResponse.json({ ok: true, active, user: clientUser(user) });
 }

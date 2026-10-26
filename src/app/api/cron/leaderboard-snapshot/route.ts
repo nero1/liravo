@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { cron } from '@/lib/cron';
+import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient } from '@/lib/redis';
 
@@ -7,11 +8,7 @@ export const dynamic = 'force-dynamic';
 // Snapshot the current global XP leaderboard into Redis weekly keys
 // and reset weekly XP counters
 
-export async function GET(request: NextRequest) {
-  const secret = request.headers.get('x-cron-secret');
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+async function run() {
 
   const supabase = createServiceClient();
   const redis = getRedisClient();
@@ -59,3 +56,8 @@ function getWeekKey(): string {
   );
   return `${now.getFullYear()}-W${weekNum.toString().padStart(2, '0')}`;
 }
+
+export const GET = cron('leaderboard-snapshot', run);
+export const POST = GET;
+
+export const maxDuration = 60;

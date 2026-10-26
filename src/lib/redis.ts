@@ -6,9 +6,12 @@ export interface RedisClient {
   set(key: string, value: string, options?: { ex?: number }): Promise<unknown>;
   del(key: string | string[]): Promise<unknown>;
   incr(key: string): Promise<number>;
+  incrementWindow(key: string, seconds: number): Promise<number>;
   expire(key: string, seconds: number): Promise<unknown>;
   ttl(key: string): Promise<number>;
   setNx(key: string, value: string): Promise<boolean | number>;
+  compareExpire(key: string, owner: string, seconds: number): Promise<unknown>;
+  compareDelete(key: string, owner: string): Promise<unknown>;
   setNxEx?(key: string, value: string, ttlSeconds: number): Promise<boolean>;
 }
 
@@ -18,6 +21,8 @@ function createIoRedisClient(): RedisClient {
   const redis = new IORedis(process.env.REDIS_URL!, { lazyConnect: true });
 
   return {
+    async compareExpire(key, owner, seconds) { return redis.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],ARGV[2]) else return 0 end", 1, key, owner, seconds); },
+    async compareDelete(key, owner) { return redis.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", 1, key, owner); },
     async get(key) { return redis.get(key); },
     async set(key, value, options) {
       if (options?.ex) return redis.set(key, value, 'EX', options.ex);
@@ -25,6 +30,9 @@ function createIoRedisClient(): RedisClient {
     },
     async del(key) { return Array.isArray(key) ? redis.del(...key) : redis.del(key); },
     async incr(key) { return redis.incr(key); },
+    async incrementWindow(key, seconds) {
+      return Number(await redis.eval("local n=redis.call('incr',KEYS[1]); if n==1 then redis.call('expire',KEYS[1],ARGV[1]) end; return n", 1, key, seconds));
+    },
     async expire(key, seconds) { return redis.expire(key, seconds); },
     async ttl(key) { return redis.ttl(key); },
     async setNx(key, value) { return redis.setnx(key, value); },
@@ -39,9 +47,12 @@ function createUpstashClient(): RedisClient {
   const redis = new UpstashRedis({
     url: process.env.UPSTASH_REDIS_REST_URL!,
     token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    automaticDeserialization: false,
   });
 
   return {
+    async compareExpire(key, owner, seconds) { return redis.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],ARGV[2]) else return 0 end", [key], [owner, seconds]); },
+    async compareDelete(key, owner) { return redis.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", [key], [owner]); },
     async get(key) {
       const val = await redis.get<string>(key);
       return val ?? null;
@@ -52,6 +63,9 @@ function createUpstashClient(): RedisClient {
     },
     async del(key) { return Array.isArray(key) ? redis.del(...key) : redis.del(key); },
     async incr(key) { return redis.incr(key); },
+    async incrementWindow(key, seconds) {
+      return Number(await redis.eval("local n=redis.call('incr',KEYS[1]); if n==1 then redis.call('expire',KEYS[1],ARGV[1]) end; return n", [key], [seconds]));
+    },
     async expire(key, seconds) { return redis.expire(key, seconds); },
     async ttl(key) { return redis.ttl(key); },
     async setNx(key, value) {

@@ -1,3 +1,4 @@
+import { PUBLIC_USER_COLUMNS } from '@/lib/user-profile';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { ProfileEditForm } from '@/components/profile/ProfileEditForm';
@@ -12,7 +13,7 @@ export default async function ProfileEditPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single();
+  const { data: profile } = await supabase.from('users').select(PUBLIC_USER_COLUMNS).eq('id', user.id).single();
   if (!profile) redirect('/login');
 
   return (

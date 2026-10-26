@@ -1,3 +1,4 @@
+import { clientUser } from '@/lib/user-profile';
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -123,7 +124,7 @@ export async function POST(request: Request) {
     .eq('id', user.id)
     .maybeSingle();
 
-  const response = NextResponse.json({ ok: true, token, user: profile });
+  const response = NextResponse.json({ ok: true, token, user: clientUser(profile) });
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

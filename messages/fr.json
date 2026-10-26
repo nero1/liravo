@@ -9,12 +9,11 @@
     "notifications": "Notifications"
   },
   "auth": {
-    "loginTitle": "Bienvenue sur Liravo",
-    "loginSubtitle": "Votre réseau social de découverte de livres",
-    "signInGoogle": "Continuer avec Google",
-    "signInTelegram": "Continuer avec Telegram",
-    "signOut": "Se déconnecter",
-    "loading": "Connexion en cours..."
+    "signInWithGoogle": "Se connecter avec Google",
+    "signInWithTelegram": "Se connecter avec Telegram",
+    "continueWithGoogle": "Continuer avec Google",
+    "continueWithTelegram": "Continuer avec Telegram",
+    "orContinueWith": "ou continuer avec"
   },
   "onboarding": {
     "title": "Configurons votre profil",
@@ -49,7 +48,7 @@
     "wantToRead": "À lire",
     "search": "Rechercher des livres...",
     "noResults": "Aucun livre trouvé",
-    "ratings": "{count} évaluations",
+    "ratings": "{count, plural, one {# évaluation} other {# évaluations}}",
     "reviews": "Critiques",
     "quotes": "Citations",
     "writtenBy": "par {author}"
@@ -59,7 +58,7 @@
     "followers": "Abonnés",
     "following": "Abonnements",
     "booksRead": "Livres lus",
-    "streak": "Série de {days} jours",
+    "streak": "{days, plural, one {Série de # jour} other {Série de # jours}}",
     "level": "Niveau"
   },
   "discover": {
@@ -81,7 +80,7 @@
     "similarBooks": "Les lecteurs ont aussi aimé",
     "helpfulVote": "Utile",
     "unhelpfulVote": "Pas utile",
-    "replyCount": "{count} réponses"
+    "replyCount": "{count, plural, one {# réponse} other {# réponses}}"
   },
   "badges": {
     "earned": "Badge obtenu",
@@ -156,8 +155,8 @@
     "weekly": "Hebdomadaire",
     "monthly": "Mensuel",
     "allTime": "Tout le temps",
-    "helpfulVotes": "{count} votes utiles",
-    "reviews": "{count} critiques"
+    "helpfulVotes": "{count, plural, one {# vote utile} other {# votes utiles}}",
+    "reviews": "{count, plural, one {# critique} other {# critiques}}"
   },
   "common": {
     "loading": "Chargement...",
@@ -176,13 +175,6 @@
     "darkMode": "Mode sombre",
     "lightMode": "Mode clair"
   },
-  "auth": {
-    "signInWithGoogle": "Se connecter avec Google",
-    "signInWithTelegram": "Se connecter avec Telegram",
-    "continueWithGoogle": "Continuer avec Google",
-    "continueWithTelegram": "Continuer avec Telegram",
-    "orContinueWith": "ou continuer avec"
-  },
   "pushNotifications": {
     "enable": "Activer les notifications",
     "enabled": "Notifications activées",
@@ -196,5 +188,53 @@
     "submitted": "Votre note a été soumise pour examen.",
     "eligibility": "Vous avez besoin de 50+ critiques pour contribuer des notes communautaires.",
     "noNotes": "Pas encore de notes communautaires."
+  },
+  "premium": {
+    "pageTitle": "Passer à Premium",
+    "title": "Liravo Premium",
+    "subtitle": "Profitez pleinement de la lecture et de l’écriture.",
+    "activeTitle": "Vous êtes Premium !",
+    "activeMessage": "Profitez de toutes les fonctionnalités Premium, {name}.",
+    "reader": "lecteur",
+    "perMonth": "par mois",
+    "feature": "Fonctionnalité",
+    "free": "Gratuit",
+    "premium": "Premium",
+    "terms": "Résiliez à tout moment. Aucun frais caché.",
+    "manage": "Gérer l’abonnement",
+    "payCard": "Payer par carte (monde entier)",
+    "payPaystack": "Payer avec Paystack (Nigeria)",
+    "paymentPending": "Le paiement est en cours de confirmation. Actualisez cette page dans un instant.",
+    "freeShelves": "10 étagères",
+    "features": {
+      "shelves": {
+        "label": "Étagères personnalisées illimitées",
+        "value": "Illimité"
+      },
+      "stats": {
+        "label": "Tableau de statistiques de lecture",
+        "value": "Tableau complet"
+      },
+      "taste": {
+        "label": "Profil de goûts par IA",
+        "value": "Personnalisé"
+      },
+      "feedback": {
+        "label": "Commentaires d’écriture par IA",
+        "value": "Sur chaque texte"
+      },
+      "plan": {
+        "label": "Programme d’écriture par IA",
+        "value": "Programme hebdomadaire"
+      },
+      "digest": {
+        "label": "Récapitulatifs par e-mail",
+        "value": "Récapitulatif hebdomadaire"
+      },
+      "badge": {
+        "label": "Badge Premium",
+        "value": "Sur le profil"
+      }
+    }
   }
 }

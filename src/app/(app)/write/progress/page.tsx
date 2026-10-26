@@ -32,7 +32,7 @@ export default async function WritingProgressPage() {
 
   // Aggregate writing stats
   const { data: promptSubs } = await supabase
-    .from('prompt_submissions')
+    .from('writing_prompt_submissions')
     .select('word_count, created_at')
     .eq('user_id', user.id);
 
