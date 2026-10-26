@@ -1,3 +1,5 @@
+import { requireWorkshopMember } from '@/lib/workshops';
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -16,6 +18,8 @@ export async function POST(
   const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try{await requireWorkshopMember(params.id,user.id);}catch(error){return NextResponse.json({error:'Workshop unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
+
 
   let body: unknown;
   try {
@@ -39,16 +43,17 @@ export async function POST(
 
   if (!submission) return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
 
-  const { data: feedback, error } = await supabase
-    .from('workshop_feedback')
-    .insert({
+  let feedback;
+  try {
+    const intent=await contentIntent(req,user.id,'workshop_feedback',{
       user_id: user.id,
       submission_id: params.submissionId,
       comment: parsed.data.comment,
-    })
-    .select()
-    .single();
+    });
+    feedback = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ feedback }, { status: 201 });
 }

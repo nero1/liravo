@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
+import { createServiceClient, createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -14,19 +15,12 @@ export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data, error } = await supabase
-    .from('reading_room_posts')
-    .select('id, content, milestone_id, created_at, users:user_id(id, display_name, username, avatar_url)')
-    .eq('room_id', params.id)
-    .order('created_at', { ascending: true })
-    .limit(100);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ posts: data ?? [] });
+  const {data,error}=await createServiceClient().rpc('read_room_posts' as never,{p_user_id:user.id,p_room_id:params.id} as never);
+  if(error)return NextResponse.json({error:'Room unavailable'},{status:error.code==='P1003'?403:error.code==='22P02'?400:503});
+  return NextResponse.json({posts:data??[]});
 }
 
 export async function POST(
@@ -70,17 +64,18 @@ export async function POST(
     }
   }
 
-  const { data, error } = await supabase
-    .from('reading_room_posts')
-    .insert({
+  let data;
+  try {
+    const intent=await contentIntent(req,user.id,'reading_room_posts',{
       room_id: params.id,
       user_id: user.id,
       content: parsed.data.content,
       milestone_id: parsed.data.milestone_id ?? null,
-    })
-    .select('id, content, milestone_id, created_at, users:user_id(id, display_name, username, avatar_url)')
-    .single();
+    });
+    data = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ post: data }, { status: 201 });
 }

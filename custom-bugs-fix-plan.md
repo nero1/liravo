@@ -55,6 +55,7 @@ Updated 26 October 2026. Section status summarizes its bullets; individual verif
 🟡 10. Validation rollout
 - 🟡 Add concurrency/load tests for payout/webhook/cron paths.
 - ✅ Add security tests (CSRF, replay, IDOR, abuse throttling).
+- ✅ Verify remaining content tables, durable creates, group capacity, private discussions, badge rewards and paged author notifications.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.
 
 Footer/Signature: Generated on May 23, 2026 09:39 PM UTC

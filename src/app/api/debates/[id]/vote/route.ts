@@ -1,80 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { z } from 'zod';
+import { NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { z } from 'zod';
 
-export const dynamic = 'force-dynamic';
-
-// debate_votes table not in generated types — using any cast
-// Expected columns: debate_id, user_id, vote (yes|no), created_at
-
-const VoteSchema = z.object({
-  vote: z.enum(['yes', 'no']),
-});
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-
-  const parsed = VoteSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const { vote } = parsed.data;
-
-  // Check if user already voted
-  const { data: existingVote } = await supabase 
-    .from('debate_votes')
-    .select('vote')
-    .eq('debate_id', params.id)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (existingVote) {
-    return NextResponse.json({ error: 'Already voted' }, { status: 409 });
-  }
-
-  // Insert vote
-  const { error: voteError } = await supabase 
-    .from('debate_votes')
-    .insert({ debate_id: params.id, user_id: user.id, vote });
-
-  if (voteError) {
-    return NextResponse.json({ error: 'Failed to record vote' }, { status: 500 });
-  }
-
-  // Update count on debate
-  const field = vote === 'yes' ? 'yes_count' : 'no_count';
-
-  // Get current count
-  const { data: debate } = await supabase
-    .from('book_debates')
-    .select('yes_count,no_count')
-    .eq('id', params.id)
-    .single();
-
-  if (debate) {
-    const current = field === 'yes_count' ? (debate.yes_count ?? 0) : (debate.no_count ?? 0);
-    await supabase 
-      .from('book_debates')
-      .update({ [field]: current + 1 })
-      .eq('id', params.id);
-  }
-
-  return NextResponse.json({ success: true, vote });
+export async function POST(request:Request,{params}:{params:{id:string}}) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid debate'},{status:400});
+  let body;try{body=await request.json();}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
+  const parsed=z.object({vote:z.enum(['yes','no'])}).safeParse(body);if(!parsed.success)return NextResponse.json({error:'Invalid vote'},{status:400});
+  const {data,error}=await createServiceClient().rpc('cast_debate_vote' as never,{p_user_id:user.id,p_debate_id:params.id,p_vote:parsed.data.vote} as never);
+  if(error)return NextResponse.json({error:'Vote unavailable'},{status:({P1001:409,P1003:403,P1004:409,P1005:404} as Record<string,number>)[error.code]??503});
+  return NextResponse.json(data);
 }

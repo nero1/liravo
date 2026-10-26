@@ -1,56 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { z } from 'zod';
 
-export const dynamic = 'force-dynamic';
-
-export async function POST(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { data: room } = await supabase
-    .from('reading_rooms')
-    .select('id, is_active, is_public')
-    .eq('id', params.id)
-    .single();
-
-  if (!room) {
-    return NextResponse.json({ error: 'Room not found' }, { status: 404 });
-  }
-
-  if (!room.is_active) {
-    return NextResponse.json({ error: 'Room is no longer active' }, { status: 400 });
-  }
-
-  // Check if already joined
-  const { data: existing } = await supabase
-    .from('room_participants')
-    .select('user_id')
-    .eq('room_id', params.id)
-    .eq('user_id', user.id)
-    .single();
-
-  if (existing) {
-    return NextResponse.json({ joined: true, alreadyJoined: true });
-  }
-
-  const { error } = await supabase
-    .from('room_participants')
-    .insert({
-      room_id: params.id,
-      user_id: user.id,
-    });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ joined: true });
+export const dynamic='force-dynamic';
+export async function POST(_request:Request,{params}:{params:{id:string}}) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid target'},{status:400});
+  const {data,error}=await createServiceClient().rpc('join_content_group' as never,{p_user_id:user.id,p_kind:'reading_room',p_target:params.id} as never);
+  if(error)return NextResponse.json({error:'Membership unavailable'},{status:({P1003:403,P1004:409,P1005:404} as Record<string,number>)[error.code]??503});
+  return NextResponse.json(data);
 }

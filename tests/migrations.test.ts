@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
+vi.mock('@/lib/rate-limit',async original=>({...await original<typeof import('@/lib/rate-limit')>(),checkRouteRateLimit:vi.fn(async()=>true)}));
 vi.mock('next-intl/server',()=>({
   getTranslations:async()=>createTranslator({locale:'en',messages:en,namespace:'admin'}),
   getFormatter:async()=>createFormatter({locale:'en'}),
@@ -15,6 +16,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
   const url = process.env.MIGRATION_TEST_DATABASE_URL!;
   if (!['localhost','127.0.0.1'].includes(new URL(url).hostname)) throw new Error('Migration rehearsal requires an isolated loopback database');
   const sql = postgres(url, { max: 4, prepare: false, ssl: false, onnotice: () => {} });
+  let closeAdapter=async()=>{};
   try {
     const [row] = await sql`select count(*) as count from pg_tables where schemaname='public'`;
     if (Number(row.count) !== 0) throw new Error('Refusing to modify a nonempty database');
@@ -26,7 +28,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
       create schema auth;
       create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');
-      create function auth.uid() returns uuid language sql as $$select null::uuid$$;
+      create function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
       create function auth.role() returns text language sql as $$select coalesce(current_setting('request.jwt.claim.role',true),'service_role')::text$$;
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
@@ -90,7 +92,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         has_column_privilege(${role},'public.users','recovery_codes','SELECT') as recovery`;
       expect(access).toEqual({ profile: true, email: false, pin: false, totp: false, recovery: false });
       const routines = await sql`select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy','creator_balance','claim_payout_request','settle_payout_request','defer_payout_request','cancel_payout_request','release_legacy_payout_request','process_refund_event','claim_refund_reconciliation','reconcile_capture_and_refund','apply_pending_capture_refunds')`;
+        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy','creator_balance','claim_payout_request','settle_payout_request','defer_payout_request','cancel_payout_request','release_legacy_payout_request','process_refund_event','claim_refund_reconciliation','reconcile_capture_and_refund','apply_pending_capture_refunds','award_badge_atomic','count_verified_books','join_content_group','fork_reading_list','cast_debate_vote','reading_room_visible','read_room_posts')`;
       for (const routine of routines) {
         const [permissions] = await sql`select has_function_privilege(${role},${routine.oid}::oid,'EXECUTE') as allowed`;
         expect(permissions.allowed, `${role}:${routine.proname}`).toBe(false);
@@ -157,6 +159,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     vi.stubEnv('DATABASE_SSL', 'false');
     const { contentIntent } = await import('@/lib/content-intents');
     const { getSql } = await import('@/lib/db/pg');
+    closeAdapter=async()=>{await getSql().end();};
     try {
       const request = new Request('https://app.test/api/quotes', { headers: { 'Idempotency-Key': 'durable-content-key' } });
       const payload = { book_id: book.id, content: 'A stable quote', page_number: null };
@@ -266,7 +269,6 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await (await contentIntent(answerRequest,recipient,'ask_writer_answers',answerPayload)).insert();
       expect((await sql`select answer_count from ask_writer_questions where id=${questionId}`)[0].answer_count).toBe(1);
     } finally {
-      await getSql().end();
       vi.unstubAllEnvs();
     }
     await sql`update users set is_admin=true where id=${recipient}`;
@@ -552,5 +554,85 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect(Number((await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance.available)).toBe(Number(beforeDuplicate.available)+18);
     await sql`select process_refund_event('paystack','original-charge-refund',${credited.payment_id},2000,'USD','refund-rehearsal')`;
     expect(Number((await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance.available)).toBe(Number(beforeDuplicate.available));
-  } finally { await sql.end(); }
+    vi.stubEnv('DATABASE_PROVIDER','railway');vi.stubEnv('DATABASE_URL',url);vi.stubEnv('DATABASE_SSL','false');
+    const createRequest=(key:string)=>new Request('https://app.test/api/content',{method:'POST',headers:{'Idempotency-Key':key}});
+    const createContent=async(table:Parameters<typeof contentIntent>[2],key:string,payload:Record<string,unknown>,actor=recipient)=>(await contentIntent(createRequest(key),actor,table,payload)).insert();
+    const replayLists=await Promise.all(Array.from({length:4},()=>createContent('reading_lists','root-list-replay',{name:'Replay list',description:null,is_public:true})));
+    expect(new Set(replayLists.map(row=>row.id)).size).toBe(1);
+    await expect(createContent('reading_lists','root-list-replay',{name:'Different list',is_public:true})).rejects.toMatchObject({status:409});
+    await sql`insert into reading_list_books(list_id,book_id,position) values(${replayLists[0].id},${book.id},7)`;
+    const forkResults=await Promise.all(Array.from({length:4},()=>sql`select fork_reading_list(${sender},${replayLists[0].id},'fork-replay-key') as result`));
+    expect(new Set(forkResults.map(rows=>rows[0].result.id)).size).toBe(1);
+    const forkId=forkResults[0][0].result.id;
+    expect((await sql`select position from reading_list_books where list_id=${forkId}`)[0].position).toBe(7);
+    await sql`delete from reading_lists where id=${replayLists[0].id}`;
+    expect((await sql`select fork_reading_list(${sender},${replayLists[0].id},'fork-replay-key') as result`)[0].result.id).toBe(forkId);
+    const room=await createContent('reading_rooms','reading-room-root',{name:'Root reading room',book_id:null,is_public:false,is_active:true});
+    expect((await sql`select name,title,created_by,creator_id from reading_rooms where id=${room.id}`)[0]).toMatchObject({name:'Root reading room',title:'Root reading room',created_by:recipient,creator_id:recipient});
+    expect((await sql`select count(*)::int as count from room_participants where room_id=${room.id}`)[0].count).toBe(1);
+    await expect(sql`select join_content_group(${sender},'reading_room',${room.id})`).rejects.toThrow('unavailable');
+    await expect(createContent('reading_room_posts','outsider-room-post',{room_id:room.id,content:'Private post'},sender)).rejects.toMatchObject({status:403});
+    await expect(createContent('reading_room_milestones','outsider-milestone',{room_id:room.id,title:'Foreign milestone',unlock_date:new Date().toISOString()},sender)).rejects.toMatchObject({status:403});
+    const milestone=await createContent('reading_room_milestones','future-milestone',{room_id:room.id,title:'Next chapter',unlock_date:new Date(Date.now()+86400000).toISOString()});
+    await expect(createContent('reading_room_posts','locked-room-post',{room_id:room.id,content:'Spoiler',milestone_id:milestone.id})).rejects.toMatchObject({status:403});
+    const roomPost=await createContent('reading_room_posts','owner-room-post',{room_id:room.id,content:'Private discussion',milestone_id:null});
+    expect((await sql`select read_room_posts(${recipient},${room.id}) as posts`)[0].posts[0].id).toBe(roomPost.id);
+    await expect(sql`select read_room_posts(${sender},${room.id})`).rejects.toThrow('unavailable');
+    for(const [actor,visible] of [[recipient,1],[sender,0]] as const){
+      const allowed=await sql.begin(async tx=>{await tx`select set_config('request.jwt.claim.sub',${actor},true)`;await tx`select set_config('request.jwt.claim.role','authenticated',true)`;await tx`set local role authenticated`;return tx`select count(*)::int as count from reading_room_posts where room_id=${room.id}`;});
+      expect(allowed[0].count).toBe(visible);
+    }
+    const workshop=await createContent('workshop_rooms','workshop-root',{name:'Root workshop',topic:'Peer feedback',max_members:3,is_active:true});
+    expect(workshop.member_count).toBe(1);
+    const workshopJoiners=[sender,playUser,otherPlayUser];
+    const workshopJoins=await Promise.allSettled(workshopJoiners.map(actor=>sql`select join_content_group(${actor},'workshop',${workshop.id})`));
+    expect(workshopJoins.filter(result=>result.status==='fulfilled')).toHaveLength(2);
+    expect((await sql`select member_count from workshop_rooms where id=${workshop.id}`)[0].member_count).toBe(3);
+    expect((await sql`select join_content_group(${recipient},'workshop',${workshop.id}) as result`)[0].result.alreadyJoined).toBe(true);
+    const excluded=workshopJoiners[workshopJoins.findIndex(result=>result.status==='rejected')];
+    await expect(createContent('workshop_submissions','outsider-submission',{room_id:workshop.id,title:'No membership',excerpt:'not a member'},excluded)).rejects.toMatchObject({status:403});
+    const workshopSubmission=await createContent('workshop_submissions','member-submission',{room_id:workshop.id,title:'My draft',excerpt:'three actual words'});
+    expect(workshopSubmission.word_count).toBe(3);
+    const workshopFeedback=await createContent('workshop_feedback','member-feedback',{submission_id:workshopSubmission.id,comment:'Helpful feedback'});
+    expect((await createContent('workshop_feedback','member-feedback',{submission_id:workshopSubmission.id,comment:'Helpful feedback'})).id).toBe(workshopFeedback.id);
+    await expect(createContent('workshop_feedback','duplicate-feedback',{submission_id:workshopSubmission.id,comment:'Another feedback'})).rejects.toMatchObject({status:409});
+    await sql`update workshop_rooms set is_active=false where id=${workshop.id}`;
+    await expect(createContent('workshop_submissions','closed-submission',{room_id:workshop.id,title:'Closed workshop',excerpt:'No new content'})).rejects.toMatchObject({status:422});
+    for(const [actor,visible] of [[recipient,1],[excluded,0]] as const){
+      const allowed=await sql.begin(async tx=>{await tx`select set_config('request.jwt.claim.sub',${actor},true)`;await tx`select set_config('request.jwt.claim.role','authenticated',true)`;await tx`set local role authenticated`;return tx`select count(*)::int as count from workshop_submissions where room_id=${workshop.id}`;});
+      expect(allowed[0].count).toBe(visible);
+    }
+    await sql`insert into follows(follower_id,following_id) values(${recipient},${sender}) on conflict do nothing`;
+    const passes=await Promise.all(Array.from({length:4},()=>createContent('book_passes','book-pass-root',{recipient_id:sender,book_id:book.id,message:'Try this book'})));
+    expect(new Set(passes.map(row=>row.id)).size).toBe(1);
+    expect((await sql`select count(*)::int as count from notifications where type='book_pass' and actor_id=${recipient} and user_id=${sender}`)[0].count).toBe(1);
+    const debate=await createContent('book_debates','debate-root',{book_id:book.id,question:'Did the ending work?',yes_count:0,no_count:0,is_active:true});
+    await Promise.all(Array.from({length:4},()=>sql`select cast_debate_vote(${sender},${debate.id},'yes')`));
+    expect((await sql`select yes_count,no_count from book_debates where id=${debate.id}`)[0]).toEqual({yes_count:1,no_count:0});
+    await expect(sql`select cast_debate_vote(${sender},${debate.id},'no')`).rejects.toThrow('final');
+    const groupEvent=await createContent('events','event-root',{title:'Reading event',description:'Join us',event_date:new Date(Date.now()+86400000).toISOString(),is_paid:false,ticket_price:null,currency:'USD',max_attendees:1,book_id:book.id});
+    const rsvps=await Promise.allSettled([sender,playUser].map(actor=>sql`select join_content_group(${actor},'event',${groupEvent.id})`));
+    expect(rsvps.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    expect((await sql`select count(*)::int as count from event_rsvps where event_id=${groupEvent.id}`)[0].count).toBe(1);
+    const badgeXp=(await sql`select xp from users where id=${recipient}`)[0].xp;
+    const badgeResults=await Promise.all(Array.from({length:4},()=>sql`select award_badge_atomic(${recipient},'test_atomic_badge',75,'Atomic badge','★') as awarded`));
+    expect(badgeResults.filter(rows=>rows[0].awarded)).toHaveLength(1);
+    expect((await sql`select xp from users where id=${recipient}`)[0].xp).toBe(badgeXp+75);
+    expect((await sql`select count(*)::int as count from notifications where user_id=${recipient} and type='badge_earned' and message='★ Atomic badge'`)[0].count).toBe(1);
+    await sql`insert into auth.users(id,email,raw_user_meta_data)
+      select ('00000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'fan'||i||'@example.test',jsonb_build_object('username','fan_'||i) from generate_series(10001,10501) i`;
+    await sql`insert into follows(follower_id,following_id) select id,${recipient} from users where username like 'fan_%' on conflict do nothing`;
+    const announcement=await createContent('author_posts','announcement-root',{title:'A new chapter',body:'Announcement body',book_id:book.id,type:'announcement'});
+    const [announcementRow]=await sql`select content,body,created_at from author_posts where id=${announcement.id}`;
+    expect(announcementRow.content).toBe(announcementRow.body);
+    const [expectedAnnouncements]=await sql`select count(*)::int as count from follows f join users u on u.id=f.follower_id where following_id=${recipient} and f.created_at<=${announcementRow.created_at} and coalesce(u.notify_author_announcements,true)`;
+    expect(expectedAnnouncements.count).toBeGreaterThan(500);
+    for(let page=0;page<10;page++){
+      const jobs=await sql`update outbox_events set status='processing' where aggregate_type='author_post' and aggregate_id=${announcement.id} and status='pending' returning id`;
+      if(!jobs.length)break;
+      for(const job of jobs)await Promise.all([sql`select process_outbox_event_atomic(${job.id})`,sql`select process_outbox_event_atomic(${job.id})`]);
+    }
+    expect((await sql`select count(*)::int as count from notifications where type='author_announcement' and entity_id=${announcement.id}`)[0].count).toBe(expectedAnnouncements.count);
+    expect((await sql`select followers_notified from author_posts where id=${announcement.id}`)[0].followers_notified).toBe(true);
+  } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

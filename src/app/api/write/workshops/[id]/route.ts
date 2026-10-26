@@ -1,3 +1,6 @@
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { ContentIntentError } from '@/lib/content-intents';
+import { requireWorkshopMember } from '@/lib/workshops';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
@@ -7,6 +10,8 @@ export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  try{await requireWorkshopMember(params.id,user.id);}catch(error){return NextResponse.json({error:'Workshop unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
   const supabase = createClient();
 
   const { data: room, error } = await supabase

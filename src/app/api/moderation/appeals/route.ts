@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -23,25 +24,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
   }
 
-  const serviceSupabase = createServiceClient();
-
   // appeals table may not be in DB type
-  const { data, error } = await serviceSupabase
-    .from('appeals')
-    .insert({
+  let data;
+  try {
+    const intent=await contentIntent(request,user.id,'appeals',{
       user_id: user.id,
       report_id: parsed.data.report_id ?? null,
       reason: parsed.data.reason,
       content_type: parsed.data.content_type ?? null,
       content_id: parsed.data.content_id ?? null,
       status: 'pending',
-      created_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    });
+    data = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
   return NextResponse.json({ appeal: data }, { status: 201 });

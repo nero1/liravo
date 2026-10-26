@@ -21,7 +21,7 @@ export async function GET() {
     .eq('user_id', user.id);
 
   const { data: challengeEntries } = await supabase
-    .from('writing_challenge_entries')
+    .from('writing_challenge_submissions')
     .select('word_count')
     .eq('user_id', user.id);
 

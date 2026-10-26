@@ -1,59 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { z } from 'zod';
 
-export const dynamic = 'force-dynamic';
-
-export async function POST(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { data: event } = await supabase
-    .from('events')
-    .select('id, is_paid, event_date')
-    .eq('id', params.id)
-    .single();
-
-  if (!event) {
-    return NextResponse.json({ error: 'Event not found' }, { status: 404 });
-  }
-
-  if (event.is_paid) {
-    return NextResponse.json(
-      { error: 'This is a paid event. Please purchase a ticket instead.' },
-      { status: 400 }
-    );
-  }
-
-  // Check if already RSVP'd
-  const { data: existing } = await supabase
-    .from('event_rsvps')
-    .select('id')
-    .eq('event_id', params.id)
-    .eq('user_id', user.id)
-    .single();
-
-  if (existing) {
-    return NextResponse.json({ rsvped: true, alreadyRsvped: true });
-  }
-
-  const { error } = await supabase
-    .from('event_rsvps')
-    .insert({
-      event_id: params.id,
-      user_id: user.id,
-    });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ rsvped: true });
+export const dynamic='force-dynamic';
+export async function POST(_request:Request,{params}:{params:{id:string}}) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid target'},{status:400});
+  const {data,error}=await createServiceClient().rpc('join_content_group' as never,{p_user_id:user.id,p_kind:'event',p_target:params.id} as never);
+  if(error)return NextResponse.json({error:'Membership unavailable'},{status:({P1003:403,P1004:409,P1005:404} as Record<string,number>)[error.code]??503});
+  return NextResponse.json(data);
 }

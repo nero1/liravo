@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError, requireReadingRoomAccess } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -17,6 +18,7 @@ export async function GET(
   const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try{await requireReadingRoomAccess(params.id,user.id);}catch(error){return NextResponse.json({error:'Room unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
 
   const { data, error } = await supabase
     .from('reading_room_milestones')
@@ -53,13 +55,14 @@ export async function POST(
   const parsed = MilestoneSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
 
-  const { data, error } = await supabase
-    .from('reading_room_milestones')
-    .insert({ room_id: params.id, title: parsed.data.title, unlock_date: parsed.data.unlock_date })
-    .select()
-    .single();
+  let data;
+  try {
+    const intent=await contentIntent(req,user.id,'reading_room_milestones',{ room_id: params.id, title: parsed.data.title, unlock_date: parsed.data.unlock_date });
+    data = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ milestone: data }, { status: 201 });
 }
 

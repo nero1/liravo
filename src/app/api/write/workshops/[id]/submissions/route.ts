@@ -1,14 +1,15 @@
+import { requireWorkshopMember } from '@/lib/workshops';
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { checkAndAwardBadges } from '@/services/badges';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
 const SubmitSchema = z.object({
-  title: z.string().min(1).max(200),
-  excerpt: z.string().min(1).max(1000),
+  title: z.string().trim().min(1).max(200),
+  excerpt: z.string().trim().min(1).max(1000),
   word_count: z.number().int().min(0).optional(),
 });
 
@@ -16,6 +17,8 @@ export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  try{await requireWorkshopMember(params.id,user.id);}catch(error){return NextResponse.json({error:'Workshop unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
   const supabase = createClient();
 
   const { data, error } = await supabase
@@ -32,9 +35,10 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try{await requireWorkshopMember(params.id,user.id);}catch(error){return NextResponse.json({error:'Workshop unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
+
 
   let body: unknown;
   try {
@@ -48,22 +52,18 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  const { data: submission, error } = await supabase
-    .from('workshop_submissions')
-    .insert({
+  let submission;
+  try {
+    const intent=await contentIntent(req,user.id,'workshop_submissions',{
       user_id: user.id,
       room_id: params.id,
       title: parsed.data.title,
       excerpt: parsed.data.excerpt,
-      word_count: parsed.data.word_count ?? 0,
-    })
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Check workshop veteran badge
-  await checkAndAwardBadges(user.id, 'workshop_submit');
+    });
+    submission = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 
   return NextResponse.json({ submission }, { status: 201 });
 }
