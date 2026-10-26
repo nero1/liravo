@@ -41,7 +41,7 @@ export async function createTipCheckout(tip: { id: string; amount: string; curre
   const product = await productResponse.json();
   if (product.is_recurring !== false || product.price?.type !== 'one_time_price' ||
     product.price.currency !== tip.currency || product.price.pay_what_you_want !== true ||
-    product.price.price > amount || product.price.purchasing_power_parity || product.price.discount_bps || product.price.discount) throw new Error('Invalid tip product pricing');
+    product.price.price > amount || product.price.tax_inclusive===true || product.price.purchasing_power_parity || product.price.discount_bps || product.price.discount) throw new Error('Invalid tip product pricing');
   const response = await fetch(`${base}/checkouts`, {
     method: 'POST', signal: AbortSignal.timeout(8_000),
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'Idempotency-Key': reference },
@@ -65,13 +65,21 @@ export async function cancelProviderSubscription(provider: string, remoteId: str
   if (!current.ok) throw new Error(`Cancellation lookup failed: ${current.status}`);
   const state = await current.json();
   if (state.subscription_id !== remoteId) throw new Error('Subscription binding mismatch');
-  if (state.status === 'cancelled') return;
+  if (state.status === 'cancelled' || state.cancel_at_next_billing_date===true) return;
   const response = await fetch(`${connection.base}/subscriptions/${encodeURIComponent(remoteId)}`, {
     method: 'PATCH', signal: AbortSignal.timeout(8_000),
     headers: { Authorization: `Bearer ${connection.key}`, 'Content-Type': 'application/json', 'Idempotency-Key': key },
-    body: JSON.stringify({ status: 'cancelled', cancel_reason: 'cancelled_by_customer', cancel_at_next_billing_date: false }),
+    body: JSON.stringify({ cancel_reason: 'cancelled_by_customer', cancel_at_next_billing_date: true }),
   });
   if (!response.ok) throw new Error(`Cancellation failed: ${response.status}`);
   const result = await response.json();
-  if (result.subscription_id !== remoteId || result.status !== 'cancelled') throw new Error('Cancellation was not confirmed');
+  if (result.subscription_id !== remoteId || result.status !== 'cancelled' && result.cancel_at_next_billing_date!==true) throw new Error('Cancellation was not confirmed');
+}
+
+export async function validateDodoSubscriptionProduct(productId:string,amount:string) {
+  const connection=dodoConnection();
+  const response=await fetch(`${connection.base}/products/${encodeURIComponent(productId)}`,{headers:{Authorization:`Bearer ${connection.key}`},signal:AbortSignal.timeout(5_000)});
+  if(!response.ok)throw new Error('Subscription product unavailable');
+  const product=await response.json(),price=product.price;
+  if(product.product_id!==productId||product.is_recurring!==true||price?.type!=='recurring_price'||price.currency!=='USD'||price.price!==Math.round(Number(amount)*100)||price.payment_frequency_count!==1||price.payment_frequency_interval!=='Month'||price.tax_inclusive===true||price.purchasing_power_parity||price.discount_bps||price.discount||price.trial_period_days)throw new Error('Invalid subscription product pricing');
 }

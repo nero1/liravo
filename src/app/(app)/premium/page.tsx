@@ -1,7 +1,8 @@
 import { hasPremiumAccess } from '@/lib/premium-access';
 import { getTranslations, getFormatter } from 'next-intl/server';
 import { CsrfInput } from '@/components/layout/CsrfInput';
-import { createClient } from '@/lib/supabase/server';
+import { googlePlayManagementUrl } from '@/lib/google-play';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
@@ -32,6 +33,13 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
     .single();
 
   const isPremium = await hasPremiumAccess(user.id);
+  const {data:subscriptions,error:subscriptionError}=await createServiceClient().from('subscriptions').select('provider,current_period_end,renewal_cancelled').eq('user_id',user.id).eq('status','active').gt('current_period_end',new Date().toISOString());
+  if(subscriptionError||!Array.isArray(subscriptions))throw new Error('Subscription management unavailable');
+  const paidUntil=subscriptions.reduce((latest:string|null,item:{current_period_end:string})=>!latest||item.current_period_end>latest?item.current_period_end:latest,null);
+  const canCancel=subscriptions.some((item:{provider:string;renewal_cancelled:boolean})=>item.provider==='dodopayments'&&!item.renewal_cancelled);
+  const googleManaged=subscriptions.some((item:{provider:string})=>item.provider==='google_play');
+  const paystackPass=subscriptions.some((item:{provider:string})=>item.provider==='paystack');
+
 
   return (
     <div className="max-w-xl mx-auto px-4 py-8">
@@ -51,7 +59,10 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
           <p className="text-muted-foreground text-sm mt-1">
             {t('activeMessage', { name: profile?.display_name ?? t('reader') })}
           </p>
-          <CancelSubscriptionButton />
+          {paidUntil&&<p className="text-sm mt-2">{t('paidUntil',{date:formatter.dateTime(new Date(paidUntil),{dateStyle:'medium'})})}</p>}
+          {paystackPass&&<p className="text-sm mt-2">{t('paystackPass')}</p>}
+          {canCancel&&<CancelSubscriptionButton />}
+          {googleManaged&&<a href={googlePlayManagementUrl()} target="_blank" rel="noopener noreferrer" className="underline text-sm block mt-2">{t('manageGoogle')}</a>}
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card p-6 text-center mb-8">

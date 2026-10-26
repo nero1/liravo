@@ -219,7 +219,7 @@
     "terms": "Résiliez à tout moment. Aucun frais caché.",
     "manage": "Gérer l’abonnement",
     "payCard": "Payer par carte (monde entier)",
-    "payPaystack": "Payer avec Paystack (Nigeria)",
+    "payPaystack": "Acheter 30 jours avec Paystack (NGN)",
     "paymentPending": "Le paiement est en cours de confirmation. Actualisez cette page dans un instant.",
     "freeShelves": "10 étagères",
     "features": {
@@ -257,7 +257,9 @@
     "cancelPending": "La résiliation est en attente. Votre abonnement reste actif jusqu’à confirmation du prestataire.",
     "cancelError": "La confirmation est indisponible. Réessayez ; les demandes existantes sont conservées.",
     "managedByGoogle": "Gérez votre abonnement Google Play dans le Play Store.",
-    "manageGoogle": "Gérer dans Google Play"
+    "manageGoogle": "Gérer dans Google Play",
+    "paidUntil": "Accès payé jusqu’au {date}.",
+    "paystackPass": "Les achats Paystack donnent accès pendant 30 jours, sans renouvellement automatique."
   },
   "admin": {
     "cron": {
@@ -280,7 +282,11 @@
         "uncertainDigests": "E-mails à vérifier auprès du prestataire",
         "unacknowledgedPurchases": "Achats Google Play non acquittés",
         "stalledBillingDeliveries": "Notifications de facturation bloquées",
-        "unconfirmedPayouts": "Versements à rapprocher"
+        "unconfirmedPayouts": "Versements à rapprocher",
+        "pendingRefunds": "Remboursements à rapprocher",
+        "unverifiedBillingPeriods": "Périodes payées non vérifiées",
+        "overdrawnCreators": "Soldes créateurs négatifs",
+        "duplicatePayments": "Paiements à rapprocher"
       },
       "jobs": {
         "outbox-drain": {
@@ -515,7 +521,9 @@
     "status": {
       "completed": "Votre pourboire de {amount} est confirmé. Merci !",
       "failed": "Le paiement de votre pourboire de {amount} a échoué.",
-      "pending": "Votre pourboire de {amount} est en attente de confirmation du paiement."
+      "pending": "Votre pourboire de {amount} est en attente de confirmation du paiement.",
+      "refunded": "Votre pourboire de {amount} a été remboursé.",
+      "partiallyRefunded": "Votre pourboire de {amount} a été partiellement remboursé."
     }
   },
   "writing": {

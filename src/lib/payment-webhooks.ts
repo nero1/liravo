@@ -57,10 +57,23 @@ export function normalizeSubscription(notice: PaymentNotice) {
     provider_subscription_id: remoteId === undefined || remoteId === null ? null : z.string().min(1).max(150).parse(remoteId),
   };
   const eventId = paid ? `${notice.provider === 'paystack' ? 'charge' : 'payment'}:${identifier.parse(notice.provider === 'paystack' ? notice.data.id : notice.data.payment_id)}` : identifier.parse(notice.deliveryId).toString();
+  let periodEnd: string | undefined;
+  if (paid) {
+    if (notice.provider==='paystack') periodEnd=new Date(Date.parse(result.provider_event_at)+30*86400000).toISOString();
+    else {
+      const periods=z.array(z.object({subscription_id:z.string(),starts_at:timestamp,ends_at:timestamp})).parse(notice.data.service_periods);
+      const period=periods.find(item=>item.subscription_id===result.provider_subscription_id);
+      if (!period || Date.parse(period.ends_at)<=Date.parse(period.starts_at)) throw new Error('Verified service period unavailable');
+      periodEnd=period.ends_at;
+    }
+  }
   return {
     eventId, payload: {
       ...result,
       ...(paid ? {
+        payment_id: identifier.parse(notice.provider==='paystack'?notice.data.id:notice.data.payment_id).toString(),
+        period_end:periodEnd,
+        tax_minor:notice.provider==='dodopayments'?z.number().int().nonnegative().parse(notice.data.tax??0):0,
         paid_amount_minor: z.number().int().nonnegative().parse(notice.provider === 'paystack' ? notice.data.amount : notice.data.total_amount),
         currency: currency.parse(notice.data.currency),
         provider_reference: notice.provider === 'paystack' ? z.string().parse(notice.data.reference) : metadata.reference ?? null,
@@ -82,9 +95,19 @@ export function normalizeTip(notice: PaymentNotice) {
     payload: {
       tipId: uuid.parse(metadata.tip_id), status: completed ? 'completed' : 'failed', providerReference: reference,
       ...(completed ? {
+        payment_id:reference,
+        tax_minor:notice.provider==='dodopayments'?z.number().int().nonnegative().parse(notice.data.tax??0):0,
         paid_amount_minor: z.number().int().nonnegative().parse(notice.provider === 'paystack' ? notice.data.amount : notice.data.total_amount),
         currency: currency.parse(notice.data.currency),
       } : {}),
     },
   };
+}
+
+export function normalizeRefund(notice:PaymentNotice) {
+  if(notice.event!==(notice.provider==='paystack'?'refund.processed':'refund.succeeded'))return null;
+  z.literal(notice.provider==='paystack'?'processed':'succeeded').parse(notice.data.status);
+  const transaction=notice.data.transaction;
+  const paymentId=notice.provider==='paystack'?(typeof transaction==='object'&&transaction!==null?(transaction as {id?:unknown}).id:transaction):notice.data.payment_id;
+  return {refundId:identifier.parse(notice.provider==='paystack'?notice.data.id:notice.data.refund_id).toString(),paymentId:identifier.parse(paymentId).toString(),amountMinor:z.number().int().positive().parse(notice.data.amount),currency:currency.parse(notice.data.currency)};
 }

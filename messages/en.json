@@ -219,7 +219,7 @@
     "terms": "Cancel anytime. No hidden fees.",
     "manage": "Manage subscription",
     "payCard": "Pay with Card (Global)",
-    "payPaystack": "Pay with Paystack (Nigeria)",
+    "payPaystack": "Buy 30 days with Paystack (NGN)",
     "paymentPending": "Payment confirmation is pending. Refresh this page shortly.",
     "freeShelves": "10 shelves",
     "features": {
@@ -257,7 +257,9 @@
     "cancelPending": "Cancellation is queued. Your subscription remains active until the provider confirms.",
     "cancelError": "Cancellation confirmation is unavailable. Try again; existing requests are retained.",
     "managedByGoogle": "Manage your Google Play subscription in the Play Store.",
-    "manageGoogle": "Manage in Google Play"
+    "manageGoogle": "Manage in Google Play",
+    "paidUntil": "Paid access through {date}.",
+    "paystackPass": "Paystack purchases provide 30 days of access without automatic renewal."
   },
   "admin": {
     "cron": {
@@ -280,7 +282,11 @@
         "uncertainDigests": "Email deliveries awaiting reconciliation",
         "unacknowledgedPurchases": "Unacknowledged Google Play purchases",
         "stalledBillingDeliveries": "Stalled billing notifications",
-        "unconfirmedPayouts": "Payouts awaiting reconciliation"
+        "unconfirmedPayouts": "Payouts awaiting reconciliation",
+        "pendingRefunds": "Refunds awaiting reconciliation",
+        "unverifiedBillingPeriods": "Unverified paid periods",
+        "overdrawnCreators": "Negative creator balances",
+        "duplicatePayments": "Charges needing reconciliation"
       },
       "jobs": {
         "outbox-drain": {
@@ -515,7 +521,9 @@
     "status": {
       "completed": "Your {amount} tip is confirmed. Thank you!",
       "failed": "Your {amount} tip payment failed.",
-      "pending": "Your {amount} tip is awaiting payment confirmation."
+      "pending": "Your {amount} tip is awaiting payment confirmation.",
+      "refunded": "Your tip of {amount} was refunded.",
+      "partiallyRefunded": "Your tip of {amount} was partially refunded."
     }
   },
   "writing": {

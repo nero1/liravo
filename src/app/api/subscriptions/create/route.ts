@@ -6,7 +6,7 @@ import { checkMoneyRateLimit } from '@/lib/rate-limit';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { validateCheckoutUrl } from '@/lib/payment-providers';
+import { validateCheckoutUrl, validateDodoSubscriptionProduct } from '@/lib/payment-providers';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
@@ -79,6 +79,7 @@ async function createDodoCheckout(opts: {
   const mode = process.env.DODOPAYMENTS_ENVIRONMENT ?? 'test_mode';
   if (!['test_mode', 'live_mode'].includes(mode)) throw new Error('Invalid Dodo environment');
   const base = mode === 'test_mode' ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+  await validateDodoSubscriptionProduct(productId,opts.amountUsd);
   const res = await fetch(`${base}/checkouts`, {
     method: 'POST',
     signal: AbortSignal.timeout(8_000),

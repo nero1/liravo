@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import Decimal from 'decimal.js';
+import { dodoConnection } from '@/lib/payment-providers';
 import { z, ZodError } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
-import { readPaymentNotice, normalizeSubscription, normalizeTip, paymentMetadata, type PaymentNotice } from '@/lib/payment-webhooks';
+import { readPaymentNotice, normalizeSubscription, normalizeTip, normalizeRefund, paymentMetadata, type PaymentNotice } from '@/lib/payment-webhooks';
 import { getRequestCorrelationId } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
@@ -27,6 +28,23 @@ export async function paymentWebhook(request:Request) {
   await observeOperationalSignal('webhooks',correlationId);
   try {
     const transfer=await settleTransfer(notice,correlationId);if(transfer)return transfer;
+    if(notice.provider==='dodopayments'&&notice.event==='refund.succeeded'&&(notice.data.amount==null||notice.data.currency==null)){
+      const id=z.string().min(1).max(150).parse(notice.data.refund_id);const connection=dodoConnection();
+      const response=await fetch(`${connection.base}/refunds/${encodeURIComponent(id)}`,{headers:{Authorization:`Bearer ${connection.key}`},signal:AbortSignal.timeout(6_000)});
+      if(!response.ok)throw new Error('Refund lookup unavailable');
+      const refund=await response.json();
+      if(refund.refund_id!==id||(notice.data.payment_id!=null&&refund.payment_id!==notice.data.payment_id)||refund.amount==null||refund.currency==null)throw new Error('Refund currency or amount unavailable');
+      notice.data=refund;
+    }
+    const refund=normalizeRefund(notice);
+    if(refund){
+      const {data,error}=await createServiceClient().rpc('process_refund_event' as never,{p_provider:notice.provider,p_refund_id:refund.refundId,p_payment_id:refund.paymentId,p_amount_minor:refund.amountMinor,p_currency:refund.currency,p_correlation_id:correlationId} as never);
+      if(error)throw Object.assign(new Error('Refund reconciliation unavailable'),{code:error.code});
+      if(data==null){await observeOperationalSignal('paymentFailures',correlationId);return NextResponse.json({error:'Captured payment pending reconciliation',code:'REFUND_CAPTURE_PENDING',correlationId},{status:503});}
+      if(data===false)await observeOperationalSignal('webhookReplays',correlationId);
+      return NextResponse.json({received:true,correlationId});
+    }
+
     let event:ReturnType<typeof normalizeTip>|ReturnType<typeof normalizeSubscription>=normalizeTip(notice);
     if(!event){
       const remoteId=notice.data.subscription_id??(Array.isArray(notice.data.subscription_ids)&&notice.data.subscription_ids.length===1?notice.data.subscription_ids[0]:undefined);
@@ -34,6 +52,14 @@ export async function paymentWebhook(request:Request) {
         const {data,error}=await createServiceClient().from('subscriptions').select('id,user_id').eq('provider',notice.provider).eq('provider_subscription_id',remoteId).maybeSingle();
         if(error)throw new Error('Subscription lookup failed');
         if(data)notice.data.metadata={subscription_id:data.id,user_id:data.user_id};
+      }
+      if(notice.provider==='dodopayments'&&notice.event==='payment.succeeded'&&paymentMetadata(notice).subscription_id&&!Array.isArray(notice.data.service_periods)){
+        const id=z.string().min(1).max(150).parse(notice.data.payment_id);const connection=dodoConnection();
+        const response=await fetch(`${connection.base}/payments/${encodeURIComponent(id)}`,{headers:{Authorization:`Bearer ${connection.key}`},signal:AbortSignal.timeout(6_000)});
+        if(!response.ok)throw new Error('Payment service period unavailable');
+        const payment=await response.json();
+        if(payment.payment_id!==id||!Array.isArray(payment.service_periods))throw new Error('Payment service period unavailable');
+        notice.data.service_periods=payment.service_periods;
       }
       event=normalizeSubscription(notice);
     }

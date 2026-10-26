@@ -38,7 +38,36 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         insert into tips(id,user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status) values('${legacyUser}','${legacyUser}','${legacyUser}',100,10,90,'USD','completed');
         insert into payouts(tip_id,recipient_id,amount,currency,status,provider) values('${legacyUser}','${legacyUser}',90,'USD','failed','paystack');
       `).simple();
+      const legacyRefund=file.startsWith('041_');
+      if(legacyRefund)await sql.unsafe(`
+        insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
+        insert into tips(id,user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status) values('${legacyUser}','${legacyUser}','${legacyUser}',100,10,90,'USD','refunded');
+        insert into payment_events(provider,event_id,payload) values('paystack','charge:legacy-paid-refund','{"tipId":"${legacyUser}","status":"completed","payment_id":"legacy-paid-refund","paid_amount_minor":10000,"currency":"USD"}');
+        insert into subscriptions(id,user_id,provider,status,amount,currency,provider_event_id,provider_subscription_id) values('${legacyUser}','${legacyUser}','dodopayments','active',4.99,'USD','sub_${legacyUser}','sub_legacy_period');
+        insert into payment_events(provider,event_id,payload) values('dodopayments','payment:legacy-sub-paid','{"event":"subscription.activated","subscription_id":"${legacyUser}","user_id":"${legacyUser}","paid_amount_minor":499,"currency":"USD","provider_reference":"sub_${legacyUser}"}');
+      `).simple();
       await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
+      if(legacyRefund){
+        expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.available)).toBe(0);
+        expect((await sql`select credited from payment_captures where payment_id='legacy-paid-refund'`)[0].credited).toBe(false);
+        expect((await sql`select process_payment_event('paystack','charge:legacy-paid-refund',${sql.json({tipId:legacyUser,status:'completed',payment_id:'legacy-paid-refund',paid_amount_minor:10000,tax_minor:0,currency:'USD',providerReference:'legacy-paid-refund'})},'migration-rehearsal') as applied`)[0].applied).toBe(false);
+        expect((await sql`select has_premium_access(${legacyUser}) as active`)[0].active).toBe(false);
+        const reconciledPeriod={event:'subscription.activated',subscription_id:legacyUser,user_id:legacyUser,payment_id:'legacy-sub-paid',paid_amount_minor:499,tax_minor:0,currency:'USD',provider_reference:'sub_'+legacyUser,provider_subscription_id:'sub_legacy_period',provider_event_at:new Date().toISOString(),period_end:new Date(Date.now()+30*86400000).toISOString()};
+        for(let replay=0;replay<2;replay++)expect((await sql`select process_payment_event('dodopayments','payment:legacy-sub-paid',${sql.json(reconciledPeriod)},'migration-rehearsal') as applied`)[0].applied).toBe(false);
+        expect((await sql`select has_premium_access(${legacyUser}) as active`)[0].active).toBe(true);
+        expect((await sql`select count(*)::int as count from financial_audit_log where action='billing_period_reconciled' and target_user_id=${legacyUser}`)[0].count).toBe(1);
+
+        await sql`select process_refund_event('paystack','legacy-native-refund','legacy-paid-refund',10000,'USD','migration-rehearsal')`;
+        expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.available)).toBe(0);
+        await sql`delete from refund_inbox where payment_id='legacy-paid-refund'`;
+        await sql`delete from payment_refunds where payment_id='legacy-paid-refund'`;
+        await sql`delete from payment_captures where user_id=${legacyUser}`;
+        await sql`delete from subscriptions where id=${legacyUser}`;
+        await sql`delete from payment_events where event_id in ('charge:legacy-paid-refund','payment:legacy-sub-paid')`;
+        await sql`delete from financial_audit_log where target_user_id=${legacyUser}`;
+        await sql`delete from tips where id=${legacyUser}`;
+        await sql`delete from auth.users where id=${legacyUser}`;
+      }
       if(legacy){
         const [hold]=await sql`select method,status,amount,last_error from payout_requests where user_id=${legacyUser}`;
         expect(hold).toMatchObject({method:'manual',status:'processing',amount:'90.00',last_error:'Legacy transfer requires reconciliation'});
@@ -61,7 +90,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         has_column_privilege(${role},'public.users','recovery_codes','SELECT') as recovery`;
       expect(access).toEqual({ profile: true, email: false, pin: false, totp: false, recovery: false });
       const routines = await sql`select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy','creator_balance','claim_payout_request','settle_payout_request','defer_payout_request','cancel_payout_request','release_legacy_payout_request')`;
+        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy','creator_balance','claim_payout_request','settle_payout_request','defer_payout_request','cancel_payout_request','release_legacy_payout_request','process_refund_event','claim_refund_reconciliation','reconcile_capture_and_refund','apply_pending_capture_refunds')`;
       for (const routine of routines) {
         const [permissions] = await sql`select has_function_privilege(${role},${routine.oid}::oid,'EXECUTE') as allowed`;
         expect(permissions.allowed, `${role}:${routine.proname}`).toBe(false);
@@ -80,7 +109,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       insert into tips(id,user_id,recipient_id,amount,platform_fee,recipient_amount,currency)
         values('${tip}','${sender}','${recipient}',100,10,90,'USD');
     `).simple();
-    const payload={tipId:tip,status:'completed'};
+    const payload={tipId:tip,status:'completed',payment_id:'rehearsal-charge',paid_amount_minor:10000,currency:'USD'};
     for(let i=0;i<2;i++) await sql.unsafe('select * from process_payment_event(p_provider => $1,p_event_id => $2,p_payload => $3,p_correlation_id => $4)', ['paystack','rehearsal-event',payload,'rehearsal']);
     const claims=await sql`select * from claim_outbox_events(10)`;
     for(const event of claims) await Promise.all([sql`select process_outbox_event_atomic(${event.id})`,sql`select process_outbox_event_atomic(${event.id})`]);
@@ -357,12 +386,14 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect(deliveryRace.filter(result=>result.status==='fulfilled')).toHaveLength(1);
     const [webSubscription]=await sql`select create_subscription_intent(${playUser},'paystack','USD',4.99,'play-web-intent','play-rehearsal') as result`;
     const webId=webSubscription.result.id;
-    await sql`select process_payment_event('paystack','play-web-payment',${sql.json({event:'subscription.activated',subscription_id:webId,user_id:playUser,paid_amount_minor:499,currency:'USD',provider_reference:'sub_'+webId})},'play-rehearsal')`;
+    await sql`select process_payment_event('paystack','play-web-payment',${sql.json({event:'subscription.activated',subscription_id:webId,user_id:playUser,payment_id:'play-web-charge',period_end:new Date(Date.now()+30*86400000).toISOString(),provider_event_at:new Date().toISOString(),paid_amount_minor:499,currency:'USD',provider_reference:'sub_'+webId})},'play-rehearsal')`;
     expect((await sql`select request_subscription_cancellation(${playUser},'play-rehearsal') as count`)[0].count).toBe(1);
     const webClaims=await sql`select * from claim_subscription_cancellations(${playUser},3)`;
     expect(webClaims).toHaveLength(1);expect(webClaims[0].provider).toBe('paystack');
     await sql`select complete_subscription_cancellation(${webId})`;
     expect((await sql`select is_premium from users where id=${playUser}`)[0].is_premium).toBe(true);
+    expect((await sql`select renewal_cancelled from subscriptions where id=${webId}`)[0].renewal_cancelled).toBe(true);
+    await sql`update subscriptions set status='expired',current_period_end=now()-interval '1 second' where id=${webId}`;
     await sql`select set_premium_override_atomic(${recipient},${playUser},true,'play-rehearsal')`;
     for(const token of [playToken,linkedToken]) await verifyPlay(playUser,token,token===playToken?accountId:null,'SUBSCRIPTION_STATE_EXPIRED',new Date(playClock.verified.getTime()+10));
     expect((await sql`select is_premium from users where id=${playUser}`)[0].is_premium).toBe(true);
@@ -438,5 +469,88 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     for(let replay=0;replay<2;replay++)await sql`select release_legacy_payout_request(${recipient},${legacyHold.id},'bank-case-unpaid',5,'USD','rehearsal')`;
     expect((await sql`select status from payout_requests where id=${legacyHold.id}`)[0].status).toBe('failed');
     expect((await sql`select count(*)::int as count from financial_audit_log where action='legacy_payout_released' and metadata->>'payout_id'=${legacyHold.id}`)[0].count).toBe(1);
+    const [beforeRefund]=await sql`select xp from users where id=${sender}`;
+    const refund=(id:string,amount:number)=>sql`select process_refund_event('paystack',${id},'rehearsal-charge',${amount},'USD','refund-rehearsal') as applied`;
+    expect((await refund('refund-half',5000))[0].applied).toBe(true);
+    expect((await refund('refund-half',5000))[0].applied).toBe(false);
+    await expect(refund('refund-half',4000)).rejects.toThrow('identity conflict');
+    expect((await sql`select status,refunded_recipient_amount from tips where id=${tip}`)[0]).toEqual({status:'completed',refunded_recipient_amount:'45.00'});
+    expect((await sql`select count(*)::int as count from payout_requests where user_id=${recipient} and status='pending' and currency='USD'`)[0].count).toBe(0);
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='payout_cancelled_after_refund' and target_user_id=${recipient}`)[0].count).toBe(1);
+    const refundRace=await Promise.allSettled([refund('refund-race-a',3000),refund('refund-race-b',3000)]);
+    expect(refundRace.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    expect((await sql`select refunded_minor::int as amount from payment_captures where payment_id='rehearsal-charge'`)[0].amount).toBe(8000);
+    await refund('refund-final',2000);
+    expect((await sql`select status,refunded_recipient_amount from tips where id=${tip}`)[0]).toEqual({status:'refunded',refunded_recipient_amount:'90.00'});
+    expect((await sql`select xp from users where id=${sender}`)[0].xp).toBe(beforeRefund.xp-5);
+    await refund('refund-final',2000);
+    expect((await sql`select xp from users where id=${sender}`)[0].xp).toBe(beforeRefund.xp-5);
+    expect(Number((await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance.available)).toBeLessThan(0);
+    await expect(sql`select create_payout_request_atomic(${recipient},5,'manual','refunded-overdraft-intent','rehearsal','USD')`).rejects.toThrow('Insufficient');
+    await sql`update users set referred_by=${playUser} where id=${sender}`;
+    const [taxTip]=await sql`select create_tip_transaction(${sender},${recipient},100,10,90,'USD','tax-tip-intent','refund-rehearsal') as result`;
+    await sql`select process_payment_event('dodopayments','payment:tax-tip-payment',${sql.json({tipId:taxTip.result.id,status:'completed',payment_id:'tax-tip-payment',paid_amount_minor:11000,tax_minor:1000,currency:'USD',providerReference:'tax-tip-payment'})},'refund-rehearsal')`;
+    for(const [id,amount] of [['tax-refund-half',5500],['tax-refund-final',5500]] as const){
+      await sql`select process_refund_event('dodopayments',${id},'tax-tip-payment',${amount},'USD','refund-rehearsal')`;
+      const [commission]=await sql`select commission_amount,original_commission_amount,reversed_at from referral_commissions where idempotency_key='dodopayments:payment:tax-tip-payment'`;
+      expect(Number(commission.original_commission_amount)).toBe(1);expect(Number(commission.commission_amount)).toBe(id==='tax-refund-half'?0.5:0);
+      expect(commission.reversed_at!==null).toBe(id==='tax-refund-final');
+    }
+    const [beforeSkippedReward]=await sql`select xp from users where id=${sender}`;
+    const skippedEvents=await sql`update outbox_events set status='processing' where aggregate_id=${taxTip.result.id} returning id`;
+    for(const event of skippedEvents)expect((await sql`select process_outbox_event_atomic(${event.id}) as applied`)[0].applied).toBe(false);
+    expect((await sql`select xp from users where id=${sender}`)[0].xp).toBe(beforeSkippedReward.xp);
+    const refundUser='00000000-0000-4000-8000-000000009901';
+    await sql`insert into auth.users(id,email,raw_user_meta_data) values(${refundUser},'refund@example.test',${sql.json({username:'refund_audit'})})`;
+    const [refSub]=await sql`select create_subscription_intent(${refundUser},'dodopayments','USD',4.99,'refund-sub-intent','refund-rehearsal') as result`;
+    const [periods]=await sql`select now()-interval '31 days' as older,now()-interval '1 day' as older_end,now() as current,now()+interval '30 days' as current_end`;
+    for(const [id,at,end] of [['old-sub-payment',periods.older,periods.older_end],['new-sub-payment',periods.current,periods.current_end]]){
+      await sql`select process_payment_event('dodopayments',${'payment:'+id},${sql.json({event:'subscription.activated',subscription_id:refSub.result.id,user_id:refundUser,payment_id:id,paid_amount_minor:499,tax_minor:0,currency:'USD',provider_event_at:at,period_end:end,provider_reference:'sub_'+refSub.result.id,provider_subscription_id:'sub_refund_remote'})},'refund-rehearsal')`;
+    }
+    await sql`select process_refund_event('dodopayments','old-sub-refund','old-sub-payment',499,'USD','refund-rehearsal')`;
+    expect((await sql`select has_premium_access(${refundUser}) as active`)[0].active).toBe(true);
+    await sql`select set_premium_override_atomic(${recipient},${refundUser},true,'refund-rehearsal')`;
+    await sql`select process_refund_event('dodopayments','new-sub-refund-half','new-sub-payment',249,'USD','refund-rehearsal')`;
+    expect((await sql`select status from subscriptions where id=${refSub.result.id}`)[0].status).toBe('active');
+    await sql`select process_refund_event('dodopayments','new-sub-refund-final','new-sub-payment',250,'USD','refund-rehearsal')`;
+    expect((await sql`select status from subscriptions where id=${refSub.result.id}`)[0].status).toBe('expired');
+    expect((await sql`select has_premium_access(${refundUser}) as active`)[0].active).toBe(true);
+    await sql`select set_premium_override_atomic(${recipient},${refundUser},false,'refund-rehearsal')`;
+    expect((await sql`select has_premium_access(${refundUser}) as active`)[0].active).toBe(false);
+    expect((await sql`select process_refund_event('paystack','refund-before-capture','late-charge',10000,'USD','refund-rehearsal') as applied`)[0].applied).toBeNull();
+    expect((await sql`select status from refund_inbox where refund_id='refund-before-capture'`)[0].status).toBe('pending');
+    await expect(sql`select process_refund_event('paystack','refund-before-capture','other-charge',10000,'USD','refund-rehearsal')`).rejects.toThrow('identity conflict');
+    const refundClaims=await Promise.all(Array.from({length:4},()=>sql`select * from claim_refund_reconciliation(3)`));
+    expect(refundClaims.flat()).toHaveLength(1);
+    await sql`update refund_inbox set status='failed',attempts=10 where refund_id='refund-before-capture'`;
+    const [lateTip]=await sql`select create_tip_transaction(${sender},${recipient},100,10,90,'USD','late-tip-intent','refund-rehearsal') as result`;
+    const beforeLateBalance=(await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance;
+    const latePayload={tipId:lateTip.result.id,status:'completed',payment_id:'late-charge',paid_amount_minor:10000,currency:'USD',providerReference:'late-charge'};
+    await Promise.all([
+      sql`select process_payment_event('paystack','charge:late-charge',${sql.json(latePayload)},'refund-rehearsal')`,
+      sql`select reconcile_capture_and_refund('paystack','refund-before-capture','late-charge',10000,'USD','charge:late-charge',${sql.json(latePayload)},'refund-rehearsal')`,
+      sql`select reconcile_capture_and_refund('paystack','refund-before-capture','late-charge',10000,'USD','charge:late-charge',${sql.json(latePayload)},'refund-rehearsal')`,
+    ]);
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='payment_refunded' and provider_event_id='refund-before-capture'`)[0].count).toBe(1);
+    expect((await sql`select reconcile_capture_and_refund('paystack','refund-before-capture','late-charge',10000,'USD','charge:late-charge',${sql.json(latePayload)},'refund-rehearsal') as applied`)[0].applied).toBe(false);
+    expect((await sql`select status from tips where id=${lateTip.result.id}`)[0].status).toBe('refunded');
+    expect((await sql`select status from refund_inbox where refund_id='refund-before-capture'`)[0].status).toBe('processed');
+    expect(Number((await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance.available)).toBe(Number(beforeLateBalance.available));
+    expect((await sql`select process_refund_event('paystack','refund-before-capture','late-charge',10000,'USD','refund-rehearsal') as applied`)[0].applied).toBe(false);
+    await expect(sql`select process_refund_event('paystack','wrong-currency-refund','late-charge',1,'EUR','refund-rehearsal')`).rejects.toThrow('currency mismatch');
+    for(const role of ['anon','authenticated'])for(const table of ['payment_captures','payment_refunds','refund_inbox','xp_reversals'])expect((await sql`select has_table_privilege(${role},${table},'SELECT') as allowed`)[0].allowed).toBe(false);
+    const beforeDuplicate=(await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance;
+    const [duplicateTip]=await sql`select create_tip_transaction(${sender},${recipient},20,2,18,'USD','duplicate-tip-intent','refund-rehearsal') as result`;
+    const duplicateCharge=(id:string)=>sql`select process_payment_event('paystack',${'charge:'+id},${sql.json({tipId:duplicateTip.result.id,status:'completed',payment_id:id,paid_amount_minor:2000,currency:'USD',providerReference:id})},'refund-rehearsal')`;
+    await Promise.all([duplicateCharge('duplicate-charge-a'),duplicateCharge('duplicate-charge-b')]);
+    const duplicateCaptures=await sql`select payment_id,credited from payment_captures where entity_id=${duplicateTip.result.id}`;
+    expect(duplicateCaptures).toHaveLength(2);expect(duplicateCaptures.filter(row=>row.credited)).toHaveLength(1);
+    expect(Number((await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance.available)).toBe(Number(beforeDuplicate.available)+18);
+    const uncredited=duplicateCaptures.find(row=>!row.credited)!,credited=duplicateCaptures.find(row=>row.credited)!;
+    await sql`select process_refund_event('paystack','duplicate-charge-refund',${uncredited.payment_id},2000,'USD','refund-rehearsal')`;
+    expect((await sql`select status,refunded_recipient_amount from tips where id=${duplicateTip.result.id}`)[0]).toEqual({status:'completed',refunded_recipient_amount:'0.00'});
+    expect(Number((await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance.available)).toBe(Number(beforeDuplicate.available)+18);
+    await sql`select process_refund_event('paystack','original-charge-refund',${credited.payment_id},2000,'USD','refund-rehearsal')`;
+    expect(Number((await sql`select creator_balance(${recipient},'USD') as balance`)[0].balance.available)).toBe(Number(beforeDuplicate.available));
   } finally { await sql.end(); }
 }, 60_000);

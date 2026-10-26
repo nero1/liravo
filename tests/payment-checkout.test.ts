@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cancelProviderSubscription, createTipCheckout, validateCheckoutUrl } from '@/lib/payment-providers';
+import { cancelProviderSubscription, createTipCheckout, validateCheckoutUrl, validateDodoSubscriptionProduct } from '@/lib/payment-providers';
 
 const fetchMock = vi.fn();
 beforeEach(() => {
@@ -56,7 +56,7 @@ it('requires provider confirmation and retains a replayable cancellation identit
   fetchMock.mockResolvedValueOnce(response({subscription_id:'sub_remote',status:'active'})).mockResolvedValueOnce(response({subscription_id:'sub_remote',status:'cancelled'}));
   await cancelProviderSubscription('dodopayments','sub_remote','cancel-intent');
   expect(fetchMock.mock.calls[1][1]).toMatchObject({method:'PATCH',headers:{'Idempotency-Key':'cancel-intent'}});
-  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({status:'cancelled',cancel_reason:'cancelled_by_customer',cancel_at_next_billing_date:false});
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({cancel_reason:'cancelled_by_customer',cancel_at_next_billing_date:true});
   fetchMock.mockResolvedValueOnce(response({subscription_id:'sub_other',status:'cancelled'}));
   await expect(cancelProviderSubscription('dodopayments','sub_remote','cancel-intent')).rejects.toThrow('binding');
   await expect(cancelProviderSubscription('dodopayments',null,'cancel-intent')).rejects.toThrow('binding');
@@ -65,4 +65,14 @@ it('requires provider confirmation and retains a replayable cancellation identit
 it('does not invent a recurring Paystack contract for one-time checkouts',async()=>{
   await cancelProviderSubscription('paystack',null,'cancel-intent');
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('checks the advertised recurring base price, currency, billing interval and tax policy before checkout',async()=>{
+  const recurring={product_id:'premium_product',is_recurring:true,price:{type:'recurring_price',currency:'USD',price:499,payment_frequency_count:1,payment_frequency_interval:'Month'}};
+  fetchMock.mockResolvedValueOnce(response(recurring));
+  await expect(validateDodoSubscriptionProduct('premium_product','4.99')).resolves.toBeUndefined();
+  for(const change of [{price:599},{currency:'EUR'},{payment_frequency_interval:'Year'},{tax_inclusive:true},{discount_bps:1000},{trial_period_days:7},{purchasing_power_parity:true}]){
+    fetchMock.mockResolvedValueOnce(response({...recurring,price:{...recurring.price,...change}}));
+    await expect(validateDodoSubscriptionProduct('premium_product','4.99')).rejects.toThrow('pricing');
+  }
 });
