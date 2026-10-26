@@ -4,6 +4,7 @@ import Decimal from 'decimal.js';
 import { recordMetric } from '@/lib/metrics';
 import { getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -186,6 +187,7 @@ export async function POST(
     recordMetric('payout_processing_deferred', { provider, correlationId });
     return NextResponse.json({ processed: false, message: `Payout queued for ${provider} — complete manually or await provider webhook` });
   } catch (err) {
+    await observeOperationalSignal('payoutFailures',correlationId);
     const message = err instanceof Error ? err.message : 'Unknown error';
     await serviceClient.from('payouts').update({ status: 'failed' }).eq('id', params.id);
     recordMetric('payout_process_error', { provider, error: message, correlationId }, 'error');

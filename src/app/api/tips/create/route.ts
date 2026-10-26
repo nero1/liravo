@@ -6,18 +6,21 @@ import { checkMoneyRateLimit } from '@/lib/rate-limit';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { createTipCheckout } from '@/lib/payment-providers';
+import { withRedisLock } from '@/lib/locks';
+import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const schema = z.object({
   recipientId: z.string().uuid(),
-  amount: z.number().min(0.5).max(5000),
+  amount: z.number().min(0.5).max(5000).multipleOf(0.01),
   currency: z.enum(['USD', 'NGN', 'EUR']).default('USD'),
 });
 
 export async function POST(req: Request) {
   const correlationId = getRequestCorrelationId(req);
-  // Bugfix: enforce strict content type and body-size guard on money-affecting route.
   const contentType = req.headers.get('content-type') ?? '';
   if (!contentType.includes('application/json')) {
     return NextResponse.json({ error: 'Unsupported content type' }, { status: 415 });
@@ -27,7 +30,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
   }
 
-  // Bugfix: apply abuse controls to expensive money-affecting endpoint.
   const user = await getCurrentUser();
 
   if (!user) {
@@ -43,8 +45,6 @@ export async function POST(req: Request) {
   }
 
   const supabase = createServiceClient();
-
-
   const idempotencyKey = req.headers.get('idempotency-key');
   if (!idempotencyKey || (idempotencyKey.length < 8 || idempotencyKey.length > 200)) {
     return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
@@ -52,7 +52,6 @@ export async function POST(req: Request) {
 
   const rawBody = await req.text().catch(() => '');
   if (Buffer.byteLength(rawBody, 'utf8') > 10_000) {
-    // Bugfix: enforce body size using actual payload length, not only content-length header.
     return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
   }
   let body: unknown = null;
@@ -70,10 +69,11 @@ export async function POST(req: Request) {
   }
 
   const { recipientId, amount, currency } = parsed.data;
+  if (recipientId === user.id) return NextResponse.json({ error: 'Cannot tip yourself' }, { status: 400 });
   const { data: recipient } = await supabase
     .from('users')
     .select('id, display_name')
-    .eq('id', recipientId)
+    .eq('id', recipientId).eq('is_banned', false)
     .single();
 
   if (!recipient) {
@@ -84,8 +84,7 @@ export async function POST(req: Request) {
   const platformFee = decAmount.times(0.1).toDecimalPlaces(2);
   const recipientAmount = decAmount.minus(platformFee).toDecimalPlaces(2);
 
-  // Bugfix: prefer transactional DB routine for tip + ledger write; fallback keeps compatibility.
-    const rpcResponse = await supabase.rpc('create_tip_transaction' as never, {
+  const rpcResponse = await supabase.rpc('create_tip_transaction' as never, {
     p_user_id: user.id,
     p_recipient_id: recipientId,
     p_amount: decAmount.toFixed(2),
@@ -102,5 +101,24 @@ export async function POST(req: Request) {
   }
   const tip = rpcResponse.data as { id?: string } | null;
   if (!tip?.id) return NextResponse.json({ error: 'Missing tip identifier', correlationId }, { status: 503 });
-  return NextResponse.json({ tipId: tip.id, redirectUrl: '/tips/pending', correlationId });
+  try {
+    const result = await withRedisLock(`tip-checkout:${tip.id}`, 30, async () => {
+      const { data, error } = await supabase.from('tips').select('id,amount,currency,status,checkout_url').eq('id', tip.id!).single();
+      if (error || !data) throw new Error('Tip lookup failed');
+      const saved = data as unknown as { id: string; amount: string; currency: string; status: string; checkout_url: string | null };
+      if (saved.status === 'completed') return { redirectUrl: `/tips/${tip.id}` };
+      if (saved.checkout_url) return { redirectUrl: saved.checkout_url };
+      if (!z.email().safeParse(user.email).success) throw new Error('Payment contact email is required');
+      const checkoutUrl = await createTipCheckout(saved, user.email);
+      const { error: saveError } = await supabase.from('tips').update({ checkout_url: checkoutUrl } as never).eq('id', tip.id!);
+      if (saveError) throw new Error('Checkout persistence failed');
+      return { redirectUrl: checkoutUrl };
+    });
+    if (!result) return NextResponse.json({ error: 'Checkout is processing; retry with the same key', correlationId }, { status: 409 });
+    return NextResponse.json({ tipId: tip.id, ...result, correlationId });
+  } catch (error) {
+    await observeOperationalSignal('paymentFailures',correlationId);
+    recordMetric('tip_checkout_error', { correlationId, tipId: tip.id, name: error instanceof Error ? error.name : 'Unknown' }, 'error');
+    return NextResponse.json({ error: 'Checkout unavailable; retry with the same key', correlationId }, { status: 502 });
+  }
 }

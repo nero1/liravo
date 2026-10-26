@@ -247,7 +247,11 @@
         "label": "Premium-Abzeichen",
         "value": "Im Profil"
       }
-    }
+    },
+    "cancel": "Abonnement kündigen",
+    "cancelling": "Wird gekündigt…",
+    "cancelPending": "Die Kündigung wurde vorgemerkt. Dein Abonnement bleibt bis zur Bestätigung des Zahlungsanbieters aktiv.",
+    "cancelError": "Die Bestätigung ist nicht verfügbar. Bitte erneut versuchen; bestehende Anfragen bleiben erhalten."
   },
   "admin": {
     "cron": {
@@ -319,7 +323,19 @@
           "description": "Die Affiliate-Aktivität beliebter Bücher prüfen."
         }
       },
-      "partial": "Mit Fehlern oder Warnungen abgeschlossen. Prüfe den Systemstatus."
+      "partial": "Mit Fehlern oder Warnungen abgeschlossen. Prüfe den Systemstatus.",
+      "operations": "Sicherheits- und Zahlungssignale",
+      "operationsUnavailable": "Betriebszähler sind nicht verfügbar. Bitte Redis und Bereitstellungsprotokolle prüfen.",
+      "windowStart": "Das aktuelle 15-Minuten-Fenster begann um {time}.",
+      "signals": {
+        "webhooks": "Verifizierte Webhook-Zustellungen",
+        "webhookReplays": "Wiederholte Zahlungsereignisse",
+        "webhookConflicts": "Widersprüchliche Zahlungsereignisse",
+        "paymentFailures": "Fehler bei der Zahlungsverarbeitung",
+        "payoutFailures": "Auszahlungsfehler",
+        "cronFailures": "Fehlgeschlagene Cron-Läufe",
+        "cronOverlaps": "Überlappende Cron-Läufe"
+      }
     },
     "affiliateStoreRegistry": "Affiliate-Shop-Verzeichnis",
     "addStore": "Shop hinzufügen",
@@ -473,5 +489,24 @@
     "activationHelp": "Sende zum Aktivieren eines Eintrags seine ID und die Aktivierungsdaten an {endpoint}.",
     "dailyPromptsHint": "Durch {endpoint} erstellt. Die letzten {count, number} werden angezeigt.",
     "loadThemesFailed": "Designs konnten nicht geladen werden."
+  },
+  "tips": {
+    "tip": "Trinkgeld",
+    "title": "{name} unterstützen",
+    "close": "Schließen",
+    "custom": "Eigener Betrag (USD)",
+    "placeholder": "Betrag eingeben",
+    "error": "Die Zahlung ist nicht verfügbar. Bitte mit demselben Betrag erneut versuchen.",
+    "processing": "Zahlung wird geöffnet…",
+    "checkout": "Weiter zur Zahlung",
+    "checkoutAmount": "Weiter zur Zahlung — {amount}",
+    "fee": "Es fallen 10 % Plattformgebühren an. Mindestbetrag {minimum}. Die Zahlung wird nach dem Bezahlvorgang bestätigt.",
+    "statusTitle": "Trinkgeldzahlung",
+    "refresh": "Status aktualisieren",
+    "status": {
+      "completed": "Dein Trinkgeld von {amount} wurde bestätigt. Vielen Dank!",
+      "failed": "Deine Trinkgeldzahlung von {amount} ist fehlgeschlagen.",
+      "pending": "Dein Trinkgeld von {amount} wartet auf die Zahlungsbestätigung."
+    }
   }
 }

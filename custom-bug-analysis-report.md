@@ -22,7 +22,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
 ## Medium (one-line list)
 ✅ 13: BUG-013: SEO metadata coverage is inconsistent across dynamic pages; several pages may miss canonical/OG/Twitter structured metadata.
 ✅ 14: BUG-014: Cursor pagination is not consistently used across list/feed-style APIs, risking slow scans and pagination drift.
-🟡 15: BUG-015: Observability is incomplete for security/finance paths (limited correlation IDs and error taxonomies).
+✅ 15: BUG-015: Observability is incomplete for security/finance paths (limited correlation IDs and error taxonomies).
 ✅ 16: BUG-016: JSDoc/documentation coverage for critical utility modules is inconsistent, raising maintenance and misuse risk.
 ✅ 17: BUG-017: Large cron fan-out loops are sequential in places and may time out on Hobby compute windows.
 🟡 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
@@ -92,7 +92,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
     FILES: src/app/api/feed/route.ts, src/app/api/notifications/route.ts, src/app/api/lists/route.ts
     FIX: Standardize on cursor pagination for high-volume collections; allow offset only for small admin datasets.
 
-🟡 15: BUG-015: Observability is incomplete for security/finance paths (limited correlation IDs and error taxonomies).
+✅ 15: BUG-015: Observability is incomplete for security/finance paths (limited correlation IDs and error taxonomies).
     FILES: src/lib/metrics.ts, src/app/api/subscriptions/webhook/route.ts, src/app/api/earnings/request-payout/route.ts
     FIX: Introduce required request correlation IDs, standardized error codes, and alert thresholds for financial anomalies and webhook replay/conflict rates.
 

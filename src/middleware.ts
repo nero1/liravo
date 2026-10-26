@@ -4,10 +4,13 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { Database } from '@/types/database';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { LOCALES } from '@/constants/config';
+import { getRequestCorrelationId } from '@/lib/utils';
 
 const isDirectPostgresMode = isDirectPostgres();
 
 export async function middleware(request: NextRequest) {
+  const correlationId = getRequestCorrelationId(request);
+  request.headers.set('x-request-id',correlationId);
   const language = request.nextUrl.searchParams.get('lang');
   const preferred = language ?? request.cookies.get('NEXT_LOCALE')?.value;
   const locale = LOCALES.find(value => value === preferred) ?? 'en';
@@ -18,9 +21,10 @@ export async function middleware(request: NextRequest) {
   // Bearer handlers authenticate independently and must not fall back to cookies.
   const hasBearerToken = request.headers.get('authorization')?.startsWith('Bearer ');
   const csrfToken = request.cookies.get(CSRF_COOKIE)?.value ?? crypto.randomUUID();
-  const finish = () => {
-    response.cookies.set(CSRF_COOKIE, csrfToken, { secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
-    return response;
+  const finish = (result = response) => {
+    result.headers.set('x-request-id',correlationId);
+    result.cookies.set(CSRF_COOKIE, csrfToken, { secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
+    return result;
   };
 
   // Bugfix: defense-in-depth CSRF guard for mutating API routes using cookie auth.
@@ -33,14 +37,14 @@ export async function middleware(request: NextRequest) {
     && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)
   ) {
     const cookie = request.cookies.get(CSRF_COOKIE)?.value;
-    if (!cookie) return NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 });
+    if (!cookie) return finish(NextResponse.json({ error: 'Invalid CSRF token', code: 'CSRF_REJECTED', correlationId }, { status: 403 }));
     let token = request.headers.get(CSRF_HEADER);
     if (!token && request.headers.get('content-type')?.includes('form')) {
       try { token = String((await request.clone().formData()).get('_csrf') ?? ''); }
-      catch { return NextResponse.json({ error: 'Invalid form data' }, { status: 400 }); }
+      catch { return finish(NextResponse.json({ error: 'Invalid form data', code: 'INVALID_FORM', correlationId }, { status: 400 })); }
     }
     if (!validCsrf(cookie, token)) {
-      return NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 });
+      return finish(NextResponse.json({ error: 'Invalid CSRF token', code: 'CSRF_REJECTED', correlationId }, { status: 403 }));
     }
     const requestOrigin = request.headers.get('origin');
     const referer = request.headers.get('referer');
@@ -49,7 +53,7 @@ export async function middleware(request: NextRequest) {
     const trustedFetchSite = secFetchSite === 'same-origin';
     // Bugfix: reject missing-origin mutating requests unless other browser trust headers prove same-site.
     if ((requestOrigin && requestOrigin !== origin) || (!requestOrigin && !trustedReferer && !trustedFetchSite)) {
-      return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 });
+      return finish(NextResponse.json({ error: 'Invalid request origin', code: 'ORIGIN_REJECTED', correlationId }, { status: 403 }));
     }
   }
 
@@ -92,16 +96,16 @@ export async function middleware(request: NextRequest) {
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 
   if (isProtected && !user) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return finish(NextResponse.redirect(new URL('/login', request.url)));
   }
 
   if (pathname.startsWith('/admin') && !user) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return finish(NextResponse.redirect(new URL('/login', request.url)));
   }
 
   // Redirect authenticated users away from auth pages
   if (pathname === '/login' && user) {
-    return NextResponse.redirect(new URL('/', request.url));
+    return finish(NextResponse.redirect(new URL('/', request.url)));
   }
 
   return finish();

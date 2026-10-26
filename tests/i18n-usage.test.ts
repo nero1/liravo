@@ -60,7 +60,7 @@ it('resolves literal translation calls against the English catalog', () => {
 it('keeps localized sign-in and admin screens free of untranslated text and labels', () => {
   const literals: string[] = [];
   const adminFiles=(directory:string):string[]=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?adminFiles(join(directory,entry.name)):entry.name.endsWith('.tsx')?[join(directory,entry.name)]:[]);
-  for(const file of ['src/components/auth/LoginForm.tsx','src/app/login/page.tsx',...adminFiles('src/app/(app)/admin')]) {
+  for(const file of ['src/components/auth/LoginForm.tsx','src/app/login/page.tsx','src/components/creator/TipButton.tsx','src/components/creator/CancelSubscriptionButton.tsx','src/app/(app)/tips/[id]/page.tsx',...adminFiles('src/app/(app)/admin')]) {
     const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
     const check=(node: ts.Node) => {
       let value: string | undefined;
