@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import Decimal from 'decimal.js';
+import { PayoutQueue } from '@/components/creator/PayoutQueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -198,6 +199,7 @@ export default async function AdminPage() {
           </Link>
         ))}
       </div>
+      <PayoutQueue />
     </div>
   );
 }

@@ -13,7 +13,8 @@ Updated 26 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Enforce unique idempotency constraints for payouts/tips/webhook events.
 - ✅ Move financial audit/event writes into same transaction (transactional outbox).
 - ✅ Enforce Google Play account/receipt ownership, authenticated RTDN replay and paid-period access.
-- 🟡 Complete provider settlement/refund reconciliation and verify staging bindings.
+- ✅ Unify creator reservations/settlement, immutable destinations, confirmed transfers and audited manual/legacy reconciliation.
+- 🟡 Complete refunds and remaining billing reconciliation; verify staging bindings.
 
 ✅ 3. Cron hardening and Vercel Hobby compliance (Critical/High)
 - ✅ Standardize cron auth helper (`Authorization: Bearer <CRON_SECRET>`).

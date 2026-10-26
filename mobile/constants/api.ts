@@ -138,6 +138,8 @@ export const ENDPOINTS = {
   earnings: {
     list: '/api/earnings',
     requestPayout: '/api/earnings/request-payout',
+    payoutMethod:'/api/earnings/payout-method',
+    cancelPayout:(id:string)=>`/api/earnings/payouts/${id}`,
   },
   tips: {
     create: '/api/tips/create',

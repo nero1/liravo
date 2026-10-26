@@ -30,7 +30,26 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       create function auth.role() returns text language sql as $$select coalesce(current_setting('request.jwt.claim.role',true),'service_role')::text$$;
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
-    for (const file of migrations) await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
+    const legacyUser='00000000-0000-4000-8000-000000009991';
+    for (const file of migrations) {
+      const legacy=file.startsWith('040_');
+      if(legacy)await sql.unsafe(`
+        insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
+        insert into tips(id,user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status) values('${legacyUser}','${legacyUser}','${legacyUser}',100,10,90,'USD','completed');
+        insert into payouts(tip_id,recipient_id,amount,currency,status,provider) values('${legacyUser}','${legacyUser}',90,'USD','failed','paystack');
+      `).simple();
+      await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
+      if(legacy){
+        const [hold]=await sql`select method,status,amount,last_error from payout_requests where user_id=${legacyUser}`;
+        expect(hold).toMatchObject({method:'manual',status:'processing',amount:'90.00',last_error:'Legacy transfer requires reconciliation'});
+        expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.available)).toBe(0);
+        await sql`delete from financial_audit_log where target_user_id=${legacyUser}`;
+        await sql`delete from payout_requests where user_id=${legacyUser}`;
+        await sql`delete from payouts where recipient_id=${legacyUser}`;
+        await sql`delete from tips where recipient_id=${legacyUser}`;
+        await sql`delete from auth.users where id=${legacyUser}`;
+      }
+    }
     const [functions] = await sql`select count(*) as count from pg_proc where proname in ('create_payout_request_atomic','process_payment_event','apply_social_intent','award_xp_once','process_outbox_event_atomic','create_subscription_intent')`;
     expect(Number(functions.count)).toBe(6);
     for (const role of ['anon', 'authenticated']) {
@@ -42,7 +61,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         has_column_privilege(${role},'public.users','recovery_codes','SELECT') as recovery`;
       expect(access).toEqual({ profile: true, email: false, pin: false, totp: false, recovery: false });
       const routines = await sql`select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy')`;
+        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy','creator_balance','claim_payout_request','settle_payout_request','defer_payout_request','cancel_payout_request','release_legacy_payout_request')`;
       for (const routine of routines) {
         const [permissions] = await sql`select has_function_privilege(${role},${routine.oid}::oid,'EXECUTE') as allowed`;
         expect(permissions.allowed, `${role}:${routine.proname}`).toBe(false);
@@ -68,8 +87,9 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     const [notifications]=await sql`select count(*) as count from notifications`;
     const [reward]=await sql`select xp from users where id=${sender}`;
     expect(Number(notifications.count)).toBe(1); expect(reward.xp).toBe(5);
+    await sql`insert into user_payout_methods(user_id,provider,display_name,account_number,bank_code,currency) values(${recipient},'manual','Audit account','1234567890','AUDIT','USD')`;
     const outcomes=await Promise.allSettled(['intent-a','intent-b'].map(key => sql.begin(async tx => {
-      await tx`select create_payout_request_atomic(${recipient},60,'paystack',${key},'rehearsal')`;
+      await tx`select create_payout_request_atomic(${recipient},60,'manual',${key},'rehearsal')`;
       await tx`select pg_sleep(0.2)`;
     })));
     expect(outcomes.filter(result=>result.status==='fulfilled')).toHaveLength(1);
@@ -367,5 +387,56 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await sql`select reading_streak,streak_freeze_tokens from users where id=${sender}`)[0]).toEqual({reading_streak:8,streak_freeze_tokens:0});
     await sql`select increment_streak_atomic(${sender},'reading','2026-11-01'::date)`;
     expect((await sql`select reading_streak from users where id=${sender}`)[0].reading_streak).toBe(1);
+    await sql`insert into tips(user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status) values(${sender},${recipient},1000,100,900,'NGN','completed') returning id`;
+    await sql`insert into user_payout_methods(user_id,provider,display_name,account_number,bank_code,currency) values(${recipient},'paystack','Audit NGN account','1234567890','058','NGN')`;
+    const [ngnBalance]=await sql`select creator_balance(${recipient},'NGN') as balance`;
+    expect(Number(ngnBalance.balance.available)).toBe(900);
+    await expect(sql`select create_payout_request_atomic(${recipient},5,'paystack','wrong-currency-intent','rehearsal','USD')`).rejects.toThrow('Invalid payout');
+    const [ngnPayout]=await sql`select create_payout_request_atomic(${recipient},600,'paystack','ngn-payout-intent','rehearsal','NGN') as id`;
+    await sql`update user_payout_methods set account_number='9999999999' where user_id=${recipient} and provider='paystack'`;
+    const payoutClaims=await Promise.all(Array.from({length:4},()=>sql`select claim_payout_request(${recipient},${ngnPayout.id},'rehearsal') as result`));
+    expect(payoutClaims.filter(rows=>rows[0].result.claimed)).toHaveLength(1);
+    const ngnClaim=payoutClaims.find(rows=>rows[0].result.claimed)![0].result;
+    expect(ngnClaim.destination.account_number).toBe('1234567890');
+    expect(Number((await sql`select creator_balance(${recipient},'NGN') as balance`)[0].balance.available)).toBe(300);
+    await expect(sql`select cancel_payout_request(${recipient},${ngnPayout.id},'rehearsal')`).rejects.toThrow('processing');
+    await expect(sql`select settle_payout_request(${recipient},${ngnPayout.id},'completed',${ngnClaim.transfer_reference},600,'USD','transfer-code','rehearsal')`).rejects.toThrow('mismatch');
+    await sql`select defer_payout_request(${ngnPayout.id},${ngnClaim.attempts},'Ambiguous provider response')`;
+    expect((await sql`select status from payout_requests where id=${ngnPayout.id}`)[0].status).toBe('processing');
+    for(let replay=0;replay<2;replay++)await sql`select settle_payout_request(null,${ngnPayout.id},'completed',${ngnClaim.transfer_reference},600,'NGN','transfer-code','rehearsal')`;
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='payout_completed' and metadata->>'payout_id'=${ngnPayout.id}`)[0].count).toBe(1);
+    await expect(sql`select settle_payout_request(null,${ngnPayout.id},'completed',${ngnClaim.transfer_reference},600,'NGN','other-transfer-code','rehearsal')`).rejects.toThrow('identity conflict');
+    await sql`select settle_payout_request(null,${ngnPayout.id},'reversed',${ngnClaim.transfer_reference},600,'NGN','transfer-code','rehearsal')`;
+    expect(Number((await sql`select creator_balance(${recipient},'NGN') as balance`)[0].balance.available)).toBe(900);
+    const [cancelPayout]=await sql`select create_payout_request_atomic(${recipient},200,'paystack','ngn-cancel-intent','rehearsal','NGN') as id`;
+    await expect(sql`select cancel_payout_request(${sender},${cancelPayout.id},'rehearsal')`).rejects.toThrow('Unknown payout');
+    for(let replay=0;replay<2;replay++)await sql`select cancel_payout_request(${recipient},${cancelPayout.id},'rehearsal')`;
+    expect(Number((await sql`select creator_balance(${recipient},'NGN') as balance`)[0].balance.available)).toBe(900);
+    const [racePayout]=await sql`select create_payout_request_atomic(${recipient},200,'paystack','approval-cancel-race','rehearsal','NGN') as id`;
+    const approvalRace=await Promise.allSettled([sql`select claim_payout_request(${recipient},${racePayout.id},'rehearsal') as result`,sql`select cancel_payout_request(${recipient},${racePayout.id},'rehearsal')`]);
+    const [raceState]=await sql`select status,transfer_reference from payout_requests where id=${racePayout.id}`;
+    expect(['processing','cancelled']).toContain(raceState.status);
+    if(raceState.status==='processing') {
+      expect(approvalRace[1].status).toBe('rejected');
+      await sql`select settle_payout_request(null,${racePayout.id},'failed',${raceState.transfer_reference},200,'NGN','race-transfer','rehearsal')`;
+    }else expect(approvalRace[0].status==='fulfilled'&&approvalRace[0].value[0].result.claimed).toBe(false);
+    const [manualPayout]=await sql`select create_payout_request_atomic(${recipient},5,'manual','manual-payout-intent','rehearsal','USD') as id`;
+    await expect(sql`select settle_payout_request(${recipient},${manualPayout.id},'completed','bank-receipt',5,'USD',null,'rehearsal')`).rejects.toThrow('Admin settlement');
+    await expect(sql`select claim_payout_request(${sender},${manualPayout.id},'rehearsal')`).rejects.toThrow('Forbidden');
+    await sql`select claim_payout_request(${recipient},${manualPayout.id},'rehearsal')`;
+    await expect(sql`select settle_payout_request(null,${manualPayout.id},'completed','bank-receipt',5,'USD',null,'rehearsal')`).rejects.toThrow('Admin settlement');
+    for(let replay=0;replay<2;replay++)await sql`select settle_payout_request(${recipient},${manualPayout.id},'completed','bank-receipt',5,'USD',null,'rehearsal')`;
+    expect((await sql`select status from payout_requests where id=${manualPayout.id}`)[0].status).toBe('completed');
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='payout_completed' and metadata->>'payout_id'=${manualPayout.id}`)[0].count).toBe(1);
+    const [legacyHold]=await sql`select create_payout_request_atomic(${recipient},5,'manual','legacy-reconciliation-fixture','rehearsal','USD') as id`;
+    await sql`select claim_payout_request(${recipient},${legacyHold.id},'rehearsal')`;
+    await expect(sql`select settle_payout_request(${recipient},${legacyHold.id},'completed','bank-receipt',5,'USD',null,'rehearsal')`).rejects.toThrow('duplicate key');
+    await expect(sql`select release_legacy_payout_request(${recipient},${legacyHold.id},'bank-case-unpaid',5,'USD','rehearsal')`).rejects.toThrow('mismatch');
+    await sql`update payout_requests set idempotency_key='legacy_tip_payout:test-fixture' where id=${legacyHold.id}`;
+    await expect(sql`select release_legacy_payout_request(${sender},${legacyHold.id},'bank-case-unpaid',5,'USD','rehearsal')`).rejects.toThrow('Forbidden');
+    await expect(sql`select release_legacy_payout_request(${recipient},${legacyHold.id},'bank-case-unpaid',6,'USD','rehearsal')`).rejects.toThrow('mismatch');
+    for(let replay=0;replay<2;replay++)await sql`select release_legacy_payout_request(${recipient},${legacyHold.id},'bank-case-unpaid',5,'USD','rehearsal')`;
+    expect((await sql`select status from payout_requests where id=${legacyHold.id}`)[0].status).toBe('failed');
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='legacy_payout_released' and metadata->>'payout_id'=${legacyHold.id}`)[0].count).toBe(1);
   } finally { await sql.end(); }
 }, 60_000);
