@@ -19,8 +19,11 @@ for (const [locale,messages] of Object.entries({en,fr,de})) describe(`locale ${l
       const argumentsOf=(text: string)=>Array.from(text.matchAll(/\{(\w+)(?:\s*[,}])/g),m=>m[1]).sort();
       const names=argumentsOf(message);
       expect(argumentsOf(target[key])).toEqual(names);
-      const values=Object.fromEntries(names.map(name=>[name,['count','days','percent'].includes(name)?2:'Reader']));
-      expect(t(key as Parameters<typeof t>[0],values)).toBeTruthy();
+      const numeric = new Set(Array.from(message.matchAll(/\{(\w+),\s*(?:plural|selectordinal|number)\b/g), match => match[1]));
+      const values=Object.fromEntries(names.map(name=>[name,numeric.has(name)||['count','days','percent'].includes(name)?2:'Reader']));
+      const rendered=t(key as Parameters<typeof t>[0],values);
+      expect(rendered).toBeTruthy();
+      expect(rendered).not.toContain('NaN');
     }
   });
   it('handles singular and plural reply counts', () => {

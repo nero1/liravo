@@ -1,6 +1,15 @@
+import { createFormatter, createTranslator } from 'next-intl';
+import en from '../messages/en.json';
 import { it, expect, vi } from 'vitest';
 import postgres from 'postgres';
 import { readFileSync, readdirSync } from 'node:fs';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+
+vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
+vi.mock('next-intl/server',()=>({
+  getTranslations:async()=>createTranslator({locale:'en',messages:en,namespace:'admin'}),
+  getFormatter:async()=>createFormatter({locale:'en'}),
+}));
 
 it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, outbox replay and concurrent payouts on local PostgreSQL', async () => {
   const url = process.env.MIGRATION_TEST_DATABASE_URL!;
@@ -33,7 +42,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         has_column_privilege(${role},'public.users','recovery_codes','SELECT') as recovery`;
       expect(access).toEqual({ profile: true, email: false, pin: false, totp: false, recovery: false });
       const routines = await sql`select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness')`;
+        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic')`;
       for (const routine of routines) {
         const [permissions] = await sql`select has_function_privilege(${role},${routine.oid}::oid,'EXECUTE') as allowed`;
         expect(permissions.allowed, `${role}:${routine.proname}`).toBe(false);
@@ -115,6 +124,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await sql`delete from quotes where id=${records[0].id}`;
       expect((await (await contentIntent(request,sender,'quotes',payload)).insert()).id).toBe(records[0].id);
       expect((await sql`select count(*)::int as count from quotes where user_id=${sender}`)[0].count).toBe(0);
+      await sql`update users set is_admin=true where id=${recipient}`;
       const { getPgQueryBuilderFactory } = await import('@/lib/db/query-builder');
       const factory = getPgQueryBuilderFactory();
       const projected = await factory.from<{id:string}>('quotes').insert({user_id:sender,book_id:book.id,content:'Projection test'}).select('id').single();
@@ -170,6 +180,37 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await sql`select apply_book_interaction(${sender},${book.id},'helpfulness','unhelpful-intent',${reviewId},false)`;
       await vote();
       expect((await sql`select helpful_votes,unhelpful_votes from reviews where id=${reviewId}`)[0]).toEqual({helpful_votes:0,unhelpful_votes:1});
+      const embedded=await factory.from<{writer:{username:string};book:{title:string}}>('reviews').select('id,writer:user_id(username),book:books(title)').eq('id',reviewId).single();
+      expect(embedded.error).toBeNull(); expect(embedded.data).toMatchObject({writer:{username:'audit_sender'},book:{title:'Intent test'}});
+      const follow=await factory.from('follows').upsert({follower_id:sender,following_id:recipient},{onConflict:'follower_id,following_id'}).select('follower:users!follower_id(username),following:users!following_id(username)').single();
+      expect(follow.error).toBeNull(); expect(follow.data).toEqual({follower:{username:'audit_sender'},following:{username:'audit_recipient'}});
+      const nested=await factory.from('users').select('id,outgoing:follows!follower_id(following:following_id(username)),total:follows!follower_id(count),referrer:referred_by(username)').eq('id',sender).single();
+      expect(nested.error).toBeNull(); expect(nested.data).toMatchObject({outgoing:[{following:{username:'audit_recipient'}}],total:[{count:1}],referrer:null});
+      const ambiguous=await factory.from('follows').select('users(username)');
+      expect(ambiguous.error?.message).toContain('Ambiguous relationship');
+      vi.mocked(getCurrentUser).mockResolvedValue({id:recipient,email:'recipient@example.test'});
+      await sql`update users set user_types=array['reader','author'],email='sender.contact@example.test' where id=${sender}`;
+      const authorFilter=await factory.from<Array<{id:string}>>('users').select('id').contains('user_types',['author']).not('email','is',null).ilike('username','AUDIT_SENDER');
+      expect(authorFilter.error).toBeNull(); expect(authorFilter.data).toEqual([{id:sender}]);
+      const injection=await factory.from<Array<{id:string}>>('users').select('id').ilike('username',"%' OR true --");
+      expect(injection.error).toBeNull(); expect(injection.data).toEqual([]);
+      const { PgQueryBuilder } = await import('@/lib/db/query-builder');
+      const execute=PgQueryBuilder.prototype.execute;
+      const queryGuard=vi.spyOn(PgQueryBuilder.prototype,'execute').mockImplementation(async function(this: InstanceType<typeof PgQueryBuilder>) {
+        const result=await execute.call(this);
+        if(result.error) throw new Error(`Admin query failed: ${result.error.message}`);
+        return result;
+      });
+      try {
+        const pages=[
+          await import('@/app/(app)/admin/page'),
+          await import('@/app/(app)/admin/books/page'),
+          await import('@/app/(app)/admin/promoted-listings/page'),
+          await import('@/app/(app)/admin/seasonal-events/page'),
+          await import('@/app/(app)/admin/writing-challenges/page'),
+        ];
+        for(const page of pages) expect(await page.default()).toBeTruthy();
+      } finally { queryGuard.mockRestore(); }
       const answerRequest = new Request('https://app.test/api/content',{headers:{'Idempotency-Key':'answer-intent-key'}});
       const answerPayload = {question_id:questionId,answer:'A sufficiently detailed answer.'};
       await (await contentIntent(answerRequest,recipient,'ask_writer_answers',answerPayload)).insert();
@@ -179,6 +220,29 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await getSql().end();
       vi.unstubAllEnvs();
     }
+    await sql`update users set is_admin=true where id=${recipient}`;
+    await expect(sql`select set_feature_flag_atomic(${sender},'google_auth',false)`).rejects.toThrow('Forbidden');
+    await sql`update feature_flags set enabled=true where name in ('google_auth','telegram_auth')`;
+    const disabled=await Promise.allSettled(['google_auth','telegram_auth'].map(name=>sql.begin(async tx=>{
+      await tx`select set_feature_flag_atomic(${recipient},${name},false)`;
+      await tx`select pg_sleep(0.1)`;
+    })));
+    expect(disabled.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    expect((await sql`select count(*)::int as count from feature_flags where name in ('google_auth','telegram_auth') and enabled`)[0].count).toBe(1);
+    await expect(sql`select set_feature_flag_atomic(${recipient},'unknown_flag',true)`).rejects.toThrow('Unknown flag');
+    const referred='00000000-0000-4000-8000-000000000093';
+    await sql`insert into auth.users(id,email,raw_user_meta_data) values(${referred},'referred@example.test','{"username":"audit_referred"}')`;
+    const codes=await sql`select id,referral_code,xp from users where id in (${recipient},${sender}) order by id`;
+    const assignments=await Promise.all(codes.map(ref=>sql`select attribute_referral_atomic(${referred},${ref.referral_code}) as referrer`));
+    const winner=assignments[0][0].referrer;
+    expect(assignments[1][0].referrer).toBe(winner);
+    expect((await sql`select count(*)::int as count from referrals where referred_id=${referred}`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from notifications where actor_id=${referred} and type='referral'`)[0].count).toBe(1);
+    expect((await sql`select xp from users where id=${winner}`)[0].xp).toBe(codes.find(row=>row.id===winner)!.xp+200);
+    await expect(sql.begin(async tx=>{
+      await tx`select set_config('request.jwt.claim.role','authenticated',true)`;
+      await tx`update users set referred_by=null where id=${referred}`;
+    })).rejects.toThrow('Referral identity');
     await sql`update users set reading_streak=6,last_streak_date='2026-10-25',streak_freeze_tokens=0 where id=${sender}`;
     await expect(sql.begin(async tx => {
       await tx`select set_config('request.jwt.claim.role','authenticated',true)`;

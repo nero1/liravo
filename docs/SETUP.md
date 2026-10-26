@@ -456,7 +456,7 @@ Unsupported events or unrelated products are acknowledged without changes. Do no
 
 ## 13. Cron Job Setup (cron-job.org)
 
-Vercel Hobby schedules each job daily or less often. `vercel.json` contains the deployed schedules. All cron routes accept GET (Vercel) and POST (external orchestrators), require `Authorization: Bearer <CRON_SECRET>`, and use a renewable distributed overlap lock. Redis failure returns 503; overlap returns 409. Stagger external jobs; do not run the same job concurrently on two schedulers.
+Vercel Hobby schedules each job daily or less often. `vercel.json` contains the deployed schedules. All cron routes accept GET (Vercel) and POST (external orchestrators), require `Authorization: Bearer <CRON_SECRET>`, and use a renewable distributed overlap lock. Redis failure returns 503; overlap returns 409. Stagger external jobs; do not run the same job concurrently on two schedulers. Administrators can run jobs through `POST /api/admin/cron-status`; its DB authorization and server-held credential preserve the same job locks. The admin panel lists deployed schedules and integrity alerts. Never expose the cron credential through a public environment variable.
 
 | Job | Endpoint | Schedule |
 |---|---|---|
@@ -983,7 +983,7 @@ The `.gitignore` excludes `.env.local`. Never commit `.env` files with real valu
 
 ### Security and financial migration update
 
-Apply migrations 019–034 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+Apply migrations 019–036 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
 
 Payout requests reserve USD balances atomically; failed/cancelled requests release reservations, completed requests remain deducted. Other currencies are not converted into USD. New referral commissions are 10% of the platform fee, not 10% of gross; audit historical commissions separately before enabling withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
 
@@ -1006,3 +1006,7 @@ Migrations 029–030 restrict private profile columns and privileged RPCs for br
 Migrations 032–034 add durable intent snapshots/reward outbox records for primary content creation, atomic streaks and replay-safe book interactions. Those content APIs require `Idempotency-Key` (8–200 characters); browser forms and mobile transport retain keys until acknowledgement. Reusing a key with another payload returns 409. Natural membership keys make buddy joining idempotent; a database lock enforces capacity. Migration 032 preserves legacy buddy data by renaming `creator_id`/`max_members` to the API’s `created_by`/`max_participants`; reconcile installations containing both names before applying it. Reading/writing streak dates and freeze tokens are service-managed. Missing days consume one freeze token each.
 
 Direct PostgreSQL mutation `.select()` now returns selected fields, `.single()` checks cardinality, exact counts retain result rows, and duplicate-ignore upserts honor their option. Regression tests run against PostgreSQL. Native transport/changed payload contracts are covered independently; a full Expo build was not run.
+
+Migrations 035–036 enforce the last-enabled sign-in provider under concurrent admin updates and atomically bind referral identity, its reward and notification. Referral codes/attribution are service-managed; OAuth callbacks accept only app-relative return paths. A 503 `FLAG_CACHE_UNAVAILABLE` means the flag was saved but cache synchronization failed; retrying the same desired state is safe.
+
+Admin pages use service reads after DB authorization and catalogs for English/French/German. The direct PostgreSQL adapter resolves FK relationships from schema metadata, including nested/cardinality-aware projections, and supports consumed containment, non-null and case-insensitive filters. Real admin page queries and rejection handling run in the migration rehearsal. Restart app processes after schema changes.

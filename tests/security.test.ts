@@ -185,3 +185,10 @@ it('bounds fan-out concurrency and stops scheduling after the deadline', async (
   expect(new Set(completed).size).toBe(9);
   expect(await mapBatches([1], 4, async () => { throw new Error('Past deadline'); }, Date.now() - 1)).toBe(0);
 });
+
+
+it('accepts app return paths and rejects OAuth authority and header injection', async () => {
+  const { safeReturnPath } = await import('@/lib/utils');
+  expect(safeReturnPath('/book/123?tab=reviews#latest')).toBe('/book/123?tab=reviews#latest');
+  for(const path of [null,'@evil.test','.evil.test','//evil.test','https://evil.test','/\\evil.test','/path\r\nLocation: evil']) expect(safeReturnPath(path)).toBe('/');
+});

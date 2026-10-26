@@ -1605,3 +1605,5 @@ Billing returns users to an entitlement-checked pending-confirmation page; brows
 Development audit: migrations 029–031 restrict private profile data and RPC access, add weekly digest receipts, and expose service-only financial reconciliation counts through outbox drain. Public metadata honors profile privacy and supported language URLs. The audit retains unresolved work explicitly; provider sandbox validation is required before enabling live billing.
 
 Content retry handling: primary content creation now commits a durable replay snapshot and reward intent with the record. Book/helpfulness toggles, buddy capacity and streak updates are transactional. Login text is localized, with source-reference and untranslated-label checks in CI. Wider translation and provider lifecycle gaps remain tracked in the audit.
+
+Admin operations now keep cron credentials server-side, show integrity alerts, and use localized controls. Concurrent provider changes preserve one enabled sign-in provider. Referral binding/reward/notification commit together, and browser profile writes cannot replace referral identity. These paths are included in the database rehearsal.

@@ -1,4 +1,5 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/moderation';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { invalidateFeatureFlag } from '@/lib/feature-flags';
@@ -11,20 +12,10 @@ const patchSchema = z.object({
   enabled: z.boolean(),
 });
 
-async function checkAdmin(supabase: ReturnType<typeof createClient>, userId: string) {
-  const { data } = await supabase
-    .from('users')
-    .select('is_admin')
-    .eq('id', userId)
-    .single();
-  return data?.is_admin === true;
-}
-
 export async function GET() {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!(await checkAdmin(supabase, user.id))) {
+  if (!await isAdmin(user.id)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -40,10 +31,9 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!(await checkAdmin(supabase, user.id))) {
+  if (!await isAdmin(user.id)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -56,15 +46,17 @@ export async function PATCH(req: Request) {
   const { name, enabled } = parsed.data;
   const service = createServiceClient();
 
-  const { error } = await service
-    .from('feature_flags')
-    .update({ enabled, updated_at: new Date().toISOString() })
-    .eq('name', name);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data: changed, error } = await service.rpc('set_feature_flag_atomic' as never, {
+    p_actor_id: user.id, p_name: name, p_enabled: enabled,
+  } as never);
+  if (error) {
+    const status = error.code === 'P1006' ? 409 : error.code === 'P1003' ? 404 : error.code === 'P1005' ? 403 : 503;
+    return NextResponse.json({ error: status === 409 ? 'At least one sign-in provider must remain active' : 'Flag update unavailable', code: error.code }, { status });
+  }
 
   // Invalidate Redis cache immediately
-  await invalidateFeatureFlag(name);
+  try { await invalidateFeatureFlag(name); }
+  catch { return NextResponse.json({ error: 'Flag saved; retry to synchronize cache', code: 'FLAG_CACHE_UNAVAILABLE' }, { status: 503 }); }
 
-  return NextResponse.json({ updated: true });
+  return NextResponse.json({ updated: true, changed });
 }

@@ -46,3 +46,8 @@ export function getRequestCorrelationId(request: Request): string {
 export function singleRelation<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
+
+/** Accepts app-relative return paths without authority or header-control characters. */
+export function safeReturnPath(value: string | null): string {
+  return value?.startsWith('/') && !value.startsWith('//') && !/[\\\u0000-\u001f]/.test(value) ? value : '/';
+}

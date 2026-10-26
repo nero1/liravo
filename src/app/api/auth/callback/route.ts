@@ -1,8 +1,8 @@
+import { safeReturnPath, getRequestCorrelationId } from '@/lib/utils';
+import { recordMetric } from '@/lib/metrics';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { awardXP } from '@/services/xp';
-import { XP_CONFIG } from '@/constants/config';
 import { checkAndAwardBadges } from '@/services/badges';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   }
 
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/';
+  const next = safeReturnPath(searchParams.get('next'));
   const refCode = searchParams.get('ref');
 
   if (code) {
@@ -33,51 +33,12 @@ export async function GET(request: Request) {
           .eq('id', user.id)
           .single();
 
-        // Handle referral attribution if ref code provided and not yet attributed
-        if (refCode && profile && !profile.referred_by) {
-          const serviceClient = createServiceClient();
-
-          // Find the referrer by their referral code
-          const { data: referrer } = await serviceClient
-            .from('users')
-            .select('id')
-            .eq('referral_code', refCode)
-            .neq('id', user.id)
-            .single();
-
-          if (referrer) {
-            // Mark the new user as referred
-            await serviceClient
-              .from('users')
-              .update({ referred_by: referrer.id })
-              .eq('id', user.id);
-
-            // Award XP to the referrer
-            await awardXP(referrer.id, XP_CONFIG.REFER_SIGNUP, 'referral_signup', `referral-signup:${user.id}`);
-
-            // Create notification for referrer
-            await serviceClient.from('notifications').insert({
-              user_id: referrer.id,
-              type: 'referral',
-              actor_id: user.id,
-              message: `Someone signed up using your referral link! +${XP_CONFIG.REFER_SIGNUP} XP`,
-            });
-
-            // Check referral badges for the referrer
-            await checkAndAwardBadges(referrer.id, 'referral');
-
-            // Record in referrals table if it exists
-            try {
-              await serviceClient
-                .from('referrals')
-                .insert({
-                  referrer_id: referrer.id,
-                  referred_id: user.id,
-                });
-            } catch {
-              // Silently ignore if table doesn't exist
-            }
-          }
+        if (refCode) {
+          const { data: referrerId, error: referralError } = await createServiceClient().rpc('attribute_referral_atomic' as never, {
+            p_user_id: user.id, p_code: refCode,
+          } as never);
+          if (referralError) recordMetric('referral_attribution_error', { userId: user.id, correlationId: getRequestCorrelationId(request), code: referralError.code }, 'error');
+          else if (referrerId) await checkAndAwardBadges(String(referrerId), 'referral');
         }
 
         if (!profile?.onboarding_complete) {

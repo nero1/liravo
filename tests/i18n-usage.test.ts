@@ -8,7 +8,9 @@ it('resolves literal translation calls against the English catalog', () => {
   const missing: string[] = [];
   const walk = (directory: string): string[] => readdirSync(directory,{withFileTypes:true}).flatMap(entry => entry.isDirectory() ? walk(join(directory,entry.name)) : /\.tsx?$/.test(entry.name) ? [join(directory,entry.name)] : []);
   for (const file of walk('src')) {
-    const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
+    const contents=readFileSync(file,'utf8');
+    if (!/\b(?:useTranslations|getTranslations)\s*\(/.test(contents)) continue;
+    const source=ts.createSourceFile(file,contents,ts.ScriptTarget.Latest,true);
     const bindings=new Map<ts.Node,Map<string,string>>();
     const scopeOf = (node: ts.Node): ts.Node => {
       let parent=node.parent;
@@ -55,18 +57,58 @@ it('resolves literal translation calls against the English catalog', () => {
   expect(missing).toEqual([]);
 });
 
-it('keeps localized sign-in screens free of untranslated text and labels', () => {
+it('keeps localized sign-in and admin screens free of untranslated text and labels', () => {
   const literals: string[] = [];
-  for(const file of ['src/components/auth/LoginForm.tsx','src/app/login/page.tsx']) {
+  const adminFiles=(directory:string):string[]=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?adminFiles(join(directory,entry.name)):entry.name.endsWith('.tsx')?[join(directory,entry.name)]:[]);
+  for(const file of ['src/components/auth/LoginForm.tsx','src/app/login/page.tsx',...adminFiles('src/app/(app)/admin')]) {
     const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
     const check=(node: ts.Node) => {
       let value: string | undefined;
       if(ts.isJsxText(node)) value=node.text.trim();
       if(ts.isJsxAttribute(node) && ['title','placeholder','aria-label','alt'].includes(node.name.getText()) && node.initializer && ts.isStringLiteral(node.initializer)) value=node.initializer.text;
-      if(value && /[A-Za-z]{2}/.test(value) && value!=='Liravo') literals.push(`${file}: ${value}`);
+      const technical = ts.isJsxText(node) && ts.isJsxElement(node.parent) && node.parent.openingElement.tagName.getText()==='code';
+      const example = value && (/^https?:\/\//.test(value) || /^(?:[A-Z]{2}, )+[A-Z]{2}$/.test(value));
+      if(value && /[A-Za-z]{2}/.test(value) && value!=='Liravo' && !technical && !example) literals.push(`${file}: ${value}`);
       ts.forEachChild(node,check);
     };
     check(source);
   }
   expect(literals).toEqual([]);
+});
+
+it('keeps admin fields named and switches stateful for assistive technology', () => {
+  const files=(directory:string):string[]=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?files(join(directory,entry.name)):entry.name.endsWith('.tsx')?[join(directory,entry.name)]:[]);
+  const missing: string[]=[];
+  for(const file of files('src/app/(app)/admin')) {
+    const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
+    type Element=ts.JsxOpeningElement|ts.JsxSelfClosingElement;
+    const attributes=(node:Element)=>new Map(node.attributes.properties.filter(ts.isJsxAttribute).map(attribute=>[attribute.name.getText(),attribute.initializer]));
+    const value=(node:ts.JsxAttributeValue|undefined)=>node && ts.isStringLiteral(node)?node.text:node?.getText();
+    const labels=new Set<string>();
+    const collect=(node:ts.Node)=>{
+      if(ts.isJsxOpeningElement(node)&&node.tagName.getText()==='label') {
+        const target=value(attributes(node).get('htmlFor')); if(target) labels.add(target);
+      }
+      ts.forEachChild(node,collect);
+    };
+    collect(source);
+    const check=(node:ts.Node)=>{
+      if(ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node)) {
+        const tag=node.tagName.getText(), attrs=attributes(node);
+        if(['input','textarea','select'].includes(tag)&&value(attrs.get('type'))!=='hidden') {
+          let parent:ts.Node|undefined=node.parent,wrapped=false;
+          while(parent&&!ts.isFunctionLike(parent)) {
+            if(ts.isJsxElement(parent)&&parent.openingElement.tagName.getText()==='label') wrapped=true;
+            parent=parent.parent;
+          }
+          if(!wrapped&&!attrs.has('aria-label')&&!attrs.has('aria-labelledby')&&!labels.has(value(attrs.get('id'))??'')) missing.push(`${file}: unnamed ${tag}`);
+        }
+        if(value(attrs.get('role'))==='switch'&&(!attrs.has('aria-checked')||!attrs.has('aria-label'))) missing.push(`${file}: incomplete switch`);
+        if(tag==='th'&&!attrs.has('scope')) missing.push(`${file}: unscoped table header`);
+      }
+      ts.forEachChild(node,check);
+    };
+    check(source);
+  }
+  expect(missing).toEqual([]);
 });

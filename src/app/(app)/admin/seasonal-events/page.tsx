@@ -1,11 +1,17 @@
-import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { isAdmin } from '@/lib/moderation';
+import { getTranslations, getFormatter } from 'next-intl/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Seasonal Events — Admin' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('admin');
+  return { title: t('seasonalEvents') };
+}
 
 interface SeasonalEvent {
   id: string;
@@ -18,12 +24,12 @@ interface SeasonalEvent {
 }
 
 export default async function SeasonalEventsPage() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const formatter = await getFormatter();
+  const t = await getTranslations('admin');
+  const user = await getCurrentUser();
   if (!user) redirect('/login');
-
-  const { data: profile } = await supabase.from('users').select('is_admin').eq('id', user.id).single();
-  if (!profile?.is_admin) redirect('/');
+  if (!await isAdmin(user.id)) redirect('/');
+  const supabase = createServiceClient();
 
   const { data: events } = await supabase
     .from('seasonal_events')
@@ -37,17 +43,15 @@ export default async function SeasonalEventsPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-2xl font-bold">Seasonal Events</h1>
+        <h1 className="font-display text-2xl font-bold">{t('seasonalEvents')}</h1>
         <Link
           href="/admin/seasonal-events/new"
           className="px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors"
-        >
-          + New Event
-        </Link>
+        >{t('newEvent')}</Link>
       </div>
 
       {items.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No seasonal events yet. Create one to get started.</p>
+        <p className="text-muted-foreground text-sm">{t('noSeasonalEventsYetCreateOneToGetStarted')}</p>
       ) : (
         <div className="space-y-3">
           {items.map((event) => {
@@ -71,21 +75,19 @@ export default async function SeasonalEventsPage() {
                             ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400'
                             : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
                     }`}>
-                      {isActive ? 'Active' : isPast ? 'Past' : event.is_published ? 'Upcoming' : 'Draft'}
+                      {isActive ? t('active') : isPast ? t('past') : event.is_published ? t('upcoming') : t('draft')}
                     </span>
                   </div>
                   {event.theme && <p className="text-sm text-muted-foreground">{event.theme}</p>}
                   <p className="text-xs text-muted-foreground mt-1">
-                    {new Date(event.start_date).toLocaleDateString()} — {new Date(event.end_date).toLocaleDateString()}
+                    {formatter.dateTime(new Date(event.start_date), { dateStyle: 'medium' })} — {formatter.dateTime(new Date(event.end_date), { dateStyle: 'medium' })}
                     {event.badge_name && ` · Badge: ${event.badge_name}`}
                   </p>
                 </div>
                 <Link
                   href={`/admin/seasonal-events/${event.id}/edit`}
                   className="shrink-0 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Edit
-                </Link>
+                >{t('edit')}</Link>
               </div>
             );
           })}

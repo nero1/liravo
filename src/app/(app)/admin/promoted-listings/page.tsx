@@ -1,10 +1,16 @@
-import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { isAdmin } from '@/lib/moderation';
+import { getTranslations, getFormatter } from 'next-intl/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Promoted Listings — Admin' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('admin');
+  return { title: t('promotedListings') };
+}
 
 interface Listing {
   id: string;
@@ -19,17 +25,12 @@ interface Listing {
 }
 
 export default async function PromotedListingsPage() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const formatter = await getFormatter();
+  const t = await getTranslations('admin');
+  const user = await getCurrentUser();
   if (!user) redirect('/login');
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
-
-  if (!profile?.is_admin) redirect('/');
+  if (!await isAdmin(user.id)) redirect('/');
+  const supabase = createServiceClient();
 
   const { data: listings } = await supabase
     .from('promoted_listings')
@@ -42,20 +43,20 @@ export default async function PromotedListingsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
-      <h1 className="font-display text-2xl font-bold mb-6">Promoted Listings</h1>
+      <h1 className="font-display text-2xl font-bold mb-6">{t('promotedListings')}</h1>
 
       {items.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No promoted listings yet.</p>
+        <p className="text-muted-foreground text-sm">{t('noPromotedListingsYet')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-2 pr-4">Book</th>
-                <th className="text-left py-2 pr-4">Status</th>
-                <th className="text-left py-2 pr-4">Dates</th>
-                <th className="text-right py-2 pr-4">Clicks</th>
-                <th className="text-right py-2">Price</th>
+                <th scope="col" className="text-left py-2 pr-4">{t('book')}</th>
+                <th scope="col" className="text-left py-2 pr-4">{t('status')}</th>
+                <th scope="col" className="text-left py-2 pr-4">{t('dates')}</th>
+                <th scope="col" className="text-right py-2 pr-4">{t('clicks')}</th>
+                <th scope="col" className="text-right py-2">{t('price')}</th>
               </tr>
             </thead>
             <tbody>
@@ -80,17 +81,17 @@ export default async function PromotedListingsPage() {
                             ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
                             : 'bg-muted text-muted-foreground'
                       }`}>
-                        {isLive ? 'Live' : listing.is_active ? 'Scheduled' : 'Inactive'}
+                        {isLive ? t('live') : listing.is_active ? t('scheduled') : t('inactive')}
                       </span>
                     </td>
                     <td className="py-3 pr-4 text-xs text-muted-foreground">
-                      {listing.start_date ? new Date(listing.start_date).toLocaleDateString() : '—'}
+                      {listing.start_date ? formatter.dateTime(new Date(listing.start_date), { dateStyle: 'medium' }) : '—'}
                       {' → '}
-                      {listing.end_date ? new Date(listing.end_date).toLocaleDateString() : '—'}
+                      {listing.end_date ? formatter.dateTime(new Date(listing.end_date), { dateStyle: 'medium' }) : '—'}
                     </td>
                     <td className="py-3 pr-4 text-right">{listing.clicks}</td>
                     <td className="py-3 text-right">
-                      {listing.price_usd != null ? `$${listing.price_usd}` : '—'}
+                      {listing.price_usd != null ? formatter.number(Number(listing.price_usd), { style: 'currency', currency: 'USD' }) : '—'}
                     </td>
                   </tr>
                 );
@@ -100,10 +101,7 @@ export default async function PromotedListingsPage() {
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground mt-6">
-        To activate a listing, use the API route <code>POST /api/admin/promoted-listings</code> with the listing ID and activation dates.
-        Activation will be automated when payment webhook integration is complete (Phase 7).
-      </p>
+      <p className="text-xs text-muted-foreground mt-6">{t('activationHelp', { endpoint: 'POST /api/admin/promoted-listings' })}</p>
     </div>
   );
 }
