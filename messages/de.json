@@ -13,7 +13,19 @@
     "signInWithTelegram": "Mit Telegram anmelden",
     "continueWithGoogle": "Mit Google fortfahren",
     "continueWithTelegram": "Mit Telegram fortfahren",
-    "orContinueWith": "oder fortfahren mit"
+    "orContinueWith": "oder fortfahren mit",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "createAccount": "Konto erstellen",
+    "signIn": "Anmelden",
+    "alreadyAccount": "Du hast bereits ein Konto? Anmelden",
+    "needAccount": "Du hast noch kein Konto? Registrieren",
+    "terms": "Mit der Anmeldung akzeptierst du unsere Nutzungsbedingungen und Datenschutzerklärung.",
+    "unavailable": "Die Anmeldung ist vorübergehend nicht verfügbar. Bitte versuche es später erneut.",
+    "passwordResetRequired": "Dein Konto wurde über OAuth erstellt und hat kein Passwort. Kontaktiere den Support, um einen Link zum Zurücksetzen zu erhalten.",
+    "signInFailed": "Anmeldung fehlgeschlagen. Prüfe deine Angaben und versuche es erneut.",
+    "tagline": "Dein soziales Netzwerk zum Entdecken von Büchern",
+    "description": "Melde dich bei Liravo an, um Bücher zu entdecken und deine Lektüre zu verfolgen."
   },
   "onboarding": {
     "title": "Richten wir Ihr Profil ein",

@@ -1,7 +1,8 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { awardXP } from '@/services/xp';
+import { awardXP, incrementStreak } from '@/services/xp';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -48,45 +49,16 @@ export async function POST(req: Request) {
   const parsed = sessionSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
 
-  const supabase = createClient();
-
   // Insert session
-  const { data: session, error } = await supabase
-    .from('reading_sessions')
-    .insert({
-      user_id: user.id,
-      book_id: parsed.data.book_id,
-      pages_read: parsed.data.pages_read ?? null,
-      started_at: parsed.data.started_at ?? new Date().toISOString(),
-      ended_at: parsed.data.ended_at ?? null,
-      notes: parsed.data.notes ?? null,
-    })
-    .select('id, book_id, pages_read, started_at, ended_at, created_at')
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Increment reading streak (if not already incremented today)
-  const today = new Date().toISOString().slice(0, 10);
-  const { data: profile } = await supabase
-    .from('users')
-    .select('reading_streak, last_streak_date, streak_freeze_tokens')
-    .eq('id', user.id)
-    .single();
-
-  if (profile) {
-    const lastDate = profile.last_streak_date;
-    if (lastDate !== today) {
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      const isConsecutive = lastDate === yesterday;
-      const newStreak = isConsecutive ? (profile.reading_streak ?? 0) + 1 : 1;
-
-      await supabase
-        .from('users')
-        .update({ reading_streak: newStreak, last_streak_date: today })
-        .eq('id', user.id);
-    }
+  let session;
+  try {
+    const intent = await contentIntent(req, user.id, 'reading_sessions', { book_id: parsed.data.book_id, pages_read: parsed.data.pages_read ?? null, ...(parsed.data.started_at ? { started_at: parsed.data.started_at } : {}), ended_at: parsed.data.ended_at ?? null, notes: parsed.data.notes ?? null });
+    session = await intent.insert();
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Content creation unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
+
+  await incrementStreak(user.id);
 
   // Award 5 XP for logging a session
   await awardXP(user.id, 5, 'reading_session', `reading-session:${session.id}`);

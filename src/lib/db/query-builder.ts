@@ -18,6 +18,7 @@ interface MutationState {
   type: MutationType;
   data?: Record<string, unknown> | Record<string, unknown>[];
   onConflict?: string;
+  ignoreDuplicates?: boolean;
   returning: boolean;
 }
 
@@ -42,6 +43,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
   select(columns: string = '*', options?: { count?: 'exact'; head?: boolean }) {
     this._selectCols = columns;
+    if (this._mutation) this._mutation.returning = true;
     if (options?.count === 'exact') this._countOnly = true;
     if (options?.head) this._head = true;
     return this;
@@ -112,13 +114,11 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
   single() {
     this._isSingle = true;
-    this._limit = 1;
     return this;
   }
 
   maybeSingle() {
     this._isMaybeSingle = true;
-    this._limit = 1;
     return this;
   }
 
@@ -139,12 +139,13 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
   upsert(
     data: Record<string, unknown> | Record<string, unknown>[],
-    options?: { onConflict?: string }
+    options?: { onConflict?: string; ignoreDuplicates?: boolean }
   ) {
     this._mutation = {
       type: 'upsert',
       data,
       onConflict: options?.onConflict,
+      ignoreDuplicates: options?.ignoreDuplicates,
       returning: false,
     };
     return this;
@@ -245,6 +246,13 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
     return joins;
   }
 
+  private mutationResult(rows: Row[]): QueryResult<T> {
+    if ((this._isSingle && rows.length !== 1) || (this._isMaybeSingle && rows.length > 1)) {
+      return { data: null, error: { message: 'Expected one row', code: 'PGRST116' } };
+    }
+    return { data: (this._isSingle || this._isMaybeSingle ? rows[0] ?? null : rows) as T, error: null };
+  }
+
   async execute(): Promise<QueryResult<T>> {
     const sql = getSql();
     try {
@@ -252,14 +260,15 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         return await this._executeMutation(sql);
       }
 
+      let count: number | undefined;
       if (this._countOnly) {
         const where = this.buildWhere();
         const hasWhere = this._filters.length > 0 || this._orFragment;
         const rows = hasWhere
           ? await sql`SELECT COUNT(*) AS count FROM ${sql(this._table)} WHERE ${where}`
           : await sql`SELECT COUNT(*) AS count FROM ${sql(this._table)}`;
-        const count = parseInt(rows[0]?.count ?? '0', 10);
-        return { data: null, error: null, count };
+        count = parseInt(rows[0]?.count ?? '0', 10);
+        if (this._head) return { data: null, error: null, count };
       }
 
       const joins = this._extractJoins();
@@ -329,13 +338,14 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
       if (this._head) return { data: null, error: null };
       if (this._isSingle) {
-        if (rows.length === 0) return { data: null, error: { message: 'No rows found' } };
-        return { data: rows[0] as T, error: null };
+        if (rows.length !== 1) return { data: null, error: { message: 'Expected one row', code: 'PGRST116' } };
+        return { data: rows[0] as T, error: null, count };
       }
       if (this._isMaybeSingle) {
-        return { data: rows.length > 0 ? rows[0] as T : null, error: null };
+        if (rows.length > 1) return { data: null, error: { message: 'Expected at most one row', code: 'PGRST116' } };
+        return { data: rows.length > 0 ? rows[0] as T : null, error: null, count };
       }
-      return { data: rows as unknown as T, error: null };
+      return { data: rows as unknown as T, error: null, count };
     } catch (err) {
       return { data: null, error: queryError(err) };
     }
@@ -343,6 +353,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
   private async _executeMutation(sql: ReturnType<typeof getSql>): Promise<QueryResult<T>> {
     const m = this._mutation!;
+    const returning = this._buildSelectCols();
     const hasWhere = this._filters.length > 0 || this._orFragment;
     const where = this.buildWhere();
 
@@ -351,8 +362,8 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         case 'insert': {
           const rows = Array.isArray(m.data) ? m.data : [m.data!];
           if (m.returning) {
-            const result = await sql`INSERT INTO ${sql(this._table)} ${sql(rows)} RETURNING *`;
-            return { data: (rows.length === 1 ? result[0] : result) as unknown as T, error: null };
+            const result = await sql`INSERT INTO ${sql(this._table)} ${sql(rows)} RETURNING ${sql.unsafe(returning)}`;
+            return this.mutationResult(result);
           }
           await sql`INSERT INTO ${sql(this._table)} ${sql(rows)}`;
           return { data: null, error: null };
@@ -370,16 +381,16 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
           // Column names come from application data objects, not user input.
           const safeId = (c: string) => `"${c.replace(/[^a-zA-Z0-9_]/g, '')}"`;
           const conflictExpr = conflictCols.map(safeId).join(', ');
-          const updateExpr = updateCols.length > 0
+          const updateExpr = !m.ignoreDuplicates && updateCols.length > 0
             ? `DO UPDATE SET ${updateCols.map((c) => `${safeId(c)} = EXCLUDED.${safeId(c)}`).join(', ')}`
             : 'DO NOTHING';
 
           if (m.returning) {
             const result = await sql.unsafe(
-              `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr} RETURNING *`,
+              `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr} RETURNING ${returning}`,
               rows.flatMap((r) => keys.map((k) => r[k])) as ParameterOrJSON<never>[]
             );
-            return { data: (rows.length === 1 ? result[0] : result) as unknown as T, error: null };
+            return this.mutationResult(result);
           }
           await sql.unsafe(
             `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr}`,
@@ -391,8 +402,8 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         case 'update': {
           if (!hasWhere) throw new Error('update() requires at least one filter');
           if (m.returning) {
-            const result = await sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where} RETURNING *`;
-            return { data: result[0] as unknown as T, error: null };
+            const result = await sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where} RETURNING ${sql.unsafe(returning)}`;
+            return this.mutationResult(result);
           }
           await sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where}`;
           return { data: null, error: null };
@@ -400,6 +411,10 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
 
         case 'delete': {
           if (!hasWhere) throw new Error('delete() requires at least one filter');
+          if (m.returning) {
+            const result = await sql`DELETE FROM ${sql(this._table)} WHERE ${where} RETURNING ${sql.unsafe(returning)}`;
+            return this.mutationResult(result);
+          }
           await sql`DELETE FROM ${sql(this._table)} WHERE ${where}`;
           return { data: null, error: null };
         }

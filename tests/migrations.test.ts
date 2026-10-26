@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import postgres from 'postgres';
 import { readFileSync, readdirSync } from 'node:fs';
 
@@ -18,7 +18,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       create schema auth;
       create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');
       create function auth.uid() returns uuid language sql as $$select null::uuid$$;
-      create function auth.role() returns text language sql as $$select 'service_role'::text$$;
+      create function auth.role() returns text language sql as $$select coalesce(current_setting('request.jwt.claim.role',true),'service_role')::text$$;
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     for (const file of migrations) await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
@@ -33,7 +33,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         has_column_privilege(${role},'public.users','recovery_codes','SELECT') as recovery`;
       expect(access).toEqual({ profile: true, email: false, pin: false, totp: false, recovery: false });
       const routines = await sql`select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot')`;
+        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness')`;
       for (const routine of routines) {
         const [permissions] = await sql`select has_function_privilege(${role},${routine.oid}::oid,'EXECUTE') as allowed`;
         expect(permissions.allowed, `${role}:${routine.proname}`).toBe(false);
@@ -93,5 +93,103 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect(snapshot.anomalies).toMatchObject({ tipsWithoutPayout: 0, tipsWithoutOutbox: 0, payoutsWithoutAudit: 0, uncertainDigests: 1 });
     await sql`delete from financial_audit_log where action='payout_requested'`;
     expect((await sql`select financial_integrity_snapshot() as anomalies`)[0].anomalies.payoutsWithoutAudit).toBe(1);
+    const [book] = await sql`insert into books(title,author_name) values('Intent test','Author') returning id`;
+    vi.stubEnv('DATABASE_PROVIDER', 'railway');
+    vi.stubEnv('DATABASE_URL', url);
+    vi.stubEnv('DATABASE_SSL', 'false');
+    const { contentIntent } = await import('@/lib/content-intents');
+    const { getSql } = await import('@/lib/db/pg');
+    try {
+      const request = new Request('https://app.test/api/quotes', { headers: { 'Idempotency-Key': 'durable-content-key' } });
+      const payload = { book_id: book.id, content: 'A stable quote', page_number: null };
+      const records = await Promise.all(Array.from({length:4}, async () => (await contentIntent(request,sender,'quotes',payload)).insert()));
+      expect(new Set(records.map(record => record.id)).size).toBe(1);
+      expect((await sql`select count(*)::int as count from quotes where user_id=${sender}`)[0].count).toBe(1);
+      expect(records[0]).not.toHaveProperty('idempotency_key');
+      await expect(contentIntent(request,sender,'quotes',{ ...payload, content: 'Different quote' })).rejects.toMatchObject({status:409});
+      const [before] = await sql`select xp from users where id=${sender}`;
+      await sql`select award_xp_once(${sender},10,'post_quote',${`quote:${records[0].id}`})`;
+      const rewards = await sql`select * from claim_outbox_events(20)`;
+      for(const event of rewards) await sql`select process_outbox_event_atomic(${event.id})`;
+      expect((await sql`select xp from users where id=${sender}`)[0].xp).toBe(before.xp+10);
+      await sql`delete from quotes where id=${records[0].id}`;
+      expect((await (await contentIntent(request,sender,'quotes',payload)).insert()).id).toBe(records[0].id);
+      expect((await sql`select count(*)::int as count from quotes where user_id=${sender}`)[0].count).toBe(0);
+      const { getPgQueryBuilderFactory } = await import('@/lib/db/query-builder');
+      const factory = getPgQueryBuilderFactory();
+      const projected = await factory.from<{id:string}>('quotes').insert({user_id:sender,book_id:book.id,content:'Projection test'}).select('id').single();
+      expect(projected.error).toBeNull(); expect(Object.keys(projected.data!)).toEqual(['id']);
+      const listed = await factory.from<Array<{id:string}>>('quotes').select('id',{count:'exact'}).eq('user_id',sender).limit(1);
+      expect(listed.count).toBe(1); expect(listed.data).toHaveLength(1);
+      const removed = await factory.from<Array<{id:string}>>('quotes').delete().eq('id',projected.data!.id).select('id');
+      expect(removed.data).toEqual([{id:projected.data!.id}]);
+      const ownerPayloads: Array<[Parameters<typeof contentIntent>[2],Record<string,unknown>]> = [
+        ['reviews',{book_id:book.id,rating:4,content:'A review',review_type:'short'}],
+        ['buddy_reads',{book_id:book.id,max_participants:3,current_chapter:1,is_active:true}],
+        ['ask_writer_questions',{question:'A test question?',tags:[],answer_count:0}],
+        ['reading_sessions',{book_id:book.id,pages_read:2}],
+      ];
+      let questionId='', buddyId='', reviewId='';
+      for(const [table,values] of ownerPayloads) {
+        const intentRequest = new Request('https://app.test/api/content',{headers:{'Idempotency-Key':`table-intent-${table}`}});
+        const row = await (await contentIntent(intentRequest,sender,table,values)).insert();
+        expect((await (await contentIntent(intentRequest,sender,table,values)).insert()).id).toBe(row.id);
+        if(table==='ask_writer_questions') questionId=row.id;
+        if(table==='buddy_reads') buddyId=row.id;
+        if(table==='reviews') reviewId=row.id;
+        if(table==='reading_sessions') expect(row.started_at).toBeTruthy();
+      }
+      const third='00000000-0000-4000-8000-000000000094';
+      await sql`insert into auth.users(id,email,raw_user_meta_data) values(${third},'third@example.test','{"username":"audit_third"}')`;
+      await sql`update buddy_reads set max_participants=2 where id=${buddyId}`;
+      const joins=await Promise.allSettled([recipient,third].map(member=>sql.begin(async tx=>{
+        await tx`insert into buddy_read_members(buddy_read_id,user_id) values(${buddyId},${member})`;
+        await tx`select pg_sleep(0.1)`;
+      })));
+      expect(joins.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+      expect((await sql`select count(*)::int as count from buddy_read_members where buddy_read_id=${buddyId}`)[0].count).toBe(2);
+      const replayMember=await factory.from('buddy_read_members').upsert({buddy_read_id:buddyId,user_id:sender},{onConflict:'buddy_read_id,user_id',ignoreDuplicates:true});
+      expect(replayMember.error).toBeNull();
+      await expect(sql.begin(async tx=>{
+        await tx`insert into quotes(user_id,book_id,content,idempotency_key,request_hash) values(${sender},${book.id},'Rollback test','rolled-back-key',${'a'.repeat(64)})`;
+        throw new Error('Abort content transaction');
+      })).rejects.toThrow('Abort content transaction');
+      expect((await sql`select count(*)::int as count from content_intents where intent_key='rolled-back-key'`)[0].count).toBe(0);
+      await sql`insert into shelves(user_id,name,slug,is_default,default_type) values(${sender},'Want to Read','want-to-read',true,'want_to_read')`;
+      const react=()=>sql`select apply_book_interaction(${sender},${book.id},'reaction','reaction-intent') as result`;
+      const reactions=await Promise.all(Array.from({length:4},react));
+      expect(reactions.every(rows=>rows[0].result.reacted)).toBe(true);
+      expect((await sql`select want_to_read_count from books where id=${book.id}`)[0].want_to_read_count).toBe(1);
+      await sql`select apply_book_interaction(${sender},${book.id},'reaction','reaction-intent-2')`;
+      await react();
+      expect((await sql`select want_to_read_count from books where id=${book.id}`)[0].want_to_read_count).toBe(0);
+      const vote=()=>sql`select apply_book_interaction(${sender},${book.id},'helpfulness','helpful-intent',${reviewId},true) as result`;
+      await Promise.all(Array.from({length:4},vote));
+      expect((await sql`select helpful_votes,unhelpful_votes from reviews where id=${reviewId}`)[0]).toEqual({helpful_votes:1,unhelpful_votes:0});
+      await expect(sql`select apply_book_interaction(${sender},${book.id},'helpfulness','helpful-intent',${reviewId},false)`).rejects.toThrow('Conflicting');
+      await sql`select apply_book_interaction(${sender},${book.id},'helpfulness','unhelpful-intent',${reviewId},false)`;
+      await vote();
+      expect((await sql`select helpful_votes,unhelpful_votes from reviews where id=${reviewId}`)[0]).toEqual({helpful_votes:0,unhelpful_votes:1});
+      const answerRequest = new Request('https://app.test/api/content',{headers:{'Idempotency-Key':'answer-intent-key'}});
+      const answerPayload = {question_id:questionId,answer:'A sufficiently detailed answer.'};
+      await (await contentIntent(answerRequest,recipient,'ask_writer_answers',answerPayload)).insert();
+      await (await contentIntent(answerRequest,recipient,'ask_writer_answers',answerPayload)).insert();
+      expect((await sql`select answer_count from ask_writer_questions where id=${questionId}`)[0].answer_count).toBe(1);
+    } finally {
+      await getSql().end();
+      vi.unstubAllEnvs();
+    }
+    await sql`update users set reading_streak=6,last_streak_date='2026-10-25',streak_freeze_tokens=0 where id=${sender}`;
+    await expect(sql.begin(async tx => {
+      await tx`select set_config('request.jwt.claim.role','authenticated',true)`;
+      await tx`update users set reading_streak=30 where id=${sender}`;
+    })).rejects.toThrow('Privileged');
+    const [xpBefore] = await sql`select xp from users where id=${sender}`;
+    await Promise.all(Array.from({length:4}, () => sql`select increment_streak_atomic(${sender},'reading','2026-10-26'::date)`));
+    expect((await sql`select reading_streak,streak_freeze_tokens,xp from users where id=${sender}`)[0]).toEqual({reading_streak:7,streak_freeze_tokens:1,xp:xpBefore.xp+50});
+    await sql`select increment_streak_atomic(${sender},'reading','2026-10-28'::date)`;
+    expect((await sql`select reading_streak,streak_freeze_tokens from users where id=${sender}`)[0]).toEqual({reading_streak:8,streak_freeze_tokens:0});
+    await sql`select increment_streak_atomic(${sender},'reading','2026-11-01'::date)`;
+    expect((await sql`select reading_streak from users where id=${sender}`)[0].reading_streak).toBe(1);
   } finally { await sql.end(); }
 }, 60_000);

@@ -1603,3 +1603,5 @@ XP is now awarded from verified activity and a durable per-user event ledger; cl
 Billing returns users to an entitlement-checked pending-confirmation page; browser redirects never activate Premium. Locale preferences now persist in the profile and browser, and Premium checkout has English/French/German catalogs and locale-aware prices. Full UI translation remains tracked separately.
 
 Development audit: migrations 029–031 restrict private profile data and RPC access, add weekly digest receipts, and expose service-only financial reconciliation counts through outbox drain. Public metadata honors profile privacy and supported language URLs. The audit retains unresolved work explicitly; provider sandbox validation is required before enabling live billing.
+
+Content retry handling: primary content creation now commits a durable replay snapshot and reward intent with the record. Book/helpfulness toggles, buddy capacity and streak updates are transactional. Login text is localized, with source-reference and untranslated-label checks in CI. Wider translation and provider lifecycle gaps remain tracked in the audit.

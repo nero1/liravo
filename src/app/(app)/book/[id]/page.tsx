@@ -1,3 +1,4 @@
+import { HelpfulnessButtons } from '@/components/books/HelpfulnessButtons';
 import { languageAlternates } from '@/lib/metadata';
 import { singleRelation } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/server';
@@ -5,7 +6,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Star, BookOpen, Share2, BookMarked, ThumbsUp, ThumbsDown, MessageSquare } from 'lucide-react';
+import { Star, BookOpen, Share2, BookMarked, MessageSquare } from 'lucide-react';
 import { ReviewForm } from '@/components/books/ReviewForm';
 import { ReactionButtons } from '@/components/books/ReactionButtons';
 import { AudibleCTA } from '@/components/books/AudibleCTA';
@@ -108,6 +109,10 @@ export default async function BookPage({ params }: BookPageProps) {
     .eq('is_hidden', false)
     .order('helpful_votes', { ascending: false })
     .limit(20);
+
+  const { data: helpfulnessVotes } = reviews?.length ? await supabase.from('review_helpfulness_votes')
+    .select('review_id,is_helpful').eq('user_id', user.id).in('review_id', reviews.map(review => review.id)) : { data: [] };
+  const votesByReview = new Map((helpfulnessVotes ?? []).map(vote => [vote.review_id, vote.is_helpful]));
 
   // Rating distribution
   const dist: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -447,13 +452,7 @@ export default async function BookPage({ params }: BookPageProps) {
 
                   {/* Helpfulness + replies */}
                   <div className="flex items-center gap-4 pt-2 border-t border-border/50">
-                    <span className="text-xs text-muted-foreground">Helpful?</span>
-                    <a href={`/api/books/${params.id}/reviews/${review.id}/helpful?value=true`} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-green-600 transition-colors">
-                      <ThumbsUp size={12} /> {review.helpful_votes ?? 0}
-                    </a>
-                    <a href={`/api/books/${params.id}/reviews/${review.id}/helpful?value=false`} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-red-500 transition-colors">
-                      <ThumbsDown size={12} /> {review.unhelpful_votes ?? 0}
-                    </a>
+                    <HelpfulnessButtons bookId={params.id} reviewId={review.id} initialVote={votesByReview.get(review.id) ?? null} helpful={review.helpful_votes ?? 0} unhelpful={review.unhelpful_votes ?? 0} />
                     {replyCount > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground ml-auto">
                         <MessageSquare size={12} /> {replyCount} {replyCount === 1 ? 'reply' : 'replies'}

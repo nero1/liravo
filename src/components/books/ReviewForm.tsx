@@ -1,5 +1,7 @@
 'use client';
 
+import { useRequestIntent } from '@/lib/client/useRequestIntent';
+
 import { useState, useCallback } from 'react';
 import { Star, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,6 +23,7 @@ const REVIEW_TYPES = [
 type ReviewType = 'one_line' | 'short' | 'long';
 
 export function ReviewForm({ bookId, onSubmit }: ReviewFormProps) {
+  const intent = useRequestIntent();
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewType, setReviewType] = useState<ReviewType>('short');
@@ -73,7 +76,7 @@ export function ReviewForm({ bookId, onSubmit }: ReviewFormProps) {
     try {
       const res = await fetch(`/api/books/${bookId}/reviews`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...intent.headers({ rating, body, reviewType, selectedMoods, spoilerWarning, readDate, editionRead }) },
         body: JSON.stringify({
           star_rating: rating,
           body: body.trim(),
@@ -85,6 +88,7 @@ export function ReviewForm({ bookId, onSubmit }: ReviewFormProps) {
         }),
       });
       if (res.ok) {
+        intent.complete();
         setSuccess(true);
         onSubmit?.();
       } else {

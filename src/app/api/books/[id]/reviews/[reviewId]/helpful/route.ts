@@ -1,61 +1,26 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { checkRouteRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
-const schema = z.object({ value: z.enum(['true', 'false']) });
-
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string; reviewId: string } }
-) {
+export async function POST(request: Request, { params }: { params: { id: string; reviewId: string } }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const url = new URL(request.url);
-  const parsed = schema.safeParse({ value: url.searchParams.get('value') ?? 'true' });
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid value' }, { status: 400 });
-
-  const isHelpful = parsed.data.value === 'true';
-  const supabase = createClient();
-
-  // Upsert vote
-  const { data: existing } = await supabase
-    .from('review_helpfulness_votes')
-    .select('id, is_helpful')
-    .eq('review_id', params.reviewId)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (existing) {
-    if (existing.is_helpful === isHelpful) {
-      // Toggle off
-      await supabase.from('review_helpfulness_votes').delete().eq('id', existing.id);
-      const delta = isHelpful ? -1 : 0;
-      const delta2 = isHelpful ? 0 : -1;
-      await supabase.rpc('increment_review_helpfulness' as never, {
-        p_review_id: params.reviewId, p_helpful_delta: delta, p_unhelpful_delta: delta2,
-      } as never);
-    } else {
-      await supabase.from('review_helpfulness_votes').update({ is_helpful: isHelpful }).eq('id', existing.id);
-      const delta = isHelpful ? 1 : -1;
-      const delta2 = isHelpful ? -1 : 1;
-      await supabase.rpc('increment_review_helpfulness' as never, {
-        p_review_id: params.reviewId, p_helpful_delta: delta, p_unhelpful_delta: delta2,
-      } as never);
-    }
-  } else {
-    await supabase.from('review_helpfulness_votes').insert({ review_id: params.reviewId, user_id: user.id, is_helpful: isHelpful });
-    await supabase.rpc('increment_review_helpfulness' as never, {
-      p_review_id: params.reviewId, p_helpful_delta: isHelpful ? 1 : 0, p_unhelpful_delta: isHelpful ? 0 : 1,
-    } as never);
+  if (!z.object({ id: z.string().uuid(), reviewId: z.string().uuid() }).safeParse(params).success) return NextResponse.json({ error: 'Invalid target' }, { status: 400 });
+  const key = request.headers.get('idempotency-key') ?? request.headers.get('x-idempotency-key');
+  if (!key || key.length < 8 || key.length > 200) return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
+  const value = z.enum(['true','false']).safeParse(new URL(request.url).searchParams.get('value'));
+  if (!value.success) return NextResponse.json({ error: 'Invalid value' }, { status: 400 });
+  if (!await checkRouteRateLimit(user.id,'social')) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const { data, error } = await createServiceClient().rpc('apply_book_interaction' as never, {
+    p_user_id: user.id, p_book_id: params.id, p_action: 'helpfulness', p_key: key, p_review_id: params.reviewId, p_value: value.data === 'true',
+  } as never);
+  if (error) {
+    const status = error.code === 'P1001' ? 409 : error.code === 'P1003' ? 404 : 503;
+    return NextResponse.json({ error: status === 409 ? 'Conflicting idempotency key' : status === 404 ? 'Target unavailable' : 'Interaction unavailable' }, { status });
   }
-
-  return NextResponse.json({ ok: true });
-}
-
-export async function GET(request: Request, ctx: { params: { id: string; reviewId: string } }) {
-  return POST(request, ctx);
+  return NextResponse.json(data);
 }

@@ -8,6 +8,8 @@ interface ApiResponse<T = unknown> {
   ok: boolean;
 }
 
+const pendingIntents = new Map<string, string>();
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -25,11 +27,20 @@ async function request<T>(
   params?: Record<string, string | number | undefined>,
   extraHeaders?: Record<string, string>,
 ): Promise<T> {
-  const token = useAuthStore.getState().token;
+  const { token, user } = useAuthStore.getState();
+  const signature = JSON.stringify([user?.id ?? token, method, path, body]);
+  const mutating = method !== 'GET';
+  const suppliedKey = Object.entries(extraHeaders ?? {}).find(([name]) => /^(x-)?idempotency-key$/i.test(name))?.[1];
+  let intentKey = suppliedKey ?? pendingIntents.get(signature);
+  if (mutating && !intentKey) {
+    intentKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    pendingIntents.set(signature, intentKey);
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...extraHeaders,
+    ...(mutating ? { 'Idempotency-Key': intentKey!, 'X-Idempotency-Key': intentKey! } : {}),
+    ...Object.fromEntries(Object.entries(extraHeaders ?? {}).filter(([name]) => !/^(x-)?idempotency-key$/i.test(name))),
   };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -54,12 +65,14 @@ async function request<T>(
     let message = `HTTP ${res.status}`;
     try {
       const json = await res.json();
-      message = json.error ?? message;
+      message = typeof json.error === 'string' ? json.error : message;
     } catch {}
     throw new ApiError(res.status, message);
   }
 
-  return res.json() as Promise<T>;
+  const data = await res.json() as T;
+  if (mutating && !suppliedKey) pendingIntents.delete(signature);
+  return data;
 }
 
 export const api = {

@@ -1,7 +1,7 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
-import { createServiceClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import { sanitizeText } from '@/lib/sanitize';
@@ -31,20 +31,12 @@ export async function POST(request: NextRequest) {
   const { book_id, page_number } = parsed.data;
   const content = sanitizeText(parsed.data.content);
 
-  const serviceSupabase = createServiceClient();
-  const { data: quote, error } = await serviceSupabase
-    .from('quotes')
-    .insert({
-      user_id: user.id,
-      book_id,
-      content,
-      page_number: page_number ?? null,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  let quote;
+  try {
+    const intent = await contentIntent(request, user.id, 'quotes', { book_id, content, page_number: page_number ?? null });
+    quote = await intent.insert();
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Content creation unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
 
   // Award XP for posting a quote
