@@ -1,8 +1,8 @@
+import { directLoginResponse } from '@/lib/auth/second-factor';
 import { clientUser } from '@/lib/user-profile';
 import { NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
-import { createDoSession, SESSION_COOKIE, SESSION_TTL } from '@/lib/db/unified-client';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 
   // Check auth_date is not too old (10 min window)
   const age = Math.floor(Date.now() / 1000) - telegramData.auth_date;
-  if (age > 600) return NextResponse.json({ error: 'Auth data expired' }, { status: 401 });
+  if (age > 600 || age < -60) return NextResponse.json({ error: 'Auth data expired' }, { status: 401 });
 
   const supabase = createServiceClient();
   const telegramId = String(telegramData.id);
@@ -90,38 +90,16 @@ export async function POST(request: Request) {
     const baseUsername = (telegramData.username ?? `tg${telegramId}`).toLowerCase().replace(/[^a-z0-9_]/g, '');
     const username = `${baseUsername}_${Math.floor(Math.random() * 9999)}`;
 
-    const { data: newUser, error } = await supabase
-      .from('users')
-      .insert({
-        id: crypto.randomUUID(),
-        email: null,
-        display_name: displayName,
-        username,
-        avatar_url: telegramData.photo_url ?? null,
-        telegram_id: telegramId,
-        created_at: new Date().toISOString(),
-      })
-      .select('*')
-      .single();
+    const {data:newUser,error}=await supabase.rpc('create_direct_account' as never,{p_id:crypto.randomUUID(),p_email:null,p_username:username,p_display_name:displayName,p_telegram_id:telegramId,p_avatar_url:telegramData.photo_url??null} as never);
 
     if (error || !newUser) {
       return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
     }
-    user = newUser;
+    user=newUser as unknown as typeof user;
   }
 
-  const token = await createDoSession({ id: user.id, email: user.email ?? '' });
-
-  const response = NextResponse.json({ ok: true, token, user: clientUser(user) });
-  response.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: SESSION_TTL,
-    path: '/',
-  });
-
-  return response;
+  if(!user)return NextResponse.json({error:'Account unavailable'},{status:503});
+  return directLoginResponse(user,clientUser(user));
 }
 
 // Supabase mode: redirect to Supabase Telegram OAuth

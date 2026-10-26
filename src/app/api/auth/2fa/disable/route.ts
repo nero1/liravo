@@ -1,86 +1,27 @@
-import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { verifySync } from 'otplib';
 import { z } from 'zod';
-import bcrypt from 'bcryptjs';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
-import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { currentFactorSessionHash, factorHash, factorProfile, factorSessionResponse, verifyFactorProof } from '@/lib/auth/second-factor';
 
-export const dynamic = 'force-dynamic';
-
-const schema = z.object({
-  code: z.string().length(6).regex(/^\d{6}$/).optional(),
-  recoveryCode: z.string().min(8).max(20).optional(),
-}).refine((d) => d.code ?? d.recoveryCode, {
-  message: 'Provide either a TOTP code or a recovery code',
-});
-
-export async function POST(req: Request) {
-  const ip = getClientIp(req);
-  const rate = await checkCriticalRateLimit(ip);
-  if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const raw = await req.text().catch(() => '');
-  if (raw.length > 500) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
-  let body: unknown;
-  try { body = JSON.parse(raw); } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const { code, recoveryCode } = parsed.data;
-
-  const service = createServiceClient();
-  const { data: profile } = await service
-    .from('users')
-    .select('totp_enabled, totp_secret, recovery_codes')
-    .eq('id', user.id)
-    .single();
-
-  if (!profile?.totp_enabled) {
-    return NextResponse.json({ error: '2FA is not enabled' }, { status: 400 });
-  }
-
-  let verified = false;
-
-  if (code && profile.totp_secret) {
-    verified = !!(verifySync({ token: code, secret: profile.totp_secret }) as unknown);
-  } else if (recoveryCode && profile.recovery_codes) {
-    // Check each hashed recovery code
-    for (let i = 0; i < profile.recovery_codes.length; i++) {
-      if (await bcrypt.compare(recoveryCode.toUpperCase(), profile.recovery_codes[i])) {
-        // Consume the code (remove it)
-        const updatedCodes = [...profile.recovery_codes];
-        updatedCodes.splice(i, 1);
-        await service.from('users').update({ recovery_codes: updatedCodes }).eq('id', user.id);
-        verified = true;
-        break;
-      }
-    }
-  }
-
-  if (!verified) {
-    return NextResponse.json({ error: 'Invalid code' }, { status: 422 });
-  }
-
-  // Disable 2FA
-  const { error } = await service
-    .from('users')
-    .update({ totp_enabled: false, totp_secret: null, recovery_codes: null })
-    .eq('id', user.id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  await service.from('security_events').insert({
-    user_id: user.id,
-    event_type: '2fa_disabled',
-  });
-
-  return NextResponse.json({ ok: true });
+export const dynamic='force-dynamic';
+const schema=z.object({code:z.string().regex(/^\d{6}$/).optional(),recoveryCode:z.string().regex(/^[a-fA-F0-9]{5}-?[a-fA-F0-9]{5}$/).optional()}).refine(value=>!!value.code!==!!value.recoveryCode);
+export async function POST(request:Request) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!(await checkCriticalRateLimit(getClientIp(request))).allowed)return NextResponse.json({error:'Too many requests'},{status:429});
+  const key=request.headers.get('idempotency-key');if(!key||key.length<8||key.length>200)return NextResponse.json({error:'Invalid request key'},{status:400});
+  const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:'Invalid verification request'},{status:400});
+  const fingerprint=factorHash(JSON.stringify(parsed.data));
+  try{
+    const {data:previous,error:lookupError}=await createServiceClient().from('content_intents').select('fingerprint').eq('actor_id',user.id).eq('action','auth:disable_factor').eq('intent_key',key).maybeSingle();
+    if(lookupError)throw new Error('Request lookup unavailable');
+    if(previous)return previous.fingerprint===fingerprint?factorSessionResponse({ok:true}):NextResponse.json({error:'Conflicting request key'},{status:409});
+    const profile=await factorProfile(user.id);if(!profile?.totp_enabled)return NextResponse.json({error:'2FA is not enabled'},{status:409});
+    const proof=await verifyFactorProof(profile,parsed.data);if(!proof)return NextResponse.json({error:'Invalid verification code'},{status:422});
+    const {error}=await createServiceClient().rpc('disable_factor_atomic' as never,{p_user_id:user.id,p_version:profile.mfa_version,p_step:proof.step,p_recovery_hash:proof.recoveryHash,p_session_hash:await currentFactorSessionHash(user.id),p_key:key,p_fingerprint:fingerprint} as never);
+    if(error)return NextResponse.json({error:'Code already used or factor state changed'},{status:['P1001','P1003'].includes(error.code)?409:503});
+    return factorSessionResponse({ok:true});
+  }catch{return NextResponse.json({error:'Factor update unavailable'},{status:503});}
 }

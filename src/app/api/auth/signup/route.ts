@@ -83,34 +83,14 @@ export async function POST(request: Request) {
   const password_hash = await bcrypt.hash(password, 12);
   const id = crypto.randomUUID();
 
-  // Generate unique 12-digit referral code
-  let referralCode: string;
-  do {
-    referralCode = String(Math.floor(Math.random() * 1_000_000_000_000)).padStart(12, '0');
-    const { data: codeCheck } = await supabase
-      .from('users')
-      .select('id')
-      .eq('referral_code', referralCode)
-      .maybeSingle();
-    if (!codeCheck) break;
-  } while (true);
-
   // Derive username from email prefix
   const emailPrefix = email.split('@')[0].replace(/[^a-z0-9_]/gi, '_').toLowerCase();
   const username = `${emailPrefix}_${id.slice(0, 6)}`;
 
-  const { error } = await supabase.from('users').insert({
-    id,
-    email,
-    password_hash,
-    username,
-    display_name: emailPrefix,
-    referral_code: referralCode,
-    created_at: new Date().toISOString(),
-  });
+  const {error}=await supabase.rpc('create_direct_account' as never,{p_id:id,p_email:email,p_username:username,p_display_name:emailPrefix,p_password_hash:password_hash} as never);
 
   if (error) {
-    return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
+    return NextResponse.json({error:error.code==='23505'?'Account already exists':'Failed to create account'},{status:error.code==='23505'?409:503});
   }
 
   const token = await createDoSession({ id, email });

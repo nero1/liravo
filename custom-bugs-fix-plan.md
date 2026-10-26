@@ -7,6 +7,7 @@ Updated 26 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Verify self/admin guards for `/api/users/*` mutations; retain verified cross-user social targets.
 - ✅ Enforce DB-backed `is_admin` verification via service-side query/RPC.
 - ✅ Add regression tests: self access, cross-user denial, admin override.
+- ✅ Enforce real second-factor login, session-bound enrollment, one-time recovery, encrypted secrets and Supabase session policies.
 
 🟡 2. Financial correctness and integrity (Critical)
 - ✅ Implement transactional payout reserve RPC (check available balance + reserve + create payout atomically).

@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { getRedisClient } from '@/lib/redis';
+import { readDirectSession } from '@/lib/auth/second-factor';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { SESSION_COOKIE } from '@/lib/db/unified-client';
 
@@ -25,12 +25,7 @@ async function getDoUser(): Promise<SessionUser | null> {
     const authHeader = headers().get('authorization');
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
-      const redis = getRedisClient();
-      const raw = await redis.get(`do:session:${token}`);
-      if (raw) {
-        try { return JSON.parse(raw) as SessionUser; } catch { return null; }
-      }
-      return null;
+      return readDirectSession(token);
     }
   } catch { return null; }
 
@@ -38,15 +33,7 @@ async function getDoUser(): Promise<SessionUser | null> {
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
-  const redis = getRedisClient();
-  const raw = await redis.get(`do:session:${token}`);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as SessionUser;
-  } catch {
-    return null;
-  }
+  return readDirectSession(token);
 }
 
 async function getSupabaseUser(): Promise<SessionUser | null> {

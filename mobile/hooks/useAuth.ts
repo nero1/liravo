@@ -4,39 +4,28 @@ import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api';
 import type { UserRow } from '@/types';
 
-export function useAuth() {
-  const { user, token, isLoading, setUser, setToken, setLoading, signOut, loadStoredToken } = useAuthStore();
+export function useAuth(initialize=false) {
+  const { user, token, isLoading, setUser, setToken, setLoading, signOut, loadStoredToken, mfaChallenge, setMfaChallenge } = useAuthStore();
 
-  useEffect(() => {
-    if (isSupabaseMode) {
-      initSupabase();
-    } else {
-      initDigitalOcean();
+  useEffect(()=>{
+    if(!initialize)return;
+    let active=true;
+    const authenticate=async(accessToken:string)=>{
+      await setToken(accessToken);
+      try{
+        const result=await api.post<{mfaRequired?:boolean;challengeToken?:string;user?:UserRow}>('/api/auth/session',{});
+        if(!active)return;
+        if(result.mfaRequired){setUser(null);setMfaChallenge(result.challengeToken!);}else{setMfaChallenge(null);setUser(result.user??null);}
+      }catch{if(active)await signOut();}finally{if(active)setLoading(false);}
+    };
+    if(isSupabaseMode){
+      void supabase.auth.getSession().then(({data:{session}})=>{if(active){if(session)void authenticate(session.access_token);else setLoading(false);}});
+      const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{queueMicrotask(()=>{if(active){if(session)void authenticate(session.access_token);else{void signOut();setLoading(false);}}});});
+      return()=>{active=false;subscription.unsubscribe();};
     }
-  }, []);
-
-  // ── Supabase mode ────────────────────────────────────────────────────────────
-  async function initSupabase() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      await setToken(session.access_token);
-      await fetchProfile();
-    } else {
-      setLoading(false);
-    }
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        await setToken(session.access_token);
-        await fetchProfile();
-      } else {
-        await signOut();
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }
+    void initDigitalOcean();
+    return()=>{active=false;};
+  },[initialize]);
 
   // ── DigitalOcean mode ────────────────────────────────────────────────────────
   async function initDigitalOcean() {
@@ -62,31 +51,23 @@ export function useAuth() {
   }
 
   async function logout() {
-    if (isSupabaseMode) {
-      await supabase.auth.signOut();
-    } else {
-      try { await api.post('/api/auth/logout', {}); } catch { /* best effort */ }
-    }
+    try{await api.post('/api/auth/logout',{});}catch{}
+    if(isSupabaseMode)await supabase.auth.signOut();
     await signOut();
   }
 
-  async function loginWithEmail(email: string, password: string): Promise<void> {
-    const res = await api.post<{ token: string; user: UserRow }>('/api/auth/login', { email, password });
-    await setToken(res.token);
-    setUser(res.user);
+  type LoginResult={token?:string;user?:UserRow;mfaRequired?:boolean;challengeToken?:string};
+  async function acceptLogin(result:LoginResult){
+    if(result.mfaRequired){setMfaChallenge(result.challengeToken!);setUser(null);return;}
+    await setToken(result.token!);setUser(result.user!);setMfaChallenge(null);
   }
-
-  async function signUpWithEmail(email: string, password: string): Promise<void> {
-    const res = await api.post<{ token: string; user: UserRow }>('/api/auth/signup', { email, password });
-    await setToken(res.token);
-    setUser(res.user);
+  async function loginWithEmail(email:string,password:string){await acceptLogin(await api.post<LoginResult>('/api/auth/login',{email,password}));}
+  async function signUpWithEmail(email:string,password:string){await acceptLogin(await api.post<LoginResult>('/api/auth/signup',{email,password}));}
+  async function loginWithGoogleToken(idToken:string){await acceptLogin(await api.post<LoginResult>('/api/auth/google',{idToken}));}
+  async function verifySecondFactor(value:string,recovery:boolean){
+    const result=await api.post<LoginResult>('/api/auth/2fa/verify',{challengeToken:useAuthStore.getState().mfaChallenge,...(recovery?{recoveryCode:value}:{code:value})});
+    if(result.token)await setToken(result.token);
+    setUser(result.user!);setMfaChallenge(null);
   }
-
-  async function loginWithGoogleToken(idToken: string): Promise<void> {
-    const res = await api.post<{ token: string; user: UserRow }>('/api/auth/google', { idToken });
-    await setToken(res.token);
-    setUser(res.user);
-  }
-
-  return { user, token, isLoading, logout, fetchProfile, loginWithEmail, signUpWithEmail, loginWithGoogleToken };
+  return {user,token,isLoading,mfaChallenge,logout,fetchProfile,loginWithEmail,signUpWithEmail,loginWithGoogleToken,verifySecondFactor};
 }

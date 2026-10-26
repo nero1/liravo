@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { safeReturnPath } from '@/lib/utils';
+import { SecondFactorForm } from '@/components/auth/SecondFactorForm';
 import { createClient } from '@/lib/supabase/client';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -23,6 +25,23 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
+  const [challengeToken,setChallengeToken]=useState<string|null>(null);
+  function completeLogin(user?:{onboarding_complete?:boolean}){
+    const next=new URLSearchParams(window.location.search).get('next');
+    router.push(user?.onboarding_complete===false?'/onboarding':safeReturnPath(next));router.refresh();
+  }
+  useEffect(()=>{
+    if(isDirectPostgresMode||new URLSearchParams(window.location.search).get('mfa')!=='required')return;
+    let active=true;
+    fetch('/api/auth/session',{method:'POST'}).then(async response=>{
+      if(!response.ok)throw new Error('Session unavailable');
+      const data=await response.json();
+      if(active){if(data.mfaRequired)setChallengeToken(data.challengeToken);else{router.push('/');router.refresh();}}
+    }).catch(()=>{if(active)setError(t('signInFailed'));});
+    return()=>{active=false;};
+  },[router,t]);
+  if(challengeToken)return <SecondFactorForm challengeToken={challengeToken} onSuccess={completeLogin} onCancel={()=>{setChallengeToken(null);router.replace('/login');}} />;
+
 
   // ── Direct-postgres mode ──────────────────────────────────────────────────────
   if (isDirectPostgresMode) {
@@ -52,6 +71,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
           return;
         }
 
+        if(json.mfaRequired){setChallengeToken(json.challengeToken);return;}
         router.push(isSignup ? '/onboarding' : '/');
         router.refresh();
       } catch { setError(t('signInFailed')); } finally { setLoading(null); }

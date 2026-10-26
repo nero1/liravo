@@ -8,11 +8,12 @@ vi.mock('@/lib/supabase/server',()=>({createClient:vi.fn(),createServiceClient:v
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
 vi.mock('@/lib/db/provider',()=>({isDirectPostgres:()=>false}));
 vi.mock('@/services/badges',()=>({checkAndAwardBadges:vi.fn()}));
+vi.mock('@/lib/auth/second-factor',()=>({factorProfile:vi.fn(async()=>({totp_enabled:false}))}));
 vi.mock('@/lib/metrics',()=>({recordMetric:vi.fn()}));
 beforeEach(()=>vi.clearAllMocks());
 
 it('keeps successful OAuth return locations on the application origin',async()=>{
-  const client={auth:{exchangeCodeForSession:vi.fn().mockResolvedValue({error:null})},from:()=>({select:()=>({eq:()=>({single:async()=>({data:{onboarding_complete:true}})})})})};
+  const client={auth:{getUser:vi.fn().mockResolvedValue({data:{user:{id:'signed-in-user'}}}),exchangeCodeForSession:vi.fn().mockResolvedValue({error:null})},from:()=>({select:()=>({eq:()=>({single:async()=>({data:{onboarding_complete:true}})})})})};
   vi.mocked(createClient).mockReturnValue(client as unknown as ReturnType<typeof createClient>);
   vi.mocked(getCurrentUser).mockResolvedValue({id:'signed-in-user',email:''});
   for(const next of ['@evil.test','.evil.test','//evil.test','https://evil.test']) {
@@ -26,7 +27,7 @@ it('keeps successful OAuth return locations on the application origin',async()=>
 });
 
 it('attributes referrals only through the service transaction for the authenticated user',async()=>{
-  const client={auth:{exchangeCodeForSession:vi.fn().mockResolvedValue({error:null})},from:()=>({select:()=>({eq:()=>({single:async()=>({data:{onboarding_complete:true}})})})})};
+  const client={auth:{getUser:vi.fn().mockResolvedValue({data:{user:{id:'signed-in-user'}}}),exchangeCodeForSession:vi.fn().mockResolvedValue({error:null})},from:()=>({select:()=>({eq:()=>({single:async()=>({data:{onboarding_complete:true}})})})})};
   vi.mocked(createClient).mockReturnValue(client as unknown as ReturnType<typeof createClient>);
   vi.mocked(getCurrentUser).mockResolvedValue({id:'signed-in-user',email:''});
   const rpc=vi.fn().mockResolvedValue({data:'verified-referrer',error:null});

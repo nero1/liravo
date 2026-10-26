@@ -10,9 +10,12 @@ import { AccountHardeningBanner } from '@/components/profile/AccountHardeningBan
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  if (isDirectPostgres() && !await getCurrentUser()) redirect('/login');
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user=await getCurrentUser();
+  if(isDirectPostgres()&&!user)redirect('/login');
+  if(!isDirectPostgres()&&!user){
+    const {data:{user:primaryUser}}=await createClient({skipMfa:true}).auth.getUser();
+    if(primaryUser)redirect('/login?mfa=required');
+  }
 
   const moderator = user ? await isModerator(user.id) : false;
 

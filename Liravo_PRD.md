@@ -309,7 +309,7 @@ After onboarding, the platform periodically (non-intrusively) encourages the use
 
 - **Add an email address** for account recovery purposes. This is optional. Email is not used for marketing. A verification link is sent to confirm the address.
 - **Set a password** associated with their email (optional, only if they added an email).
-- **Enable 2FA** via an authenticator app (Google Authenticator, Authy, etc.). Optional but prominently recommended. No SMS 2FA at any point.
+- **Enable 2FA** via an authenticator app (Google Authenticator, Authy, etc.). Optional but prominently recommended. No SMS 2FA at any point. Enrollment is session-bound; encrypted factors, one-time recovery codes and versioned session proofs enforce verification before application access, including Supabase RLS.
 
 These prompts appear:
 - Once during onboarding (skippable).

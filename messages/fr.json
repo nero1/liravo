@@ -9,6 +9,16 @@
     "notifications": "Notifications"
   },
   "auth": {
+    "mfaTitle": "Vérification à deux facteurs",
+    "mfaDescription": "Saisissez un code de votre application d’authentification ou utilisez un code de récupération.",
+    "authenticatorCode": "Code d’authentification",
+    "recoveryCode": "Code de récupération",
+    "mfaFailed": "La vérification a échoué. Vérifiez le code ou reconnectez-vous si la demande a expiré.",
+    "mfaVerifying": "Vérification…",
+    "mfaVerify": "Vérifier et continuer",
+    "useAuthenticator": "Utiliser un code d’authentification",
+    "useRecovery": "Utiliser un code de récupération",
+    "mfaCancel": "Retour à la connexion",
     "signInWithGoogle": "Se connecter avec Google",
     "signInWithTelegram": "Se connecter avec Telegram",
     "continueWithGoogle": "Continuer avec Google",

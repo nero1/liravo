@@ -389,7 +389,7 @@ describe('audit — zero raw supabase.auth.getUser() calls in API routes', () =>
   it('getCurrentUser works in all modes (source inspection)', () => {
     const src = readSrc('lib', 'auth', 'getCurrentUser.ts');
     expect(src).toContain('isDirectPostgres');
-    expect(src).toContain('do:session:');
+    expect(src).toContain('readDirectSession');
     expect(src).toContain('getSupabaseUser');
     expect(src).toContain('getDoUser');
   });

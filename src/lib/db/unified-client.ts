@@ -10,6 +10,7 @@
  *   - supabase.storage.from(bucket).*
  */
 import { cookies } from 'next/headers';
+import { factorHash, readDirectSession } from '@/lib/auth/second-factor';
 import { getRedisClient } from '@/lib/redis';
 import { getPgQueryBuilderFactory } from './query-builder';
 import { getStorageProvider } from '@/lib/storage/provider';
@@ -21,6 +22,7 @@ const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
 interface DoUser {
   id: string;
   email: string;
+  mfaVersion?:number;
 }
 
 function buildAuthModule(readCookie: () => string | undefined) {
@@ -29,22 +31,13 @@ function buildAuthModule(readCookie: () => string | undefined) {
       const token = readCookie();
       if (!token) return { data: { user: null }, error: null };
 
-      const redis = getRedisClient();
-      const raw = await redis.get(`do:session:${token}`);
-      if (!raw) return { data: { user: null }, error: null };
-
-      try {
-        return { data: { user: JSON.parse(raw) as DoUser }, error: null };
-      } catch {
-        return { data: { user: null }, error: null };
-      }
+      return {data:{user:await readDirectSession(token)},error:null};
     },
 
     async signOut(): Promise<void> {
       const token = readCookie();
       if (!token) return;
-      const redis = getRedisClient();
-      await redis.del(`do:session:${token}`);
+      await destroySession(token);
       // Cookie clearing must be done in the route handler that has access to the response.
       // Routes should call cookies().delete(SESSION_COOKIE) after signOut().
     },
@@ -131,15 +124,7 @@ export async function getDoUserFromRequest(
   const token = getCookieFn(SESSION_COOKIE);
   if (!token) return null;
 
-  const redis = getRedisClient();
-  const raw = await redis.get(`do:session:${token}`);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as DoUser;
-  } catch {
-    return null;
-  }
+  return readDirectSession(token);
 }
 
 export async function createDoSession(user: DoUser): Promise<string> {
@@ -150,8 +135,10 @@ export async function createDoSession(user: DoUser): Promise<string> {
 }
 
 export async function destroySession(token: string): Promise<void> {
-  const redis = getRedisClient();
-  await redis.del(`do:session:${token}`);
+  if(!/^mfa_[a-f0-9]{64}$/.test(token))await getRedisClient().del(`do:session:${token}`);
+  const {createServiceClient}=await import('@/lib/supabase/server');
+  const {error}=await createServiceClient().from('auth_factor_grants').delete().eq('session_hash',factorHash(token));
+  if(error)throw new Error('Session revocation unavailable');
 }
 
 export { SESSION_COOKIE, SESSION_TTL };

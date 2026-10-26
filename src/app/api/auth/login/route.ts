@@ -1,9 +1,9 @@
+import { directLoginResponse } from '@/lib/auth/second-factor';
 import { clientUser } from '@/lib/user-profile';
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
-import { createDoSession, SESSION_COOKIE, SESSION_TTL } from '@/lib/db/unified-client';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
@@ -79,15 +79,17 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  const { data: user } = await supabase
+  const { data: user, error:lookupError } = await supabase
     .from('users')
     .select('id, email, password_hash, deleted_at')
     .eq('email', email)
     .maybeSingle();
 
+  if(lookupError)return NextResponse.json({error:'Authentication unavailable'},{status:503});
+
   // Timing-safe: always hash compare even on not-found to prevent enumeration
   if (!user || user.deleted_at) {
-    await bcrypt.compare(password, '$2b$12$invalidhashfortimingnormalization000000000000000000');
+    await bcrypt.compare(password, '$2b$12$9e0BKWDqcma0ywIEdZgZG.SwcEW940wVFsjKKETPzSDZcfk3yxqXa');
     await redis.incr(failKey);
     await redis.expire(failKey, FAILED_ATTEMPTS_TTL);
     const newFail = failCount + 1;
@@ -115,23 +117,6 @@ export async function POST(request: Request) {
   // Successful login — clear fail counter
   await redis.del(failKey);
 
-  const token = await createDoSession({ id: user.id, email: user.email });
-
-  const supabaseForProfile = createServiceClient();
-  const { data: profile } = await supabaseForProfile
-    .from('users')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  const response = NextResponse.json({ ok: true, token, user: clientUser(profile) });
-  response.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: SESSION_TTL,
-    path: '/',
-  });
-
-  return response;
+  const {data:profile}=await createServiceClient().from('users').select('*').eq('id',user.id).maybeSingle();
+  return directLoginResponse(user,clientUser(profile));
 }

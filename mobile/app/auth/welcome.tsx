@@ -19,7 +19,8 @@ export default function WelcomeScreen() {
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { loginWithEmail, signUpWithEmail, loginWithGoogleToken } = useAuth();
+  const {loginWithEmail,signUpWithEmail,loginWithGoogleToken,mfaChallenge,verifySecondFactor,logout}=useAuth();
+  const [factorCode,setFactorCode]=useState(''),[useRecovery,setUseRecovery]=useState(false);
 
   // Google OAuth request (used only in DO mode)
   const [, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
@@ -88,6 +89,15 @@ export default function WelcomeScreen() {
   }
 
   const signInWithGoogle = isSupabaseMode ? signInWithGoogleSupabase : signInWithGoogleDO;
+
+  if(mfaChallenge)return <SafeAreaView className="flex-1 bg-background px-6 justify-center gap-4">
+    <Text className="text-2xl font-bold text-foreground">Two-factor verification</Text>
+    <Text className="text-muted-foreground">{useRecovery?'Enter a recovery code.':'Enter a code from your authenticator app.'}</Text>
+    <TextInput accessibilityLabel={useRecovery?'Recovery code':'Authenticator code'} value={factorCode} onChangeText={setFactorCode} autoCapitalize="characters" keyboardType={useRecovery?'default':'number-pad'} maxLength={useRecovery?11:6} textContentType="oneTimeCode" className="border border-border rounded-xl p-4 text-foreground" />
+    <TouchableOpacity accessibilityRole="button" disabled={loading} className="rounded-xl bg-accent p-4 items-center" onPress={async()=>{setLoading(true);try{await verifySecondFactor(factorCode,useRecovery);}catch{Alert.alert('Verification failed','Check the code or sign in again if the challenge expired.');}finally{setLoading(false);}}}><Text className="text-white">{loading?'Verifying…':'Verify and continue'}</Text></TouchableOpacity>
+    <TouchableOpacity accessibilityRole="button" disabled={loading} onPress={()=>{setUseRecovery(!useRecovery);setFactorCode('');}}><Text className="text-accent">{useRecovery?'Use authenticator code':'Use a recovery code'}</Text></TouchableOpacity>
+    <TouchableOpacity accessibilityRole="button" disabled={loading} onPress={()=>{setFactorCode('');void logout();}}><Text className="text-muted-foreground">Back to sign in</Text></TouchableOpacity>
+  </SafeAreaView>;
 
   return (
     <SafeAreaView className="flex-1 bg-background">

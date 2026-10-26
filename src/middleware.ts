@@ -105,10 +105,6 @@ export async function middleware(request: NextRequest) {
     return finish(NextResponse.redirect(new URL('/login', request.url)));
   }
 
-  // Redirect authenticated users away from auth pages
-  if (pathname === '/login' && user) {
-    return finish(NextResponse.redirect(new URL('/', request.url)));
-  }
 
   return finish();
 }
