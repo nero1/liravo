@@ -37,8 +37,8 @@ export default async function WritingProgressPage() {
     .eq('user_id', user.id);
 
   const { data: challengeEntries } = await supabase
-    .from('writing_challenge_entries')
-    .select('word_count, created_at')
+    .from('writing_challenge_submissions')
+    .select('word_count, created_at:submitted_at')
     .eq('user_id', user.id);
 
   const { data: workshopSubs } = await supabase
@@ -64,7 +64,7 @@ export default async function WritingProgressPage() {
     .from('user_badges')
     .select('badge_id, awarded_at')
     .eq('user_id', user.id)
-    .in('badge_id', ['first_prompt', 'writing_streak_7', 'writing_streak_30', 'challenge_finisher', 'workshop_veteran', 'prolific_writer']);
+    .in('badge_id', ['first_prompt', 'writing_streak_7', 'writing_streak_30', 'first_draft', 'workshop_regular', 'prolific_writer']);
 
   // Weekly word counts (last 7 weeks)
   const weeklyData: WeeklyEntry[] = [];

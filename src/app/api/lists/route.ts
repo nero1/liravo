@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { decodeCursor, encodeCursor, cursorFilter } from '@/lib/pagination';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
@@ -59,7 +60,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
   const user = await getCurrentUser();
 
   if (!user) {
@@ -78,19 +78,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: list, error } = await supabase
-    .from('reading_lists')
-    .insert({
+  let list;
+  try {
+    const intent=await contentIntent(request,user.id,'reading_lists',{
       user_id: user.id,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       is_public: parsed.data.is_public,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: 'Failed to create list' }, { status: 500 });
+    });
+    list = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
   return NextResponse.json({ list }, { status: 201 });

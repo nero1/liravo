@@ -1,6 +1,5 @@
 import { singleRelation } from '@/lib/utils';
 import { createServiceClient } from '@/lib/supabase/server';
-import { awardXP } from '@/services/xp';
 
 export interface BadgeDefinition {
   id: string;
@@ -119,20 +118,9 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
 // ─── Helper types ─────────────────────────────────────────────────────────────
 type Supabase = ReturnType<typeof createServiceClient>;
 
-async function hasAwardedBadge(supabase: Supabase, userId: string, badgeId: string): Promise<boolean> {
-  const { data } = await supabase.from('user_badges').select('id').eq('user_id', userId).eq('badge_id', badgeId).maybeSingle();
-  return !!data;
-}
-
 async function awardBadge(supabase: Supabase, userId: string, badge: BadgeDefinition): Promise<void> {
-  if (await hasAwardedBadge(supabase, userId, badge.id)) return;
-  await supabase.from('user_badges').insert({ user_id: userId, badge_id: badge.id });
-  await awardXP(userId, badge.xp_reward, `badge:${badge.id}`, `badge:${badge.id}`);
-  await supabase.from('notifications').insert({
-    user_id: userId,
-    type: 'badge_earned',
-    message: `${badge.icon} You earned the "${badge.name}" badge! +${badge.xp_reward} XP`,
-  });
+  const {error}=await supabase.rpc('award_badge_atomic' as never,{p_user_id:userId,p_badge_id:badge.id,p_xp:badge.xp_reward,p_name:badge.name,p_icon:badge.icon} as never);
+  if(error)throw new Error('Badge award unavailable');
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -146,6 +134,11 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
     .single();
 
   if (!profile) return;
+  if(trigger==='finish_book'){
+    const {data:completed,error}=await supabase.rpc('count_verified_books' as never,{p_user_id:userId} as never);
+    if(error||typeof completed!=='number')throw new Error('Reading milestones unavailable');
+    profile.books_read_count=completed;
+  }
 
   const relevantBadges = BADGE_DEFINITIONS.filter((b) => b.trigger === trigger);
 
@@ -262,8 +255,9 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Workshop Regular (5 workshops) ──
       case 'workshop_regular': {
-        const { count } = await supabase.from('workshop_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
-        qualifies = (count ?? 0) >= 5; break;
+        const {data,error}=await supabase.from('workshop_submissions').select('room_id').eq('user_id',userId);
+        if(error)throw new Error('Workshop milestones unavailable');
+        qualifies=new Set((data??[]).map(row=>row.room_id)).size>=5; break;
       }
 
       // ── Prolific Writer (10k words) ──
@@ -314,7 +308,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
             .in('shelf_id', shelves.map((s) => s.id)).not('finished_at', 'is', null).order('finished_at', { ascending: false }).limit(20);
           qualifies = (recent ?? []).some((b: { added_at: string; finished_at: string }) => {
             const diff = new Date(b.finished_at).getTime() - new Date(b.added_at).getTime();
-            return diff <= 3 * 24 * 60 * 60 * 1000;
+            return diff >= 0 && diff <= 3 * 24 * 60 * 60 * 1000;
           });
         }
         break;
@@ -332,7 +326,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
             const diff = end.getTime() - start.getTime();
             const startDay = start.getDay();
             // Started Fri/Sat/Sun and finished within 3 days
-            return diff <= 3 * 24 * 60 * 60 * 1000 && (startDay === 5 || startDay === 6 || startDay === 0);
+            return diff >= 0 && diff <= 3 * 24 * 60 * 60 * 1000 && (startDay === 5 || startDay === 6 || startDay === 0);
           });
         }
         break;

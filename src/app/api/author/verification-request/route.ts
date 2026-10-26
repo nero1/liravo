@@ -1,7 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createNotification } from '@/services/notifications';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +14,6 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
 
   if (!user) {
@@ -28,9 +26,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { error } = await supabase
-    .from('author_verification_requests')
-    .insert({
+  try {
+    const intent=await contentIntent(req,user.id,'author_verification_requests',{
       user_id: user.id,
       pen_name: parsed.data.pen_name,
       publisher: parsed.data.publisher ?? null,
@@ -39,25 +36,9 @@ export async function POST(req: Request) {
       social_proof_url: parsed.data.social_proof_url || null,
       status: 'pending',
     });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Notify admins
-  const { data: admins } = await supabase
-    .from('users')
-    .select('id')
-    .eq('is_admin', true);
-
-  for (const admin of admins ?? []) {
-    await createNotification({
-      userId: admin.id,
-      type: 'author_qa_answer',
-      actorId: user.id,
-      entityType: 'author_verification_request',
-      message: `A new author verification request has been submitted by a user.`,
-    });
+    await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
   return NextResponse.json({ message: 'Verification request submitted' }, { status: 201 });

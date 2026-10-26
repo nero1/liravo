@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -23,6 +24,7 @@ export async function GET() {
     .from('reading_rooms')
     .select('id, name, book_id, is_public, created_by, is_active, created_at')
     .eq('is_active', true)
+    .eq('is_public',true)
     .order('created_at', { ascending: false })
     .limit(30);
 
@@ -34,7 +36,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
 
   if (!user) {
@@ -47,29 +48,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: room, error } = await supabase
-    .from('reading_rooms')
-    .insert({
+  let room;
+  try {
+    const intent=await contentIntent(req,user.id,'reading_rooms',{
       name: parsed.data.name,
       book_id: parsed.data.book_id ?? null,
       is_public: parsed.data.is_public,
       created_by: user.id,
       is_active: true,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Add creator as first participant
-  await supabase
-    .from('room_participants')
-    .insert({
-      room_id: room.id,
-      user_id: user.id,
     });
+    room = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 
   return NextResponse.json({ room }, { status: 201 });
 }

@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
@@ -5,7 +6,6 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
-// book_passes table may not exist — fallback to notifications table with type='book_pass'
 
 const PassBookSchema = z.object({
   book_id: z.string().uuid(),
@@ -14,7 +14,6 @@ const PassBookSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
   const user = await getCurrentUser();
 
   if (!user) {
@@ -33,75 +32,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { book_id, recipient_id, message } = parsed.data;
-
-  // Verify the book exists
-  const { data: book } = await supabase
-    .from('books')
-    .select('id, title, author_name')
-    .eq('id', book_id)
-    .single();
-
-  if (!book) {
-    return NextResponse.json({ error: 'Book not found' }, { status: 404 });
+  try {
+    const intent=await contentIntent(request,user.id,'book_passes',{book_id:parsed.data.book_id,recipient_id:parsed.data.recipient_id,message:parsed.data.message??null});
+    const pass=await intent.insert();
+    return NextResponse.json({success:true,pass},{status:201});
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:'Book pass unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
-
-  // Verify the recipient is followed by sender (social graph check)
-  const { data: followCheck } = await supabase
-    .from('follows')
-    .select('follower_id')
-    .eq('follower_id', user.id)
-    .eq('following_id', recipient_id)
-    .maybeSingle();
-
-  if (!followCheck) {
-    return NextResponse.json({ error: 'You can only pass books to users you follow' }, { status: 403 });
-  }
-
-  // Get sender display name
-  const { data: senderProfile } = await supabase
-    .from('users')
-    .select('display_name')
-    .eq('id', user.id)
-    .single();
-
-  // Try to store in book_passes table first
-  const { error: passError } = await supabase 
-    .from('book_passes')
-    .insert({
-      sender_id: user.id,
-      recipient_id,
-      book_id,
-      message: message ?? null,
-    });
-
-  if (passError) {
-    // Fallback: store in notifications table
-    await supabase.from('notifications').insert({
-      user_id: recipient_id,
-      type: 'book_pass',
-      actor_id: user.id,
-      entity_type: 'book',
-      entity_id: book_id,
-      message: message
-        ? `${senderProfile?.display_name ?? 'Someone'} passed you "${book.title}" — "${message}"`
-        : `${senderProfile?.display_name ?? 'Someone'} passed you "${book.title}" by ${book.author_name}`,
-    });
-  } else {
-    // Also send notification
-    await supabase.from('notifications').insert({
-      user_id: recipient_id,
-      type: 'book_pass',
-      actor_id: user.id,
-      entity_type: 'book',
-      entity_id: book_id,
-      message: message
-        ? `${senderProfile?.display_name ?? 'Someone'} passed you "${book.title}" — "${message}"`
-        : `${senderProfile?.display_name ?? 'Someone'} passed you "${book.title}" by ${book.author_name}`,
-    });
-  }
-
-  return NextResponse.json({ success: true });
 }
 
 export async function GET() {

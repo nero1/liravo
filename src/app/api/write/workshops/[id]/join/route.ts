@@ -1,49 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { z } from 'zod';
 
-export const dynamic = 'force-dynamic';
-
-export async function POST(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { data: room } = await supabase
-    .from('workshop_rooms')
-    .select('id, max_members, member_count')
-    .eq('id', params.id)
-    .single();
-
-  if (!room) return NextResponse.json({ error: 'Room not found' }, { status: 404 });
-
-  if ((room.member_count ?? 0) >= (room.max_members ?? 8)) {
-    return NextResponse.json({ error: 'Room is full' }, { status: 409 });
-  }
-
-  // Check already a member
-  const { data: existing } = await supabase
-    .from('workshop_members')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('room_id', params.id)
-    .maybeSingle();
-
-  if (existing) return NextResponse.json({ message: 'Already a member' });
-
-  const { error } = await supabase
-    .from('workshop_members')
-    .insert({ user_id: user.id, room_id: params.id });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  await supabase
-    .from('workshop_rooms')
-    .update({ member_count: (room.member_count ?? 0) + 1 })
-    .eq('id', params.id);
-
-  return NextResponse.json({ success: true });
+export const dynamic='force-dynamic';
+export async function POST(_request:Request,{params}:{params:{id:string}}) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid target'},{status:400});
+  const {data,error}=await createServiceClient().rpc('join_content_group' as never,{p_user_id:user.id,p_kind:'workshop',p_target:params.id} as never);
+  if(error)return NextResponse.json({error:'Membership unavailable'},{status:({P1003:403,P1004:409,P1005:404} as Record<string,number>)[error.code]??503});
+  return NextResponse.json(data);
 }

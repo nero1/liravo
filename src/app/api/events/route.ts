@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -11,7 +12,7 @@ const createSchema = z.object({
   event_date: z.string().datetime(),
   is_paid: z.boolean().default(false),
   price: z.number().min(0).optional(),
-  currency: z.string().default('USD'),
+  currency: z.enum(['USD','NGN','EUR']).default('USD'),
   book_id: z.string().uuid().optional(),
   max_attendees: z.number().int().min(1).optional(),
 });
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabase
     .from('events')
-    .select('id, title, description, event_date, is_paid, price, currency, host_id, book_id, max_attendees, created_at')
+    .select('id, title, description, event_date, is_paid, price:ticket_price, currency, host_id:organizer_id, book_id, max_attendees, created_at')
     .gte('event_date', now)
     .order('event_date', { ascending: true })
     .limit(limit);
@@ -67,24 +68,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: event, error } = await supabase
-    .from('events')
-    .insert({
+  let event;
+  try {
+    const intent=await contentIntent(req,user.id,'events',{
       title: parsed.data.title,
       description: parsed.data.description,
       event_date: parsed.data.event_date,
       is_paid: parsed.data.is_paid,
-      price: parsed.data.price ?? null,
+      ticket_price: parsed.data.price ?? null,
       currency: parsed.data.currency,
       book_id: parsed.data.book_id ?? null,
       max_attendees: parsed.data.max_attendees ?? null,
-      host_id: user.id,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+      organizer_id: user.id,
+    });
+    event = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
   return NextResponse.json({ event }, { status: 201 });

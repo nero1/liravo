@@ -1,3 +1,4 @@
+import { checkAndAwardBadges } from '@/services/badges';
 import { sendPushToUser } from '@/lib/push-notifications';
 import { createServiceClient } from '@/lib/supabase/server';
 import { recordMetric } from '@/lib/metrics';
@@ -19,6 +20,7 @@ function nextDelaySeconds(attempts: number): number {
 }
 
 async function processEvent(event: OutboxEventRow) {
+  if(event.event_type==='check_badges')await checkAndAwardBadges(String(event.payload.userId),String(event.payload.trigger));
   const { data, error } = await createServiceClient().rpc('process_outbox_event_atomic' as never, { p_event_id: event.id } as never);
   if (error) throw new Error(`Outbox processing failed: ${error.message}`);
   if (data && ['push_notification', 'notify_recipient'].includes(event.event_type)) {

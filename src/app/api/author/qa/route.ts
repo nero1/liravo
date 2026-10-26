@@ -1,4 +1,5 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sanitizeText } from '@/lib/sanitize';
@@ -57,36 +58,18 @@ export async function POST(req: Request) {
 
   if (!isAuthor) return NextResponse.json({ error: 'Target user is not an author' }, { status: 404 });
 
-  const { data: qa, error } = await supabase
-    .from('author_qa')
-    .insert({
+  let qa;
+  try {
+    const intent=await contentIntent(req,user.id,'author_qa',{
       author_id: parsed.data.author_id,
       asked_by: user.id,
       question: sanitizeText(parsed.data.question),
       is_public: true,
-    })
-    .select('id, question, created_at')
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Notify the author
-  try {
-    const serviceSupabase = createServiceClient();
-    const { data: asker } = await supabase
-      .from('users')
-      .select('display_name')
-      .eq('id', user.id)
-      .single();
-    await serviceSupabase.from('notifications').insert({
-      user_id: parsed.data.author_id,
-      type: 'author_qa_answer',
-      actor_id: user.id,
-      entity_type: 'author_qa',
-      entity_id: qa.id,
-      message: `${asker?.display_name ?? 'A reader'} asked you: ${parsed.data.question.slice(0, 80)}…`,
     });
-  } catch { /* non-critical */ }
+    qa = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 
   return NextResponse.json({ qa }, { status: 201 });
 }

@@ -1,6 +1,6 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,6 @@ const reportSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -31,18 +30,17 @@ export async function POST(request: Request) {
     profile: 'user',
   };
 
-  const { error } = await supabase
-    .from('content_reports')
-    .insert({
+  try {
+    const intent=await contentIntent(request,user.id,'content_reports',{
       reporter_id: user.id,
       entity_type: entityTypeMap[content_type],
       entity_id: content_id,
       reason,
       status: 'pending',
     });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
   return NextResponse.json({ ok: true }, { status: 201 });

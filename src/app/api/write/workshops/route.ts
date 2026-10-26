@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -25,7 +26,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -41,17 +41,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  const { data, error } = await supabase
-    .from('workshop_rooms')
-    .insert({
+  let data;
+  try {
+    const intent=await contentIntent(req,user.id,'workshop_rooms',{
       ...parsed.data,
       facilitator_id: user.id,
-      member_count: 1,
       is_active: true,
-    })
-    .select()
-    .single();
+    });
+    data = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ room: data }, { status: 201 });
 }

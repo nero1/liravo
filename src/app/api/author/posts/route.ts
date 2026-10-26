@@ -1,4 +1,5 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
@@ -64,50 +65,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { data: post, error } = await supabase
-    .from('author_posts')
-    .insert({
+  let post;
+  try {
+    const intent=await contentIntent(req,user.id,'author_posts',{
       author_id: user.id,
       title: sanitizeText(parsed.data.title),
       body: sanitizeRichText(parsed.data.body),
       book_id: parsed.data.book_id ?? null,
       type: parsed.data.type,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // For announcements, notify all followers in-app (emails handled by cron)
-  if (parsed.data.type === 'announcement') {
-    const serviceSupabase = createServiceClient();
-    const { data: followers } = await serviceSupabase
-      .from('follows')
-      .select('follower_id')
-      .eq('following_id', user.id)
-      .limit(500);
-
-    const authorName = profile?.display_name ?? profile?.username ?? 'An author';
-    if (followers && followers.length > 0) {
-      const notifications = followers.map((f) => ({
-        user_id: f.follower_id,
-        type: 'author_announcement',
-        actor_id: user.id,
-        entity_type: 'author_post',
-        entity_id: post.id,
-        message: `${authorName} posted: ${parsed.data.title}`,
-      }));
-      // Fire-and-forget — don't block the response
-      serviceSupabase.from('notifications').insert(notifications).then(() => {
-        serviceSupabase
-          .from('author_posts')
-          .update({ followers_notified: true })
-          .eq('id', post.id)
-          .then(() => {});
-      });
-    }
+    });
+    post = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
   return NextResponse.json({ post }, { status: 201 });

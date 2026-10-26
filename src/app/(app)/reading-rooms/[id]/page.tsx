@@ -1,3 +1,4 @@
+import { requireReadingRoomAccess } from '@/lib/content-intents';
 import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import { notFound, redirect } from 'next/navigation';
@@ -21,6 +22,7 @@ export default async function ReadingRoomPage({
   } = await supabase.auth.getUser();
 
   if (!user) redirect('/auth/login');
+  try{await requireReadingRoomAccess(params.id,user.id);}catch{notFound();}
 
   const { data: room } = await supabase
     .from('reading_rooms')

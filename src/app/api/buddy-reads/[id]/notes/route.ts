@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -12,8 +13,11 @@ export async function GET(
   const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const {data:member,error:membershipError}=await supabase.from('buddy_read_members').select('user_id').eq('buddy_read_id',params.id).eq('user_id',user.id).maybeSingle();
+  if(membershipError)return NextResponse.json({error:'Membership unavailable'},{status:503});
+  if(!member)return NextResponse.json({error:'Not a participant'},{status:403});
 
-  const { data: notes } = await supabase
+  const { data: notes, error } = await supabase
     .from('buddy_read_notes')
     .select(`
       id, user_id, content, created_at, reply_to_id,
@@ -23,6 +27,7 @@ export async function GET(
     .order('created_at', { ascending: false })
     .limit(100);
 
+  if(error)return NextResponse.json({error:'Notes unavailable'},{status:503});
   return NextResponse.json({ notes: notes ?? [] });
 }
 
@@ -55,21 +60,18 @@ export async function POST(
   const parsed = NoteSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
 
-  const { data: note, error } = await supabase
-    .from('buddy_read_notes')
-    .insert({
+  let note;
+  try {
+    const intent=await contentIntent(req,user.id,'buddy_read_notes',{
       buddy_read_id: params.id,
       user_id: user.id,
       content: parsed.data.content,
       reply_to_id: parsed.data.reply_to_id ?? null,
-    })
-    .select(`
-      id, user_id, content, created_at, reply_to_id,
-      user:user_id (display_name, username, avatar_url)
-    `)
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    });
+    note = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
+  }
 
   return NextResponse.json({ note }, { status: 201 });
 }

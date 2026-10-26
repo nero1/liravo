@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
   // community_notes table may not be in DB type
   const { data: notes, error } = await supabase
     .from('community_notes')
-    .select('id, note, created_at, author_id')
+    .select('id, note:note_text, created_at, author_id')
     .eq('content_type', contentType)
     .eq('content_id', contentId)
     .eq('status', 'approved')
@@ -83,24 +84,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const serviceSupabase = createServiceClient();
-
   // community_notes table may not be in DB type
-  const { data, error } = await serviceSupabase
-    .from('community_notes')
-    .insert({
+  let data;
+  try {
+    const intent=await contentIntent(request,user.id,'community_notes',{
       author_id: user.id,
       content_type: parsed.data.content_type,
       content_id: parsed.data.content_id,
-      note: parsed.data.note,
+      note_text: parsed.data.note,
       status: 'pending',
-      created_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+      is_visible:false,
+    });
+    data = await intent.insert();
+  } catch(error) {
+    return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
   return NextResponse.json({ note: data }, { status: 201 });
@@ -129,6 +126,7 @@ export async function PATCH(request: Request) {
     .from('community_notes')
     .update({
       status: parsed.data.status,
+      is_visible:parsed.data.status==='approved',
       reviewed_by: auth.userId,
       reviewed_at: new Date().toISOString(),
     })

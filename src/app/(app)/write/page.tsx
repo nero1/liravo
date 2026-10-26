@@ -67,7 +67,7 @@ export default async function WritePage() {
     .eq('user_id', user.id);
 
   const { data: challengeStats } = await supabase
-    .from('writing_challenge_entries')
+    .from('writing_challenge_submissions')
     .select('id, word_count', { count: 'exact' })
     .eq('user_id', user.id);
 
