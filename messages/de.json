@@ -219,7 +219,7 @@
     "terms": "Jederzeit kündbar. Keine versteckten Gebühren.",
     "manage": "Abonnement verwalten",
     "payCard": "Mit Karte bezahlen (weltweit)",
-    "payPaystack": "Mit Paystack bezahlen (Nigeria)",
+    "payPaystack": "30 Tage mit Paystack kaufen (NGN)",
     "paymentPending": "Die Zahlung wird noch bestätigt. Lade diese Seite in Kürze neu.",
     "freeShelves": "10 Regale",
     "features": {
@@ -257,7 +257,9 @@
     "cancelPending": "Die Kündigung wurde vorgemerkt. Dein Abonnement bleibt bis zur Bestätigung des Zahlungsanbieters aktiv.",
     "cancelError": "Die Bestätigung ist nicht verfügbar. Bitte erneut versuchen; bestehende Anfragen bleiben erhalten.",
     "managedByGoogle": "Verwalte dein Google-Play-Abonnement im Play Store.",
-    "manageGoogle": "In Google Play verwalten"
+    "manageGoogle": "In Google Play verwalten",
+    "paidUntil": "Bezahlter Zugang bis {date}.",
+    "paystackPass": "Paystack-Käufe gewähren 30 Tage Zugang ohne automatische Verlängerung."
   },
   "admin": {
     "cron": {
@@ -280,7 +282,11 @@
         "uncertainDigests": "E-Mails mit ungeklärtem Zustellstatus",
         "unacknowledgedPurchases": "Unbestätigte Google-Play-Käufe",
         "stalledBillingDeliveries": "Festhängende Abrechnungsbenachrichtigungen",
-        "unconfirmedPayouts": "Auszahlungen mit Klärungsbedarf"
+        "unconfirmedPayouts": "Auszahlungen mit Klärungsbedarf",
+        "pendingRefunds": "Erstattungen mit Klärungsbedarf",
+        "unverifiedBillingPeriods": "Ungeprüfte Zahlungszeiträume",
+        "overdrawnCreators": "Negative Creator-Guthaben",
+        "duplicatePayments": "Zahlungen mit Klärungsbedarf"
       },
       "jobs": {
         "outbox-drain": {
@@ -515,7 +521,9 @@
     "status": {
       "completed": "Dein Trinkgeld von {amount} wurde bestätigt. Vielen Dank!",
       "failed": "Deine Trinkgeldzahlung von {amount} ist fehlgeschlagen.",
-      "pending": "Dein Trinkgeld von {amount} wartet auf die Zahlungsbestätigung."
+      "pending": "Dein Trinkgeld von {amount} wartet auf die Zahlungsbestätigung.",
+      "refunded": "Dein Trinkgeld von {amount} wurde erstattet.",
+      "partiallyRefunded": "Dein Trinkgeld von {amount} wurde teilweise erstattet."
     }
   },
   "writing": {

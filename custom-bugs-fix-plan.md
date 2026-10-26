@@ -14,7 +14,8 @@ Updated 26 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Move financial audit/event writes into same transaction (transactional outbox).
 - ✅ Enforce Google Play account/receipt ownership, authenticated RTDN replay and paid-period access.
 - ✅ Unify creator reservations/settlement, immutable destinations, confirmed transfers and audited manual/legacy reconciliation.
-- 🟡 Complete refunds and remaining billing reconciliation; verify staging bindings.
+- ✅ Add capture-linked refunds, cumulative credit/commission adjustments, XP reversal and paid-period access.
+- 🟡 Complete checkout/promotion reconciliation and verify staging bindings.
 
 ✅ 3. Cron hardening and Vercel Hobby compliance (Critical/High)
 - ✅ Standardize cron auth helper (`Authorization: Bearer <CRON_SECRET>`).
