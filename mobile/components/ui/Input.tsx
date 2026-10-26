@@ -13,6 +13,8 @@ export function Input({ label, error, style, ...props }: Props) {
         className={`border rounded-lg px-3 py-2.5 text-base text-foreground bg-background ${
           error ? 'border-destructive' : 'border-input'
         }`}
+        style={style}
+        accessibilityLabel={props.accessibilityLabel??label}
         placeholderTextColor="#9ca3af"
         {...props}
       />

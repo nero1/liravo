@@ -1,3 +1,5 @@
+import { applyCommunityIntent } from '@/lib/community-intents';
+import { ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireModerator } from '@/lib/moderation';
@@ -41,43 +43,13 @@ export async function GET(request: Request) {
   });
 }
 
-export async function PATCH(request: Request) {
-  const auth = await requireModerator();
-  if (auth instanceof NextResponse) return auth;
-
-  const { searchParams } = new URL(request.url);
-  const reportId = searchParams.get('reportId');
-  if (!reportId) {
-    return NextResponse.json({ error: 'reportId is required' }, { status: 400 });
+export async function PATCH(request:Request) {
+  const auth=await requireModerator();if(auth instanceof NextResponse)return auth;
+  const reportId=new URL(request.url).searchParams.get('reportId');if(!reportId)return NextResponse.json({error:'reportId required'},{status:400});
+  let body;try{body=await request.json();}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
+  const parsed=patchSchema.safeParse(body);if(!parsed.success)return NextResponse.json({error:'Invalid decision'},{status:400});
+  try{return NextResponse.json(await applyCommunityIntent(request,auth.userId,'report_review',reportId,{status:parsed.data.status??null,note:parsed.data.moderator_note??null}));
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
-
-  const raw = await request.json();
-  const parsed = patchSchema.safeParse(raw);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
-  }
-
-  const supabase = createServiceClient();
-
-  const updates: Record<string, unknown> = {
-    moderator_id: auth.userId,
-    ...parsed.data,
-  };
-
-  if (parsed.data.status && ['approved', 'removed', 'warned', 'escalated'].includes(parsed.data.status)) {
-    updates.resolved_at = new Date().toISOString();
-  }
-
-  const { data, error } = await supabase
-    .from('content_reports')
-    .update(updates)
-    .eq('id', reportId)
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ report: data });
 }

@@ -29,6 +29,11 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
+  if(!list.is_public){
+    const user=await getCurrentUser();
+    if(list.user_id!==user?.id)return NextResponse.json({error:'Not found'},{status:404});
+  }
+
   // Get books in the list
   const { data: listBooks } = await supabase 
     .from('reading_list_books')

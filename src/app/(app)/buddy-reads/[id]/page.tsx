@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -35,8 +35,8 @@ interface Book {
   cover_url: string | null;
 }
 
-export default function BuddyReadRoomPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function BuddyReadRoomPage({ params }: { params: { id: string } }) {
+  const { id } = params;
 
   const [buddyRead, setBuddyRead] = useState<BuddyRead | null>(null);
   const [book, setBook] = useState<Book | null>(null);

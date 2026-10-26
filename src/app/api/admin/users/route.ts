@@ -1,8 +1,9 @@
+import { applyCommunityIntent } from '@/lib/community-intents';
+import { ContentIntentError } from '@/lib/content-intents';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { getRequestCorrelationId } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,15 +81,9 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { userId, is_premium, ...updates } = parsed.data;
-  const service = createServiceClient();
-
-  if (is_premium !== undefined) {
-    const {error}=await service.rpc('set_premium_override_atomic' as never,{p_actor_id:user.id,p_user_id:userId,p_enabled:is_premium,p_correlation_id:getRequestCorrelationId(req)} as never);
-    if (error) return NextResponse.json({error:'Premium grant unavailable'},{status:error.code==='P1003'?403:503});
+  const {userId,...updates}=parsed.data;
+  try{return NextResponse.json(await applyCommunityIntent(req,user.id,'admin_user',userId,updates));
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
-  const { error } = Object.keys(updates).length ? await service.from('users').update(updates).eq('id', userId) : {error:null};
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ updated: true });
 }

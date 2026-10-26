@@ -1,72 +1,19 @@
+import { applyCommunityIntent } from '@/lib/community-intents';
+import { ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { requireModerator } from '@/lib/moderation';
-import { createServiceClient } from '@/lib/supabase/server';
+import { z } from 'zod';
 
-export const dynamic = 'force-dynamic';
+export const dynamic='force-dynamic';
 
-const patchSchema = z.object({
-  status: z.enum(['approved', 'rejected']),
-  note: z.string().max(500).optional(),
-});
+const schema=z.object({status:z.enum(['approved','rejected']),note:z.string().max(500).optional()});
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  const auth = await requireModerator();
-  if (auth instanceof NextResponse) return auth;
-
-  const raw = await request.json();
-  const parsed = patchSchema.safeParse(raw);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
+export async function PATCH(request:Request,{params}:{params:{id:string}}) {
+  const auth=await requireModerator();if(auth instanceof NextResponse)return auth;
+  let body;try{body=await request.json();}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
+  const parsed=schema.safeParse(body);if(!parsed.success)return NextResponse.json({error:'Invalid input'},{status:400});
+  try{return NextResponse.json(await applyCommunityIntent(request,auth.userId,'appeal_review',params.id,{status:parsed.data.status,note:parsed.data.note??null}));
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
-
-  const supabase = createServiceClient();
-
-  // appeals table may not be in DB type
-  const { data: appeal, error: fetchError } = await supabase
-    .from('appeals')
-    .select('*')
-    .eq('id', params.id)
-    .single();
-
-  if (fetchError || !appeal) {
-    return NextResponse.json({ error: 'Appeal not found' }, { status: 404 });
-  }
-
-  const { data: updated, error } = await supabase
-    .from('appeals')
-    .update({
-      status: parsed.data.status,
-      reviewed_by: auth.userId,
-      reviewer_note: parsed.data.note ?? null,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq('id', params.id)
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Notify the user of the decision
-  const message = parsed.data.status === 'approved'
-    ? `Your appeal has been approved. ${parsed.data.note ?? ''}`
-    : `Your appeal has been rejected. ${parsed.data.note ?? ''}`;
-
-  await supabase
-    .from('notifications')
-    .insert({
-      user_id: appeal.user_id,
-      type: 'appeal_decision',
-      actor_id: auth.userId,
-      entity_type: 'appeal',
-      entity_id: params.id,
-      message,
-    });
-
-  return NextResponse.json({ appeal: updated });
 }

@@ -56,6 +56,7 @@ Updated 26 October 2026. Section status summarizes its bullets; individual verif
 - 🟡 Add concurrency/load tests for payout/webhook/cron paths.
 - ✅ Add security tests (CSRF, replay, IDOR, abuse throttling).
 - ✅ Verify remaining content tables, durable creates, group capacity, private discussions, badge rewards and paged author notifications.
+- ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.
 
 Footer/Signature: Generated on May 23, 2026 09:39 PM UTC

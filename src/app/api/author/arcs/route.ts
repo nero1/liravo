@@ -1,3 +1,4 @@
+import { singleRelation } from '@/lib/utils';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
@@ -22,11 +23,13 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const authorId = searchParams.get('authorId') ?? user.id;
+  const requestedAuthor=searchParams.get('authorId');
+  if(requestedAuthor&&requestedAuthor!=='me'&&requestedAuthor!==user.id)return NextResponse.json({error:'Forbidden'},{status:403});
+  const authorId=user.id;
 
   const { data, error } = await supabase
     .from('arcs')
-    .select('id, book_id, description, reader_slots, close_date, is_active, created_at')
+    .select('id, book_id, description, reader_slots, close_date, is_active, created_at, books:book_id(id,title,author_name,cover_url)')
     .eq('author_id', authorId)
     .order('created_at', { ascending: false });
 
@@ -34,7 +37,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ arcs: data ?? [] });
+  const {data:authorBooks,error:booksError}=await supabase.from('author_books').select('book:book_id(id,title)').eq('author_id',user.id).limit(100);
+  if(booksError)return NextResponse.json({error:'Author books unavailable'},{status:503});
+  return NextResponse.json({arcs:(data??[]).map(row=>({...row,title:singleRelation(row.books)?.title??''})),books:(authorBooks??[]).map(row=>singleRelation(row.book)).filter(Boolean)});
 }
 
 export async function POST(req: Request) {
