@@ -54,3 +54,5 @@ Add to your GitHub Actions workflow:
 `security.test.ts` covers CSRF, ownership, trusted ingress, provider signatures and retry budgets. `redis.test.ts` exercises the actual Upstash SDK against mocked transport responses. `migrations.test.ts` applies the full SQL sequence to an empty local PostgreSQL database with Supabase auth stubs. Set `MIGRATION_TEST_DATABASE_URL` to a dedicated loopback database; it refuses remote or nonempty databases and retains results for inspection. CI supplies PostgreSQL 16. Never point the rehearsal at application data.
 
 `payment-webhooks.test.ts` verifies native Paystack and Dodo signatures/envelopes. `i18n.test.ts` validates catalog parity, interpolation and ICU output across all supported locales.
+
+The PostgreSQL rehearsal also exercises content intent races, rollback/deleted-record replay, buddy capacity, vote counters, adapter mutation/count contracts and streak rewards. `mobile-api.test.ts` executes native transport against mocked fetch/store dependencies; it does not replace an Expo build. `i18n-usage.test.ts` checks source translation references and localized login labels.

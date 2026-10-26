@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   const from = (page - 1) * pageSize;
 
   let query = supabase
-    .from('writer_questions')
+    .from('ask_writer_questions')
     .select(
       'id, question, tags, answer_count, created_at, author:user_id(display_name, username)',
       { count: 'exact' }
@@ -47,7 +48,6 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -63,18 +63,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  const { data: question, error } = await supabase
-    .from('writer_questions')
-    .insert({
-      user_id: user.id,
-      question: parsed.data.question,
-      tags: parsed.data.tags ?? [],
-      answer_count: 0,
-    })
-    .select('id, question, tags, answer_count, created_at')
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  let question;
+  try {
+    const intent = await contentIntent(req, user.id, 'ask_writer_questions', { question: parsed.data.question, tags: parsed.data.tags ?? [], answer_count: 0 });
+    question = await intent.insert();
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Content creation unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
+  }
 
   // Award 5 XP for asking
   await awardXP(user.id, 5, 'ask_question', `question:${question.id}`);

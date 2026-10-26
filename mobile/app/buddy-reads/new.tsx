@@ -14,7 +14,7 @@ export default function NewBuddyReadScreen() {
   const [title, setTitle] = useState('');
   const [bookId, setBookId] = useState('');
   const create = useMutation({
-    mutationFn: () => api.post(ENDPOINTS.buddyReads.create, { title, book_id: bookId }),
+    mutationFn: () => api.post(ENDPOINTS.buddyReads.create, { title, book_id: bookId, max_participants: 3, current_chapter: 1 }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['buddy-reads'] }); router.back(); },
     onError: (err) => Alert.alert('Error', (err as Error).message),
   });

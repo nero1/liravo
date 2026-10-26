@@ -21,12 +21,11 @@ export default function NewReviewScreen() {
 
   const submit = useMutation({
     mutationFn: () =>
-      api.post(ENDPOINTS.reviews.create, {
-        book_id: bookId,
-        rating,
-        content,
+      api.post(ENDPOINTS.books.reviews(bookId), {
+        star_rating: rating,
+        body: content,
         mood_tags: selectedMoods,
-        has_spoilers: hasSpoilers,
+        spoiler_warning: hasSpoilers,
         review_type: content.length > 200 ? 'long' : content.length > 0 ? 'short' : 'one_line',
       }),
     onSuccess: () => {
@@ -53,13 +52,13 @@ export default function NewReviewScreen() {
           </View>
 
           <Input
-            label="Review (optional)"
+            label="Review"
             value={content}
             onChangeText={setContent}
             placeholder="What did you think?"
             multiline
             numberOfLines={5}
-            maxLength={5000}
+            maxLength={2000}
             style={{ minHeight: 120, textAlignVertical: 'top' }}
           />
 
@@ -96,7 +95,7 @@ export default function NewReviewScreen() {
           <Button
             onPress={() => submit.mutate()}
             loading={submit.isPending}
-            disabled={rating === 0}
+            disabled={rating === 0 || !content.trim()}
             size="lg"
           >
             Post Review

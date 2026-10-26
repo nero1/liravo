@@ -1,9 +1,12 @@
 'use client';
 
+import { useRequestIntent } from '@/lib/client/useRequestIntent';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function NewBuddyReadPage() {
+  const intent = useRequestIntent();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,20 +21,22 @@ export default function NewBuddyReadPage() {
     setPending(true);
     setError(null);
 
-    const res = await fetch('/api/buddy-reads', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
+    try {
+      const res = await fetch('/api/buddy-reads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...intent.headers(form) },
+        body: JSON.stringify(form),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      router.push(`/buddy-reads/${data.buddyRead.id}`);
-    } else {
-      const data = await res.json();
-      setError(data.error ?? 'Something went wrong');
-    }
-    setPending(false);
+      if (res.ok) {
+        const data = await res.json();
+        intent.complete();
+        router.push(`/buddy-reads/${data.buddyRead.id}`);
+      } else {
+        const data = await res.json();
+        setError(typeof data.error === 'string' ? data.error : 'Something went wrong');
+      }
+    } catch { setError('Network error. Please retry.'); } finally { setPending(false); }
   }
 
   return (

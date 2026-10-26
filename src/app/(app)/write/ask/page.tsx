@@ -1,5 +1,7 @@
 'use client';
 
+import { useRequestIntent } from '@/lib/client/useRequestIntent';
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
@@ -15,6 +17,7 @@ interface Question {
 type FilterType = 'all' | 'unanswered' | 'most_answered';
 
 export default function AskAWriterPage() {
+  const intent = useRequestIntent();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
@@ -39,22 +42,24 @@ export default function AskAWriterPage() {
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
-    const res = await fetch('/api/write/questions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: askForm.question, tags }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setSubmitError(data.error ?? 'Failed to submit question');
-    } else {
-      setSubmitSuccess(true);
-      setAskForm({ question: '', tags: '' });
-      if (data.question) {
-        setQuestions((q) => [data.question, ...q]);
+    try {
+      const res = await fetch('/api/write/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...intent.headers(askForm) },
+        body: JSON.stringify({ question: askForm.question, tags }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSubmitError(typeof data.error === 'string' ? data.error : 'Failed to submit question');
+      } else {
+        intent.complete();
+        setSubmitSuccess(true);
+        setAskForm({ question: '', tags: '' });
+        if (data.question) {
+          setQuestions((q) => [data.question, ...q]);
+        }
       }
-    }
-    setSubmitting(false);
+    } catch { setSubmitError('Network error. Please retry.'); } finally { setSubmitting(false); }
   }
 
   return (

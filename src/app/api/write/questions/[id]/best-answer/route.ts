@@ -20,7 +20,7 @@ export async function POST(
 
   // Verify this question belongs to the current user
   const { data: question } = await supabase
-    .from('writer_questions')
+    .from('ask_writer_questions')
     .select('id, user_id, best_answer_id')
     .eq('id', params.id)
     .single();
@@ -45,7 +45,7 @@ export async function POST(
   if (!answer) return NextResponse.json({ error: 'Answer not found for this question' }, { status: 404 });
 
   const { error } = await supabase
-    .from('writer_questions')
+    .from('ask_writer_questions')
     .update({ best_answer_id: parsed.data.answer_id })
     .eq('id', params.id);
 

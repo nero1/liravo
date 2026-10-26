@@ -1,5 +1,7 @@
 'use client';
 
+import { useRequestIntent } from '@/lib/client/useRequestIntent';
+
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Quote } from 'lucide-react';
@@ -11,11 +13,13 @@ interface QuoteFormProps {
 }
 
 export function QuoteForm({ bookId, onSuccess }: QuoteFormProps) {
+  const intent = useRequestIntent();
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState('');
   const [pageNumber, setPageNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState(false);
 
   const handleSave = async () => {
     if (!content.trim()) return;
@@ -24,27 +28,34 @@ export function QuoteForm({ bookId, onSuccess }: QuoteFormProps) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
-    await fetch('/api/quotes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        book_id: bookId,
-        content: content.trim(),
-        page_number: pageNumber ? parseInt(pageNumber, 10) : undefined,
-      }),
-    });
+    setError(false);
+    try {
+      const response = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...intent.headers({ bookId, content, pageNumber }) },
+        body: JSON.stringify({
+          book_id: bookId,
+          content: content.trim(),
+          page_number: pageNumber ? parseInt(pageNumber, 10) : undefined,
+        }),
+      });
 
-    setSaving(false);
-    setDone(true);
-    setContent('');
-    setPageNumber('');
-    setOpen(false);
-    onSuccess?.();
-    setTimeout(() => setDone(false), 3000);
+      if (!response.ok) { setError(true); return; }
+      await response.json();
+      intent.complete();
+      setDone(true);
+      setContent('');
+      setPageNumber('');
+      setOpen(false);
+      onSuccess?.();
+      setTimeout(() => setDone(false), 3000);
+    } catch { setError(true); }
+    finally { setSaving(false); }
   };
 
   return (
     <div>
+      {error && <p role="alert" className="text-sm text-red-500 mb-2">Unable to save quote. Please retry.</p>}
       {done && (
         <p className="text-sm text-accent mb-2">Quote saved!</p>
       )}

@@ -369,43 +369,8 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
 // ── Writing streak increment (separate from reading streak) ──────────────────
 export async function incrementWritingStreak(userId: string): Promise<void> {
-  const supabase = createServiceClient();
-  const today = new Date().toISOString().split('T')[0];
-
-  const { data: user } = await supabase
-    .from('users')
-    .select('writing_streak, last_writing_date, writing_freeze_tokens, xp')
-    .eq('id', userId)
-    .single();
-
-  if (!user) return;
-
-  if (user.last_writing_date === today) return;
-
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-  let newStreak = user.writing_streak ?? 0;
-
-  if (user.last_writing_date === yesterdayStr) {
-    newStreak += 1;
-  } else if (user.last_writing_date !== null) {
-    if ((user.writing_freeze_tokens ?? 0) > 0) {
-      await supabase.from('users').update({ writing_freeze_tokens: (user.writing_freeze_tokens ?? 1) - 1, last_writing_date: today }).eq('id', userId);
-      return;
-    }
-    newStreak = 1;
-  } else {
-    newStreak = 1;
-  }
-
-  const updates: Record<string, unknown> = { writing_streak: newStreak, last_writing_date: today };
-  if (newStreak === 7 || newStreak === 30) {
-    updates.writing_freeze_tokens = (user.writing_freeze_tokens ?? 0) + 1;
-  }
-
-  await supabase.from('users').update(updates as never).eq('id', userId);
+  const { error } = await createServiceClient().rpc('increment_streak_atomic' as never, { p_user_id: userId, p_kind: 'writing' } as never);
+  if (error) throw new Error('Writing streak update unavailable');
   await checkAndAwardBadges(userId, 'writing_streak');
 }
 

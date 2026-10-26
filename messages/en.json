@@ -13,7 +13,19 @@
     "signInWithTelegram": "Sign in with Telegram",
     "continueWithGoogle": "Continue with Google",
     "continueWithTelegram": "Continue with Telegram",
-    "orContinueWith": "or continue with"
+    "orContinueWith": "or continue with",
+    "email": "Email",
+    "password": "Password",
+    "createAccount": "Create account",
+    "signIn": "Sign in",
+    "alreadyAccount": "Already have an account? Sign in",
+    "needAccount": "Don’t have an account? Sign up",
+    "terms": "By signing in, you agree to our Terms of Service and Privacy Policy.",
+    "unavailable": "Sign-in is temporarily unavailable. Please try again later.",
+    "passwordResetRequired": "Your account was created via OAuth and has no password set. Contact support to receive a password reset link.",
+    "signInFailed": "Unable to sign in. Check your details and try again.",
+    "tagline": "Your book discovery social network",
+    "description": "Sign in to Liravo to discover and track books."
   },
   "onboarding": {
     "title": "Let's set up your profile",

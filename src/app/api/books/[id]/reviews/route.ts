@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
@@ -65,40 +66,22 @@ export async function POST(
   // Sanitize before any further processing or storage
   const body = review_type === 'long' ? sanitizeRichText(parsed.data.body) : sanitizeText(parsed.data.body);
 
-  // Check for spam before proceeding
-  const isSpam = await checkSpam(user.id, 'review');
-  if (isSpam) {
-    return NextResponse.json({ error: 'Too many submissions. Please wait before posting again.' }, { status: 429 });
+  let review;
+  try {
+    const intent = await contentIntent(request, user.id, 'reviews', {
+      book_id: params.id, rating: star_rating, content: body, review_type, mood_tags,
+      has_spoilers: spoiler_warning, read_date: parsed.data.read_date ?? null,
+      edition_read: parsed.data.edition_read ?? null, moderation_status: 'published',
+    });
+    if (!intent.existing) {
+      if (await checkSpam(user.id, 'review')) return NextResponse.json({ error: 'Too many submissions. Please wait before posting again.' }, { status: 429 });
+      if (await classifyTone(body) === 'toxic') return NextResponse.json({ error: 'Review contains inappropriate content. Please revise.' }, { status: 400 });
+    }
+    review = await intent.insert();
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Review unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
-
-  // Classify tone; block toxic content
-  const tone = await classifyTone(body);
-  if (tone === 'toxic') {
-    return NextResponse.json({ error: 'Review contains inappropriate content. Please revise.' }, { status: 400 });
-  }
-
   const serviceSupabase = createServiceClient();
-
-  const { data: review, error } = await serviceSupabase
-    .from('reviews')
-    .insert({
-      user_id: user.id,
-      book_id: params.id,
-      rating: star_rating,
-      content: body,
-      review_type,
-      mood_tags,
-      has_spoilers: spoiler_warning,
-      read_date: parsed.data.read_date ?? null,
-      edition_read: parsed.data.edition_read ?? null,
-      moderation_status: 'published',
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
 
   // Award XP for writing a review
   await awardXP(user.id, XP_CONFIG.SHORT_REVIEW, 'write_review', `review:${params.id}`);

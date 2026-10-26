@@ -14,6 +14,7 @@ const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supa
 
 export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   const t = useTranslations('auth');
+  const common = useTranslations('common');
   const router = useRouter();
   const [loading, setLoading] = useState<'google' | 'telegram' | 'email' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,36 +31,36 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
       setLoading('email');
       setError(null);
 
-      const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      try {
+        const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
 
-      const json = await res.json();
+        const json = await res.json();
 
-      if (!res.ok) {
-        if (json.error === 'PASSWORD_RESET_REQUIRED') {
-          setError(
-            'Your account was created via OAuth and has no password set. ' +
-            'Contact support to receive a password reset link.'
-          );
-        } else {
-          setError(json.error ?? 'Something went wrong');
+        if (!res.ok) {
+          if (json.error === 'PASSWORD_RESET_REQUIRED') {
+            setError(
+              t('passwordResetRequired')
+            );
+          } else {
+            setError(t('signInFailed'));
+          }
+          return;
         }
-        setLoading(null);
-        return;
-      }
 
-      router.push(isSignup ? '/onboarding' : '/');
-      router.refresh();
+        router.push(isSignup ? '/onboarding' : '/');
+        router.refresh();
+      } catch { setError(t('signInFailed')); } finally { setLoading(null); }
     };
 
     return (
       <div className="space-y-4">
         {error && (
-          <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg">
+          <div role="alert" className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg">
             {error}
           </div>
         )}
@@ -67,7 +68,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
         <form onSubmit={handleEmailAuth} className="space-y-3">
           <div>
             <label htmlFor="email" className="block text-sm font-medium mb-1">
-              Email
+              {t('email')}
             </label>
             <input
               id="email"
@@ -82,7 +83,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
 
           <div>
             <label htmlFor="password" className="block text-sm font-medium mb-1">
-              Password
+              {t('password')}
             </label>
             <input
               id="password"
@@ -102,10 +103,10 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
             className="w-full px-4 py-3 bg-accent text-accent-foreground rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
           >
             {loading === 'email'
-              ? t('loading')
+              ? common('loading')
               : isSignup
-                ? 'Create account'
-                : 'Sign in'}
+                ? t('createAccount')
+                : t('signIn')}
           </button>
         </form>
 
@@ -114,11 +115,11 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
           onClick={() => { setIsSignup((v) => !v); setError(null); }}
           className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          {isSignup ? t('alreadyAccount') : t('needAccount')}
         </button>
 
         <p className="text-center text-xs text-muted-foreground pt-2">
-          By signing in, you agree to our Terms of Service and Privacy Policy.
+          {t('terms')}
         </p>
       </div>
     );
@@ -134,7 +135,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
       options: { redirectTo: `${window.location.origin}/api/auth/callback` },
     });
     if (error) {
-      setError(error.message);
+      setError(t('signInFailed'));
       setLoading(null);
     }
   };
@@ -148,7 +149,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
       options: { redirectTo: `${window.location.origin}/api/auth/callback` },
     });
     if (error) {
-      setError(error.message);
+      setError(t('signInFailed'));
       setLoading(null);
     }
   };
@@ -156,7 +157,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   if (!googleEnabled && !telegramEnabled) {
     return (
       <div className="text-center p-4 bg-muted rounded-lg text-muted-foreground">
-        Sign-in is temporarily unavailable. Please try again later.
+        {t('unavailable')}
       </div>
     );
   }
@@ -164,7 +165,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   return (
     <div className="space-y-3">
       {error && (
-        <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg">
+        <div role="alert" className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg">
           {error}
         </div>
       )}
@@ -176,11 +177,11 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
           className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-border rounded-lg font-medium hover:bg-muted transition-colors disabled:opacity-60"
         >
           {loading === 'google' ? (
-            <span className="text-sm">{t('loading')}</span>
+            <span className="text-sm">{common('loading')}</span>
           ) : (
             <>
               <GoogleIcon />
-              <span>{t('signInGoogle')}</span>
+              <span>{t('signInWithGoogle')}</span>
             </>
           )}
         </button>
@@ -193,18 +194,18 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
           className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#229ED9] text-white rounded-lg font-medium hover:bg-[#1a8cbe] transition-colors disabled:opacity-60"
         >
           {loading === 'telegram' ? (
-            <span className="text-sm">{t('loading')}</span>
+            <span className="text-sm">{common('loading')}</span>
           ) : (
             <>
               <TelegramIcon />
-              <span>{t('signInTelegram')}</span>
+              <span>{t('signInWithTelegram')}</span>
             </>
           )}
         </button>
       )}
 
       <p className="text-center text-xs text-muted-foreground pt-2">
-        By signing in, you agree to our Terms of Service and Privacy Policy.
+        {t('terms')}
       </p>
     </div>
   );
@@ -212,7 +213,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
 
 function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="20" height="20">
       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
       <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -223,7 +224,7 @@ function GoogleIcon() {
 
 function TelegramIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
       <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.26 14.4l-2.968-.924c-.643-.203-.658-.643.136-.953l11.57-4.461c.536-.194 1.006.131.836.96l-.04.198z" />
     </svg>
   );

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useRequestIntent } from '@/lib/client/useRequestIntent';
+import { useState, useRef } from 'react';
 import { Bookmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -11,22 +12,30 @@ interface ReactionButtonsProps {
 }
 
 export function ReactionButtons({ bookId, initialWantToRead }: ReactionButtonsProps) {
+  const intent = useRequestIntent();
+  const busy = useRef(false);
   const [wantToRead, setWantToRead] = useState(initialWantToRead);
   const [loading, setLoading] = useState(false);
 
   async function handleWantToRead() {
+    if (busy.current) return;
+    busy.current = true;
     setLoading(true);
     try {
       const res = await fetch(`/api/books/${bookId}/reactions`, {
         method: 'POST',
+        headers: intent.headers({bookId}),
       });
       if (res.ok) {
         const data = await res.json() as { reacted: boolean };
+        if (typeof data.reacted !== 'boolean') throw new Error('Invalid reaction response');
+        intent.complete();
         setWantToRead(data.reacted);
       }
     } catch {
       // Ignore
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   }

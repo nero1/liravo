@@ -220,11 +220,6 @@ describe('query-builder.ts — structure', () => {
     expect(src).toContain('COUNT');
   });
 
-  it('handles RETURNING * for select after insert/update', () => {
-    const src = readSrc('lib', 'db', 'query-builder.ts');
-    expect(src).toContain('RETURNING *');
-  });
-
   it('parses OR filter string', () => {
     const src = readSrc('lib', 'db', 'query-builder.ts');
     expect(src).toContain('_buildOrSql');

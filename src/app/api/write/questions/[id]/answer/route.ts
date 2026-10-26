@@ -1,3 +1,4 @@
+import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -53,30 +54,20 @@ export async function POST(
 
   // Check question exists
   const { data: question } = await supabase
-    .from('writer_questions')
+    .from('ask_writer_questions')
     .select('id, answer_count')
     .eq('id', params.id)
     .single();
 
   if (!question) return NextResponse.json({ error: 'Question not found' }, { status: 404 });
 
-  const { data: answer, error } = await supabase
-    .from('writer_answers')
-    .insert({
-      user_id: user.id,
-      question_id: params.id,
-      answer: parsed.data.answer,
-    })
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Increment answer count
-  await supabase
-    .from('writer_questions')
-    .update({ answer_count: (question.answer_count ?? 0) + 1 })
-    .eq('id', params.id);
+  let answer;
+  try {
+    const intent = await contentIntent(req, user.id, 'ask_writer_answers', { question_id: params.id, answer: parsed.data.answer });
+    answer = await intent.insert();
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Content creation unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
+  }
 
   // Award 10 XP for answering
   await awardXP(user.id, 10, 'answer_question', `answer:${answer.id}`);

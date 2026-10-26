@@ -1,97 +1,24 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { awardXP } from '@/services/xp';
-import { XP_CONFIG } from '@/constants/config';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { checkRouteRateLimit } from '@/lib/rate-limit';
+import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
+export async function POST(request: Request, { params }: { params: { id: string } }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const bookId = params.id;
-
-  // Check if reaction already exists
-  const { data: existing } = await supabase
-    .from('shelf_books')
-    .select('id')
-    .eq('book_id', bookId)
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-
-  // We use shelf_books with want_to_read shelf for the want_to_read reaction
-  // First find the user's want_to_read shelf
-  const { data: wantShelf } = await supabase
-    .from('shelves')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('default_type', 'want_to_read')
-    .single();
-
-  if (!wantShelf) {
-    return NextResponse.json({ error: 'Want to read shelf not found' }, { status: 404 });
-  }
-
-  // Check if already on want_to_read shelf
-  const { data: existingEntry } = await supabase
-    .from('shelf_books')
-    .select('id')
-    .eq('book_id', bookId)
-    .eq('shelf_id', wantShelf.id)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (existingEntry) {
-    // Toggle off: remove from shelf
-    await supabase
-      .from('shelf_books')
-      .delete()
-      .eq('id', existingEntry.id);
-
-    return NextResponse.json({ reacted: false });
-  }
-
-  // Toggle on: add to want_to_read shelf
-  const { error } = await supabase
-    .from('shelf_books')
-    .insert({
-      shelf_id: wantShelf.id,
-      book_id: bookId,
-      user_id: user.id,
-    });
-
+  if (!z.object({ id: z.string().uuid() }).safeParse(params).success) return NextResponse.json({ error: 'Invalid target' }, { status: 400 });
+  const key = request.headers.get('idempotency-key') ?? request.headers.get('x-idempotency-key');
+  if (!key || key.length < 8 || key.length > 200) return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
+  if (!await checkRouteRateLimit(user.id,'social')) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const { data, error } = await createServiceClient().rpc('apply_book_interaction' as never, {
+    p_user_id: user.id, p_book_id: params.id, p_action: 'reaction', p_key: key,
+  } as never);
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const status = error.code === 'P1001' ? 409 : error.code === 'P1003' ? 404 : 503;
+    return NextResponse.json({ error: status === 409 ? 'Conflicting idempotency key' : status === 404 ? 'Target unavailable' : 'Interaction unavailable' }, { status });
   }
-
-  // Award XP
-  await awardXP(user.id, XP_CONFIG.WANT_TO_READ_REACTION, 'want_to_read', `want-to-read:${bookId}`);
-
-  // Update book want_to_read_count — best effort
-  try {
-    const { count } = await supabase
-      .from('shelf_books')
-      .select('id', { count: 'exact', head: true })
-      .eq('book_id', bookId);
-
-    if (count !== null) {
-      await supabase
-        .from('books')
-        .update({ want_to_read_count: count })
-        .eq('id', bookId);
-    }
-  } catch {
-    // Non-critical
-  }
-
-  // Suppress unused variable warning
-  void existing;
-
-  return NextResponse.json({ reacted: true });
+  return NextResponse.json(data);
 }
