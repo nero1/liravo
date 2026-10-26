@@ -12,8 +12,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isLoading } = useAuth();
-  const { user, token } = useAuthStore();
+  const { isLoading } = useAuth(true);
+  const { user, token, mfaChallenge } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
   usePushNotifications();
@@ -22,7 +22,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
 
     const inAuth = segments[0] === 'auth';
-    const isAuthenticated = !!token;
+    if(mfaChallenge){if(!inAuth||segments[1]!=='welcome')router.replace('/auth/welcome');return;}
+    const isAuthenticated=!!token&&!!user&&!mfaChallenge;
 
     if (!isAuthenticated && !inAuth) {
       router.replace('/auth/welcome');
@@ -35,7 +36,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     } else if (isAuthenticated && user && !user.onboarding_complete && segments[1] !== 'onboarding') {
       router.replace('/auth/onboarding');
     }
-  }, [isLoading, token, user, segments]);
+  }, [isLoading,token,user,mfaChallenge,segments]);
 
   if (isLoading) return <LoadingSpinner />;
 

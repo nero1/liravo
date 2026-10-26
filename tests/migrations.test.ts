@@ -92,7 +92,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         has_column_privilege(${role},'public.users','recovery_codes','SELECT') as recovery`;
       expect(access).toEqual({ profile: true, email: false, pin: false, totp: false, recovery: false });
       const routines = await sql`select p.oid, p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy','creator_balance','claim_payout_request','settle_payout_request','defer_payout_request','cancel_payout_request','release_legacy_payout_request','process_refund_event','claim_refund_reconciliation','reconcile_capture_and_refund','apply_pending_capture_refunds','award_badge_atomic','count_verified_books','join_content_group','fork_reading_list','cast_debate_vote','reading_room_visible','read_room_posts','apply_community_intent','set_list_follow')`;
+        where n.nspname='public' and p.proname in ('create_payout_request_atomic','create_tip_transaction','process_payment_event','apply_social_intent','award_xp_once','claim_outbox_events','process_outbox_event_atomic','create_subscription_intent','cancel_subscriptions_atomic','page_followed_lists','process_subscription_webhook','toggle_review_like_atomic','increment_xp','claim_digest_delivery','financial_integrity_snapshot','increment_streak_atomic','apply_book_interaction','increment_review_helpfulness','set_feature_flag_atomic','attribute_referral_atomic','request_subscription_cancellation','claim_subscription_cancellations','complete_subscription_cancellation','apply_writing_intent','increment_challenge_vote','publish_writing_prompt','has_premium_access','refresh_premium_access','set_premium_override_atomic','register_billing_account','reconcile_google_play_purchase','complete_google_play_delivery','expire_subscription_entitlements','process_payment_event_legacy','creator_balance','claim_payout_request','settle_payout_request','defer_payout_request','cancel_payout_request','release_legacy_payout_request','process_refund_event','claim_refund_reconciliation','reconcile_capture_and_refund','apply_pending_capture_refunds','award_badge_atomic','count_verified_books','join_content_group','fork_reading_list','cast_debate_vote','reading_room_visible','read_room_posts','apply_community_intent','set_list_follow','begin_factor_challenge','claim_factor_challenge','finish_factor_challenge','disable_factor_atomic','read_factor_session','cleanup_factor_sessions','create_direct_account')`;
       for (const routine of routines) {
         const [permissions] = await sql`select has_function_privilege(${role},${routine.oid}::oid,'EXECUTE') as allowed`;
         expect(permissions.allowed, `${role}:${routine.proname}`).toBe(false);
@@ -728,5 +728,59 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     await sql`update shelf_books set finished_at=now() where shelf_id=${genreShelf.id}`;
     expect(await checkAndAwardBadges(otherPlayUser,'finish_book_genre')).toEqual(['horror_head_5']);
     expect(await checkAndAwardBadges(otherPlayUser,'finish_book_genre')).toEqual([]);
+    {
+    const mfa=await import('@/lib/auth/second-factor');
+    const {generateSecret,generateSync}=await import('otplib');
+    const bcrypt=await import('bcryptjs');
+    vi.stubEnv('AUTH_ENCRYPTION_KEY',Buffer.alloc(32,9).toString('base64'));
+    const mfaUser='00000000-0000-4000-8000-000000009950';
+    await sql`select create_direct_account(${mfaUser},'mfa@example.test','mfa_fixture','MFA fixture',${await bcrypt.hash('fixture-password',4)})`;
+    expect((await sql`select email from users where id=${mfaUser}`)[0].email).toBe('mfa@example.test');
+    const secret=generateSecret(),enrollment=mfa.factorToken(),sessionToken=mfa.factorSessionToken(mfa.factorToken()),sessionHash=mfa.factorHash(sessionToken);
+    const recoveryCodes=Array.from({length:8},(_,i)=>'ABCDE-1234'+i),recoveryHashes=await Promise.all(recoveryCodes.map(code=>bcrypt.hash(code,4)));
+    const encrypted=mfa.encryptFactor(JSON.stringify({secret,recoveryCodes}));
+    const code=generateSync({secret}),proof=await mfa.verifyFactorProof({id:mfaUser,email:'mfa@example.test',username:'mfa_fixture',totp_enabled:true,totp_secret:secret,recovery_codes:recoveryHashes,mfa_version:0,mfa_last_step:null,is_banned:false,deleted_at:null},{code});
+    expect(proof).not.toBeNull();
+    await sql`select begin_factor_challenge(${mfaUser},${mfa.factorHash(enrollment)},'setup',${sessionHash},${encrypted})`;
+    await sql`select claim_factor_challenge(${mfa.factorHash(enrollment)},'setup')`;
+    const confirm=()=>sql`select finish_factor_challenge(${mfa.factorHash(enrollment)},'setup',0,${proof!.step},null,${sessionHash},${mfa.encryptFactor(secret)},${recoveryHashes})`;
+    await Promise.all([confirm(),confirm()]);
+    expect((await sql`select count(*)::int as count from security_events where user_id=${mfaUser} and event_type='2fa_enabled'`)[0].count).toBe(1);
+    expect((await sql`select totp_enabled,mfa_version from users where id=${mfaUser}`)[0]).toEqual({totp_enabled:true,mfa_version:1});
+    expect((await mfa.readDirectSession(sessionToken))?.id).toBe(mfaUser);
+    const challenge=async()=>{const token=mfa.factorToken(),hash=mfa.factorHash(token);await sql`select begin_factor_challenge(${mfaUser},${hash},'login',null)`;await sql`select claim_factor_challenge(${hash},'login')`;return {token,hash,grant:mfa.factorHash(mfa.factorSessionToken(token))};};
+    const replayedStep=await challenge();
+    await expect(sql`select finish_factor_challenge(${replayedStep.hash},'login',1,${proof!.step},null,${replayedStep.grant})`).rejects.toThrow('already used');
+    const recoveryClaims=await Promise.all([challenge(),challenge()]);
+    const recoveryRace=await Promise.allSettled(recoveryClaims.map(item=>sql`select finish_factor_challenge(${item.hash},'login',1,null,${recoveryHashes[0]},${item.grant})`));
+    expect(recoveryRace.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    const recovered=recoveryClaims[recoveryRace.findIndex(result=>result.status==='fulfilled')];
+    await sql`select finish_factor_challenge(${recovered.hash},'login',1,null,null,${recovered.grant})`;
+    expect((await sql`select count(*)::int as count from security_events where user_id=${mfaUser} and event_type='2fa_login'`)[0].count).toBe(1);
+    expect((await sql`select cardinality(recovery_codes) as count from users where id=${mfaUser}`)[0].count).toBe(7);
+    const exhausted=await challenge();
+    for(let attempt=1;attempt<10;attempt++)expect((await sql`select claim_factor_challenge(${exhausted.hash},'login') as result`)[0].result).not.toBeNull();
+    expect((await sql`select claim_factor_challenge(${exhausted.hash},'login') as result`)[0].result).toBeNull();
+    const providerId=crypto.randomUUID(),providerHash=mfa.factorHash(`supabase:${mfaUser}:${providerId}`);
+    async function providerVisible(){return sql.begin(async tx=>{await tx`select set_config('request.jwt.claim.sub',${mfaUser},true)`;await tx`select set_config('request.jwt.claim.role','authenticated',true)`;await tx`select set_config('request.jwt.claims',${JSON.stringify({sub:mfaUser,session_id:providerId})},true)`;await tx`set local role authenticated`;return tx`select id from users where id=${mfaUser}`;});}
+    expect(await providerVisible()).toHaveLength(0);
+    const providerChallenge=mfa.factorToken();
+    await sql`select begin_factor_challenge(${mfaUser},${mfa.factorHash(providerChallenge)},'login',${providerHash})`;
+    await sql`select claim_factor_challenge(${mfa.factorHash(providerChallenge)},'login')`;
+    await expect(sql`select finish_factor_challenge(${mfa.factorHash(providerChallenge)},'login',1,null,${recoveryHashes[1]},${'b'.repeat(64)})`).rejects.toThrow('binding');
+    await sql`select finish_factor_challenge(${mfa.factorHash(providerChallenge)},'login',1,null,${recoveryHashes[1]},${providerHash})`;
+    expect(await providerVisible()).toHaveLength(1);
+    const disabled=()=>sql`select disable_factor_atomic(${mfaUser},1,null,${recoveryHashes[2]},${sessionHash},'disable-mfa-replay',${mfa.factorHash('disable-payload')})`;
+    await Promise.all([disabled(),disabled()]);
+    expect((await sql`select count(*)::int as count from security_events where user_id=${mfaUser} and event_type='2fa_disabled'`)[0].count).toBe(1);
+    expect((await sql`select totp_enabled,mfa_version from users where id=${mfaUser}`)[0]).toEqual({totp_enabled:false,mfa_version:2});
+    expect(await mfa.readDirectSession(mfa.factorSessionToken(recovered.token))).toBeNull();
+    expect((await mfa.readDirectSession(sessionToken))?.id).toBe(mfaUser);
+    await expect(sql.begin(async tx=>{await tx`select set_config('request.jwt.claim.role','authenticated',true)`;await tx`update users set mfa_version=0 where id=${mfaUser}`;})).rejects.toThrow('service authorization');
+    await sql`update auth_factor_challenges set expires_at=now()-interval '1 minute' where user_id=${mfaUser}`;
+    expect((await sql`select claim_factor_challenge(${replayedStep.hash},'login') as result`)[0].result).toBeNull();
+    expect(Number((await sql`select cleanup_factor_sessions(500) as count`)[0].count)).toBeGreaterThan(0);
+    for(const role of ['anon','authenticated'])for(const relation of ['auth_factor_challenges','auth_factor_grants'])expect((await sql`select has_table_privilege(${role},${relation},'SELECT') as allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

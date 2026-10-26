@@ -9,6 +9,16 @@
     "notifications": "Notifications"
   },
   "auth": {
+    "mfaTitle": "Two-factor verification",
+    "mfaDescription": "Enter a code from your authenticator app or use a recovery code.",
+    "authenticatorCode": "Authenticator code",
+    "recoveryCode": "Recovery code",
+    "mfaFailed": "Verification failed. Check your code or sign in again if the challenge expired.",
+    "mfaVerifying": "Verifying…",
+    "mfaVerify": "Verify and continue",
+    "useAuthenticator": "Use authenticator code",
+    "useRecovery": "Use a recovery code",
+    "mfaCancel": "Back to sign in",
     "signInWithGoogle": "Sign in with Google",
     "signInWithTelegram": "Sign in with Telegram",
     "continueWithGoogle": "Continue with Google",

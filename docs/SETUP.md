@@ -98,9 +98,11 @@ S3_CDN_URL=https://cdn.example.com        # Public CDN/download base URL for the
 
 | Variable | Description |
 |---|---|
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth Client ID _(Supabase mode only)_ |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth client audience for Supabase or direct token sign-in |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret _(Supabase mode only)_ |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token from BotFather _(Supabase mode only)_ |
+| `AUTH_ENCRYPTION_KEY` | Server-only base64 value encoding 32 random bytes; required to enroll/encrypt 2FA secrets (`openssl rand -base64 32`). Preserve this key with backups; rotation requires re-encrypting stored factors. |
+| `GOOGLE_ALLOWED_CLIENT_IDS` | Optional comma-separated native Google OAuth audiences for direct PostgreSQL sign-in; `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is also accepted. |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token from BotFather |
 
 ### AI
 
@@ -732,8 +734,7 @@ psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c \
 
 Both direct-PostgreSQL modes (DigitalOcean and Railway) share these limitations:
 
-- **No OAuth**: Google and Telegram login buttons are automatically hidden. Users sign in
-  with email + password only.
+- **Web sign-in** uses email/password in direct PostgreSQL mode. Native Google ID-token sign-in requires an allowed client audience; Telegram signed-payload exchange requires the bot token. Supabase web OAuth uses its configured providers.
 - **No Supabase Realtime**: Live updates use SSE polling instead of Supabase's WebSocket
   connection. Updates appear within ~5–30 seconds rather than instantly.
 - **No database-level RLS by default**: `auth.uid()` is a Supabase function and returns
@@ -755,9 +756,10 @@ Both direct-PostgreSQL modes (DigitalOcean and Railway) share these limitations:
 **Supabase mode only** — Supabase manages JWT signing. To rotate: Supabase Dashboard → Settings
 → API → JWT Secret → Regenerate. All active sessions will be invalidated; users must sign in again.
 
-**DigitalOcean / Railway mode** — Sessions are stored in Redis. To invalidate all sessions:
+**DigitalOcean / Railway mode** — Sessions use Redis and PostgreSQL factor grants. To invalidate all sessions, remove both:
 ```bash
-redis-cli --scan --pattern "do:session:*" | xargs redis-cli del
+redis-cli --scan --pattern "do:session:*" | xargs -r redis-cli del
+psql "$DATABASE_DIRECT_URL" -c "DELETE FROM auth_factor_grants;"
 ```
 
 ### Payment Webhook Secrets
@@ -983,7 +985,7 @@ The `.gitignore` excludes `.env.local`. Never commit `.env` files with real valu
 
 ### Security and financial migration update
 
-Apply migrations 019–043 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+Apply migrations 019–044 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
 
 Payout requests reserve each USD/NGN/EUR balance atomically; failed/cancelled requests release reservations, completed requests remain deducted. Currencies are never implicitly converted; referral commissions remain USD. New referral commissions are 10% of the platform fee, not 10% of gross; audit historical commissions separately before enabling withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
 
@@ -1032,3 +1034,5 @@ Configure both payment providers to POST native signed events to `/api/webhooks/
 Migration 041 records immutable provider capture identities and verified service periods. Paystack purchases are 30-day passes from payment time; Dodo access uses each payment’s `service_periods`, not the subscription’s current renewal date. Dodo products must have the advertised monthly USD price, no trial/discount/PPP, and tax-exclusive pricing; tip products must also be tax exclusive. Gateway principal after tax must exactly match the reserved amount. Displayed prices exclude applicable tax. Cancellation schedules the end of renewal and preserves paid access. A full refund of the last paid Dodo period queues provider cancellation. Legacy active subscriptions without a verifiable period fail closed and appear in integrity alerts; reconcile them before deploying. Verified replays can fill a missing paid period without repeating the charge, commissions or rewards.
 
 Signed `refund.processed` (Paystack) and `refund.succeeded` (Dodo) events bind to original captures. Partial refunds prorate creator credit and referral commission cumulatively against the original gross charge, with final rounding at the ledger’s precision; full refunds reverse tip XP and revoke only the refunded paid period. Uncovered pending payouts cancel atomically; approved/ambiguous transfers stay reserved and negative balances are flagged. Refunds before capture enter a private retry queue; outbox drain fetches the original payment and commits capture/refund together. Ten failed attempts require operator reconciliation. Duplicate charges are recorded without repeating earnings/rewards; refund them in the provider dashboard. Refunds must use the original charge currency; no FX is inferred. Historical refunded tips retain zero credit, and existing refund/commission/XP records require staging reconciliation.
+
+Migration 044 enforces authenticator/recovery verification before direct or Supabase application access. Enrollment uses session-bound five-minute challenges and encrypted secrets; login challenges allow ten attempts, consume TOTP steps/recovery hashes once, and issue versioned seven-day grants. Supabase authenticated RLS also requires a proof for its validated `session_id`; apply the migration before deploying. Enabling 2FA rejects unverified sessions; disabling invalidates earlier proofs. Configure `AUTH_ENCRYPTION_KEY` first. New secrets are encrypted; legacy plaintext secrets upgrade after successful verification when the key is configured. `POST /api/auth/2fa/setup` starts/confirms enrollment; verification uses `/api/auth/2fa/verify`, and Supabase clients first exchange their session through `/api/auth/session`. Outbox drain removes expired challenges/grants in bounded batches. The migration also supplies missing account deletion/Google identity columns and transactional direct-account creation for schemas retaining the auth-user foreign key.

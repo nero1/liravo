@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { checkAndAwardBadges } from '@/services/badges';
 import { isDirectPostgres } from '@/lib/db/provider';
+import { factorProfile } from '@/lib/auth/second-factor';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,8 @@ export async function GET(request: Request) {
     const supabase = createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      const {data:{user:primaryUser}}=await createClient({skipMfa:true}).auth.getUser();
+      if(primaryUser&&(await factorProfile(primaryUser.id))?.totp_enabled)return NextResponse.redirect(`${origin}/login?mfa=required&next=${encodeURIComponent(next)}`);
       const user = await getCurrentUser();
       if (user) {
         const { data: profile } = await supabase

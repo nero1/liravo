@@ -1,111 +1,44 @@
-/**
- * 2FA TOTP setup and enable flow.
- * GET  → generate a secret + QR code data URL (not yet saved)
- * POST → verify the provided TOTP code, then save the secret + recovery codes
- */
-import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { generateSecret as otplibGenerateSecret, generateURI, verifySync } from 'otplib';
+import { generateSecret, generateURI, verifySync } from 'otplib';
 import QRCode from 'qrcode';
-import { z } from 'zod';
-import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
-import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { claimFactorChallenge, currentFactorSessionHash, decryptFactor, encryptFactor, factorHash, factorSessionResponse, factorToken } from '@/lib/auth/second-factor';
 
-export const dynamic = 'force-dynamic';
+export const dynamic='force-dynamic';
+const schema=z.discriminatedUnion('action',[
+  z.object({action:z.literal('start')}),
+  z.object({action:z.literal('confirm'),enrollmentToken:z.string().regex(/^[a-f0-9]{64}$/),code:z.string().regex(/^\d{6}$/)}),
+]);
 
-const APP_NAME = 'Liravo';
-
-function generateRecoveryCodes(count = 8): string[] {
-  return Array.from({ length: count }, () =>
-    crypto.randomBytes(5).toString('hex').toUpperCase().replace(/(.{5})/, '$1-')
-  );
-}
-
-export async function GET() {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('username, totp_enabled')
-    .eq('id', user.id)
-    .single();
-
-  if (profile?.totp_enabled) {
-    return NextResponse.json({ error: '2FA is already enabled' }, { status: 409 });
-  }
-
-  const secret = otplibGenerateSecret();
-  const otpauthUrl = generateURI({
-    label: profile?.username ?? user.id,
-    issuer: APP_NAME,
-    secret,
-  });
-
-  const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
-
-  // Return secret and QR — not saved yet, user must verify first
-  return NextResponse.json({ secret, qrDataUrl });
-}
-
-const verifySchema = z.object({
-  secret: z.string().min(16).max(64),
-  code: z.string().length(6).regex(/^\d{6}$/),
-});
-
-export async function POST(req: Request) {
-  const ip = getClientIp(req);
-  const rate = await checkCriticalRateLimit(ip);
-  if (!rate.allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const raw = await req.text().catch(() => '');
-  if (raw.length > 500) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
-  let body: unknown;
-  try { body = JSON.parse(raw); } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-
-  const parsed = verifySchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const { secret, code } = parsed.data;
-
-  const isValid = verifySync({ token: code, secret });
-  if (!isValid) {
-    return NextResponse.json({ error: 'Invalid verification code. Please try again.' }, { status: 422 });
-  }
-
-  // Generate recovery codes
-  const recoveryCodes = generateRecoveryCodes(8);
-  const hashedCodes = await Promise.all(
-    recoveryCodes.map((c) => bcrypt.hash(c, 10))
-  );
-
-  // Save: encrypt secret + store hashed recovery codes
-  const service = createServiceClient();
-  const { error } = await service
-    .from('users')
-    .update({
-      totp_secret: secret,
-      totp_enabled: true,
-      recovery_codes: hashedCodes,
-    })
-    .eq('id', user.id);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Log security event
-  await service.from('security_events').insert({
-    user_id: user.id,
-    event_type: '2fa_enabled',
-  });
-
-  return NextResponse.json({ ok: true, recoveryCodes });
+export async function POST(request:Request) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!(await checkCriticalRateLimit(getClientIp(request))).allowed)return NextResponse.json({error:'Too many requests'},{status:429});
+  const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:'Invalid enrollment request'},{status:400});
+  try{
+    const sessionHash=await currentFactorSessionHash(user.id);
+    if(parsed.data.action==='start'){
+      const secret=generateSecret(),enrollmentToken=factorToken();
+      const recoveryCodes=Array.from({length:8},()=>factorToken().slice(0,10).toUpperCase().replace(/^(.{5})/,'$1-'));
+      const encrypted=encryptFactor(JSON.stringify({secret,recoveryCodes}));
+      const {error}=await createServiceClient().rpc('begin_factor_challenge' as never,{p_user_id:user.id,p_hash:factorHash(enrollmentToken),p_kind:'setup',p_session_hash:sessionHash,p_encrypted_payload:encrypted} as never);
+      if(error)return NextResponse.json({error:'Enrollment unavailable'},{status:error.code==='P1001'?409:503});
+      const qrDataUrl=await QRCode.toDataURL(generateURI({label:user.email||user.id,issuer:'Liravo',secret}));
+      return factorSessionResponse({secret,qrDataUrl,enrollmentToken});
+    }
+    const challenge=await claimFactorChallenge(parsed.data.enrollmentToken,'setup');
+    if(!challenge||challenge.user_id!==user.id||challenge.provider_session_hash!==sessionHash||!challenge.encrypted_payload)return NextResponse.json({error:'Enrollment expired or unavailable'},{status:401});
+    const payload=JSON.parse(decryptFactor(challenge.encrypted_payload)) as {secret:string;recoveryCodes:string[]};
+    const result=verifySync({token:parsed.data.code,secret:payload.secret,epochTolerance:30});
+    if(!challenge.verified_at&&!result.valid)return NextResponse.json({error:'Invalid verification code'},{status:422});
+    const step=result.valid&&'timeStep'in result&&typeof result.timeStep==='number'?result.timeStep:null;
+    const hashes=await Promise.all(payload.recoveryCodes.map(code=>bcrypt.hash(code,10)));
+    const {error}=await createServiceClient().rpc('finish_factor_challenge' as never,{p_hash:factorHash(parsed.data.enrollmentToken),p_kind:'setup',p_version:challenge.expected_version,p_step:step,p_recovery_hash:null,p_grant_hash:sessionHash,p_secret:encryptFactor(payload.secret),p_recovery_hashes:hashes} as never);
+    if(error)return NextResponse.json({error:'Enrollment changed; restart setup'},{status:['P1001','P1003'].includes(error.code)?409:503});
+    return factorSessionResponse({ok:true,recoveryCodes:payload.recoveryCodes});
+  }catch{return NextResponse.json({error:'Enrollment unavailable'},{status:503});}
 }

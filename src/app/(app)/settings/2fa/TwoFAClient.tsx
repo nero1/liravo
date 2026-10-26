@@ -12,6 +12,8 @@ type Phase = 'idle' | 'setup_qr' | 'verify' | 'recovery_codes' | 'disable';
 export default function TwoFAClient({ enabled }: TwoFAClientProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [secret, setSecret] = useState('');
+  const [enrollmentToken,setEnrollmentToken]=useState('');
+  const [disableKey,setDisableKey]=useState(()=>crypto.randomUUID());
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [code, setCode] = useState('');
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -22,15 +24,16 @@ export default function TwoFAClient({ enabled }: TwoFAClientProps) {
   const startSetup = async () => {
     setLoading(true);
     setError(null);
-    const res = await fetch('/api/auth/2fa/setup');
+    const res = await fetch('/api/auth/2fa/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start'})});
     setLoading(false);
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
       setError((d as { error?: string }).error ?? 'Failed to start setup');
       return;
     }
-    const data = await res.json() as { secret: string; qrDataUrl: string };
+    const data = await res.json() as {secret:string;qrDataUrl:string;enrollmentToken:string};
     setSecret(data.secret);
+    setEnrollmentToken(data.enrollmentToken);
     setQrDataUrl(data.qrDataUrl);
     setPhase('setup_qr');
   };
@@ -42,7 +45,7 @@ export default function TwoFAClient({ enabled }: TwoFAClientProps) {
     const res = await fetch('/api/auth/2fa/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret, code }),
+      body:JSON.stringify({action:'confirm',enrollmentToken,code}),
     });
     setLoading(false);
     const data = await res.json().catch(() => ({})) as { error?: string; recoveryCodes?: string[] };
@@ -53,13 +56,13 @@ export default function TwoFAClient({ enabled }: TwoFAClientProps) {
   };
 
   const disable = async () => {
-    if (code.length !== 6) { setError('Enter the 6-digit code from your authenticator app.'); return; }
+    if(!/^\d{6}$|^[a-fA-F0-9]{5}-?[a-fA-F0-9]{5}$/.test(code)){setError('Enter an authenticator or recovery code.');return;}
     setLoading(true);
     setError(null);
     const res = await fetch('/api/auth/2fa/disable', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
+      headers:{'Content-Type':'application/json','Idempotency-Key':disableKey},
+      body:JSON.stringify(/^\d{6}$/.test(code)?{code}:{recoveryCode:code}),
     });
     setLoading(false);
     if (!res.ok) {
@@ -162,13 +165,13 @@ export default function TwoFAClient({ enabled }: TwoFAClientProps) {
   if (phase === 'disable') {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">Enter the 6-digit code from your authenticator app to confirm.</p>
+        <p className="text-sm text-muted-foreground">Enter an authenticator code or a recovery code to confirm.</p>
         <input
           type="text"
-          inputMode="numeric"
-          maxLength={6}
+          inputMode="text"
+          maxLength={11}
           value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          onChange={(e) => setCode(e.target.value.toUpperCase().slice(0,11))}
           placeholder="000000"
           className="w-full px-3 py-2.5 border border-border rounded-lg bg-background text-sm tracking-widest text-center text-xl focus:outline-none focus:ring-2 focus:ring-accent/50"
         />
@@ -182,7 +185,7 @@ export default function TwoFAClient({ enabled }: TwoFAClientProps) {
           </button>
           <button
             onClick={disable}
-            disabled={loading || code.length !== 6}
+            disabled={loading || !/^\d{6}$|^[a-fA-F0-9]{5}-?[a-fA-F0-9]{5}$/.test(code)}
             className="flex-1 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-medium hover:bg-destructive/90 transition-colors disabled:opacity-60"
           >
             {loading ? 'Disabling…' : 'Disable 2FA'}
@@ -207,7 +210,7 @@ export default function TwoFAClient({ enabled }: TwoFAClientProps) {
 
       {isEnabled ? (
         <button
-          onClick={() => { setPhase('disable'); setError(null); }}
+          onClick={() => { setDisableKey(crypto.randomUUID());setPhase('disable'); setError(null); }}
           disabled={loading}
           className="w-full py-2.5 bg-destructive/10 text-destructive rounded-lg text-sm font-medium hover:bg-destructive/20 transition-colors"
         >

@@ -9,6 +9,16 @@
     "notifications": "Benachrichtigungen"
   },
   "auth": {
+    "mfaTitle": "Zwei-Faktor-Verifizierung",
+    "mfaDescription": "Gib einen Code aus deiner Authenticator-App oder einen Wiederherstellungscode ein.",
+    "authenticatorCode": "Authenticator-Code",
+    "recoveryCode": "Wiederherstellungscode",
+    "mfaFailed": "Die Verifizierung ist fehlgeschlagen. Prüfe den Code oder melde dich erneut an, wenn die Anfrage abgelaufen ist.",
+    "mfaVerifying": "Wird überprüft…",
+    "mfaVerify": "Bestätigen und fortfahren",
+    "useAuthenticator": "Authenticator-Code verwenden",
+    "useRecovery": "Wiederherstellungscode verwenden",
+    "mfaCancel": "Zurück zur Anmeldung",
     "signInWithGoogle": "Mit Google anmelden",
     "signInWithTelegram": "Mit Telegram anmelden",
     "continueWithGoogle": "Mit Google fortfahren",

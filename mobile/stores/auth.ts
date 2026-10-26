@@ -8,6 +8,8 @@ interface AuthState {
   user: UserRow | null;
   token: string | null;
   isLoading: boolean;
+  mfaChallenge:string|null;
+  setMfaChallenge:(challenge:string|null)=>void;
   setUser: (user: UserRow | null) => void;
   setToken: (token: string | null) => Promise<void>;
   setLoading: (loading: boolean) => void;
@@ -19,6 +21,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
   isLoading: true,
+  mfaChallenge:null,
+  setMfaChallenge:(mfaChallenge)=>set({mfaChallenge}),
   setUser: (user) => set({ user }),
   setToken: async (token) => {
     if (token) {
@@ -31,7 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
   signOut: async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
-    set({ user: null, token: null });
+    set({user:null,token:null,mfaChallenge:null});
   },
   loadStoredToken: async () => {
     const stored = await SecureStore.getItemAsync(TOKEN_KEY);

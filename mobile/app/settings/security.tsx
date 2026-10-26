@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 
 export default function SecurityScreen() {
   const { user } = useAuthStore();
+  const [factorCode,setFactorCode]=useState('');
   const [pin, setPin] = useState('');
 
   const setNewPin = useMutation({
@@ -19,8 +20,8 @@ export default function SecurityScreen() {
   });
 
   const disable2fa = useMutation({
-    mutationFn: () => api.post('/api/auth/2fa/disable'),
-    onSuccess: () => Alert.alert('2FA Disabled'),
+    mutationFn:()=>api.post('/api/auth/2fa/disable',/^\d{6}$/.test(factorCode)?{code:factorCode}:{recoveryCode:factorCode}),
+    onSuccess:async()=>{const result=await api.get<{user:typeof user}>('/api/users/me');useAuthStore.getState().setUser(result.user);setFactorCode('');Alert.alert('2FA Disabled');},
     onError: (err) => Alert.alert('Error', (err as Error).message),
   });
 
@@ -33,9 +34,9 @@ export default function SecurityScreen() {
             Status: {user?.totp_enabled ? '✅ Enabled' : '❌ Disabled'}
           </Text>
           {user?.totp_enabled ? (
-            <Button variant="destructive" onPress={() => disable2fa.mutate()} loading={disable2fa.isPending} size="sm">
+            <View className="gap-3"><Input label="Authenticator or recovery code" value={factorCode} onChangeText={setFactorCode} autoCapitalize="characters" maxLength={11} /><Button variant="destructive" onPress={() => disable2fa.mutate()} loading={disable2fa.isPending} disabled={!/^\d{6}$|^[a-fA-F0-9]{5}-?[a-fA-F0-9]{5}$/.test(factorCode)} size="sm">
               Disable 2FA
-            </Button>
+            </Button></View>
           ) : (
             <Text className="text-sm text-muted-foreground">
               Enable 2FA from the web app for enhanced security.
