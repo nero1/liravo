@@ -14,4 +14,5 @@ export const CRON_JOBS = [
 ] as const;
 export type CronJobId = typeof CRON_JOBS[number]['id'];
 
-export const INTEGRITY_SIGNALS = ['tipsWithoutPayout','tipsWithoutOutbox','payoutsWithoutAudit','failedOutbox','stalledOutbox','uncertainDigests','unacknowledgedPurchases','stalledBillingDeliveries'] as const;
+export const INTEGRITY_SIGNALS = ['tipsWithoutPayout','tipsWithoutOutbox','payoutsWithoutAudit','failedOutbox','stalledOutbox','uncertainDigests','unconfirmedPayouts',
+  'unacknowledgedPurchases','stalledBillingDeliveries'] as const;

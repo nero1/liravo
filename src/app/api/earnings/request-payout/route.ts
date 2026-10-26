@@ -12,7 +12,8 @@ export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
-  method: z.enum(['dodopayments', 'paystack']).optional(),
+  method: z.enum(['manual', 'paystack']).optional(),
+  currency:z.enum(['USD','NGN','EUR']).default('USD'),
 });
 
 const MIN_PAYOUT = new Decimal('5.00');
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
   } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
     const form = await req.formData().catch(() => new FormData());
     idempotencyKey ??= String(form.get('_idempotency') ?? '');
-    body = { amount: form.get('amount'), method: form.get('method') };
+    body = { amount: form.get('amount'), method: form.get('method'),currency:form.get('currency')??'USD' };
   } else {
     return NextResponse.json({ error: 'Unsupported content type' }, { status: 415 });
   }
@@ -76,13 +77,14 @@ export async function POST(req: Request) {
   const rpcReserve = await supabase.rpc('create_payout_request_atomic' as never, {
     p_user_id: user.id,
     p_amount: amount.toFixed(2),
-    p_method: parsed.data.method ?? 'dodopayments',
+    p_method: parsed.data.method ?? 'manual',
+    p_currency:parsed.data.currency,
     p_idempotency_key: idempotencyKey,
     p_correlation_id: correlationId,
   } as never);
   if (!rpcReserve.error) {
     recordMetric('payout_request_success', { route: 'src/app/api/earnings/request-payout/route.ts', amount: amount.toFixed(2), correlationId, mode: 'rpc' });
-    return NextResponse.json({ requested: true, mode: 'rpc' }, { status: 201 });
+    return NextResponse.json({ requested: true, payoutId:rpcReserve.data, mode: 'rpc' }, { status: 201 });
   }
 
   const status = rpcReserve.error.code === 'P0001' ? 409 : 503;
