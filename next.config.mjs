@@ -46,6 +46,27 @@ const remotePatterns = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  webpack(config, { isServer }) {
+    if (isServer) config.externals.push('@huggingface/transformers');
+    // ONNX emits pre-minified ES module workers; Next 14's script minifier cannot parse import.meta.
+    config.plugins.push({
+      apply(compiler) {
+        compiler.hooks.compilation.tap('OnnxModuleWorkers', compilation => {
+          compilation.hooks.processAssets.tap({
+            name: 'OnnxModuleWorkers',
+            stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE - 1,
+          }, assets => {
+            for (const name of Object.keys(assets)) {
+              if (/^static\/media\/ort\..*\.mjs$/.test(name)) {
+                compilation.updateAsset(name, assets[name], { minimized: true });
+              }
+            }
+          });
+        });
+      },
+    });
+    return config;
+  },
   images: {
     remotePatterns,
     formats: ['image/webp'],

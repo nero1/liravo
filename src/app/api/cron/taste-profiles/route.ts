@@ -1,3 +1,4 @@
+import { cron } from '@/lib/cron';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient } from '@/lib/redis';
 import { NextResponse } from 'next/server';
@@ -5,11 +6,7 @@ import { AI_MODELS } from '@/constants/ai';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
-  const secret = req.headers.get('x-cron-secret');
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+async function run() {
 
   const supabase = createServiceClient();
   const redis = getRedisClient();
@@ -155,3 +152,8 @@ Write in a warm, insightful tone.`;
 
   return NextResponse.json({ processed, regenerated });
 }
+
+export const GET = cron('taste-profiles', run);
+export const POST = GET;
+
+export const maxDuration = 60;

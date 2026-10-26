@@ -64,7 +64,7 @@ export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
             await fetch('/api/xp', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'finish_book' }),
+              body: JSON.stringify({ action: 'finish_book', bookId }),
             });
           }
         }
@@ -92,7 +92,7 @@ export function AddToShelfButton({ bookId, userId }: AddToShelfButtonProps) {
         await fetch('/api/xp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'finish_book' }),
+          body: JSON.stringify({ action: 'finish_book', bookId }),
         });
       }
     }

@@ -67,7 +67,7 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Award 25 XP
-  await awardXP(user.id, 25, 'challenge_submission');
+  await awardXP(user.id, 25, 'challenge_submission', `challenge:${params.id}`);
 
   // Increment writing streak and check badges
   await incrementWritingStreak(user.id);

@@ -1,10 +1,8 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import Decimal from 'decimal.js';
-import { checkCriticalRateLimit } from '@/lib/rate-limit';
-import { claimIdempotency } from '@/lib/idempotency';
-import crypto from 'crypto';
+import { checkMoneyRateLimit } from '@/lib/rate-limit';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -14,7 +12,7 @@ export const dynamic = 'force-dynamic';
 const bodySchema = z.object({
   provider: z.enum(['dodopayments', 'paystack']),
   currency: z.enum(['USD', 'NGN']),
-});
+}).refine(value => value.provider === 'paystack' || value.currency === 'USD', { message: 'Dodo checkout requires USD' });
 
 const PRICE_USD = new Decimal('4.99');
 const PRICE_NGN = new Decimal('7500');
@@ -36,13 +34,14 @@ async function createPaystackCheckout(opts: {
     headers: {
       Authorization: `Bearer ${secret}`,
       'Content-Type': 'application/json',
+      'Idempotency-Key': opts.subscriptionId,
     },
     body: JSON.stringify({
       email: opts.email,
       amount: opts.amountKobo,
       currency: opts.currency,
       reference: opts.reference,
-      callback_url: `${APP_URL}/api/subscriptions/webhook`,
+      callback_url: `${APP_URL}/premium?payment=pending`,
       metadata: {
         user_id: opts.userId,
         subscription_id: opts.subscriptionId,
@@ -52,8 +51,7 @@ async function createPaystackCheckout(opts: {
   });
 
   if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`Paystack init failed: ${res.status} ${err}`);
+    throw new Error(`Paystack init failed: ${res.status}`);
   }
 
   const data = await res.json() as { data?: { authorization_url?: string } };
@@ -69,25 +67,31 @@ async function createDodoCheckout(opts: {
   subscriptionId: string;
   reference: string;
 }): Promise<string> {
-  const key = process.env.DODOPAYMENTS_API_KEY;
+  const key = process.env.DODOPAYMENTS_API_KEY ?? process.env.DODOPAYMENTS_SECRET_KEY;
   if (!key) throw new Error('DODOPAYMENTS_API_KEY not configured');
 
-  const res = await fetch('https://api.dodopayments.com/subscriptions', {
+  const productId = process.env.DODOPAYMENTS_PREMIUM_PRODUCT_ID;
+  if (!productId) throw new Error('DODOPAYMENTS_PREMIUM_PRODUCT_ID not configured');
+  const mode = process.env.DODOPAYMENTS_ENVIRONMENT ?? 'test_mode';
+  if (!['test_mode', 'live_mode'].includes(mode)) throw new Error('Invalid Dodo environment');
+  const base = mode === 'test_mode' ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+  const res = await fetch(`${base}/checkouts`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
+      'Idempotency-Key': opts.subscriptionId,
     },
     body: JSON.stringify({
-      payment_link: true,
       customer: { email: opts.email },
+      billing_currency: 'USD',
       product_cart: [
         {
-          product_id: process.env.DODOPAYMENTS_PREMIUM_PRODUCT_ID ?? 'premium_monthly',
+          product_id: productId,
           quantity: 1,
         },
       ],
-      return_url: `${APP_URL}/premium?activated=1`,
+      return_url: `${APP_URL}/premium?payment=pending`,
       metadata: {
         user_id: opts.userId,
         subscription_id: opts.subscriptionId,
@@ -97,41 +101,43 @@ async function createDodoCheckout(opts: {
   });
 
   if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`Dodopayments init failed: ${res.status} ${err}`);
+    throw new Error(`Dodopayments init failed: ${res.status}`);
   }
 
-  const data = await res.json() as { payment_link?: string; url?: string };
-  const url = data.payment_link ?? data.url;
+  const data = await res.json() as { checkout_url?: string };
+  const url = data.checkout_url;
   if (!url) throw new Error('Dodopayments did not return a checkout URL');
   return url;
 }
 
 export async function POST(req: Request) {
   const correlationId = getRequestCorrelationId(req);
-  const ip = getClientIp(req);
-  const rate = await checkCriticalRateLimit(ip);
-  if (!rate.allowed) {
-    recordMetric('rate_limit_block', { route: 'src/app/api/subscriptions/create/route.ts' }, 'warn');
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-  }
-
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) {
     recordMetric('auth_unauthorized', { route: 'src/app/api/subscriptions/create/route.ts' }, 'warn');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const ip = getClientIp(req);
+  const rate = await checkMoneyRateLimit(user.id, ip);
+  if (!rate.allowed) {
+    recordMetric('rate_limit_block', { route: 'src/app/api/subscriptions/create/route.ts' }, 'warn');
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
+  const supabase = createServiceClient();
+
+  let formKey: string | null = null;
   let body: unknown;
   const contentType = req.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) {
     const raw = await req.text().catch(() => '');
-    if (raw.length > 10_000) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+    if (Buffer.byteLength(raw, 'utf8') > 10_000) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
     try { body = raw ? JSON.parse(raw) : {}; }
     catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   } else {
     const form = await req.formData().catch(() => new FormData());
+    formKey = String(form.get('_idempotency') ?? '');
     body = { provider: form.get('provider'), currency: form.get('currency') };
   }
 
@@ -139,37 +145,22 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
   const { provider, currency } = parsed.data;
-  const idemKey = req.headers.get('idempotency-key');
-  if (!idemKey || idemKey.length < 8) return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
-
-  const fingerprint = crypto.createHash('sha256').update(`${user.id}:${provider}:${currency}`).digest('hex');
-  const idemState = await claimIdempotency(`sub-create:${user.id}:${idemKey}`, fingerprint, 60 * 30);
-  if (idemState === 'replay') return NextResponse.json({ error: 'Duplicate request' }, { status: 409 });
-  if (idemState === 'conflict') return NextResponse.json({ error: 'Idempotency key re-used with different payload' }, { status: 409 });
+  const idemKey = req.headers.get('idempotency-key') ?? formKey;
+  if (!idemKey || (idemKey.length < 8 || idemKey.length > 200)) return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
 
   const amount = currency === 'NGN' ? PRICE_NGN.toFixed(2) : PRICE_USD.toFixed(2);
-  const reference = `sub_${user.id}_${Date.now()}`;
-
-  const { data: sub, error: insertError } = await supabase
-    .from('subscriptions')
-    .insert({ user_id: user.id, provider, status: 'pending', amount, currency })
-    .select('id')
-    .single();
-
-  if (insertError || !sub) return NextResponse.json({ error: insertError?.message ?? 'Insert failed' }, { status: 500 });
-
-  const { error: auditError } = await supabase.from('financial_audit_log').insert({
-    actor_user_id: user.id,
-    target_user_id: user.id,
-    action: 'subscription_create_pending',
-    amount,
-    currency,
-    provider,
-    idempotency_key: idemKey,
-    correlation_id: correlationId,
-    metadata: { subscription_id: sub.id, reference },
-  });
-  if (auditError) return NextResponse.json({ error: 'Failed to persist audit trail' }, { status: 500 });
+  const { data, error: intentError } = await supabase.rpc('create_subscription_intent' as never, {
+    p_user_id: user.id, p_provider: provider, p_currency: currency, p_amount: amount,
+    p_key: idemKey, p_correlation_id: correlationId,
+  } as never);
+  if (intentError) return NextResponse.json({ error: 'Subscription unavailable', correlationId }, { status: 503 });
+  const sub = data as { id: string; checkout_url: string | null };
+  const reference = `sub_${sub.id}`;
+  if (sub.checkout_url) {
+    return req.headers.get('accept')?.includes('application/json')
+      ? NextResponse.json({ checkoutUrl: sub.checkout_url })
+      : new Response(null, { status: 303, headers: { Location: sub.checkout_url } });
+  }
 
   // Get user email for payment providers
   const { data: profile } = await supabase.from('users').select('email').eq('id', user.id).single();
@@ -200,13 +191,20 @@ export async function POST(req: Request) {
       });
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Payment provider error';
-    recordMetric('subscription_checkout_error', { provider, error: message });
-    return NextResponse.json({ error: `Could not create checkout: ${message}` }, { status: 502 });
+    recordMetric('subscription_checkout_error', { provider, correlationId, name: err instanceof Error ? err.name : 'Unknown' }, 'error');
+    return NextResponse.json({ error: 'Payment provider unavailable; retry with the same key', correlationId }, { status: 502 });
   }
 
-  // Store reference in subscription for webhook correlation
-  await supabase.from('subscriptions').update({ provider_event_id: reference }).eq('id', sub.id);
+  const validCheckout = z.string().url().safeParse(checkoutUrl);
+  if (!validCheckout.success) return NextResponse.json({ error: 'Invalid checkout destination', correlationId }, { status: 503 });
+  const checkout = new URL(validCheckout.data);
+  if (checkout.protocol !== 'https:' || (provider === 'paystack' ? checkout.hostname !== 'checkout.paystack.com' : !/(^|\.)dodopayments\.com$/.test(checkout.hostname))) {
+    return NextResponse.json({ error: 'Invalid checkout destination', correlationId }, { status: 503 });
+  }
+
+  // Persist checkout URL for retries; the reference was reserved with the intent.
+  const { error: checkoutError } = await supabase.from('subscriptions').update({ checkout_url: checkoutUrl }).eq('id', sub.id);
+  if (checkoutError) return NextResponse.json({ error: 'Checkout persistence failed; retry with the same key', correlationId }, { status: 503 });
 
   const accept = req.headers.get('accept') ?? '';
   if (!accept.includes('application/json')) {

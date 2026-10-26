@@ -40,7 +40,7 @@ export async function POST(
 
   // Check already submitted
   const { data: existing } = await supabase
-    .from('prompt_submissions')
+    .from('writing_prompt_submissions')
     .select('id')
     .eq('user_id', user.id)
     .eq('prompt_id', params.id)
@@ -52,7 +52,7 @@ export async function POST(
 
   // Insert submission
   const { data: submission, error } = await supabase
-    .from('prompt_submissions')
+    .from('writing_prompt_submissions')
     .insert({
       user_id: user.id,
       prompt_id: params.id,
@@ -64,7 +64,7 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  await awardXP(user.id, 10, 'prompt_submission');
+  await awardXP(user.id, 10, 'prompt_submission', `prompt:${params.id}`);
   await incrementWritingStreak(user.id);
 
   await checkAndAwardBadges(user.id, 'prompt_submit');

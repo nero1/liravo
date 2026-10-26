@@ -1,8 +1,9 @@
+import { singleRelation } from '@/lib/utils';
 import { ImageResponse } from '@vercel/og';
 import { createServiceClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
 
@@ -22,7 +23,7 @@ export async function GET(
     return new Response('Not found', { status: 404 });
   }
 
-  const book = debate.books as { title: string; author_name: string; cover_url: string | null } | null;
+  const book = singleRelation(debate.books);
   const total = (debate.yes_count ?? 0) + (debate.no_count ?? 0);
   const yesPct = total > 0 ? Math.round((debate.yes_count / total) * 100) : 50;
   const noPct = 100 - yesPct;

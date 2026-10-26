@@ -11,7 +11,7 @@
  */
 import { cookies } from 'next/headers';
 import { getRedisClient } from '@/lib/redis';
-import { PgQueryBuilder, getPgQueryBuilderFactory } from './query-builder';
+import { getPgQueryBuilderFactory } from './query-builder';
 import { getStorageProvider } from '@/lib/storage/provider';
 import { withUserContext } from './pg';
 
@@ -50,7 +50,7 @@ function buildAuthModule(readCookie: () => string | undefined) {
     },
 
     // Not supported in DO mode — used only by middleware
-    async exchangeCodeForSession(_code: string) {
+    async exchangeCodeForSession() {
       return { error: new Error('OAuth not supported in DO mode') };
     },
   };

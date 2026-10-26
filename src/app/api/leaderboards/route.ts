@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
 
       const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
       entries = sorted
-        .map(([uid, stats], i) => {
+        .map(([uid, stats], i): LeaderboardEntry | null => {
           const p = profileMap.get(uid);
           if (!p) return null;
           return {

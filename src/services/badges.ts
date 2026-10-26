@@ -1,3 +1,4 @@
+import { singleRelation } from '@/lib/utils';
 import { createServiceClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 
@@ -126,7 +127,7 @@ async function hasAwardedBadge(supabase: Supabase, userId: string, badgeId: stri
 async function awardBadge(supabase: Supabase, userId: string, badge: BadgeDefinition): Promise<void> {
   if (await hasAwardedBadge(supabase, userId, badge.id)) return;
   await supabase.from('user_badges').insert({ user_id: userId, badge_id: badge.id });
-  await awardXP(userId, badge.xp_reward, `badge:${badge.id}`);
+  await awardXP(userId, badge.xp_reward, `badge:${badge.id}`, `badge:${badge.id}`);
   await supabase.from('notifications').insert({
     user_id: userId,
     type: 'badge_earned',
@@ -205,15 +206,15 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Referral badges (CORRECT thresholds: 10, 50, 200) ──
       case 'connector': {
-        const { count } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', userId);
+        const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
         qualifies = (count ?? 0) >= 10; break;
       }
       case 'ambassador': {
-        const { count } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', userId);
+        const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
         qualifies = (count ?? 0) >= 50; break;
       }
       case 'liravo_builder': {
-        const { count } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('referred_by', userId);
+        const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
         qualifies = (count ?? 0) >= 200; break;
       }
 
@@ -243,13 +244,13 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Writing: first prompt ──
       case 'first_prompt': {
-        const { count } = await supabase.from('prompt_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count } = await supabase.from('writing_prompt_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
         qualifies = (count ?? 0) >= 1; break;
       }
 
       // ── Writing: prompt runner (30 prompts) ──
       case 'prompt_runner': {
-        const { count } = await supabase.from('prompt_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+        const { count } = await supabase.from('writing_prompt_submissions').select('*', { count: 'exact', head: true }).eq('user_id', userId);
         qualifies = (count ?? 0) >= 30; break;
       }
 
@@ -267,7 +268,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Prolific Writer (10k words) ──
       case 'prolific_writer': {
-        const { data: pSubs } = await supabase.from('prompt_submissions').select('word_count').eq('user_id', userId);
+        const { data: pSubs } = await supabase.from('writing_prompt_submissions').select('word_count').eq('user_id', userId);
         const { data: cEntries } = await supabase.from('writing_challenge_submissions').select('word_count').eq('user_id', userId);
         const total = (pSubs ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0)
           + (cEntries ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0);
@@ -284,8 +285,8 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
             .select('book_id, books:book_id(genres)')
             .in('shelf_id', shelves.map((s) => s.id))
             .limit(500);
-          const craftCount = (sb ?? []).filter((row: { books: { genres: string[] } | null }) =>
-            row.books?.genres?.some((g) => craftGenres.some((cg) => g.toLowerCase().includes(cg.toLowerCase())))
+          const craftCount = (sb ?? []).filter((row) =>
+            singleRelation(row.books)?.genres?.some((g: string) => craftGenres.some((cg) => g.toLowerCase().includes(cg.toLowerCase())))
           ).length;
           qualifies = craftCount >= 10;
         }
@@ -349,8 +350,8 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
                   .select('book_id, books:book_id(genres)')
                   .in('shelf_id', shelves.map((s) => s.id))
                   .limit(2000);
-                const genreCount = (sb ?? []).filter((row: { books: { genres: string[] } | null }) =>
-                  row.books?.genres?.some((gn: string) => gn.toLowerCase().includes(g.genre.toLowerCase()))
+                const genreCount = (sb ?? []).filter((row) =>
+                  singleRelation(row.books)?.genres?.some((gn: string) => gn.toLowerCase().includes(g.genre.toLowerCase()))
                 ).length;
                 qualifies = genreCount >= t.count;
               }

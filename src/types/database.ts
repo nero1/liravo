@@ -11,6 +11,8 @@ export interface UserRow {
   user_types: string[];
   genres: string[];
   is_admin: boolean;
+  is_premium: boolean;
+  preferred_locale: 'en' | 'fr' | 'de';
   is_moderator: boolean;
   is_verified_author: boolean;
   is_creator: boolean;
@@ -232,17 +234,17 @@ export interface Database {
         Row: ShelfBookRow;
         Insert: Partial<ShelfBookRow> & { shelf_id: string; book_id: string; user_id: string };
         Update: Partial<ShelfBookRow>;
-      } & NoRelationships;
+      } & { Relationships: [{ foreignKeyName: 'shelf_books_book_id_fkey'; columns: ['book_id']; isOneToOne: false; referencedRelation: 'books'; referencedColumns: ['id'] }, { foreignKeyName: 'shelf_books_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'users'; referencedColumns: ['id'] }, { foreignKeyName: 'shelf_books_shelf_id_fkey'; columns: ['shelf_id']; isOneToOne: false; referencedRelation: 'shelves'; referencedColumns: ['id'] }] };
       reviews: {
         Row: ReviewRow;
         Insert: Partial<ReviewRow> & { user_id: string; book_id: string; rating: number };
         Update: Partial<ReviewRow>;
-      } & NoRelationships;
+      } & { Relationships: [{ foreignKeyName: 'reviews_book_id_fkey'; columns: ['book_id']; isOneToOne: false; referencedRelation: 'books'; referencedColumns: ['id'] }, { foreignKeyName: 'reviews_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'users'; referencedColumns: ['id'] }] };
       quotes: {
         Row: QuoteRow;
         Insert: Partial<QuoteRow> & { user_id: string; book_id: string; content: string };
         Update: Partial<QuoteRow>;
-      } & NoRelationships;
+      } & { Relationships: [{ foreignKeyName: 'quotes_book_id_fkey'; columns: ['book_id']; isOneToOne: false; referencedRelation: 'books'; referencedColumns: ['id'] }, { foreignKeyName: 'quotes_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'users'; referencedColumns: ['id'] }] };
       follows: {
         Row: FollowRow;
         Insert: { follower_id: string; following_id: string };

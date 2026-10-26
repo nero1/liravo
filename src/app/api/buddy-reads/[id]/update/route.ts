@@ -23,7 +23,7 @@ export async function PATCH(
 
   // Check user is a participant
   const { data: participant } = await supabase
-    .from('buddy_read_participants')
+    .from('buddy_read_members')
     .select('user_id')
     .eq('buddy_read_id', params.id)
     .eq('user_id', user.id)

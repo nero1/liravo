@@ -1,3 +1,4 @@
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -89,7 +90,7 @@ export default async function AdminBooksPage() {
                   <AudiobookToggle bookId={book.id} initial={book.has_audiobook ?? false} />
                 </td>
                 <td className="px-4 py-3">
-                  <form action="/api/books/refresh-affiliate" method="POST">
+                  <form action="/api/books/refresh-affiliate" method="POST"><CsrfInput />
                     <input type="hidden" name="bookId" value={book.id} />
                     <button
                       type="submit"

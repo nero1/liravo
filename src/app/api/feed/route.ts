@@ -1,3 +1,4 @@
+import { decodeCursor, encodeCursor, cursorFilter } from '@/lib/pagination';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -10,7 +11,10 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const url = new URL(request.url);
-  const cursor = url.searchParams.get('cursor');
+  let cursor;
+  try { cursor = decodeCursor(url.searchParams.get('cursor')); }
+  catch { return NextResponse.json({ error: 'Invalid cursor' }, { status: 400 }); }
+  if (cursor && !cursor.kind) return NextResponse.json({ error: 'Invalid feed cursor' }, { status: 400 });
   const limit = 20;
 
   // Get list of users the current user follows
@@ -35,11 +39,12 @@ export async function GET(request: Request) {
       shelves:shelf_id (name, default_type)
     `)
     .in('user_id', followedIds)
-    .order('added_at', { ascending: false })
-    .limit(limit);
+    .order('added_at', { ascending: false }).order('id', { ascending: false })
+    .limit(limit + 1);
 
   if (cursor) {
-    shelfBooksQuery.lt('added_at', cursor);
+    if (cursor.kind === 'sb') shelfBooksQuery.or(cursorFilter('added_at', cursor));
+    else shelfBooksQuery.lt('added_at', cursor.at);
   }
 
   const { data: shelfBooks } = await shelfBooksQuery;
@@ -55,11 +60,12 @@ export async function GET(request: Request) {
     .in('user_id', followedIds)
     .eq('moderation_status', 'published')
     .eq('is_hidden', false)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+    .order('created_at', { ascending: false }).order('id', { ascending: false })
+    .limit(limit + 1);
 
   if (cursor) {
-    reviewsQuery.lt('created_at', cursor);
+    if (cursor.kind === 'rv') reviewsQuery.or(cursorFilter('created_at', cursor));
+    else reviewsQuery.lte('created_at', cursor.at);
   }
 
   const { data: reviews } = await reviewsQuery;
@@ -90,12 +96,12 @@ export async function GET(request: Request) {
 
   // Merge and sort by timestamp descending
   const allItems = [...shelfItems, ...reviewItems].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime() || b.id.localeCompare(a.id)
   );
 
   const paginated = allItems.slice(0, limit);
   const nextCursor =
-    paginated.length === limit ? paginated[paginated.length - 1].timestamp : null;
+    allItems.length > limit ? encodeCursor({ at: paginated[limit - 1].timestamp, id: paginated[limit - 1].id.slice(3), kind: paginated[limit - 1].type === 'review' ? 'rv' : 'sb' }) : null;
 
   return NextResponse.json({ items: paginated, nextCursor });
 }

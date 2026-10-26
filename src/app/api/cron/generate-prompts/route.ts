@@ -1,3 +1,4 @@
+import { cron } from '@/lib/cron';
 import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
@@ -98,13 +99,7 @@ function parsePromptsFromAI(text: string, dates: string[]): { date: string; prom
   return results.slice(0, dates.length);
 }
 
-export async function POST(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+async function run() {
 
   const redis = getRedisClient();
   const weekKey = `${IDEMPOTENCY_KEY_PREFIX}${new Date().toISOString().slice(0, 10)}`;
@@ -170,3 +165,8 @@ Example: 1. [Adventure] A cartographer discovers a map that leads not to a place
     total: prompts.length,
   });
 }
+
+export const GET = cron('generate-prompts', run);
+export const POST = GET;
+
+export const maxDuration = 60;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -15,24 +15,32 @@ export function ReviewLikeButton({
   initialLiked,
   initialCount,
 }: ReviewLikeButtonProps) {
+  const intent = useRef(crypto.randomUUID());
+  const busy = useRef(false);
   const [liked, setLiked] = useState(initialLiked);
   const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
 
   async function handleToggle() {
+    if (busy.current) return;
+    busy.current = true;
     setLoading(true);
     try {
       const res = await fetch(`/api/reviews/${reviewId}/like`, {
         method: 'POST',
+        headers: { 'X-Idempotency-Key': intent.current },
       });
       if (res.ok) {
         const data = await res.json() as { liked: boolean };
+        if (typeof data.liked !== 'boolean') throw new Error('Invalid like response');
+        intent.current = crypto.randomUUID();
         setLiked(data.liked);
-        setCount((prev) => (data.liked ? prev + 1 : Math.max(0, prev - 1)));
+        if (data.liked !== liked) setCount((prev) => (data.liked ? prev + 1 : Math.max(0, prev - 1)));
       }
     } catch {
       // Ignore network errors
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   }

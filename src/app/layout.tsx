@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { APP_URL } from '@/constants/config';
 import { Inter, Playfair_Display } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
@@ -20,6 +21,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(APP_URL),
   title: { default: 'Liravo — Book Discovery Social Network', template: '%s | Liravo' },
   description: 'Discover books through people whose taste you trust. Track reading, write reviews, and connect with readers worldwide.',
   manifest: '/manifest.json',

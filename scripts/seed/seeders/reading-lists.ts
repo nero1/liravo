@@ -20,7 +20,7 @@ export async function seedReadingLists(
       .from('reading_lists')
       .select('id')
       .eq('user_id', editorsId)
-      .eq('title', list.title)
+      .eq('name', list.title)
       .maybeSingle();
 
     if (existing) {
@@ -32,7 +32,7 @@ export async function seedReadingLists(
       .from('reading_lists')
       .insert({
         user_id: editorsId,
-        title: list.title,
+        name: list.title,
         description: list.description,
         is_public: true,
       })

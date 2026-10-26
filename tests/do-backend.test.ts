@@ -320,30 +320,30 @@ describe('auth routes — source patterns', () => {
 // ── middleware.ts — DO mode session cookie ───────────────────────────────────
 
 describe('middleware.ts — DO mode', () => {
-  it('uses getDoUserFromRequest in DO mode', () => {
-    const src = readSrc('middleware.ts');
-    expect(src).toContain('getDoUserFromRequest');
+  it('keeps Node session validation out of Edge middleware', () => {
+    expect(readSrc('middleware.ts')).not.toContain('getDoUserFromRequest');
+    expect(readSrc('app', '(app)', 'layout.tsx')).toContain('getCurrentUser');
   });
 
-  it('has isDoMode check', () => {
+  it('has isDirectPostgresMode check', () => {
     const src = readSrc('middleware.ts');
-    expect(src).toContain('isDoMode');
+    expect(src).toContain('isDirectPostgresMode');
   });
 });
 
 // ── next.config.mjs — provider-conditional config ───────────────────────────
 
 describe('next.config.mjs', () => {
-  it('references isDoMode', () => {
+  it('references isDirectPostgres', () => {
     const src = fs.readFileSync(path.join(ROOT, 'next.config.mjs'), 'utf-8');
-    expect(src).toContain('isDoMode');
+    expect(src).toContain('isDirectPostgres');
   });
 
-  it('gates supabase.co behind isDoMode check', () => {
+  it('gates supabase.co behind isDirectPostgres check', () => {
     const src = fs.readFileSync(path.join(ROOT, 'next.config.mjs'), 'utf-8');
     expect(src).toContain('supabase.co');
     // supabase.co appears inside a condition (not for DO mode)
-    expect(src).toMatch(/isDoMode[\s\S]+supabase\.co|supabase\.co[\s\S]+isDoMode/);
+    expect(src).toMatch(/isDirectPostgres[\s\S]+supabase\.co|supabase\.co[\s\S]+isDirectPostgres/);
   });
 
   it('adds S3_CDN_URL hostname in DO mode', () => {

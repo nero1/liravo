@@ -1,3 +1,4 @@
+import { cron } from '@/lib/cron';
 /**
  * Cron: New Release Alerts
  * Sends email alerts to paid followers when a verified author announces a new release.
@@ -13,13 +14,7 @@ export const dynamic = 'force-dynamic';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
 
-export async function POST(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+async function run() {
 
   const supabase = createServiceClient();
 
@@ -105,3 +100,8 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ sent: totalSent, posts: posts.length });
 }
+
+export const GET = cron('new-release-alerts', run);
+export const POST = GET;
+
+export const maxDuration = 60;

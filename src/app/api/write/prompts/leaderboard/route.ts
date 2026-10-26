@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   // Aggregate submission counts per user
   let query = supabase
-    .from('prompt_submissions')
+    .from('writing_prompt_submissions')
     .select('user_id');
 
   if (startDate) {

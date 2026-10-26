@@ -9,12 +9,11 @@
     "notifications": "Benachrichtigungen"
   },
   "auth": {
-    "loginTitle": "Willkommen bei Liravo",
-    "loginSubtitle": "Ihr soziales Netzwerk zur Buchentdeckung",
-    "signInGoogle": "Mit Google fortfahren",
-    "signInTelegram": "Mit Telegram fortfahren",
-    "signOut": "Abmelden",
-    "loading": "Anmeldung läuft..."
+    "signInWithGoogle": "Mit Google anmelden",
+    "signInWithTelegram": "Mit Telegram anmelden",
+    "continueWithGoogle": "Mit Google fortfahren",
+    "continueWithTelegram": "Mit Telegram fortfahren",
+    "orContinueWith": "oder fortfahren mit"
   },
   "onboarding": {
     "title": "Richten wir Ihr Profil ein",
@@ -49,7 +48,7 @@
     "wantToRead": "Möchte ich lesen",
     "search": "Bücher suchen...",
     "noResults": "Keine Bücher gefunden",
-    "ratings": "{count} Bewertungen",
+    "ratings": "{count, plural, one {# Bewertung} other {# Bewertungen}}",
     "reviews": "Rezensionen",
     "quotes": "Zitate",
     "writtenBy": "von {author}"
@@ -59,7 +58,7 @@
     "followers": "Follower",
     "following": "Gefolgt",
     "booksRead": "Gelesene Bücher",
-    "streak": "{days}-Tage-Serie",
+    "streak": "{days, plural, one {#-Tages-Serie} other {#-Tage-Serie}}",
     "level": "Level"
   },
   "discover": {
@@ -81,7 +80,7 @@
     "similarBooks": "Leser mochten auch",
     "helpfulVote": "Hilfreich",
     "unhelpfulVote": "Nicht hilfreich",
-    "replyCount": "{count} Antworten"
+    "replyCount": "{count, plural, one {# Antwort} other {# Antworten}}"
   },
   "badges": {
     "earned": "Abzeichen erhalten",
@@ -156,8 +155,8 @@
     "weekly": "Wöchentlich",
     "monthly": "Monatlich",
     "allTime": "Gesamtzeit",
-    "helpfulVotes": "{count} hilfreiche Stimmen",
-    "reviews": "{count} Rezensionen"
+    "helpfulVotes": "{count, plural, one {# hilfreiche Stimme} other {# hilfreiche Stimmen}}",
+    "reviews": "{count, plural, one {# Rezension} other {# Rezensionen}}"
   },
   "common": {
     "loading": "Laden...",
@@ -176,13 +175,6 @@
     "darkMode": "Dunkelmodus",
     "lightMode": "Hellmodus"
   },
-  "auth": {
-    "signInWithGoogle": "Mit Google anmelden",
-    "signInWithTelegram": "Mit Telegram anmelden",
-    "continueWithGoogle": "Mit Google fortfahren",
-    "continueWithTelegram": "Mit Telegram fortfahren",
-    "orContinueWith": "oder fortfahren mit"
-  },
   "pushNotifications": {
     "enable": "Benachrichtigungen aktivieren",
     "enabled": "Benachrichtigungen aktiviert",
@@ -196,5 +188,53 @@
     "submitted": "Ihre Notiz wurde zur Überprüfung eingereicht.",
     "eligibility": "Sie benötigen 50+ Rezensionen, um Community-Notizen beizutragen.",
     "noNotes": "Noch keine Community-Notizen."
+  },
+  "premium": {
+    "pageTitle": "Premium werden",
+    "title": "Liravo Premium",
+    "subtitle": "Entdecke alle Funktionen zum Lesen und Schreiben.",
+    "activeTitle": "Du hast Premium!",
+    "activeMessage": "Genieße alle Premium-Funktionen, {name}.",
+    "reader": "Leser",
+    "perMonth": "pro Monat",
+    "feature": "Funktion",
+    "free": "Kostenlos",
+    "premium": "Premium",
+    "terms": "Jederzeit kündbar. Keine versteckten Gebühren.",
+    "manage": "Abonnement verwalten",
+    "payCard": "Mit Karte bezahlen (weltweit)",
+    "payPaystack": "Mit Paystack bezahlen (Nigeria)",
+    "paymentPending": "Die Zahlung wird noch bestätigt. Lade diese Seite in Kürze neu.",
+    "freeShelves": "10 Regale",
+    "features": {
+      "shelves": {
+        "label": "Unbegrenzte eigene Regale",
+        "value": "Unbegrenzt"
+      },
+      "stats": {
+        "label": "Übersicht der Lesestatistiken",
+        "value": "Vollständige Übersicht"
+      },
+      "taste": {
+        "label": "KI-Geschmacksprofil",
+        "value": "Personalisiert"
+      },
+      "feedback": {
+        "label": "KI-Schreibfeedback",
+        "value": "Zu jedem Text"
+      },
+      "plan": {
+        "label": "KI-Schreibplan",
+        "value": "Wöchentlicher Plan"
+      },
+      "digest": {
+        "label": "E-Mail-Zusammenfassungen",
+        "value": "Wöchentliche Zusammenfassung"
+      },
+      "badge": {
+        "label": "Premium-Abzeichen",
+        "value": "Im Profil"
+      }
+    }
   }
 }

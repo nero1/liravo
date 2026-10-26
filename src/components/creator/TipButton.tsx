@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface TipButtonProps {
   recipientId: string;
@@ -10,6 +10,7 @@ interface TipButtonProps {
 const PRESET_AMOUNTS = [1, 3, 5];
 
 export function TipButton({ recipientId, recipientName }: TipButtonProps) {
+  const intent = useRef(crypto.randomUUID());
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState<number | null>(null);
   const [custom, setCustom] = useState('');
@@ -36,7 +37,7 @@ export function TipButton({ recipientId, recipientName }: TipButtonProps) {
 
     const res = await fetch('/api/tips/create', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': intent.current },
       body: JSON.stringify({
         recipientId,
         amount: tipAmount,
@@ -45,6 +46,7 @@ export function TipButton({ recipientId, recipientName }: TipButtonProps) {
     });
 
     if (res.ok) {
+      intent.current = crypto.randomUUID();
       setStatus('success');
       setTimeout(() => {
         setOpen(false);

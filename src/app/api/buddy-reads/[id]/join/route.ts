@@ -31,7 +31,7 @@ export async function POST(
 
   // Check if already joined
   const { data: existing } = await supabase
-    .from('buddy_read_participants')
+    .from('buddy_read_members')
     .select('user_id')
     .eq('buddy_read_id', params.id)
     .eq('user_id', user.id)
@@ -43,7 +43,7 @@ export async function POST(
 
   // Check participant count
   const { count } = await supabase
-    .from('buddy_read_participants')
+    .from('buddy_read_members')
     .select('user_id', { count: 'exact', head: true })
     .eq('buddy_read_id', params.id);
 
@@ -52,7 +52,7 @@ export async function POST(
   }
 
   const { error } = await supabase
-    .from('buddy_read_participants')
+    .from('buddy_read_members')
     .insert({
       buddy_read_id: params.id,
       user_id: user.id,

@@ -79,7 +79,7 @@ export async function POST(
     .eq('id', params.id);
 
   // Award 10 XP for answering
-  await awardXP(user.id, 10, 'answer_question');
+  await awardXP(user.id, 10, 'answer_question', `answer:${answer.id}`);
 
   return NextResponse.json({ answer }, { status: 201 });
 }

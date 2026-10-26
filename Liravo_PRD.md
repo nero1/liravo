@@ -1593,3 +1593,13 @@ Detail every feature, technical decision, and operational process. Cover:
 ---
 
 *End of Liravo PRD v1.1*
+
+### Development verification update (26 October 2026)
+
+Financial webhooks and payout reservations now commit state and audit records atomically; browser roles cannot alter administrative, premium or XP fields. Social retries use durable intents and one reward per actor/target/action. Browser mutations require CSRF tokens. Cron jobs share Bearer authentication, renewable overlap locks and 60-second Vercel runtime limits; Hobby schedules are daily or less. The current verification matrix in `custom-bugs-verification.md` distinguishes completed fixes from remaining gaps; it supersedes the earlier 100% claim.
+
+XP is now awarded from verified activity and a durable per-user event ledger; client-supplied activity names alone cannot mint rewards. Subscription intents and cancellation update state/audit atomically; gateway adapters still require sandbox verification.
+
+Billing returns users to an entitlement-checked pending-confirmation page; browser redirects never activate Premium. Locale preferences now persist in the profile and browser, and Premium checkout has English/French/German catalogs and locale-aware prices. Full UI translation remains tracked separately.
+
+Development audit: migrations 029–031 restrict private profile data and RPC access, add weekly digest receipts, and expose service-only financial reconciliation counts through outbox drain. Public metadata honors profile privacy and supported language URLs. The audit retains unresolved work explicitly; provider sandbox validation is required before enabling live billing.

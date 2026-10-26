@@ -4,7 +4,7 @@ import type { Database } from '@/types/database';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { createDoClient, createDoServiceClient } from '@/lib/db/unified-client';
 
-export function createClient() {
+export function createClient(): ReturnType<typeof createServerClient<Database>> {
   if (isDirectPostgres()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return createDoClient() as any;
@@ -43,7 +43,7 @@ export function createClient() {
   );
 }
 
-export function createServiceClient() {
+export function createServiceClient(): ReturnType<typeof createServerClient<Database>> {
   if (isDirectPostgres()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return createDoServiceClient() as any;

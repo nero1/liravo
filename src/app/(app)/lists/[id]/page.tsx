@@ -1,3 +1,6 @@
+import { languageAlternates } from '@/lib/metadata';
+import { APP_URL } from '@/constants/config';
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -14,10 +17,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = createClient();
   const { data } = await supabase 
     .from('reading_lists')
-    .select('name')
+    .select('name, description, is_public')
     .eq('id', params.id)
     .single();
-  return { title: data?.name ?? 'Reading List' };
+  if (!data?.is_public) return { title: 'Reading List', robots: { index: false, follow: false } };
+  const url = `${APP_URL}/lists/${params.id}`;
+  return {
+    title: data.name, description: data.description ?? undefined,
+    alternates: languageAlternates(`/lists/${params.id}`),
+    openGraph: { title: data.name, description: data.description ?? '', url, type: 'website', images: [`${APP_URL}/opengraph-image`] },
+    twitter: { card: 'summary', images: [`${APP_URL}/opengraph-image`], title: data.name, description: data.description ?? '' },
+  };
 }
 
 export default async function ListDetailPage({ params }: Props) {
@@ -100,7 +110,7 @@ export default async function ListDetailPage({ params }: Props) {
 
         {user && !isOwner && (
           <div className="flex gap-2 flex-shrink-0">
-            <form action={`/api/lists/${params.id}/fork`} method="POST">
+            <form action={`/api/lists/${params.id}/fork`} method="POST"><CsrfInput />
               <button
                 type="submit"
                 className="px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"

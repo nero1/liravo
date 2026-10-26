@@ -40,5 +40,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update locale' }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, locale });
+  const response = NextResponse.json({ success: true, locale });
+  response.cookies.set('NEXT_LOCALE', locale, { path: '/', sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 31536000 });
+  return response;
 }

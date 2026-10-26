@@ -1,5 +1,6 @@
 export const APP_NAME = 'Liravo';
 export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://liravo.org';
+export const LOCALES = ['en', 'fr', 'de'] as const;
 
 export const GENRES = [
   'Literary Fiction',

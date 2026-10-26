@@ -71,7 +71,6 @@ export async function DELETE(
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { room } = await req.json().then((b: { milestone_id?: string }) => ({ room: null, ...b })).catch(() => ({ room: null }));
   const url = new URL(req.url);
   const milestoneId = url.searchParams.get('milestone_id');
   if (!milestoneId) return NextResponse.json({ error: 'milestone_id required' }, { status: 400 });

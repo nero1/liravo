@@ -40,7 +40,7 @@ export async function POST() {
       .from('reading_lists')
       .select('id')
       .eq('user_id', editor.id)
-      .eq('title', list.title)
+      .eq('name', list.title)
       .maybeSingle();
 
     if (existing) {
@@ -50,7 +50,7 @@ export async function POST() {
 
     const { data: created, error: listErr } = await service
       .from('reading_lists')
-      .insert({ user_id: editor.id, title: list.title, description: list.description, is_public: true })
+      .insert({ user_id: editor.id, name: list.title, description: list.description, is_public: true })
       .select('id')
       .single();
 

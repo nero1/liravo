@@ -16,7 +16,6 @@ const createQuoteSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -49,7 +48,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Award XP for posting a quote
-  await awardXP(user.id, XP_CONFIG.POST_QUOTE, 'post_quote');
+  await awardXP(user.id, XP_CONFIG.POST_QUOTE, 'post_quote', `quote:${quote.id}`);
 
   return NextResponse.json({ quote }, { status: 201 });
 }

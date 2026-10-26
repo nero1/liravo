@@ -1,3 +1,4 @@
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import { notFound, redirect } from 'next/navigation';
 import Image from 'next/image';
@@ -144,7 +145,7 @@ export default async function ReadingRoomPage({
       {/* Join button for non-members */}
       {!isMember && !isCreator && room.is_active && (
         <div>
-          <form action={`/api/reading-rooms/${params.id}/join`} method="POST">
+          <form action={`/api/reading-rooms/${params.id}/join`} method="POST"><CsrfInput />
             <button
               type="submit"
               className="px-6 py-2.5 rounded-lg bg-accent text-white font-semibold hover:opacity-90 transition-opacity"

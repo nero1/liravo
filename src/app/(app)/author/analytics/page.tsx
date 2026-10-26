@@ -1,3 +1,4 @@
+import { singleRelation } from '@/lib/utils';
 import { redirect } from 'next/navigation';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import Link from 'next/link';
@@ -54,7 +55,7 @@ export default async function AuthorAnalyticsPage() {
       .select('id, rating, content, created_at, books:book_id(title), users:user_id(display_name, username)')
       .in('book_id', bookIds).eq('moderation_status', 'published')
       .order('created_at', { ascending: false }).limit(5);
-    recentReviews = (rv ?? []) as typeof recentReviews;
+    recentReviews = (rv ?? []).map(row => ({ ...row, books: singleRelation(row.books), users: singleRelation(row.users) }));
   }
 
   const { count: followerCount } = await serviceSupabase

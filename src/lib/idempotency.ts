@@ -1,5 +1,6 @@
 import { getRedisClient } from '@/lib/redis';
 
+/** Claims a Redis key for ttlSeconds; this is a lease, not proof the business transaction committed. */
 export async function ensureIdempotency(key: string, ttlSeconds = 60): Promise<boolean> {
   const redis = getRedisClient();
   const namespaced = `idem:${key}`;
@@ -14,6 +15,7 @@ export async function ensureIdempotency(key: string, ttlSeconds = 60): Promise<b
 
 export type IdempotencyClaimResult = 'new' | 'replay' | 'conflict';
 
+/** Compares a payload fingerprint within the lease window; durable operations require DB intent records. */
 export async function claimIdempotency(
   key: string,
   fingerprint: string,

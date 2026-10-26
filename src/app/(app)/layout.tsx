@@ -1,12 +1,16 @@
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { isDirectPostgres } from '@/lib/db/provider';
 import { SideNav } from '@/components/layout/SideNav';
 import { BottomNav } from '@/components/layout/BottomNav';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { isModerator } from '@/lib/moderation';
 import { AccountHardeningBanner } from '@/components/profile/AccountHardeningBanner';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  if (isDirectPostgres() && !await getCurrentUser()) redirect('/login');
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -18,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let showBanner = false;
 
   if (user) {
-    const { data: profile } = await supabase
+    const { data: profile } = await createServiceClient()
       .from('users')
       .select('email, email_verified, created_at, is_verified_author, user_types')
       .eq('id', user.id)

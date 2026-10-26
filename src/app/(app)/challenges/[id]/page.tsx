@@ -1,3 +1,4 @@
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -92,7 +93,7 @@ export default async function ChallengeDetailPage({ params }: Props) {
               <span>You are participating in this challenge!</span>
             </div>
           ) : (
-            <form action={`/api/challenges/${params.id}/join`} method="POST">
+            <form action={`/api/challenges/${params.id}/join`} method="POST"><CsrfInput />
               <button
                 type="submit"
                 className="px-6 py-2 bg-accent text-white rounded-lg font-medium hover:opacity-90 transition-opacity"

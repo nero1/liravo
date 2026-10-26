@@ -53,7 +53,7 @@ export async function PATCH(
   }
 
   // Award XP for updating progress
-  await awardXP(user.id, XP_CONFIG.WANT_TO_READ_REACTION, 'progress_update');
+  await awardXP(user.id, XP_CONFIG.WANT_TO_READ_REACTION, 'progress_update', `progress:${params.id}:${new Date().toISOString().slice(0, 10)}`);
 
   return NextResponse.json(updated);
 }

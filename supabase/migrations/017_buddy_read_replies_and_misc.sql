@@ -3,6 +3,14 @@
 --                reading_goals table, and word_count on submissions
 -- ────────────────────────────────────────────────────────────────────────────
 
+create table if not exists public.buddy_read_notes (
+  id uuid primary key default gen_random_uuid(),
+  buddy_read_id uuid not null references buddy_reads(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  content text not null check (char_length(content) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+
 -- 1. Add reply_to_id column to buddy_read_notes for threaded discussion
 ALTER TABLE public.buddy_read_notes
   ADD COLUMN IF NOT EXISTS reply_to_id uuid REFERENCES public.buddy_read_notes(id) ON DELETE SET NULL;
@@ -31,7 +39,7 @@ ALTER TABLE public.writing_challenge_submissions
   ) STORED;
 
 -- 4. Add word_count column to prompt_submissions if not exists
-ALTER TABLE public.prompt_submissions
+ALTER TABLE public.writing_prompt_submissions
   ADD COLUMN IF NOT EXISTS word_count int GENERATED ALWAYS AS (
     array_length(string_to_array(trim(content), ' '), 1)
   ) STORED;
@@ -47,7 +55,7 @@ DROP POLICY IF EXISTS "Participants read notes" ON public.buddy_read_notes;
 CREATE POLICY "Participants read notes" ON public.buddy_read_notes
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM public.buddy_read_participants p
+      SELECT 1 FROM public.buddy_read_members p
       WHERE p.buddy_read_id = buddy_read_notes.buddy_read_id
         AND p.user_id = auth.uid()
     )
@@ -58,7 +66,7 @@ CREATE POLICY "Participants insert notes" ON public.buddy_read_notes
   FOR INSERT WITH CHECK (
     auth.uid() = user_id
     AND EXISTS (
-      SELECT 1 FROM public.buddy_read_participants p
+      SELECT 1 FROM public.buddy_read_members p
       WHERE p.buddy_read_id = buddy_read_notes.buddy_read_id
         AND p.user_id = auth.uid()
     )

@@ -77,7 +77,7 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Award 5 XP for asking
-  await awardXP(user.id, 5, 'ask_question');
+  await awardXP(user.id, 5, 'ask_question', `question:${question.id}`);
 
   return NextResponse.json({ question }, { status: 201 });
 }

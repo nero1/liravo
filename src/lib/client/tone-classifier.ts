@@ -22,7 +22,7 @@ async function loadPipeline() {
     );
     // Wrap to normalise output format
     pipeline = async (text: string) => {
-      const result = await p(text, { topk: 2 });
+      const result = await p(text, { top_k: 2 });
       return result as Array<{ label: string; score: number }>;
     };
   } catch {

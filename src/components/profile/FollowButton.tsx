@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 interface FollowButtonProps {
@@ -10,24 +10,32 @@ interface FollowButtonProps {
 }
 
 export function FollowButton({ targetUserId, currentUserId, initialFollowing }: FollowButtonProps) {
+  const intent = useRef(crypto.randomUUID());
+  const busy = useRef(false);
   const [following, setFollowing] = useState(initialFollowing);
   const [loading, setLoading] = useState(false);
 
   if (targetUserId === currentUserId) return null;
 
   async function handleClick() {
+    if (busy.current) return;
+    busy.current = true;
     setLoading(true);
     try {
       const res = await fetch(`/api/users/${targetUserId}/follow`, {
         method: following ? 'DELETE' : 'POST',
+        headers: { 'X-Idempotency-Key': intent.current },
       });
       if (res.ok) {
         const data = await res.json() as { following: boolean };
+        if (typeof data.following !== 'boolean') throw new Error('Invalid follow response');
+        intent.current = crypto.randomUUID();
         setFollowing(data.following);
       }
     } catch {
       // Ignore errors
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   }

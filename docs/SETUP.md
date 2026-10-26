@@ -120,11 +120,12 @@ S3_CDN_URL=https://cdn.example.com        # Public CDN/download base URL for the
 
 | Variable | Description |
 |---|---|
-| `PAYSTACK_SECRET_KEY` | Paystack secret key |
+| `PAYSTACK_SECRET_KEY` | API secret and local SHA-512 webhook verification key |
 | `PAYSTACK_PUBLIC_KEY` | Paystack public key |
-| `DODOPAYMENTS_SECRET_KEY` | Dodopayments secret key |
+| `DODOPAYMENTS_API_KEY` | Dodo API key (`DODOPAYMENTS_SECRET_KEY` remains a legacy alias) |
+| `DODOPAYMENTS_ENVIRONMENT` | `test_mode` (default) or `live_mode` |
+| `DODOPAYMENTS_PREMIUM_PRODUCT_ID` | Actual USD premium product ID; no fabricated default |
 | `DODOPAYMENTS_WEBHOOK_SECRET` | Dodopayments webhook secret |
-| `PAYMENT_WEBHOOK_SECRET` | Shared secret for all payment webhooks |
 
 ### Cron
 
@@ -324,7 +325,7 @@ running migrations (optionally document it as `DATABASE_DIRECT_URL` for your own
    - Copy the connection string (port **25061**) → set as `DATABASE_URL`
 3. Run migrations via the direct connection (port 25432 — see Section 17):
    ```bash
-   psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -f supabase/migrations/001_initial_schema.sql
+   psql "postgresql://user:pass@host:25432/dbname?sslmode=verify-full" -f supabase/migrations/001_initial_schema.sql
    # ... repeat for all migrations in order
    ```
 4. Set `DATABASE_PROVIDER=digitalocean` and `NEXT_PUBLIC_DATABASE_PROVIDER=digitalocean`.
@@ -410,41 +411,36 @@ Redis is **required in all three provider modes**. It is used for:
 ## 10. Paystack Setup
 
 1. Create an account at [paystack.com](https://paystack.com).
-2. In Settings → API Keys & Webhooks, copy your secret and public keys.
-   - Set `PAYSTACK_SECRET_KEY` (starts with `sk_live_...`)
-   - Set `PAYSTACK_PUBLIC_KEY` (starts with `pk_live_...`)
-3. Configure a webhook URL: `https://liravo.org/api/subscriptions/webhook`
-   - Set header: `x-payment-provider: paystack`
-   - Set header: `x-webhook-secret: <PAYMENT_WEBHOOK_SECRET value>`
-4. Copy the webhook secret and set `PAYMENT_WEBHOOK_SECRET` in your env.
-5. Test with Paystack's webhook simulator in the dashboard.
+2. Configure sandbox `PAYSTACK_SECRET_KEY` and `PAYSTACK_PUBLIC_KEY` first; use separate live credentials only after sandbox validation.
+3. Configure `https://liravo.org/api/subscriptions/webhook`. Native `x-paystack-signature` is verified over the untouched body using SHA-512 and the API secret; no custom shared-secret headers are needed.
+4. Charges must carry the server-generated subscription metadata; currency, amount and reference are checked before credit. Charge IDs are durable replay identities.
+5. Test with the provider dashboard before enabling billing. The verification key must be available to local HMAC code, not only as an outbound proxy placeholder.
 
 ### Paystack events handled
 
 | Event | Action |
 |---|---|
-| `subscription.activated` | Sets `is_premium: true` on user, updates subscription to `active` |
-| `subscription.cancelled` | Sets `is_premium: false`, updates subscription to `cancelled` |
+| `charge.success` | Activates/renews the bound subscription after payment validation |
 
 ---
 
 ## 11. Dodopayments Setup
 
 1. Create an account at [dodopayments.com](https://dodopayments.com).
-2. In Dashboard → API Keys, copy the secret key. Set `DODOPAYMENTS_SECRET_KEY`.
-3. Set up a webhook endpoint: `https://liravo.org/api/subscriptions/webhook`
-   - Set header: `x-payment-provider: dodopayments`
-   - Set header: `x-webhook-secret: <PAYMENT_WEBHOOK_SECRET value>`
-4. Copy the webhook signing secret. Set `DODOPAYMENTS_WEBHOOK_SECRET` (for signature verification).
-5. The same `PAYMENT_WEBHOOK_SECRET` is used across both providers for the shared header check.
+2. Set `DODOPAYMENTS_API_KEY`, `DODOPAYMENTS_ENVIRONMENT=test_mode`, and a real `DODOPAYMENTS_PREMIUM_PRODUCT_ID` priced consistently with the app's USD premium price. The legacy `DODOPAYMENTS_SECRET_KEY` name is accepted.
+3. Configure `https://liravo.org/api/subscriptions/webhook` and its `DODOPAYMENTS_WEBHOOK_SECRET`. Standard Webhooks verification uses `webhook-id`, `webhook-timestamp` and `webhook-signature`; the signing secret must be available locally for HMAC verification.
+4. Checkout uses `/checkouts` on `test.dodopayments.com` or `live.dodopayments.com`, matching the official Dodo SDK contract. `payment.succeeded` activates/renews; `subscription.cancelled` and `subscription.expired` update entitlement. Older events cannot undo a later cancellation.
+5. Tip webhook delivery uses `/api/tips/webhook` and signed provider metadata `tip_id`. Successful payment IDs deduplicate across delivery IDs; amount/currency checks precede any credit. The tip checkout UI/provider flow still needs sandbox end-to-end verification.
 
 ### Dodopayments events handled
 
 | Event | Action |
 |---|---|
-| `subscription.activated` | Sets `is_premium: true` on user |
-| `subscription.cancelled` | Sets `is_premium: false` |
-| `payment.completed` (promoted listings webhook) | Activates promoted listing for 30 days |
+| `payment.succeeded` | Validates payment and activates/renews the bound subscription, or completes a tip |
+| `payment.failed` | Marks the bound tip failed without credit |
+| `subscription.cancelled` / `subscription.expired` | Updates the bound subscription entitlement, ignoring stale events |
+
+Unsupported events or unrelated products are acknowledged without changes. Do not configure homegrown `subscription.activated` payloads or `x-webhook-secret` headers; adapters consume native provider envelopes. Promoted-listing billing is a separate unfinished integration.
 
 ---
 
@@ -460,22 +456,24 @@ Redis is **required in all three provider modes**. It is used for:
 
 ## 13. Cron Job Setup (cron-job.org)
 
-Vercel Hobby Plan allows only 1 cron trigger per day. Sub-daily jobs use [cron-job.org](https://cron-job.org) to call protected Next.js API routes.
+Vercel Hobby schedules each job daily or less often. `vercel.json` contains the deployed schedules. All cron routes accept GET (Vercel) and POST (external orchestrators), require `Authorization: Bearer <CRON_SECRET>`, and use a renewable distributed overlap lock. Redis failure returns 503; overlap returns 409. Stagger external jobs; do not run the same job concurrently on two schedulers.
 
-**All cron endpoints require the `x-cron-secret` header matching `CRON_SECRET`.**
+| Job | Endpoint | Schedule |
+|---|---|---|
+| Outbox drain | `/api/cron/outbox-drain` | Daily 00:00 UTC |
+| Leaderboard snapshot | `/api/cron/leaderboard-snapshot` | Daily 02:00 UTC |
+| Shelf recommendations | `/api/cron/shelf-recommendations` | Daily 03:00 UTC |
+| Similar books | `/api/cron/similar-books` | Daily 04:00 UTC |
+| Prompt generation | `/api/cron/generate-prompts` | Daily 06:00 UTC |
+| AI writing plans | `/api/cron/ai-writing-plans` | Daily 07:00 UTC |
+| New release alerts | `/api/cron/new-release-alerts` | Daily 08:00 UTC |
+| Reading goal milestones | `/api/cron/reading-goal-milestones` | Daily 09:00 UTC |
+| Account hardening | `/api/cron/account-hardening` | Daily 10:00 UTC |
+| Taste profiles | `/api/cron/taste-profiles` | Sunday 01:00 UTC |
+| Email digest | `/api/cron/email-digest` | Daily 11:00 UTC; once per user/UTC week |
+| Affiliate health | `/api/cron/affiliate-health` | External scheduler, daily 12:00 UTC |
 
-| Job | Endpoint | Schedule | Purpose |
-|---|---|---|---|
-| Feed pre-compute | `/api/cron/feed` | Every 5 min | Refresh active user feeds |
-| Leaderboard refresh | `/api/cron/leaderboards` | Every hour | Update leaderboard data |
-| Streak check | `/api/cron/streaks` | Daily (midnight UTC) | Process streak freezes |
-| Shelf recommendations | `/api/cron/shelf-recommendations` | Nightly 02:00 UTC | AI shelf recommendations for users |
-| Leaderboard snapshot | `/api/cron/leaderboard-snapshot` | Weekly Sunday 03:00 | Save weekly leaderboard snapshot |
-| Prompt generation | `/api/cron/generate-prompts` | Weekly Sunday 02:00 | AI-generate 7 days of writing prompts |
-| AI writing plans | `/api/cron/ai-writing-plans` | Weekly Monday 04:00 | Personalised AI writing plans for premium users |
-| Affiliate health | `/api/cron/affiliate-health` | Nightly 03:00 UTC | Validate top 500 book links, flag zero-click books |
-| Taste profiles | `/api/cron/taste-profiles` | Daily 05:00 UTC | Refresh AI taste profiles >30 days old (max 50/run) |
-| Email digest | `/api/cron/email-digest` | Weekly Friday 09:00 | Send weekly reading digest to opted-in users |
+Daily outbox processing can delay notifications up to 24 hours. Use an external POST scheduler for lower latency. Digests process four users concurrently, up to 40 per run, with a Redis cursor; increase the external invocation frequency for larger audiences. A 35-second scheduling deadline and six-second Mailgun timeout bound each invocation. Migration 031 tracks weekly delivery receipts and caps definite-failure retries at three; successful recipients are skipped on replay. Ambiguous timeouts and stale sending claims become `unknown` and are never automatically resent. Verify them in Mailgun before marking `sent` with its message ID or `failed` for a safe retry. Reconciliation logs uncertain deliveries and financial state/outbox/audit anomalies during outbox drain; alert on any nonzero count. Daily invocation permits continuation within the week; use an external scheduler when the audience exceeds daily batch capacity.
 
 ---
 
@@ -535,7 +533,7 @@ Run migrations in the following order. **How** you run them depends on your prov
 
 ```bash
 # DigitalOcean — direct connection (port 25432)
-DIRECT_URL="postgresql://user:pass@host:25432/dbname?sslmode=require"
+DIRECT_URL="postgresql://user:pass@host:25432/dbname?sslmode=verify-full"
 
 # Railway — Postgres service URL (not PgBouncer)
 DIRECT_URL="postgresql://postgres:pass@postgres.railway.internal:5432/railway"
@@ -618,7 +616,7 @@ row in the `users` table, and set `is_admin` to `true`.
 
 ```bash
 # Use the direct connection (port 25432), NOT the PgBouncer URL
-psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c \
+psql "postgresql://user:pass@host:25432/dbname?sslmode=verify-full" -c \
   "UPDATE users SET is_admin = true WHERE email = 'your@email.com';"
 ```
 
@@ -718,7 +716,7 @@ After you have an admin user ID, seed initial invite codes via the direct Postgr
 
 ```bash
 # DigitalOcean (port 25432)
-psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c \
+psql "postgresql://user:pass@host:25432/dbname?sslmode=verify-full" -c \
   "INSERT INTO invite_codes (code, created_by) VALUES ('INVITE123', '<admin-user-id>');"
 
 # Railway (Postgres service URL)
@@ -821,12 +819,12 @@ The rotation process differs by provider:
 
 **Manual backup** (uses the direct port 25432 — not the PgBouncer URL):
 ```bash
-pg_dump "postgresql://user:pass@host:25432/dbname?sslmode=require" > backup_$(date +%Y%m%d).sql
+pg_dump "postgresql://user:pass@host:25432/dbname?sslmode=verify-full" > backup_$(date +%Y%m%d).sql
 ```
 
 **Restore** (uses the direct port 25432):
 ```bash
-psql "postgresql://user:pass@host:25432/dbname?sslmode=require" < backup_20240101.sql
+psql "postgresql://user:pass@host:25432/dbname?sslmode=verify-full" < backup_20240101.sql
 ```
 
 ### Railway Backups
@@ -849,6 +847,10 @@ psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" \
 > **Tip**: When running `psql` or `pg_dump` locally against Railway, use the **public** URL
 > exposed in the Railway dashboard (Railway → postgres service → Connect), not the internal
 > `.railway.internal` URL, which is only accessible from within your Railway project.
+
+### Quarterly restore drill
+
+Restore an encrypted backup to an isolated database; never overwrite production for a drill. Target RPO ≤24 hours and RTO ≤4 hours. Verify the backup checksum before restoring, migration version, table counts and foreign keys; sample user ownership, completed tips versus payouts, referral commissions, pending payout reservations and outbox status. Run authentication and financial smoke tests with sandbox credentials. Record backup timestamp, restore duration, discrepancies and operator sign-off in the existing operations log; failed checks block release until reconciled. Delete the drill database after review.
 
 ### Manual Backup (Supabase)
 
@@ -876,7 +878,7 @@ Each migration file should have a corresponding rollback.
 
 **DigitalOcean mode**: Run rollback SQL via psql using the **direct** connection (port 25432, not PgBouncer):
 ```bash
-psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c "<rollback SQL here>"
+psql "postgresql://user:pass@host:25432/dbname?sslmode=verify-full" -c "<rollback SQL here>"
 ```
 
 **Railway mode**: Run rollback SQL via the **Postgres service URL** (not PgBouncer):
@@ -886,6 +888,19 @@ psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c "<ro
 
 ---
 
+### Abuse and alert policy
+
+Money limits enforce independent account and trusted-IP counters; AI limits use account identity; missing Redis fails closed. Auth limits retain their existing fail-open availability policy and need ingress bot protection. Forwarded IPs are ignored by default; Vercel uses its overwritten `x-vercel-forwarded-for` header. Other deployments may set `TRUSTED_CLIENT_IP_HEADER` only when their ingress strips and replaces that header. Never trust client-provided forwarding chains or fingerprints.
+
+| Class | Policy | Escalation |
+|---|---|---|
+| Authentication | `RATE_LIMITS.AUTH_*` window/lockout | Ingress challenge after repeated failures |
+| Money | Auth quota per user + trusted IP, fail closed | Investigate payout failures immediately |
+| AI | 30/minute per user, fail closed | Review spend and provider failures |
+| Social | 120/minute per user, durable idempotency and lifetime reward uniqueness | Ingress challenge for high-volume accounts |
+
+Use structured `cron_run`, `cron_error`, `payout_request_error`, `tip_create_error`, and `subscription_webhook_error` logs with correlation IDs. Alert on financial errors immediately, cron errors/overlaps across two scheduled runs, and an outbox oldest-pending age exceeding its scheduler interval. Configure dashboards in the deployment's log service; no external dashboard is provisioned by this repository. Tune quotas using verified false-positive samples; never disable financial deduplication or CSRF to reduce alerts.
+
 ## 21. Troubleshooting
 
 ### "Migrations fail with 'relation already exists'"
@@ -893,7 +908,7 @@ psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c "<ro
 In DigitalOcean or Railway mode, check what tables already exist before running a migration:
 ```bash
 # DigitalOcean
-psql "postgresql://user:pass@host:25432/dbname?sslmode=require" -c "\dt"
+psql "postgresql://user:pass@host:25432/dbname?sslmode=verify-full" -c "\dt"
 
 # Railway
 psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c "\dt"
@@ -956,7 +971,7 @@ Railway: `pgbouncer` service environment variables — `MAX_CLIENT_CONN` and `DE
 - `GOOGLE_CLIENT_SECRET`
 - `TELEGRAM_BOT_TOKEN`
 - `PAYSTACK_SECRET_KEY`
-- `DODOPAYMENTS_SECRET_KEY`
+- `DODOPAYMENTS_API_KEY` (or its legacy alias)
 - `DEEPSEEK_API_KEY`
 - `GEMINI_API_KEY`
 - `CRON_SECRET`
@@ -965,3 +980,25 @@ Railway: `pgbouncer` service environment variables — `MAX_CLIENT_CONN` and `DE
 - Redis credentials / tokens
 
 The `.gitignore` excludes `.env.local`. Never commit `.env` files with real values.
+
+### Security and financial migration update
+
+Apply migrations 019–031 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+
+Payout requests reserve USD balances atomically; failed/cancelled requests release reservations, completed requests remain deducted. Other currencies are not converted into USD. New referral commissions are 10% of the platform fee, not 10% of gross; audit historical commissions separately before enabling withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
+
+Browser mutations send the CSRF cookie in `X-CSRF-Token`; native forms include `_csrf`. Stateless Bearer clients must authenticate independently and cannot fall back to cookie sessions. Feed/notification/list cursors are opaque timestamp/UUID tokens; clients should follow `nextCursor`. List responses cap own and followed collections at 50; follow `nextCursor`/`cursor` and `nextFollowedCursor`/`followedCursor` independently.
+
+Web validation: `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run build`. Node 24 supports the current test toolchain. Expo has its own dependencies/configuration under `mobile/` and is excluded from web type checking. Set `LIRAVO_BASE_URL` only for live API tests; absent values are explicitly skipped. Local SQL tests use PGlite; repeat competing financial requests against a real PostgreSQL staging instance before release.
+
+Migration 023 copies legacy buddy participants and prompt submissions into canonical tables, retaining legacy tables for conflict reconciliation. Review conflicting rows before retiring them. Existing deployments that manually worked around failed historical migrations must reconcile that schema in staging before applying this series.
+
+XP awards now use a durable per-user business-event ledger. Daily login awards the configured 3 XP once per UTC day; finished-book rewards require a verified owned finished shelf entry and deduplicate by book. Generic client claims for review/like/follow XP are rejected; their authoritative routes award rewards. Outbox claims recover after five minutes, with at most ten attempts. Database notification/reward effects and acknowledgement commit together; push delivery remains best effort and its failures emit `push_delivery_error`.
+
+Subscription intent/audit creation and local cancellation are transactional. Reuse the same idempotency key after ambiguous gateway failures; the provider reference and upstream idempotency identity stay stable. Provider-hosted checkout URLs are HTTPS allowlisted. Dodo checkout is USD-only. Sandbox verification of provider webhook formats, recurring billing cancellation and timeout reconciliation remains required before enabling live payments.
+
+Migration 027 renames legacy `reading_lists.title` to the API contract `name` and adds followed-list keyset pagination. A database containing both columns must reconcile them first; the migration refuses to discard either.
+
+Migration 028 adds the persisted locale preference used by the locale API. Premium checkout strings and prices use locale catalogs/formatting; CI checks catalog key parity, interpolation contracts and ICU rendering for English, French and German. Other UI areas still require the translation/accessibility sweep tracked in the audit.
+
+Migrations 029–030 restrict private profile columns and privileged RPCs for browser roles, including Supabase explicit default grants. Auth API responses use a field allowlist; contact/authentication changes go through authenticated service handlers. Migration 031 adds digest delivery receipts and the service-only financial integrity snapshot used by outbox drain.

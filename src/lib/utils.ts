@@ -30,21 +30,19 @@ export function generateReferralCode(): string {
 }
 
 export function getClientIp(request: Request): string {
-  // Bugfix: do not trust arbitrary x-forwarded-for chain; prefer platform-provided client IP first.
-  const realIp = request.headers.get('x-real-ip')?.trim();
-  if (realIp) return realIp;
-
-  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  if (
-    forwarded &&
-    !forwarded.startsWith('10.') &&
-    !forwarded.startsWith('192.168.') &&
-    !forwarded.startsWith('172.16.')
-  ) return forwarded;
-  return 'unknown';
+  const header = process.env.VERCEL === '1' ? 'x-vercel-forwarded-for' : process.env.TRUSTED_CLIENT_IP_HEADER;
+  if (!header) return 'unknown';
+  const value = request.headers.get(header)?.trim();
+  return value && /^[a-fA-F0-9.:]{3,64}$/.test(value) ? value : 'unknown';
 }
 
 export function getRequestCorrelationId(request: Request): string {
   // Bugfix: always propagate a correlation ID for financial/security observability.
-  return request.headers.get('x-request-id') ?? crypto.randomUUID();
+  const supplied = request.headers.get('x-request-id');
+  return supplied && /^[a-zA-Z0-9_-]{8,100}$/.test(supplied) ? supplied : crypto.randomUUID();
+}
+
+/** Normalizes a many-to-one relation across PostgREST and direct PostgreSQL adapters. */
+export function singleRelation<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
 }

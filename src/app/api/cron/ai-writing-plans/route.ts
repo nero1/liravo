@@ -1,3 +1,4 @@
+import { cron } from '@/lib/cron';
 import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { AI_MODELS } from '@/constants/ai';
@@ -100,13 +101,7 @@ function getWeekStart(): string {
   return weekStart.toISOString().split('T')[0];
 }
 
-export async function POST(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+async function run() {
 
   const supabase = createServiceClient();
   const weekStart = getWeekStart();
@@ -174,3 +169,8 @@ Keep each task focused, achievable, and creative. Vary the exercises (character 
 
   return NextResponse.json({ success: true, week_start: weekStart, ...results });
 }
+
+export const GET = cron('ai-writing-plans', run);
+export const POST = GET;
+
+export const maxDuration = 60;

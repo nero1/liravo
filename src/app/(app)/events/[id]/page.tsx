@@ -1,3 +1,4 @@
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -156,7 +157,7 @@ export default async function EventDetailPage({
                 </span>
               </div>
             ) : (
-              <form action={`/api/events/${params.id}/rsvp`} method="POST">
+              <form action={`/api/events/${params.id}/rsvp`} method="POST"><CsrfInput />
                 <button
                   type="submit"
                   className="w-full py-3 rounded-lg bg-accent text-white font-semibold hover:opacity-90 transition-opacity"
@@ -172,7 +173,7 @@ export default async function EventDetailPage({
               </span>
             </div>
           ) : (
-            <form action={`/api/events/${params.id}/ticket`} method="POST">
+            <form action={`/api/events/${params.id}/ticket`} method="POST"><CsrfInput />
               <button
                 type="submit"
                 className="w-full py-3 rounded-lg bg-accent text-white font-semibold hover:opacity-90 transition-opacity"

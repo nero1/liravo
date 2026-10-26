@@ -1,7 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient, REDIS_KEYS, REDIS_TTL } from '@/lib/redis';
 import type { BookRow } from '@/types/database';
-import { withExponentialBackoff } from '@/lib/retry';
+import { fetchWithRetry } from '@/lib/retry';
 
 interface GoogleBooksVolume {
   id: string;
@@ -30,10 +30,7 @@ export async function searchGoogleBooks(query: string, maxResults = 10): Promise
   url.searchParams.set('printType', 'books');
   if (apiKey) url.searchParams.set('key', apiKey);
 
-  const res = await withExponentialBackoff(
-    async () => fetch(url.toString(), { next: { revalidate: 3600 } }),
-    { retries: 2 }
-  );
+  const res = await fetchWithRetry(url.toString(), { next: { revalidate: 3600 } });
   if (!res.ok) return [];
   const data = await res.json();
   return data.items ?? [];
@@ -153,7 +150,7 @@ export async function getOrCreateBook(googleBooksId: string): Promise<BookRow | 
   // Fetch from Google Books and cache
   const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
   const url = `https://www.googleapis.com/books/v1/volumes/${googleBooksId}${apiKey ? `?key=${apiKey}` : ''}`;
-  const res = await withExponentialBackoff(async () => fetch(url), { retries: 2 });
+  const res = await fetchWithRetry(url);
   if (!res.ok) return null;
 
   const volume: GoogleBooksVolume = await res.json();

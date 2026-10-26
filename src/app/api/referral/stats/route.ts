@@ -16,7 +16,7 @@ export async function GET() {
   // Count referred users
   const { count: referralCount } = await supabase
     .from('users')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .eq('referred_by', user.id);
 
   const count = referralCount ?? 0;

@@ -18,10 +18,7 @@ async function checkRateLimit(ip: string, failOpen: boolean): Promise<{
       return { allowed: false, remaining: 0, resetAt: Date.now() + ttl * 1000 };
     }
 
-    const count = await redis.incr(key);
-    if (count === 1) {
-      await redis.expire(key, windowSeconds);
-    }
+    const count = await redis.incrementWindow(key, windowSeconds);
 
     const remaining = Math.max(0, RATE_LIMITS.AUTH_MAX_ATTEMPTS - count);
 
@@ -48,4 +45,23 @@ export async function checkAuthRateLimit(ip: string) {
 
 export async function checkCriticalRateLimit(ip: string) {
   return checkRateLimit(ip, false);
+}
+
+const ROUTE_LIMITS = { ai: { max: 30, seconds: 60 }, social: { max: 120, seconds: 60 } } as const;
+
+/** Per-account risk quotas fail closed when the shared counter is unavailable. */
+export async function checkRouteRateLimit(identity: string, tier: keyof typeof ROUTE_LIMITS): Promise<boolean> {
+  const policy = ROUTE_LIMITS[tier];
+  try {
+    const key = `ratelimit:${tier}:${identity}`;
+    const count = await getRedisClient().incrementWindow(key, policy.seconds);
+    return count <= policy.max;
+  } catch { return false; }
+}
+
+/** A new IP never resets the account quota; unknown ingress does not pool unrelated users. */
+export async function checkMoneyRateLimit(userId: string, ip: string) {
+  const account = await checkCriticalRateLimit(`money:user:${userId}`);
+  if (!account.allowed || ip === 'unknown') return account;
+  return checkCriticalRateLimit(`money:ip:${ip}`);
 }

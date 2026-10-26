@@ -15,23 +15,25 @@ export async function GET() {
   // Tips received (as creator)
   const { data: tips } = await supabase
     .from('tips')
-    .select('creator_amount')
-    .eq('creator_id', user.id)
+    .select('recipient_amount, creator_amount')
+    .or(`recipient_id.eq.${user.id},creator_id.eq.${user.id}`)
+    .eq('currency', 'USD')
     .eq('status', 'completed');
 
   const tipsTotal = (tips ?? []).reduce(
-    (acc: Decimal, t: { creator_amount: string }) => acc.plus(new Decimal(t.creator_amount ?? 0)),
+    (acc: Decimal, t: { recipient_amount: string; creator_amount: string }) => acc.plus(new Decimal(t.recipient_amount ?? t.creator_amount ?? 0)),
     new Decimal(0)
   );
 
   // Referral commissions (10% of platform gross from referred users' subscriptions)
   const { data: commissions } = await supabase
     .from('referral_commissions')
-    .select('amount')
+    .select('commission_amount')
+    .is('reversed_at', null)
     .eq('referrer_id', user.id);
 
   const commissionsTotal = (commissions ?? []).reduce(
-    (acc: Decimal, c: { amount: string }) => acc.plus(new Decimal(c.amount ?? 0)),
+    (acc: Decimal, c: { commission_amount: string }) => acc.plus(new Decimal(c.commission_amount ?? 0)),
     new Decimal(0)
   );
 
@@ -39,7 +41,8 @@ export async function GET() {
   const { data: eventRevenue } = await supabase
     .from('event_revenue')
     .select('amount')
-    .eq('organizer_id', user.id);
+    .eq('organizer_id', user.id)
+    .eq('currency', 'USD');
 
   const eventTotal = (eventRevenue ?? []).reduce(
     (acc: Decimal, e: { amount: string }) => acc.plus(new Decimal(e.amount ?? 0)),

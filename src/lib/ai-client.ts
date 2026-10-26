@@ -6,7 +6,7 @@
  */
 import { getRedisClient } from '@/lib/redis';
 import { AI_MODELS } from '@/constants/ai';
-import { withExponentialBackoff } from '@/lib/retry';
+import { fetchWithRetry } from '@/lib/retry';
 
 const FAIL_KEY = 'ai:deepseek:failures';
 const CIRCUIT_KEY = 'ai:deepseek:circuit_open';
@@ -52,8 +52,7 @@ async function callDeepSeek(prompt: string, opts: AICallOptions): Promise<string
     { role: 'user', content: prompt },
   ];
 
-  const res = await withExponentialBackoff(
-    () => fetch('https://api.deepseek.com/v1/chat/completions', {
+  const res = await fetchWithRetry('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -63,9 +62,7 @@ async function callDeepSeek(prompt: string, opts: AICallOptions): Promise<string
         ...(opts.maxTokens && { max_tokens: opts.maxTokens }),
       }),
       signal: AbortSignal.timeout(8000),
-    }),
-    { retries: 1 }
-  );
+    });
 
   if (!res.ok) throw new Error(`DeepSeek error: ${res.status}`);
   const data = await res.json() as { choices: Array<{ message: { content: string } }> };
@@ -76,23 +73,14 @@ async function callGemini(prompt: string, opts: AICallOptions): Promise<string> 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('Gemini API key not configured');
 
-  const contents = [
-    ...(opts.system ? [{ role: 'model', parts: [{ text: opts.system }] }] : []),
-    { role: 'user', parts: [{ text: prompt }] },
-  ];
+  const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 
-  const res = await withExponentialBackoff(
-    () => fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_MODEL}:generateContent?key=${apiKey}`,
-      {
+  const res = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_MODEL}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents }),
+        body: JSON.stringify({ contents, ...(opts.system ? { system_instruction: { parts: [{ text: opts.system }] } } : {}) }),
         signal: AbortSignal.timeout(8000),
-      }
-    ),
-    { retries: 1 }
-  );
+      });
 
   if (!res.ok) throw new Error(`Gemini error: ${res.status}`);
   const data = await res.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };

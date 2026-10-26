@@ -1,9 +1,11 @@
+import { languageAlternates } from '@/lib/metadata';
+import { singleRelation } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Star, BookOpen, Share2, Users, BookMarked, ThumbsUp, ThumbsDown, MessageSquare } from 'lucide-react';
+import { Star, BookOpen, Share2, BookMarked, ThumbsUp, ThumbsDown, MessageSquare } from 'lucide-react';
 import { ReviewForm } from '@/components/books/ReviewForm';
 import { ReactionButtons } from '@/components/books/ReactionButtons';
 import { AudibleCTA } from '@/components/books/AudibleCTA';
@@ -29,20 +31,6 @@ export async function generateMetadata({ params }: BookPageProps): Promise<Metad
 
   if (!book) return { title: 'Book not found' };
 
-  const bookJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Book',
-    name: book.title,
-    author: { '@type': 'Person', name: book.author_name },
-    description: book.description ?? undefined,
-    image: book.cover_url ?? undefined,
-    isbn: book.isbn_13 ?? undefined,
-    datePublished: book.published_year?.toString() ?? undefined,
-    aggregateRating: book.average_rating
-      ? { '@type': 'AggregateRating', ratingValue: book.average_rating.toFixed(1), bestRating: '5', worstRating: '1' }
-      : undefined,
-    url: `${APP_URL}/book/${params.id}`,
-  };
 
   return {
     title: `${book.title} by ${book.author_name} — Liravo`,
@@ -53,8 +41,8 @@ export async function generateMetadata({ params }: BookPageProps): Promise<Metad
       images: book.cover_url ? [{ url: `${APP_URL}/share/book/${params.id}`, width: 1200, height: 630 }] : [],
       url: `${APP_URL}/book/${params.id}`,
     },
-    alternates: { canonical: `${APP_URL}/book/${params.id}` },
-    other: { 'script:ld+json': JSON.stringify(bookJsonLd) },
+    alternates: languageAlternates(`/book/${params.id}`),
+    twitter: { card: 'summary_large_image', title: book.title, images: book.cover_url ? [book.cover_url] : [] },
   };
 }
 
@@ -94,11 +82,11 @@ export default async function BookPage({ params }: BookPageProps) {
   // User country for affiliate links
   const { data: userProfile } = await supabase
     .from('users')
-    .select('country, locale')
+    .select('country, preferred_locale')
     .eq('id', user.id)
     .single();
   const country = userProfile?.country ?? 'US';
-  const locale = userProfile?.locale ?? 'en';
+  const locale = userProfile?.preferred_locale ?? 'en';
 
   // Affiliate links
   const affiliateLinks = await buildAffiliateLinks(book, country, locale);
@@ -170,7 +158,7 @@ export default async function BookPage({ params }: BookPageProps) {
       .in('id', listIds)
       .eq('is_public', true)
       .limit(5);
-    readingLists = (data as typeof readingLists) ?? [];
+    readingLists = (data ?? []).map(row => ({ ...row, users: singleRelation(row.users) }));
   }
 
   // Author's Liravo profile
@@ -208,7 +196,7 @@ export default async function BookPage({ params }: BookPageProps) {
   }
 
   // Reply counts per review
-  let replyCounts: Record<string, number> = {};
+  const replyCounts: Record<string, number> = {};
   if ((reviews ?? []).length > 0) {
     const reviewIds = (reviews ?? []).map((r) => r.id);
     const { data: replyData } = await serviceSupabase
@@ -222,6 +210,10 @@ export default async function BookPage({ params }: BookPageProps) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+        '@context': 'https://schema.org', '@type': 'Book', name: book.title,
+        author: { '@type': 'Person', name: book.author_name }, isbn: book.isbn_13 ?? undefined,
+      }).replace(/</g, '\\u003c') }} />
       {/* Book header */}
       <div className="flex gap-5 mb-6">
         <div className="shrink-0">

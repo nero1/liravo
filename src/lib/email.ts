@@ -18,7 +18,7 @@ const mailgun = new Mailgun(FormData);
 function getClient() {
   const apiKey = process.env.MAILGUN_API_KEY;
   if (!apiKey) throw new Error('MAILGUN_API_KEY is not configured');
-  return mailgun.client({ username: 'api', key: apiKey });
+  return mailgun.client({ username: 'api', key: apiKey, timeout: 6000 });
 }
 
 const DOMAIN = process.env.MAILGUN_DOMAIN ?? '';
@@ -58,6 +58,7 @@ export interface SendResult {
   ok: boolean;
   messageId?: string;
   error?: string;
+  ambiguous?: boolean;
 }
 
 export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
@@ -96,7 +97,8 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown Mailgun error';
     console.error('[email] send failed', { type, error: message });
-    return { ok: false, error: message };
+    const status = Number((err as { status?: number }).status);
+    return { ok: false, error: message, ambiguous: !Number.isFinite(status) || status >= 500 };
   }
 }
 

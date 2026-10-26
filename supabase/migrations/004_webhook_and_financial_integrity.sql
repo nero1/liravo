@@ -2,9 +2,12 @@
 alter table if exists subscriptions
   add column if not exists provider_event_id text;
 
-create unique index if not exists ux_subscriptions_provider_event
-  on subscriptions(provider, provider_event_id)
-  where provider_event_id is not null;
+do $$ begin
+  if to_regclass('public.subscriptions') is not null then
+    create unique index if not exists ux_subscriptions_provider_event
+      on subscriptions(provider, provider_event_id) where provider_event_id is not null;
+  end if;
+end $$;
 
 -- Bugfix: immutable audit trail for money-affecting operations.
 create table if not exists financial_audit_log (

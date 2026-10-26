@@ -28,10 +28,11 @@ async function getDoUser(): Promise<SessionUser | null> {
       const redis = getRedisClient();
       const raw = await redis.get(`do:session:${token}`);
       if (raw) {
-        try { return JSON.parse(raw) as SessionUser; } catch { /* corrupt session */ }
+        try { return JSON.parse(raw) as SessionUser; } catch { return null; }
       }
+      return null;
     }
-  } catch { /* headers() may throw outside request context */ }
+  } catch { return null; }
 
   const cookieStore = cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
@@ -59,10 +60,10 @@ async function getSupabaseUser(): Promise<SessionUser | null> {
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
       const { data: { user } } = await supabase.auth.getUser(token);
-      if (user) return { id: user.id, email: user.email ?? '' };
+      return user ? { id: user.id, email: user.email ?? '' } : null;
     }
   } catch {
-    // headers() throws outside a request context (e.g. during build); ignore.
+    return null;
   }
 
   const { data: { user } } = await supabase.auth.getUser();

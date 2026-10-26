@@ -16,7 +16,7 @@ export async function GET() {
     .single();
 
   const { data: promptSubs } = await supabase
-    .from('prompt_submissions')
+    .from('writing_prompt_submissions')
     .select('word_count')
     .eq('user_id', user.id);
 
