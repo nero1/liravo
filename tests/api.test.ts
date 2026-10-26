@@ -11,7 +11,7 @@ interface EndpointCheck {
 const endpoints: EndpointCheck[] = [
   { method: 'GET', path: '/api/health', expectedStatus: 200 },
   { method: 'GET', path: '/api/books/00000000-0000-4000-8000-000000000001/reviews/00000000-0000-4000-8000-000000000002/helpful?value=true', expectedStatus: 405 },
-  { method: 'GET', path: '/api/auth/callback', expectedStatus: 302 },
+  { method: 'GET', path: '/api/auth/callback', expectedStatus: 307 },
   { method: 'GET', path: '/api/books/search?q=test', expectedStatus: 401 },
   { method: 'GET', path: '/api/stats/reading', expectedStatus: 401 },
   { method: 'POST', path: '/api/subscriptions/create', expectedStatus: 401 },

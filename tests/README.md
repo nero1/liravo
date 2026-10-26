@@ -56,3 +56,5 @@ Add to your GitHub Actions workflow:
 `payment-webhooks.test.ts` verifies native Paystack and Dodo signatures/envelopes. `i18n.test.ts` validates catalog parity, interpolation and ICU output across all supported locales.
 
 The PostgreSQL rehearsal also exercises content intent races, rollback/deleted-record replay, buddy capacity, vote counters, adapter mutation/count contracts and streak rewards. `mobile-api.test.ts` executes native transport against mocked fetch/store dependencies; it does not replace an Expo build. `i18n-usage.test.ts` checks source translation references and localized login labels.
+
+Admin contract suites cover the cron broker, unavailable/partial statuses and flag requests. The migration rehearsal executes real admin query models, FK/nested relationships, provider-toggle races and referral attribution races. Localized admin labels join the i18n source checks.

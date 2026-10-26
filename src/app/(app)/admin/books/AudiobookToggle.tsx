@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 interface Props {
   bookId: string;
@@ -8,35 +9,32 @@ interface Props {
 }
 
 export function AudiobookToggle({ bookId, initial }: Props) {
+  const t = useTranslations('admin');
+  const busy = useRef(false);
   const [enabled, setEnabled] = useState(initial);
-  const [, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(false);
 
-  const toggle = () => {
+  async function toggle() {
+    if (busy.current) return;
+    busy.current = true; setPending(true); setError(false);
     const next = !enabled;
     setEnabled(next);
-    startTransition(async () => {
-      const res = await fetch(`/api/admin/books/${bookId}/audiobook`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ has_audiobook: next }),
+    try {
+      const response = await fetch(`/api/admin/books/${bookId}/audiobook`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ has_audiobook: next }),
       });
-      if (!res.ok) setEnabled(!next);
-    });
-  };
+      if (!response.ok) throw new Error('Audiobook update unavailable');
+    } catch { setEnabled(!next); setError(true); }
+    finally { busy.current = false; setPending(false); }
+  }
 
   return (
-    <button
-      onClick={toggle}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        enabled ? 'bg-amber-500' : 'bg-muted'
-      }`}
-      title={enabled ? 'Has audiobook (click to disable)' : 'No audiobook (click to enable)'}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
-          enabled ? 'translate-x-4.5' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
+    <div>
+      <button type="button" role="switch" aria-checked={enabled} aria-label={t('audiobook')} disabled={pending} onClick={toggle} className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${enabled ? 'bg-accent' : 'bg-muted'}`}>
+        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-4' : 'translate-x-1'}`} />
+      </button>
+      {error && <p role="alert" className="text-xs text-destructive">{t('updateFailed')}</p>}
+    </div>
   );
 }

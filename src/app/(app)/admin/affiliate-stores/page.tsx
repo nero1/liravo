@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
+import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 
 interface AffiliateStore {
@@ -35,6 +36,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function AdminAffiliateStoresPage() {
+  const t = useTranslations('admin');
   const [stores, setStores] = useState<AffiliateStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
@@ -42,21 +44,21 @@ export default function AdminAffiliateStoresPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/admin/affiliate-stores');
-      if (!res.ok) throw new Error('Failed to load stores');
+      if (!res.ok) throw new Error(t('loadStoresFailed'));
       const data = await res.json() as { stores: AffiliateStore[] };
       setStores(data.stores ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error');
+      setError(e instanceof Error ? e.message : t('actionFailed'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
-  useEffect(() => { fetchStores(); }, []);
+  useEffect(() => { fetchStores(); }, [fetchStores]);
 
   const startEdit = (store: AffiliateStore) => {
     setEditingId(store.id);
@@ -92,12 +94,12 @@ export default function AdminAffiliateStoresPage() {
         body: JSON.stringify(isNew ? payload : { id: editingId, ...payload }),
       });
 
-      if (!res.ok) throw new Error('Failed to save store');
+      if (!res.ok) throw new Error(t('saveStoreFailed'));
       setEditingId(null);
       setForm(EMPTY_FORM);
       await fetchStores();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error');
+      setError(e instanceof Error ? e.message : t('actionFailed'));
     } finally {
       setSaving(false);
     }
@@ -108,16 +110,14 @@ export default function AdminAffiliateStoresPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-2xl font-bold">Affiliate Store Registry</h1>
+        <h1 className="font-display text-2xl font-bold">{t('affiliateStoreRegistry')}</h1>
         <button
           onClick={() => { setEditingId('new'); setForm(EMPTY_FORM); }}
           className="px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors"
-        >
-          Add Store
-        </button>
+        >{t('addStore')}</button>
       </div>
 
-      {error && <p className="text-destructive text-sm mb-4">{error}</p>}
+      {error && <p role="alert" className="text-destructive text-sm mb-4">{error}</p>}
 
       {editingId === 'new' && (
         <StoreForm
@@ -130,7 +130,7 @@ export default function AdminAffiliateStoresPage() {
       )}
 
       {loading ? (
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">{t('loading')}</p>
       ) : (
         <div className="space-y-3">
           {stores.map((store) => (
@@ -149,26 +149,23 @@ export default function AdminAffiliateStoresPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{store.name}</span>
                       <span className={cn('text-xs px-1.5 py-0.5 rounded', store.is_active ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground')}>
-                        {store.is_active ? 'Active' : 'Inactive'}
+                        {store.is_active ? t('active') : t('inactive')}
                       </span>
                       {store.is_non_affiliate && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Non-affiliate</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{t('nonAffiliate')}</span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Countries: {store.countries.join(', ')} | Priority: {store.priority}
+                    <p className="text-xs text-muted-foreground">{t('countries')}{' '}{store.countries.join(', ')}{' '}{t('priorityInline')}{' '}{store.priority}
                     </p>
                     <p className="text-xs text-muted-foreground font-mono">{store.url_template}</p>
                     {store.affiliate_tag && (
-                      <p className="text-xs text-muted-foreground">Tag: {store.affiliate_tag}</p>
+                      <p className="text-xs text-muted-foreground">{t('tag')}{' '}{store.affiliate_tag}</p>
                     )}
                   </div>
                   <button
                     onClick={() => startEdit(store)}
                     className="px-3 py-1.5 text-xs border border-border rounded hover:bg-muted transition-colors shrink-0"
-                  >
-                    Edit
-                  </button>
+                  >{t('edit')}</button>
                 </div>
               )}
             </div>
@@ -192,20 +189,21 @@ function StoreForm({
   onCancel: () => void;
   saving: boolean;
 }) {
+  const t = useTranslations('admin');
   return (
     <div className="rounded-xl border border-accent bg-accent/5 p-4 mb-4 space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium mb-1">Name</label>
-          <input
+          <label htmlFor="affiliate-name" className="block text-xs font-medium mb-1">{t('name')}</label>
+          <input id="affiliate-name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             className="w-full px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">Countries (comma-separated)</label>
-          <input
+          <label htmlFor="affiliate-countries" className="block text-xs font-medium mb-1">{t('countriesCommaSeparated')}</label>
+          <input id="affiliate-countries"
             value={form.countries}
             onChange={(e) => setForm({ ...form, countries: e.target.value })}
             placeholder="US, UK, CA"
@@ -213,8 +211,8 @@ function StoreForm({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">URL Template</label>
-          <input
+          <label htmlFor="affiliate-url_template" className="block text-xs font-medium mb-1">{t('urlTemplate')}</label>
+          <input id="affiliate-url_template"
             value={form.url_template}
             onChange={(e) => setForm({ ...form, url_template: e.target.value })}
             placeholder="https://example.com/search?q={isbn}&tag={tag}"
@@ -222,16 +220,16 @@ function StoreForm({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">Affiliate Tag</label>
-          <input
+          <label htmlFor="affiliate-affiliate_tag" className="block text-xs font-medium mb-1">{t('affiliateTag')}</label>
+          <input id="affiliate-affiliate_tag"
             value={form.affiliate_tag}
             onChange={(e) => setForm({ ...form, affiliate_tag: e.target.value })}
             className="w-full px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">Priority</label>
-          <input
+          <label htmlFor="affiliate-priority" className="block text-xs font-medium mb-1">{t('priority')}</label>
+          <input id="affiliate-priority"
             type="number"
             value={form.priority}
             onChange={(e) => setForm({ ...form, priority: e.target.value })}
@@ -246,18 +244,14 @@ function StoreForm({
             checked={form.is_active}
             onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
             className="rounded"
-          />
-          Active
-        </label>
+          />{' '}{t('active')}</label>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
             checked={form.is_non_affiliate}
             onChange={(e) => setForm({ ...form, is_non_affiliate: e.target.checked })}
             className="rounded"
-          />
-          Non-affiliate
-        </label>
+          />{' '}{t('nonAffiliate')}</label>
       </div>
       <div className="flex gap-2">
         <button
@@ -265,14 +259,12 @@ function StoreForm({
           disabled={saving}
           className="px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-semibold hover:bg-accent/90 disabled:opacity-50 transition-colors"
         >
-          {saving ? 'Saving...' : 'Save'}
+          {saving ? t('saving') : t('save')}
         </button>
         <button
           onClick={onCancel}
           className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted transition-colors"
-        >
-          Cancel
-        </button>
+        >{t('cancel')}</button>
       </div>
     </div>
   );

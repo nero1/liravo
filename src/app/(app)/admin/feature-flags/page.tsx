@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useTranslations, useFormatter } from 'next-intl';
+import { useState, useEffect, useCallback } from 'react';
 
 interface FeatureFlag {
   id: string;
@@ -11,26 +12,28 @@ interface FeatureFlag {
 }
 
 export default function AdminFeatureFlagsPage() {
+  const formatter = useFormatter();
+  const t = useTranslations('admin');
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchFlags = async () => {
+  const fetchFlags = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/admin/feature-flags');
-      if (!res.ok) throw new Error('Failed to load flags');
+      if (!res.ok) throw new Error(t('loadFlagsFailed'));
       const data = await res.json() as { flags: FeatureFlag[] };
       setFlags(data.flags ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error');
+      setError(e instanceof Error ? e.message : t('actionFailed'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
-  useEffect(() => { fetchFlags(); }, []);
+  useEffect(() => { fetchFlags(); }, [fetchFlags]);
 
   const handleToggle = async (flag: FeatureFlag) => {
     setTogglingId(flag.id);
@@ -40,10 +43,10 @@ export default function AdminFeatureFlagsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: flag.name, enabled: !flag.enabled }),
       });
-      if (!res.ok) throw new Error('Failed to update flag');
+      if (!res.ok) throw new Error(t('updateFailed'));
       await fetchFlags();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error');
+      setError(e instanceof Error ? e.message : t('actionFailed'));
     } finally {
       setTogglingId(null);
     }
@@ -51,15 +54,13 @@ export default function AdminFeatureFlagsPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6">
-      <h1 className="font-display text-2xl font-bold mb-6">Feature Flags</h1>
-      <p className="text-sm text-muted-foreground mb-4">
-        Toggle features without redeployment. Redis cache invalidated immediately on toggle.
-      </p>
+      <h1 className="font-display text-2xl font-bold mb-6">{t('featureFlags')}</h1>
+      <p className="text-sm text-muted-foreground mb-4">{t('featureFlagsDescription')}</p>
 
-      {error && <p className="text-destructive text-sm mb-4">{error}</p>}
+      {error && <p role="alert" className="text-destructive text-sm mb-4">{error}</p>}
 
       {loading ? (
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">{t('loading')}</p>
       ) : (
         <div className="space-y-3">
           {flags.map((flag) => (
@@ -72,15 +73,15 @@ export default function AdminFeatureFlagsPage() {
                 {flag.description && (
                   <p className="text-xs text-muted-foreground mt-0.5">{flag.description}</p>
                 )}
-                <p className="text-xs text-muted-foreground mt-1">
-                  Updated {new Date(flag.updated_at).toLocaleDateString()}
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">{t('updatedAt', { date: formatter.dateTime(new Date(flag.updated_at), { dateStyle: 'medium' }) })}</p>
               </div>
               <button
                 type="button"
                 onClick={() => handleToggle(flag)}
-                disabled={togglingId === flag.id}
-                aria-label={`${flag.enabled ? 'Disable' : 'Enable'} ${flag.name}`}
+                disabled={togglingId !== null}
+                role="switch"
+                aria-checked={flag.enabled}
+                aria-label={t(flag.enabled ? 'disableFeature' : 'enableFeature', { name: flag.name })}
                 className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 ${
                   flag.enabled ? 'bg-accent' : 'bg-muted'
                 }`}
@@ -95,7 +96,7 @@ export default function AdminFeatureFlagsPage() {
           ))}
 
           {flags.length === 0 && (
-            <p className="text-muted-foreground text-sm">No feature flags found.</p>
+            <p className="text-muted-foreground text-sm">{t('noFeatureFlagsFound')}</p>
           )}
         </div>
       )}

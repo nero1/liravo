@@ -225,11 +225,6 @@ describe('query-builder.ts — structure', () => {
     expect(src).toContain('_buildOrSql');
   });
 
-  it('handles join syntax alias:table!fk(cols)', () => {
-    const src = readSrc('lib', 'db', 'query-builder.ts');
-    expect(src).toContain('_extractJoins');
-  });
-
   it('rpc function builds named params', () => {
     const src = readSrc('lib', 'db', 'query-builder.ts');
     expect(src).toContain('rpc');

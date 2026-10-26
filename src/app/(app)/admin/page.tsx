@@ -1,4 +1,7 @@
-import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { isAdmin } from '@/lib/moderation';
+import { getTranslations, getFormatter } from 'next-intl/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
@@ -6,37 +9,32 @@ import Decimal from 'decimal.js';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Admin Dashboard — Liravo' };
-
-const QUICK_LINKS = [
-  { label: 'Users', href: '/admin/users', icon: '👥' },
-  { label: 'Books', href: '/admin/books', icon: '📚' },
-  { label: 'Reports', href: '/admin/reports', icon: '🚩' },
-  { label: 'Feature Flags', href: '/admin/feature-flags', icon: '⚑' },
-  { label: 'Affiliate Stores', href: '/admin/affiliate-stores', icon: '🔗' },
-  { label: 'Promoted Listings', href: '/admin/promoted-listings', icon: '★' },
-  { label: 'Seasonal Events', href: '/admin/seasonal-events', icon: '🎉' },
-  { label: 'Writing Challenges', href: '/admin/writing-challenges', icon: '✍️' },
-  { label: 'Auth Providers', href: '/admin/auth-providers', icon: '🔐' },
-  { label: 'Theme', href: '/admin/theme', icon: '🎨' },
-  { label: 'Cron Status', href: '/admin/cron-status', icon: '⏱' },
-  { label: 'Seed Content', href: '/admin/seed', icon: '🌱' },
-];
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('admin');
+  return { title: t('adminDashboard') };
+}
 
 export default async function AdminPage() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const formatter = await getFormatter();
+  const t = await getTranslations('admin');
+  const QUICK_LINKS = [
+    { label: t('users'), href: '/admin/users', icon: '👥' },
+    { label: t('books'), href: '/admin/books', icon: '📚' },
+    { label: t('reports'), href: '/moderation/reports', icon: '🚩' },
+    { label: t('featureFlags'), href: '/admin/feature-flags', icon: '⚑' },
+    { label: t('affiliateStores'), href: '/admin/affiliate-stores', icon: '🔗' },
+    { label: t('promotedListings'), href: '/admin/promoted-listings', icon: '★' },
+    { label: t('seasonalEvents'), href: '/admin/seasonal-events', icon: '🎉' },
+    { label: t('writingChallenges'), href: '/admin/writing-challenges', icon: '✍️' },
+    { label: t('authProviders'), href: '/admin/auth-providers', icon: '🔐' },
+    { label: t('theme'), href: '/admin/theme', icon: '🎨' },
+    { label: t('cronStatus'), href: '/admin/cron-status', icon: '⏱' },
+    { label: t('seedContent'), href: '/admin/seed', icon: '🌱' },
+  ];
+  const user = await getCurrentUser();
   if (!user) redirect('/login');
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
-
-  if (!profile?.is_admin) redirect('/');
+  if (!await isAdmin(user.id)) redirect('/');
+  const supabase = createServiceClient();
 
   // Gather stats
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -108,7 +106,7 @@ export default async function AdminPage() {
       .select('id', { count: 'exact', head: true })
       .lte('start_date', nowIso)
       .gte('end_date', nowIso)
-      .eq('is_active', true),
+      .eq('is_published', true),
   ]);
 
   // Revenue this month (tips + subscriptions)
@@ -119,13 +117,13 @@ export default async function AdminPage() {
   const { data: tips } = await supabase
     .from('tips')
     .select('platform_fee')
-    .eq('status', 'completed')
+    .eq('status', 'completed').eq('currency', 'USD')
     .gte('created_at', monthStart.toISOString());
 
   const { data: subs } = await supabase
     .from('subscriptions')
     .select('amount')
-    .eq('status', 'active')
+    .eq('status', 'active').eq('currency', 'USD')
     .gte('created_at', monthStart.toISOString());
 
   const tipRevenue = (tips ?? []).reduce(
@@ -139,27 +137,27 @@ export default async function AdminPage() {
   const revenueThisMonth = tipRevenue.plus(subRevenue).toFixed(2);
 
   const stats = [
-    { label: 'Total Users', value: (totalUsers ?? 0).toLocaleString() },
-    { label: 'Total Books', value: (totalBooks ?? 0).toLocaleString() },
-    { label: 'Total Reviews', value: (totalReviews ?? 0).toLocaleString() },
-    { label: 'Reports Pending', value: (reportsPending ?? 0).toString() },
-    { label: 'Revenue This Month', value: `$${revenueThisMonth}` },
+    { label: t('totalUsers'), value: formatter.number((totalUsers ?? 0)) },
+    { label: t('totalBooks'), value: formatter.number((totalBooks ?? 0)) },
+    { label: t('totalReviews'), value: formatter.number((totalReviews ?? 0)) },
+    { label: t('reportsPending'), value: (reportsPending ?? 0).toString() },
+    { label: t('revenueThisMonth'), value: formatter.number(Number(revenueThisMonth), { style: 'currency', currency: 'USD' }) },
   ];
 
   const activityStats = [
-    { label: 'DAU (today)', value: (dau ?? 0).toLocaleString() },
-    { label: 'WAU (7 days)', value: (wau ?? 0).toLocaleString() },
-    { label: 'MAU (30 days)', value: (mau ?? 0).toLocaleString() },
-    { label: 'New Signups Today', value: (newSignupsToday ?? 0).toString() },
-    { label: 'New Signups This Week', value: (newSignupsThisWeek ?? 0).toString() },
-    { label: 'Affiliate Clicks Today', value: (affiliateClicksToday ?? 0).toString() },
-    { label: 'Active Events', value: (activeSeasonalEvents ?? 0).toString() },
-    { label: 'Pending Author Verifications', value: (pendingAuthorVerifications ?? 0).toString(), href: '/admin/users?filter=pending_authors' },
+    { label: t('dauToday'), value: formatter.number((dau ?? 0)) },
+    { label: t('wau7Days'), value: formatter.number((wau ?? 0)) },
+    { label: t('mau30Days'), value: formatter.number((mau ?? 0)) },
+    { label: t('newSignupsToday'), value: (newSignupsToday ?? 0).toString() },
+    { label: t('newSignupsThisWeek'), value: (newSignupsThisWeek ?? 0).toString() },
+    { label: t('affiliateClicksToday'), value: (affiliateClicksToday ?? 0).toString() },
+    { label: t('activeEvents'), value: (activeSeasonalEvents ?? 0).toString() },
+    { label: t('pendingAuthorVerifications'), value: (pendingAuthorVerifications ?? 0).toString(), href: '/admin/users?filter=pending_authors' },
   ];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
-      <h1 className="font-display text-2xl font-bold mb-6">Admin Dashboard</h1>
+      <h1 className="font-display text-2xl font-bold mb-6">{t('adminDashboard')}</h1>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
         {stats.map((s) => (
@@ -170,7 +168,7 @@ export default async function AdminPage() {
         ))}
       </div>
 
-      <h2 className="font-semibold text-lg mb-3 mt-6">Activity</h2>
+      <h2 className="font-semibold text-lg mb-3 mt-6">{t('activity')}</h2>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {activityStats.map((s) => (
           s.href ? (
@@ -187,7 +185,7 @@ export default async function AdminPage() {
         ))}
       </div>
 
-      <h2 className="font-semibold text-lg mb-4">Quick Links</h2>
+      <h2 className="font-semibold text-lg mb-4">{t('quickLinks')}</h2>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {QUICK_LINKS.map((link) => (
           <Link
@@ -195,7 +193,7 @@ export default async function AdminPage() {
             href={link.href}
             className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 hover:bg-muted transition-colors"
           >
-            <span className="text-xl">{link.icon}</span>
+            <span aria-hidden="true" className="text-xl">{link.icon}</span>
             <span className="font-medium text-sm">{link.label}</span>
           </Link>
         ))}
