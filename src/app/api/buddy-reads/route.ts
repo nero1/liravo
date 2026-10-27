@@ -24,11 +24,12 @@ export async function GET() {
   }
 
   // Get buddy reads the user is part of, or open ones they can join
-  const { data: participating } = await supabase
+  const { data: participating,error:membershipError } = await supabase
     .from('buddy_read_members')
     .select('buddy_read_id')
     .eq('user_id', user.id);
 
+  if(membershipError)return NextResponse.json({error:'Membership unavailable'},{status:503});
   const participatingIds = ((participating ?? []) as Array<{ buddy_read_id: string }>).map(
     (p) => p.buddy_read_id
   );
@@ -36,23 +37,26 @@ export async function GET() {
   // Get buddy reads user is in
   let myReads: unknown[] = [];
   if (participatingIds.length > 0) {
-    const { data: myReadsData } = await supabase
+    const { data: myReadsData,error:readsError } = await supabase
       .from('buddy_reads')
       .select('id, title, book_id, max_participants, current_chapter, is_active, created_by, created_at')
       .in('id', participatingIds)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
+    if(readsError)return NextResponse.json({error:'Buddy reads unavailable'},{status:503});
     myReads = myReadsData ?? [];
   }
 
   // Get open buddy reads user can join
-  const { data: openReads } = await supabase
+  const { data: openReads,error:openError } = await supabase
     .from('buddy_reads')
     .select('id, title, book_id, max_participants, current_chapter, is_active, created_by, created_at')
     .eq('is_active', true)
+    .eq('is_private',false)
     .order('created_at', { ascending: false })
     .limit(20);
 
+  if(openError)return NextResponse.json({error:'Buddy reads unavailable'},{status:503});
   const filteredOpen = ((openReads ?? []) as Array<{ id: string }>).filter(
     (r) => !participatingIds.includes(r.id)
   );
@@ -71,7 +75,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(()=>null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

@@ -1,225 +1,39 @@
+import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { checkRouteRateLimit } from '@/lib/rate-limit';
+import { GOODREADS_MAX_BYTES,parseGoodreadsImport } from '@/lib/goodreads-import';
 
 export const dynamic = 'force-dynamic';
-
-interface GoodreadsRow {
-  title: string;
-  author: string;
-  isbn: string;
-  isbn13: string;
-  shelves: string;
-  dateRead: string;
-}
-
-function parseCSV(text: string): GoodreadsRow[] {
-  const lines = text.split('\n').filter((l) => l.trim());
-  if (lines.length < 2) return [];
-
-  const header = lines[0].split(',').map((h) => h.trim().replace(/"/g, '').toLowerCase());
-
-  const findIdx = (keys: string[]) => {
-    for (const key of keys) {
-      const idx = header.findIndex((h) => h.includes(key));
-      if (idx !== -1) return idx;
+export async function POST(request:Request){
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!await checkRouteRateLimit(user.id,'social'))return NextResponse.json({error:'Too many requests'},{status:429});
+  if(Number(request.headers.get('content-length'))>GOODREADS_MAX_BYTES+10000)return NextResponse.json({error:'CSV exceeds 2 MB'},{status:413});
+  let csv:string;
+  try{
+    const reader=request.body?.getReader();if(!reader)throw new Error('Import body required');
+    const chunks:Uint8Array[]=[];let size=0;
+    for(;;){const chunk=await reader.read();if(chunk.done)break;size+=chunk.value.byteLength;
+      if(size>GOODREADS_MAX_BYTES+10000){await reader.cancel();return NextResponse.json({error:'CSV exceeds 2 MB'},{status:413});}
+      chunks.push(chunk.value);
     }
-    return -1;
-  };
+    const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+    const bodyData=new Response(bytes,{headers:{'Content-Type':request.headers.get('content-type')??''}});
 
-  const titleIdx = findIdx(['title']);
-  const authorIdx = findIdx(['author']);
-  const isbnIdx = findIdx(['isbn']);
-  const isbn13Idx = findIdx(['isbn13']);
-  const shelvesIdx = findIdx(['exclusive shelf', 'bookshelves', 'shelf']);
-  const dateReadIdx = findIdx(['date read']);
-
-  const rows: GoodreadsRow[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    // Simple CSV split respecting quoted fields
-    const fields: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let j = 0; j < line.length; j++) {
-      const ch = line[j];
-      if (ch === '"') {
-        inQuotes = !inQuotes;
-      } else if (ch === ',' && !inQuotes) {
-        fields.push(current.trim());
-        current = '';
-      } else {
-        current += ch;
-      }
+    if(request.headers.get('content-type')?.includes('application/json')){
+      const body=await bodyData.json();if(typeof body?.csv!=='string')throw new Error('CSV required');csv=body.csv;
+    }else{
+      const file=(await bodyData.formData()).get('file');if(!file||typeof file==='string')throw new Error('CSV file required');
+      if(file.size>GOODREADS_MAX_BYTES)return NextResponse.json({error:'CSV exceeds 2 MB'},{status:413});csv=await file.text();
     }
-    fields.push(current.trim());
-
-    const get = (idx: number) => (idx >= 0 && idx < fields.length ? fields[idx] ?? '' : '');
-
-    const title = get(titleIdx);
-    if (!title) continue;
-
-    rows.push({
-      title,
-      author: get(authorIdx),
-      isbn: get(isbnIdx).replace(/[^0-9X]/gi, ''),
-      isbn13: get(isbn13Idx).replace(/[^0-9]/g, ''),
-      shelves: get(shelvesIdx).toLowerCase(),
-      dateRead: get(dateReadIdx),
-    });
-  }
-
-  return rows;
-}
-
-function mapShelfType(shelves: string): 'currently_reading' | 'have_read' | 'want_to_read' {
-  if (shelves.includes('read') && !shelves.includes('want') && !shelves.includes('currently')) {
-    return 'have_read';
-  }
-  if (shelves.includes('currently')) return 'currently_reading';
-  return 'want_to_read';
-}
-
-export async function POST(request: Request) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  let csvText: string;
-  try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-    }
-    csvText = await file.text();
-  } catch {
-    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 });
-  }
-
-  const rows = parseCSV(csvText);
-  if (rows.length === 0) {
-    return NextResponse.json({ imported: 0, skipped: 0 });
-  }
-
-  // Get user's default shelves
-  const { data: userShelves } = await supabase
-    .from('shelves')
-    .select('id, default_type')
-    .eq('user_id', user.id)
-    .in('default_type', ['currently_reading', 'have_read', 'want_to_read']);
-
-  const shelfMap: Record<string, string> = {};
-  for (const shelf of userShelves ?? []) {
-    if (shelf.default_type) {
-      shelfMap[shelf.default_type] = shelf.id;
-    }
-  }
-
-  let imported = 0;
-  let skipped = 0;
-
-  for (const row of rows) {
-    try {
-      // Try to find book by ISBN or title
-      let bookId: string | null = null;
-
-      if (row.isbn13) {
-        const { data: byIsbn } = await supabase
-          .from('books')
-          .select('id')
-          .eq('isbn_13', row.isbn13)
-          .maybeSingle();
-        if (byIsbn) bookId = byIsbn.id;
-      }
-
-      if (!bookId && row.isbn) {
-        const { data: byIsbn10 } = await supabase
-          .from('books')
-          .select('id')
-          .eq('isbn_10', row.isbn)
-          .maybeSingle();
-        if (byIsbn10) bookId = byIsbn10.id;
-      }
-
-      if (!bookId) {
-        // Search by title
-        const { data: byTitle } = await supabase
-          .from('books')
-          .select('id')
-          .ilike('title', row.title.trim())
-          .limit(1)
-          .maybeSingle();
-        if (byTitle) bookId = byTitle.id;
-      }
-
-      if (!bookId) {
-        // Create minimal book record
-        const { data: newBook } = await supabase
-          .from('books')
-          .insert({
-            title: row.title.trim(),
-            author_name: row.author.trim() || 'Unknown',
-            isbn_13: row.isbn13 || null,
-            isbn_10: row.isbn || null,
-          })
-          .select('id')
-          .single();
-        if (newBook) bookId = newBook.id;
-      }
-
-      if (!bookId) {
-        skipped++;
-        continue;
-      }
-
-      const shelfType = mapShelfType(row.shelves);
-      const shelfId = shelfMap[shelfType];
-
-      if (!shelfId) {
-        skipped++;
-        continue;
-      }
-
-      // Check if already on shelf
-      const { data: existing } = await supabase
-        .from('shelf_books')
-        .select('id')
-        .eq('book_id', bookId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      const insertData: {
-        shelf_id: string;
-        book_id: string;
-        user_id: string;
-        finished_at?: string | null;
-      } = {
-        shelf_id: shelfId,
-        book_id: bookId,
-        user_id: user.id,
-      };
-
-      if (shelfType === 'have_read' && row.dateRead) {
-        const parsed = new Date(row.dateRead);
-        if (!isNaN(parsed.getTime())) {
-          insertData.finished_at = parsed.toISOString();
-        }
-      }
-
-      await supabase.from('shelf_books').insert(insertData);
-      imported++;
-    } catch {
-      skipped++;
-    }
-  }
-
-  return NextResponse.json({ imported, skipped });
+  }catch{return NextResponse.json({error:'Invalid import data'},{status:400});}
+  let parsed;
+  try{parsed=parseGoodreadsImport(csv);}catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Invalid CSV'},{status:422});}
+  const key=request.headers.get('idempotency-key')??request.headers.get('x-idempotency-key')??'goodreads:'+createHash('sha256').update(csv).digest('hex');
+  if(key.length<8||key.length>200)return NextResponse.json({error:'Invalid import intent'},{status:400});
+  const {data,error}=await createServiceClient().rpc('import_goodreads_library' as never,{p_user_id:user.id,p_key:key,p_rows:parsed.rows,p_skipped:parsed.skipped} as never);
+  if(error){const status=({P1001:409,P1003:403,P1004:422,P1005:503} as Record<string,number>)[error.code]??503;return NextResponse.json({error:status===503?'Import unavailable; retry the same file':error.message},{status});}
+  if(!data||typeof data!=='object')return NextResponse.json({error:'Import result unavailable'},{status:503});
+  return NextResponse.json(data);
 }
