@@ -269,7 +269,9 @@
     "managedByGoogle": "Verwalte dein Google-Play-Abonnement im Play Store.",
     "manageGoogle": "In Google Play verwalten",
     "paidUntil": "Bezahlter Zugang bis {date}.",
-    "paystackPass": "Paystack-Käufe gewähren 30 Tage Zugang ohne automatische Verlängerung."
+    "paystackPass": "Paystack-Käufe gewähren 30 Tage Zugang ohne automatische Verlängerung.",
+    "checkPayment": "Zahlung prüfen",
+    "verificationUnavailable": "Der Zahlungsstatus konnte nicht geprüft werden. Versuche es gleich erneut."
   },
   "admin": {
     "cron": {
@@ -296,7 +298,8 @@
         "pendingRefunds": "Erstattungen mit Klärungsbedarf",
         "unverifiedBillingPeriods": "Ungeprüfte Zahlungszeiträume",
         "overdrawnCreators": "Negative Creator-Guthaben",
-        "duplicatePayments": "Zahlungen mit Klärungsbedarf"
+        "duplicatePayments": "Zahlungen mit Klärungsbedarf",
+        "unreconciledCheckouts": "Zu prüfende Zahlungen"
       },
       "jobs": {
         "outbox-drain": {
@@ -511,9 +514,15 @@
     "editorsSummary": "Das Konto @liravo_editors besitzt die anfänglichen Leselisten, Rezensionen und Zitate der Plattform. Es ist ein serverseitig verwaltetes Redaktionskonto.",
     "editorIdentity": "Benutzername: {username} | Anzeigename: {name}",
     "seedResult": " ({inserted, number} hinzugefügt, {skipped, number} übersprungen)",
-    "activationHelp": "Sende zum Aktivieren eines Eintrags seine ID und die Aktivierungsdaten an {endpoint}.",
+    "activationHelp": "Werbung wird manuell aktiviert. Die Daten legen den Anzeigezeitraum fest.",
     "dailyPromptsHint": "Durch {endpoint} erstellt. Die letzten {count, number} werden angezeigt.",
-    "loadThemesFailed": "Designs konnten nicht geladen werden."
+    "loadThemesFailed": "Designs konnten nicht geladen werden.",
+    "promotionUpdateFailed": "Die Werbung konnte nicht aktualisiert werden. Prüfe die Daten und versuche es erneut.",
+    "promotionStartUtc": "Beginn (UTC)",
+    "promotionEndUtc": "Ende (UTC)",
+    "savePromotionDates": "Daten speichern",
+    "deactivate": "Deaktivieren",
+    "expired": "Abgelaufen"
   },
   "tips": {
     "tip": "Trinkgeld",
@@ -534,7 +543,8 @@
       "pending": "Dein Trinkgeld von {amount} wartet auf die Zahlungsbestätigung.",
       "refunded": "Dein Trinkgeld von {amount} wurde erstattet.",
       "partiallyRefunded": "Dein Trinkgeld von {amount} wurde teilweise erstattet."
-    }
+    },
+    "verificationUnavailable": "Der Zahlungsstatus konnte nicht geprüft werden. Versuche es gleich erneut."
   },
   "writing": {
     "promptTitle": "Täglicher Schreibimpuls",
@@ -726,5 +736,8 @@
       "Cookbooks": "Kochbücher",
       "Art & Photography": "Kunst und Fotografie"
     }
+  },
+  "promotions": {
+    "sponsored": "Gesponsert"
   }
 }

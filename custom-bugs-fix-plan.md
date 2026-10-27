@@ -16,7 +16,8 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Enforce Google Play account/receipt ownership, authenticated RTDN replay and paid-period access.
 - ✅ Unify creator reservations/settlement, immutable destinations, confirmed transfers and audited manual/legacy reconciliation.
 - ✅ Add capture-linked refunds, cumulative credit/commission adjustments, XP reversal and paid-period access.
-- 🟡 Complete checkout/promotion reconciliation and verify staging bindings.
+- ✅ Recover missed checkout/renewal captures, persist provider session identities and audit manual promotion controls/clicks.
+- 🟡 Complete paid-ticket checkout, capacity/refunds and staging-provider validation.
 
 ✅ 3. Cron hardening and Vercel Hobby compliance (Critical/High)
 - ✅ Standardize cron auth helper (`Authorization: Bearer <CRON_SECRET>`).

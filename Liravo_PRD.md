@@ -1006,9 +1006,9 @@ Accessible at `/admin`. Every admin route verifies `is_admin = true` against the
 ### 13.6 Promoted Listings
 
 - View active, pending, and expired listings.
-- Activate or deactivate.
-- Set start and end dates.
-- View click-through stats per listing.
+- Activate or deactivate, with durable admin intents and audit records.
+- Set start and end dates (UTC in the admin form).
+- View click-through stats per listing. Active placement clicks commit once per client intent; inactive campaigns cannot accumulate clicks.
 
 ### 13.7 Seasonal Events
 

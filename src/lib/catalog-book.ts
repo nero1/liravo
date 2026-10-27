@@ -31,6 +31,11 @@ export function catalogBookData(value:unknown){
   if(!isbn13&&!isbn10&&!data.google_books_id&&!data.open_library_id)throw new Error('Book identity missing');
   return {...data,isbn_10:isbn10,isbn_13:isbn13};
 }
+export function bookRating(value:unknown):number|null{
+  if(value===null||value===undefined||value==='')return null;
+  const rating=Number(value);
+  return Number.isFinite(rating)&&rating>=0&&rating<=5?rating:null;
+}
 export function clientBook(book:BookRow):BookRow{
-  return {...book,average_rating:book.average_rating===null?null:Number(book.average_rating)};
+  return {...book,average_rating:bookRating(book.average_rating)};
 }

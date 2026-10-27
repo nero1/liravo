@@ -106,11 +106,12 @@ export async function POST(req: Request) {
       const { data, error } = await supabase.from('tips').select('id,amount,currency,status,checkout_url').eq('id', tip.id!).single();
       if (error || !data) throw new Error('Tip lookup failed');
       const saved = data as unknown as { id: string; amount: string; currency: string; status: string; checkout_url: string | null };
-      if (saved.status === 'completed') return { redirectUrl: `/tips/${tip.id}` };
+      if (saved.status === 'completed'||saved.status==='refunded') return { redirectUrl: `/tips/${tip.id}` };
       if (saved.checkout_url) return { redirectUrl: saved.checkout_url };
       if (!z.email().safeParse(user.email).success) throw new Error('Payment contact email is required');
-      const checkoutUrl = await createTipCheckout(saved, user.email);
-      const { error: saveError } = await supabase.from('tips').update({ checkout_url: checkoutUrl } as never).eq('id', tip.id!);
+      const checkout = await createTipCheckout(saved, user.email);
+      const checkoutUrl=checkout.url;
+      const { error: saveError } = await supabase.rpc('record_checkout_session' as never,{p_user_id:user.id,p_kind:'tip',p_entity_id:tip.id,p_provider:saved.currency==='NGN'?'paystack':'dodopayments',p_checkout_id:checkout.checkoutId,p_url:checkoutUrl} as never);
       if (saveError) throw new Error('Checkout persistence failed');
       return { redirectUrl: checkoutUrl };
     });

@@ -1,3 +1,4 @@
+import { bookRating } from '@/lib/catalog-book';
 import { singleRelation } from '@/lib/utils';
 import { redirect } from 'next/navigation';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
@@ -24,13 +25,14 @@ export default async function AuthorAnalyticsPage() {
   const serviceSupabase = createServiceClient();
   const authorName = profile.display_name;
 
-  const { data: books } = await serviceSupabase
+  const { data: rawBooks } = await serviceSupabase
     .from('books')
     .select('id, title, cover_url, average_rating, ratings_count, currently_reading_count, want_to_read_count, have_read_count')
     .ilike('author_name', authorName)
     .order('have_read_count', { ascending: false })
     .limit(50);
 
+  const books=(rawBooks??[]).map(book=>({...book,average_rating:bookRating(book.average_rating)}));
   const bookIds = (books ?? []).map((b) => b.id);
 
   const totalWantToReads = (books ?? []).reduce((s, b) => s + (b.want_to_read_count ?? 0), 0);

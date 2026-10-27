@@ -59,3 +59,10 @@ describe('native provider webhook contracts', () => {
     expect(normalizeSubscription(notice)).toBeNull();
   });
 });
+
+it('rejects the legacy promotion shared secret instead of accepting client-selected activation or recipients',async()=>{
+  vi.stubEnv('PAYMENT_WEBHOOK_SECRET','isolated-legacy-fixture');
+  const {POST}=await import('@/app/api/webhooks/promoted-listings/route');
+  const response=await POST(new Request('https://app.test/api/webhooks/promoted-listings',{method:'POST',headers:{'x-webhook-secret':'isolated-legacy-fixture'},body:JSON.stringify({listing_id:subscription,user_id:user,event:'payment.completed'})}));
+  expect(response.status).toBe(401);
+});

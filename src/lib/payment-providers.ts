@@ -14,6 +14,16 @@ export function validateCheckoutUrl(provider: string, value: unknown) {
   return url.href;
 }
 
+export interface ProviderCheckout {url:string;checkoutId:string;}
+export function checkoutResult(provider:'paystack'|'dodopayments',payload:unknown,reference:string):ProviderCheckout{
+  if(provider==='paystack'){
+    const result=z.object({status:z.literal(true),data:z.object({reference:z.literal(reference),authorization_url:z.string()})}).parse(payload);
+    return {url:validateCheckoutUrl(provider,result.data.authorization_url),checkoutId:reference};
+  }
+  const result=z.object({session_id:z.string().regex(/^[a-zA-Z0-9_-]{1,150}$/),checkout_url:z.string()}).parse(payload);
+  return {url:validateCheckoutUrl(provider,result.checkout_url),checkoutId:result.session_id};
+}
+
 export async function createTipCheckout(tip: { id: string; amount: string; currency: string }, email: string) {
   const reference = `tip_${tip.id}`;
   const amount = Math.round(Number(tip.amount) * 100);
@@ -29,7 +39,7 @@ export async function createTipCheckout(tip: { id: string; amount: string; curre
     });
     if (!response.ok) throw new Error(`Paystack checkout failed: ${response.status}`);
     const result = await response.json();
-    return validateCheckoutUrl('paystack', result.data?.authorization_url);
+    return checkoutResult('paystack',result,reference);
   }
   const { key, base } = dodoConnection();
   const productId = process.env[`DODOPAYMENTS_TIP_PRODUCT_ID_${tip.currency}`];
@@ -51,7 +61,7 @@ export async function createTipCheckout(tip: { id: string; amount: string; curre
       return_url: `${appUrl}/tips/${tip.id}`, metadata: { tip_id: tip.id, reference } }),
   });
   if (!response.ok) throw new Error(`Dodo checkout failed: ${response.status}`);
-  return validateCheckoutUrl('dodopayments', (await response.json()).checkout_url);
+  return checkoutResult('dodopayments',await response.json(),reference);
 }
 
 /** Setting the same remote status is replayable after a lost response. */

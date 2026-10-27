@@ -14,7 +14,11 @@ export async function fetchCapturedPayment(provider:'paystack'|'dodopayments',pa
   const result=await response.json();
   const data=provider==='paystack'?(result.status===true?result.data:null):result;
   if(!data||String(provider==='paystack'?data.id:data.payment_id)!==paymentId||data.status!==(provider==='paystack'?'success':'succeeded'))throw new Error('Captured payment identity unavailable');
-  const notice:PaymentNotice={provider,event:provider==='paystack'?'charge.success':'payment.succeeded',deliveryId:'reconciliation',timestamp:data.created_at,data};
+  return capturedPaymentEvent(provider,data);
+}
+export async function capturedPaymentEvent(provider:'paystack'|'dodopayments',data:Record<string,unknown>){
+  if(data.status!==(provider==='paystack'?'success':'succeeded'))throw new Error('Payment is not captured');
+  const notice:PaymentNotice={provider,event:provider==='paystack'?'charge.success':'payment.succeeded',deliveryId:'reconciliation',timestamp:z.string().optional().parse(data.created_at),data};
   if(provider==='dodopayments'&&!paymentMetadata(notice).subscription_id&&!paymentMetadata(notice).tip_id){
     const remoteId=data.subscription_id??(Array.isArray(data.subscription_ids)&&data.subscription_ids.length===1?data.subscription_ids[0]:null);
     if(typeof remoteId==='string'){
@@ -27,6 +31,7 @@ export async function fetchCapturedPayment(provider:'paystack'|'dodopayments',pa
   if(!event)throw new Error('Captured payment target unavailable');
   return event;
 }
+
 export async function drainRefundReconciliation(correlationId:string) {
   const client=createServiceClient();
   const {data,error}=await client.rpc('claim_refund_reconciliation' as never,{p_limit:3} as never);

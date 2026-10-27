@@ -6,7 +6,7 @@ import { checkMoneyRateLimit } from '@/lib/rate-limit';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { validateCheckoutUrl, validateDodoSubscriptionProduct } from '@/lib/payment-providers';
+import { checkoutResult,type ProviderCheckout, validateDodoSubscriptionProduct } from '@/lib/payment-providers';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ async function createPaystackCheckout(opts: {
   userId: string;
   subscriptionId: string;
   reference: string;
-}): Promise<string> {
+}): Promise<ProviderCheckout> {
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret) throw new Error('PAYSTACK_SECRET_KEY not configured');
 
@@ -58,10 +58,7 @@ async function createPaystackCheckout(opts: {
     throw new Error(`Paystack init failed: ${res.status}`);
   }
 
-  const data = await res.json() as { data?: { authorization_url?: string } };
-  const url = data?.data?.authorization_url;
-  if (!url) throw new Error('Paystack did not return an authorization URL');
-  return url;
+  return checkoutResult('paystack',await res.json(),opts.reference);
 }
 
 async function createDodoCheckout(opts: {
@@ -70,7 +67,7 @@ async function createDodoCheckout(opts: {
   userId: string;
   subscriptionId: string;
   reference: string;
-}): Promise<string> {
+}): Promise<ProviderCheckout> {
   const key = process.env.DODOPAYMENTS_API_KEY ?? process.env.DODOPAYMENTS_SECRET_KEY;
   if (!key) throw new Error('DODOPAYMENTS_API_KEY not configured');
 
@@ -111,10 +108,7 @@ async function createDodoCheckout(opts: {
     throw new Error(`Dodopayments init failed: ${res.status}`);
   }
 
-  const data = await res.json() as { checkout_url?: string };
-  const url = data.checkout_url;
-  if (!url) throw new Error('Dodopayments did not return a checkout URL');
-  return url;
+  return checkoutResult('dodopayments',await res.json(),opts.reference);
 }
 
 export async function POST(req: Request) {
@@ -148,6 +142,7 @@ export async function POST(req: Request) {
     body = { provider: form.get('provider'), currency: form.get('currency') };
   }
 
+  const wantsJson=contentType.includes('application/json')||!!req.headers.get('accept')?.includes('application/json');
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
@@ -164,7 +159,7 @@ export async function POST(req: Request) {
   const sub = data as { id: string; checkout_url: string | null };
   const reference = `sub_${sub.id}`;
   if (sub.checkout_url) {
-    return req.headers.get('accept')?.includes('application/json')
+    return wantsJson
       ? NextResponse.json({ checkoutUrl: sub.checkout_url })
       : new Response(null, { status: 303, headers: { Location: sub.checkout_url } });
   }
@@ -172,14 +167,14 @@ export async function POST(req: Request) {
   const email = user.email;
   if (!z.email().safeParse(email).success) return NextResponse.json({ error: 'Payment contact email is required', correlationId }, { status: 400 });
 
-  let checkoutUrl: string;
+  let checkout:ProviderCheckout;
   try {
     if (provider === 'paystack') {
       // Paystack amount is in kobo (NGN) or cents (USD). Use NGN (kobo) for Paystack users.
       const amountInSmallestUnit = currency === 'NGN'
         ? PRICE_NGN.times(100).toFixed(0)  // kobo
         : PRICE_USD.times(100).toFixed(0);  // cents
-      checkoutUrl = await createPaystackCheckout({
+      checkout = await createPaystackCheckout({
         email,
         amountKobo: parseInt(amountInSmallestUnit, 10),
         currency,
@@ -188,7 +183,7 @@ export async function POST(req: Request) {
         reference,
       });
     } else {
-      checkoutUrl = await createDodoCheckout({
+      checkout = await createDodoCheckout({
         email,
         amountUsd: PRICE_USD.toFixed(2),
         userId: user.id,
@@ -202,15 +197,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Payment provider unavailable; retry with the same key', correlationId }, { status: 502 });
   }
 
-  try { checkoutUrl = validateCheckoutUrl(provider,checkoutUrl); }
-  catch { return NextResponse.json({ error: 'Invalid checkout destination', correlationId }, { status: 503 }); }
-
-  // Persist checkout URL for retries; the reference was reserved with the intent.
-  const { error: checkoutError } = await supabase.from('subscriptions').update({ checkout_url: checkoutUrl }).eq('id', sub.id);
+  const checkoutUrl=checkout.url;
+  const {error:checkoutError}=await supabase.rpc('record_checkout_session' as never,{p_user_id:user.id,p_kind:'subscription',p_entity_id:sub.id,p_provider:provider,p_checkout_id:checkout.checkoutId,p_url:checkoutUrl} as never);
   if (checkoutError) return NextResponse.json({ error: 'Checkout persistence failed; retry with the same key', correlationId }, { status: 503 });
 
-  const accept = req.headers.get('accept') ?? '';
-  if (!accept.includes('application/json')) {
+  if (!wantsJson) {
     return NextResponse.redirect(checkoutUrl, 303);
   }
 
