@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -6,6 +7,8 @@ import { useState } from 'react';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
 import { Avatar } from '@/components/ui/Avatar';
+import { useAuthStore } from '@/stores/auth';
+import { Button } from '@/components/ui/Button';
 
 interface Milestone { id: string; title: string; unlock_date: string; }
 interface PostAuthor { id: string; display_name: string; username: string; avatar_url: string | null; }
@@ -14,6 +17,7 @@ interface Post { id: string; content: string; milestone_id: string | null; creat
 export default function ReadingRoomDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
+  const user=useAuthStore(state=>state.user);
 
   const [tab, setTab] = useState<'discussion' | 'milestones'>('discussion');
   const [postContent, setPostContent] = useState('');
@@ -22,9 +26,9 @@ export default function ReadingRoomDetailScreen() {
   const [milestoneDate, setMilestoneDate] = useState('');
   const [showAddMilestone, setShowAddMilestone] = useState(false);
 
-  const { data: roomData, isLoading } = useQuery({
+  const { data: roomData, isLoading,error,refetch } = useQuery({
     queryKey: ['reading-room', id],
-    queryFn: () => api.get<{ room: { id: string; name: string; created_by: string; is_active: boolean } }>(ENDPOINTS.readingRooms.byId(id!)),
+    queryFn: () => api.get<{ room: { id: string; name: string; created_by: string; is_active: boolean;is_member:boolean } }>(ENDPOINTS.readingRooms.byId(id!)),
     enabled: !!id,
   });
 
@@ -69,6 +73,8 @@ export default function ReadingRoomDetailScreen() {
   const milestones = milestonesData?.milestones ?? [];
   const posts = postsData?.posts ?? [];
 
+  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
+
   if (isLoading || !room) {
     return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
   }
@@ -85,6 +91,7 @@ export default function ReadingRoomDetailScreen() {
         {/* Header */}
         <View className="px-4 pt-4 pb-2 border-b border-border">
           <Text className="text-xl font-bold text-foreground">{room.name}</Text>
+          {!room.is_member&&room.is_active&&<Button onPress={()=>joinMutation.mutate()} loading={joinMutation.isPending}>Join room</Button>}
           <View className="flex-row gap-2 mt-2">
             {(['discussion', 'milestones'] as const).map((t) => (
               <TouchableOpacity
@@ -131,7 +138,7 @@ export default function ReadingRoomDetailScreen() {
               );
             })}
 
-            {showAddMilestone ? (
+            {room.created_by===user?.id&&(showAddMilestone ? (
               <View className="rounded-xl border border-dashed border-border p-4 gap-3">
                 <Text className="font-semibold text-sm text-foreground">Add Milestone</Text>
                 <TextInput
@@ -154,7 +161,7 @@ export default function ReadingRoomDetailScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
-                      if (newMilestoneTitle && milestoneDate) {
+                      if (newMilestoneTitle && Number.isFinite(new Date(milestoneDate).getTime())) {
                         addMilestoneMutation.mutate({ title: newMilestoneTitle, unlock_date: new Date(milestoneDate).toISOString() });
                       }
                     }}
@@ -169,7 +176,7 @@ export default function ReadingRoomDetailScreen() {
               <TouchableOpacity onPress={() => setShowAddMilestone(true)} className="border border-dashed border-border rounded-xl py-3 items-center">
                 <Text className="text-sm text-accent font-medium">+ Add Milestone</Text>
               </TouchableOpacity>
-            )}
+            ))}
           </ScrollView>
         )}
 
@@ -221,7 +228,7 @@ export default function ReadingRoomDetailScreen() {
             />
 
             {/* Post composer */}
-            <View className="px-4 pb-4 pt-2 border-t border-border flex-row gap-2 items-end">
+            {room.is_member&&room.is_active&&<View className="px-4 pb-4 pt-2 border-t border-border flex-row gap-2 items-end">
               <TextInput
                 value={postContent}
                 onChangeText={setPostContent}
@@ -239,7 +246,7 @@ export default function ReadingRoomDetailScreen() {
               >
                 <Text className="text-white text-sm font-medium">{postMutation.isPending ? '…' : 'Post'}</Text>
               </TouchableOpacity>
-            </View>
+            </View>}
           </>
         )}
       </View>

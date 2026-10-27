@@ -1,4 +1,4 @@
-import { View, Text, FlatList, TouchableOpacity, Alert, TextInput } from 'react-native';
+import { View, Text, FlatList, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

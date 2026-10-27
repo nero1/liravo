@@ -28,6 +28,6 @@ export async function POST(request:Request) {
     if(error)return NextResponse.json({error:'Code already used or challenge changed'},{status:['P1001','P1003'].includes(error.code)?409:503});
     const {data:user,error:userError}=await createServiceClient().from('users').select('*').eq('id',profile.id).single();
     if(userError)throw new Error('Profile unavailable');
-    return factorSessionResponse({ok:true,...(token?{token}:{}),user:clientUser(user)},token);
+    return factorSessionResponse({ok:true,...(token?{token}:{}),user:clientUser(user)},token,200,request);
   }catch{return NextResponse.json({error:'Verification unavailable'},{status:503});}
 }

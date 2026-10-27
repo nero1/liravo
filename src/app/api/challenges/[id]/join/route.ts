@@ -1,43 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { createServiceClient } from '@/lib/supabase/server';
 
-export const dynamic = 'force-dynamic';
-
-// challenge_participants table not in generated types — using any cast
-// Expected columns: challenge_id, user_id, joined_at
-
-export async function POST(
-  _request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Verify challenge exists and is active
-  const now = new Date().toISOString();
-  const { data: challenge } = await supabase 
-    .from('challenges')
-    .select('id, ends_at')
-    .eq('id', params.id)
-    .gte('ends_at', now)
-    .single();
-
-  if (!challenge) {
-    return NextResponse.json({ error: 'Challenge not found or not active' }, { status: 404 });
-  }
-
-  const { error } = await supabase 
-    .from('challenge_participants')
-    .upsert({ challenge_id: params.id, user_id: user.id });
-
-  if (error) {
-    return NextResponse.json({ error: 'Failed to join challenge' }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
+export const dynamic='force-dynamic';
+export async function POST(_request:Request,{params}:{params:{id:string}}){
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid challenge'},{status:400});
+  const {data,error}=await createServiceClient().rpc('join_reading_challenge' as never,{p_user_id:user.id,p_challenge_id:params.id} as never);
+  if(error)return NextResponse.json({error:'Challenge unavailable'},{status:({P1003:403,P1004:409,P1005:404} as Record<string,number>)[error.code]??503});
+  return NextResponse.json(data);
 }

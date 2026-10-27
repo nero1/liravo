@@ -1,9 +1,10 @@
+import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
+
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { FollowButton } from '@/components/social/FollowButton';
@@ -18,13 +19,15 @@ export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const { user: currentUser } = useAuthStore();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading,error,refetch } = useQuery({
     queryKey: ['user', username],
     queryFn: () => api.get<ProfileResponse>(`/api/users/${username}`),
     enabled: !!username,
   });
 
   const profile = data?.user;
+
+  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
 
   if (isLoading || !profile) {
     return (

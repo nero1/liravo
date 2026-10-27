@@ -28,21 +28,24 @@ async function request<T>(
   extraHeaders?: Record<string, string>,
 ): Promise<T> {
   const { token, user } = useAuthStore.getState();
-  const signature = JSON.stringify([user?.id ?? token, method, path, body]);
   const mutating = method !== 'GET';
+  const primaryAuth=/^\/api\/auth\/(login|signup|google|telegram|2fa\/verify)$/.test(path);
+  const signature = primaryAuth?'':JSON.stringify([user?.id ?? token, method, path, body]);
+  const trackIntent=mutating&&!primaryAuth;
   const suppliedKey = Object.entries(extraHeaders ?? {}).find(([name]) => /^(x-)?idempotency-key$/i.test(name))?.[1];
   let intentKey = suppliedKey ?? pendingIntents.get(signature);
-  if (mutating && !intentKey) {
+  if (trackIntent && !intentKey) {
     intentKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
     pendingIntents.set(signature, intentKey);
   }
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(mutating ? { 'Idempotency-Key': intentKey!, 'X-Idempotency-Key': intentKey! } : {}),
+    'Content-Type':'application/json',
+    'X-Liravo-Client':'native',
+    ...(trackIntent ? { 'Idempotency-Key': intentKey!, 'X-Idempotency-Key': intentKey! } : {}),
     ...Object.fromEntries(Object.entries(extraHeaders ?? {}).filter(([name]) => !/^(x-)?idempotency-key$/i.test(name))),
   };
-  if (token) {
+  if (token&&!primaryAuth) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
@@ -55,8 +58,13 @@ async function request<T>(
     if (qs) url += `?${qs}`;
   }
 
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),15000);
+  try{
   const res = await fetch(url, {
     method,
+    credentials:'omit',
+    signal:controller.signal,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -70,9 +78,10 @@ async function request<T>(
     throw new ApiError(res.status, message);
   }
 
-  const data = await res.json() as T;
-  if (mutating && !suppliedKey) pendingIntents.delete(signature);
+  const data = res.status===204?undefined as T:await res.json() as T;
+  if (trackIntent && !suppliedKey) pendingIntents.delete(signature);
   return data;
+  }finally{clearTimeout(timeout);}
 }
 
 export const api = {

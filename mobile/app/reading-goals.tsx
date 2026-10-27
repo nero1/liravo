@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, TouchableOpacity, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,14 +22,11 @@ const MILESTONES = [
 export default function ReadingGoalsScreen() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [targetInput, setTargetInput] = useState('');
+  const [targetInput, setTargetInput] = useState('52');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading,error,refetch } = useQuery({
     queryKey: ['reading-goals'],
     queryFn: () => api.get<GoalData>('/api/reading-goals'),
-    onSuccess: (d: GoalData) => {
-      if (d.goal) setTargetInput(String(d.goal.target_books));
-    },
   });
 
   const setGoalMutation = useMutation({
@@ -38,6 +36,8 @@ export default function ReadingGoalsScreen() {
       setEditing(false);
     },
   });
+
+  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
 
   if (isLoading) {
     return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
@@ -80,7 +80,7 @@ export default function ReadingGoalsScreen() {
               })}
             </View>
 
-            <TouchableOpacity onPress={() => setEditing(true)} className="border border-border rounded-xl py-3 items-center">
+            <TouchableOpacity onPress={()=>{setTargetInput(String(goal.target_books));setEditing(true);}} className="border border-border rounded-xl py-3 items-center">
               <Text className="text-sm text-foreground font-medium">Change Goal</Text>
             </TouchableOpacity>
           </View>

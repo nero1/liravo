@@ -13,7 +13,7 @@ export default function NewARCScreen() {
   const qc = useQueryClient();
   const [bookId,setBookId]=useState('');
   const [slots,setSlots]=useState('5');
-  const {data,isLoading,isError}=useQuery({queryKey:['author','arc-books'],queryFn:()=>api.get<{books:Array<{id:string;title:string}>}>(ENDPOINTS.author.arcs)});
+  const {data,isLoading,isError}=useQuery({queryKey:['author','arc-books'],queryFn:()=>api.get<{books:{id:string;title:string}[]}>(ENDPOINTS.author.arcs)});
   const books=data?.books??[];
   const readerSlots=Number(slots);
   const validSlots=Number.isInteger(readerSlots)&&readerSlots>=1&&readerSlots<=20;

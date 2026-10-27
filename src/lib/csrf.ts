@@ -21,3 +21,9 @@ export function getRequestOrigin(request: Request): string | null {
     return authority.origin;
   } catch { return null; }
 }
+
+export function isStatelessNativeAuth(request:Request):boolean {
+  return request.method==='POST'&&['/api/auth/login','/api/auth/signup','/api/auth/google','/api/auth/telegram','/api/auth/2fa/verify'].includes(new URL(request.url).pathname)
+    &&request.headers.get('x-liravo-client')==='native'
+    &&!['cookie','origin','sec-fetch-site','sec-fetch-mode'].some(header=>request.headers.has(header));
+}

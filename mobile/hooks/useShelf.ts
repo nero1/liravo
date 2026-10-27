@@ -1,20 +1,22 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
 import type { ShelfRow, ShelfBookRow } from '@/types';
 
-export function useShelves() {
+export function useShelves(bookId?:string) {
   return useQuery({
-    queryKey: ['shelves'],
-    queryFn: () => api.get<{ shelves: ShelfRow[] }>(ENDPOINTS.shelves.list),
+    queryKey: ['shelves',bookId],
+    queryFn: () => api.get<{ shelves: ShelfRow[];addedToShelves:string[] }>(ENDPOINTS.shelves.list,{bookId}),
   });
 }
 
-export function useShelf(id: string) {
-  return useQuery({
-    queryKey: ['shelf', id],
-    queryFn: () => api.get<{ shelf: ShelfRow; books: ShelfBookRow[] }>(ENDPOINTS.shelves.byId(id)),
-    enabled: !!id,
+export function useShelf(id:string){
+  return useInfiniteQuery({
+    queryKey:['shelf',id],
+    initialPageParam:undefined as string|undefined,
+    queryFn:({pageParam})=>api.get<{shelf:ShelfRow;books:ShelfBookRow[];nextCursor:string|null}>(ENDPOINTS.shelves.byId(id),{cursor:pageParam}),
+    getNextPageParam:last=>last.nextCursor??undefined,
+    enabled:!!id,
   });
 }
 
@@ -39,7 +41,7 @@ export function useUpdateProgress() {
       progress_pages?: number;
       progress_percent?: number;
     }) =>
-      api.put(ENDPOINTS.shelfBooks.progress(shelfBookId), { progress_pages, progress_percent }),
+      api.patch(ENDPOINTS.shelfBooks.progress(shelfBookId), { progress_pages, progress_percent }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shelf'] }),
   });
 }

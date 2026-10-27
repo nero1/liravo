@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
-import { slugify } from '@/lib/utils';
 
 const FREE_SHELF_LIMIT = 10;
 
@@ -13,7 +11,7 @@ interface NewShelfFormProps {
   isPremium?: boolean;
 }
 
-export function NewShelfForm({ userId, customShelfCount, isPremium = false }: NewShelfFormProps) {
+export function NewShelfForm({ customShelfCount, isPremium = false }: NewShelfFormProps) {
   const router = useRouter();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -30,26 +28,12 @@ export function NewShelfForm({ userId, customShelfCount, isPremium = false }: Ne
 
     setSaving(true);
     setError(null);
-    const supabase = createClient();
-
-    const slug = slugify(name) + '-' + Date.now().toString(36);
-
-    const { error: err } = await supabase.from('shelves').insert({
-      user_id: userId,
-      name: name.trim(),
-      slug,
-      description: description.trim() || null,
-      is_public: isPublic,
-      is_default: false,
-    });
-
-    if (err) {
-      setError(err.message);
-      setSaving(false);
-      return;
-    }
-
-    router.push(`/shelf/${slug}`);
+    try{
+      const response=await fetch('/api/shelves',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim(),description:description.trim(),is_public:isPublic})});
+      const result=await response.json();
+      if(!response.ok)throw new Error(result.error??'Shelf creation failed');
+      router.push(`/shelf/${result.shelf.slug}`);
+    }catch(error){setError(error instanceof Error?error.message:'Shelf creation failed');setSaving(false);return;}
     router.refresh();
   };
 

@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { contentIntent,ContentIntentError } from '@/lib/content-intents';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -13,21 +15,34 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const bookId = searchParams.get('bookId');
 
-  const { data: shelves } = await supabase
+  const { data: shelves,error } = await supabase
     .from('shelves')
     .select('*')
     .eq('user_id', user.id)
     .order('is_default', { ascending: false });
 
+  if(error)return NextResponse.json({error:'Shelves unavailable'},{status:503});
   let addedToShelves: string[] = [];
   if (bookId) {
-    const { data: existing } = await supabase
+    const { data: existing,error:membershipError } = await supabase
       .from('shelf_books')
       .select('shelf_id')
       .eq('book_id', bookId)
       .eq('user_id', user.id);
+    if(membershipError)return NextResponse.json({error:'Shelf membership unavailable'},{status:503});
     addedToShelves = (existing ?? []).map((e: { shelf_id: string }) => e.shelf_id);
   }
 
   return NextResponse.json({ shelves: shelves ?? [], addedToShelves });
+}
+
+export async function POST(request:Request){
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  const parsed=z.object({name:z.string().trim().min(1).max(100),description:z.string().max(2000).optional(),is_public:z.boolean().default(true)}).safeParse(await request.json().catch(()=>null));
+  if(!parsed.success)return NextResponse.json({error:'Invalid shelf'},{status:422});
+  try{
+    const intent=await contentIntent(request,user.id,'shelves',{...parsed.data,description:parsed.data.description??null});
+    const shelf=await intent.insert();
+    return NextResponse.json({shelf},{status:201});
+  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Shelf creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
 }

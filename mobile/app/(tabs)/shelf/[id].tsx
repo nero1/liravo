@@ -1,26 +1,20 @@
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useShelf } from '@/hooks/useShelf';
 import { Image } from 'expo-image';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
 import { ReadingProgressBar } from '@/components/shelf/ReadingProgressBar';
-import { EmptyState } from '@/components/ui/EmptyState';
-import type { ShelfRow, ShelfBookRow } from '@/types';
+import { EmptyState,QueryError } from '@/components/ui/EmptyState';
+import type { ShelfBookRow } from '@/types';
 
 export default function ShelfDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['shelf', id],
-    queryFn: () => api.get<{ shelf: ShelfRow; books: ShelfBookRow[] }>(ENDPOINTS.shelves.byId(id!)),
-    enabled: !!id,
-  });
-
-  const shelf = data?.shelf;
-  const books = data?.books ?? [];
+  const {data,isLoading,error,refetch,hasNextPage,fetchNextPage,isFetchingNextPage}=useShelf(id!);
+  const shelf=data?.pages[0].shelf;
+  const books=data?.pages.flatMap(page=>page.books)??[];
+  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -36,6 +30,9 @@ export default function ShelfDetailScreen() {
       ) : (
         <FlatList
           data={books}
+          onEndReached={()=>{if(hasNextPage&&!isFetchingNextPage)void fetchNextPage();}}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={isFetchingNextPage?<ActivityIndicator color="#d97706" />:null}
           keyExtractor={(b) => b.id}
           renderItem={({ item }) => (
             <ShelfBookItem

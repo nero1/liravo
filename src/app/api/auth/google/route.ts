@@ -87,5 +87,5 @@ export async function POST(request: Request) {
   }
 
   if(!user)return NextResponse.json({error:'Account unavailable'},{status:503});
-  return directLoginResponse(user,clientUser(user));
+  return directLoginResponse(user,clientUser(user),request);
 }

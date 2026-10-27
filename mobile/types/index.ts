@@ -13,6 +13,8 @@ export interface UserRow {
   user_types: string[];
   genres: string[];
   is_admin: boolean;
+  is_premium:boolean;
+  preferred_locale:'en'|'fr'|'de';
   is_moderator: boolean;
   is_verified_author: boolean;
   is_creator: boolean;
@@ -29,10 +31,7 @@ export interface UserRow {
   referred_by: string | null;
   email: string | null;
   email_verified: boolean;
-  pin_hash: string | null;
-  totp_secret: string | null;
   totp_enabled: boolean;
-  recovery_codes: string[] | null;
   external_links: string[];
   profile_visibility: 'public' | 'followers_only';
   shelf_visibility: 'public' | 'followers_only' | 'private';
@@ -42,7 +41,7 @@ export interface UserRow {
   email_prompt_dismissed_at: string | null;
   created_at: string;
   updated_at: string;
-  badges?: Array<{ icon: string; name: string }>;
+  badges?: { icon: string; name: string }[];
 }
 
 export interface BookRow {
@@ -176,12 +175,14 @@ export interface ChallengeRow {
   id: string;
   title: string;
   description: string | null;
-  challenge_type: 'reading' | 'writing';
+  type: 'reading' | 'writing';
+  cadence:'weekly'|'monthly';
   start_date: string | null;
   end_date: string | null;
-  xp_reward: number;
-  is_premium: boolean;
-  participant_count: number;
+  goal_books:number|null;
+  goal_pages:number|null;
+  is_active:boolean;
+  participant_count?: number;
   created_at: string;
 }
 
@@ -265,4 +266,46 @@ export const LEVEL_THRESHOLDS = [
 
 export function getUserLevel(xp: number) {
   return LEVEL_THRESHOLDS.find((l) => xp >= l.min && xp <= l.max) ?? LEVEL_THRESHOLDS[0];
+}
+
+export interface AffiliateStoreRow {
+  id: string;
+  name: string;
+  countries: string[];
+  url_template: string;
+  affiliate_tag: string | null;
+  is_active: boolean;
+  priority: number;
+  is_non_affiliate: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeatureFlagRow {
+  id: string;
+  name: string;
+  enabled: boolean;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContentReportRow {
+  id: string;
+  reporter_id: string;
+  entity_type: 'review' | 'quote' | 'comment' | 'user';
+  entity_id: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'removed' | 'warned' | 'escalated';
+  moderator_id: string | null;
+  moderator_note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface AffiliateLink {
+  name:string;
+  url:string;
+  isAffiliate:boolean;
+  isPrimary:boolean;
 }

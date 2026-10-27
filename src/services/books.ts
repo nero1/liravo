@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient, REDIS_KEYS, REDIS_TTL } from '@/lib/redis';
 import type { BookRow } from '@/types/database';
 import { fetchWithRetry } from '@/lib/retry';
+import { catalogBookData,clientBook } from '@/lib/catalog-book';
 
 interface GoogleBooksVolume {
   id: string;
@@ -33,7 +34,7 @@ export async function searchGoogleBooks(query: string, maxResults = 10): Promise
   const res = await fetchWithRetry(url.toString(), { next: { revalidate: 3600 } });
   if (!res.ok) return [];
   const data = await res.json();
-  return data.items ?? [];
+  return Array.isArray(data.items)?data.items.filter((volume:GoogleBooksVolume)=>volume&&typeof volume.id==='string'&&volume.volumeInfo&&typeof volume.volumeInfo.title==='string'):[];
 }
 
 export function googleVolumeToBookData(volume: GoogleBooksVolume) {
@@ -80,7 +81,7 @@ export async function searchOpenLibrary(query: string, maxResults = 10) {
   url.searchParams.set('fields', 'key,title,author_name,isbn,cover_i,number_of_pages_median,subject,language,first_publish_year');
 
   try {
-    const res = await fetch(url.toString(), { next: { revalidate: 3600 } });
+    const res = await fetchWithRetry(url.toString());
     if (!res.ok) return [];
     const data = await res.json();
     return ((data.docs ?? []) as OpenLibraryDoc[]).map((doc) => ({
@@ -103,85 +104,51 @@ export async function searchOpenLibrary(query: string, maxResults = 10) {
       ratings_count: 0,
     }));
   } catch {
-    return [];
+    throw new Error('Open Library search unavailable');
   }
 }
 
 export async function searchBooks(query: string, maxResults = 10) {
-  const googleVolumes = await searchGoogleBooks(query, maxResults);
+  const googleVolumes = await searchGoogleBooks(query, maxResults).catch(()=>[]);
   const googleResults = googleVolumes.map((v) => ({ ...googleVolumeToBookData(v), google_books_id: v.id }));
   if (googleResults.length >= 3) return googleResults;
-  const olResults = await searchOpenLibrary(query, maxResults);
+  const olResults = await searchOpenLibrary(query, maxResults).catch(error=>{if(googleResults.length)return [];throw error;});
   return [...googleResults, ...olResults].slice(0, maxResults);
 }
 
-export async function getOrCreateBook(googleBooksId: string): Promise<BookRow | null> {
-  const supabase = createServiceClient();
-  const redis = getRedisClient();
-  const lockKey = `lock:getOrCreateBook:${googleBooksId}`;
-
-  // Check DB first
-  const { data: existing } = await supabase
-    .from('books')
-    .select('*')
-    .eq('google_books_id', googleBooksId)
-    .single();
-
-  if (existing) {
-    await redis.set(REDIS_KEYS.book(existing.id), JSON.stringify(existing), { ex: REDIS_TTL.BOOK });
-    return existing;
-  }
-
-  // Bugfix: prevent thundering herd by briefly locking concurrent misses per googleBooksId.
-  const lockAcquired = await redis.setNx(lockKey, '1');
-  if (!lockAcquired) {
-    // Another request is inflight; retry DB fetch after short wait.
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    const { data: secondTry } = await supabase
-      .from('books')
-      .select('*')
-      .eq('google_books_id', googleBooksId)
-      .single();
-    if (secondTry) return secondTry;
-  } else {
-    await redis.expire(lockKey, 5);
-  }
-
-  // Fetch from Google Books and cache
-  const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
-  const url = `https://www.googleapis.com/books/v1/volumes/${googleBooksId}${apiKey ? `?key=${apiKey}` : ''}`;
-  const res = await fetchWithRetry(url);
-  if (!res.ok) return null;
-
-  const volume: GoogleBooksVolume = await res.json();
-  const bookData = googleVolumeToBookData(volume);
-
-  const { data: inserted } = await supabase
-    .from('books')
-    .upsert(bookData, { onConflict: 'google_books_id' })
-    .select()
-    .single();
-
-  if (inserted) {
-    await redis.set(REDIS_KEYS.book(inserted.id), JSON.stringify(inserted), { ex: REDIS_TTL.BOOK });
-  }
-  if (lockAcquired) await redis.del(lockKey);
-  return inserted ?? null;
+export async function storeCatalogBook(value:unknown):Promise<BookRow>{
+  const payload=catalogBookData(value);
+  const {data,error}=await createServiceClient().rpc('store_catalog_book' as never,{p_data:payload} as never);
+  if(error||!data)throw new Error('Book catalog unavailable');
+  return clientBook(data as BookRow);
 }
 
-export async function getBookById(id: string): Promise<BookRow | null> {
-  const redis = getRedisClient();
-  const cacheKey = REDIS_KEYS.book(id);
+export async function getOrCreateBook(googleBooksId:string):Promise<BookRow|null>{
+  if(!/^[a-zA-Z0-9_-]{1,200}$/.test(googleBooksId))return null;
+  const {data:existing,error}=await createServiceClient().from('books').select('*').eq('google_books_id',googleBooksId).maybeSingle();
+  if(error)throw new Error('Book catalog unavailable');
+  if(existing)return clientBook(existing);
+  const url=new URL(`https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(googleBooksId)}`);
+  if(process.env.GOOGLE_BOOKS_API_KEY)url.searchParams.set('key',process.env.GOOGLE_BOOKS_API_KEY);
+  const response=await fetchWithRetry(url.toString());
+  const volume:GoogleBooksVolume=await response.json();
+  if(volume.id!==googleBooksId)throw new Error('Book identity mismatch');
+  return storeCatalogBook(googleVolumeToBookData(volume));
+}
 
-  const cached = await redis.get(cacheKey);
-  if (cached) return JSON.parse(cached) as BookRow;
-
-  const supabase = createServiceClient();
-  const { data } = await supabase.from('books').select('*').eq('id', id).single();
-  if (data) {
-    await redis.set(cacheKey, JSON.stringify(data), { ex: REDIS_TTL.BOOK });
-  }
-  return data ?? null;
+export async function getBookById(id:string):Promise<BookRow|null>{
+  const redis=getRedisClient();
+  const cacheKey=REDIS_KEYS.book(id);
+  try{
+    const cached=await redis.get(cacheKey);
+    if(cached){const book=JSON.parse(cached) as BookRow;if(book.id===id)return clientBook(book);}
+  }catch{}
+  const {data,error}=await createServiceClient().from('books').select('*').eq('id',id).maybeSingle();
+  if(error)throw new Error('Book catalog unavailable');
+  if(!data)return null;
+  const book=clientBook(data);
+  try{await redis.set(cacheKey,JSON.stringify(book),{ex:REDIS_TTL.BOOK});}catch{}
+  return book;
 }
 
 const LOCALE_TO_COUNTRY: Record<string, string> = {

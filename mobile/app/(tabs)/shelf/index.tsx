@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Plus, BookOpen } from 'lucide-react-native';
 import { useShelves } from '@/hooks/useShelf';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyState,QueryError } from '@/components/ui/EmptyState';
 import type { ShelfRow } from '@/types';
 
 const DEFAULT_ICONS: Record<string, string> = {
@@ -15,8 +15,10 @@ const DEFAULT_ICONS: Record<string, string> = {
 
 export default function ShelfScreen() {
   const router = useRouter();
-  const { data, isLoading, refetch } = useShelves();
+  const { data, isLoading, refetch,error } = useShelves();
   const shelves = data?.shelves ?? [];
+
+  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
 
   if (isLoading) return <LoadingSpinner />;
 

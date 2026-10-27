@@ -27,7 +27,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
   private _table: string;
   private _selectCols: string = '*';
   private _filters: FilterOp[] = [];
-  private _orFragment: unknown = null;
+  private _orFragments: string[] = [];
   private _orderCol: string | null = null;
   private _orders: Array<{ column: string; ascending: boolean }> = [];
   private _limit: number | null = null;
@@ -106,8 +106,15 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
     return this;
   }
 
+  textSearch(column:string,query:string,options?:{type?:'plain'|'websearch';config?:string}){
+    if(options?.config&&options.config!=='english')throw new Error('Unsupported search language');
+    if(options?.type&&!['plain','websearch'].includes(options.type))throw new Error('Unsupported search mode');
+    this._filters.push({col:column,op:options?.type==='websearch'?'@@websearch':'@@plain',val:query});
+    return this;
+  }
+
   or(filter: string) {
-    this._orFragment = filter;
+    this._orFragments.push(filter);
     return this;
   }
 
@@ -195,6 +202,8 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
           else if (f.val === true) parts.push(sql`${sql(f.col)} IS NOT TRUE`);
           else if (f.val === false) parts.push(sql`${sql(f.col)} IS NOT FALSE`);
           break;
+        case '@@websearch': parts.push(sql`${sql(f.col)} @@ websearch_to_tsquery('english',${f.val as string})`); break;
+        case '@@plain': parts.push(sql`${sql(f.col)} @@ plainto_tsquery('english',${f.val as string})`); break;
         case 'IS':
           if (f.val === null)       parts.push(sql`${sql(f.col)} IS NULL`);
           else if (f.val === true)  parts.push(sql`${sql(f.col)} IS TRUE`);
@@ -203,8 +212,8 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
       }
     }
 
-    if (this._orFragment) {
-      parts.push(sql`(${sql.unsafe(this._buildOrSql(this._orFragment as string))})`);
+    for (const fragment of this._orFragments) {
+      parts.push(sql`(${sql.unsafe(this._buildOrSql(fragment))})`);
     }
 
     if (parts.length === 0) return sql``;
@@ -255,7 +264,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
       let count: number | undefined;
       if (this._countOnly) {
         const where = this.buildWhere();
-        const hasWhere = this._filters.length > 0 || this._orFragment;
+        const hasWhere = this._filters.length > 0 || this._orFragments.length > 0;
         const rows = hasWhere
           ? await sql`SELECT COUNT(*) AS count FROM ${sql(this._table)} WHERE ${where}`
           : await sql`SELECT COUNT(*) AS count FROM ${sql(this._table)}`;
@@ -264,7 +273,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
       }
 
       const selectExpr = await buildPgProjection(sql, this._table, this._selectCols);
-      const hasWhere = this._filters.length > 0 || this._orFragment;
+      const hasWhere = this._filters.length > 0 || this._orFragments.length > 0;
       const where = this.buildWhere();
 
       let query: unknown;
@@ -319,7 +328,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
   private async _executeMutation(sql: ReturnType<typeof getSql>): Promise<QueryResult<T>> {
     const m = this._mutation!;
     const returning = m.returning ? await buildPgProjection(sql, this._table, this._selectCols) : '';
-    const hasWhere = this._filters.length > 0 || this._orFragment;
+    const hasWhere = this._filters.length > 0 || this._orFragments.length > 0;
     const where = this.buildWhere();
 
     try {

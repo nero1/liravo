@@ -3,6 +3,7 @@ import { verifySync } from 'otplib';
 import bcrypt from 'bcryptjs';
 import { getRedisClient } from '@/lib/redis';
 import { NextResponse } from 'next/server';
+import { isStatelessNativeAuth } from '@/lib/csrf';
 
 export interface FactorProfile {
   id:string;email:string|null;username:string;totp_enabled:boolean;totp_secret:string|null;recovery_codes:string[]|null;
@@ -90,18 +91,18 @@ export async function verifyFactorProof(profile:FactorProfile,input:{code?:strin
   }
   return null;
 }
-export async function directLoginResponse(user:{id:string;email:string|null},clientProfile:unknown) {
+export async function directLoginResponse(user:{id:string;email:string|null},clientProfile:unknown,request?:Request) {
   const profile=await factorProfile(user.id);
   if(!profile||profile.is_banned||profile.deleted_at)return NextResponse.json({error:'Account unavailable'},{status:403});
-  if(profile.totp_enabled)return factorSessionResponse(await beginLoginChallenge(user.id),undefined,202);
+  if(profile.totp_enabled)return factorSessionResponse(await beginLoginChallenge(user.id),undefined,202,request);
   const {createDoSession}=await import('@/lib/db/unified-client');
   const token=await createDoSession({id:user.id,email:user.email??'',mfaVersion:profile.mfa_version});
-  return factorSessionResponse({ok:true,token,user:clientProfile},token);
+  return factorSessionResponse({ok:true,token,user:clientProfile},token,200,request);
 }
-export function factorSessionResponse(data:unknown,token?:string,status=200) {
+export function factorSessionResponse(data:unknown,token?:string,status=200,request?:Request) {
   const response=NextResponse.json(data,{status});
   response.headers.set('Cache-Control','no-store');
-  if(token)response.cookies.set('liravo-session',token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',maxAge:604800,path:'/'});
+  if(token&&(!request||!isStatelessNativeAuth(request)))response.cookies.set('liravo-session',token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',maxAge:604800,path:'/'});
   return response;
 }
 

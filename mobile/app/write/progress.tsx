@@ -1,3 +1,11 @@
+import { QueryError } from '@/components/ui/EmptyState';
+import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { ENDPOINTS } from '@/constants/api';
+import { Card } from '@/components/ui/Card';
+
 interface ProgressData {
   total_words: number;
   prompts_completed: number;
@@ -8,10 +16,12 @@ interface ProgressData {
 }
 
 export default function WritingProgressScreen() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading,error,refetch } = useQuery({
     queryKey: ['write', 'progress'],
     queryFn: () => api.get<ProgressData>(ENDPOINTS.write.progress),
   });
+
+  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
 
   if (isLoading) return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
 
@@ -35,9 +45,9 @@ export default function WritingProgressScreen() {
             <View className="flex-row gap-3">
               <View className="flex-1"><Card><Text className="font-semibold text-foreground mb-1 text-sm">Prompts</Text><Text className="text-2xl font-bold text-foreground">{p.prompts_completed ?? 0}</Text></Card></View>
               <View className="flex-1"><Card><Text className="font-semibold text-foreground mb-1 text-sm">Challenges</Text><Text className="text-2xl font-bold text-foreground">{p.challenges_completed ?? 0}</Text></Card></View>
-              <View className="flex-1"><Card><Text className="font-semibold text-foreground mb-1 text-sm">Workshops</Text><Text className="text-2xl font-bold text-foreground">{p.workshop_critiques ?? 0}</Text></Card></View>
+              <View className="flex-1"><Card><Text className="font-semibold text-foreground mb-1 text-sm">Critiques</Text><Text className="text-2xl font-bold text-foreground">{p.workshop_critiques ?? 0}</Text></Card></View>
             </View>
-            <Card><Text className="font-semibold text-foreground mb-2">XP from Writing</Text><Text className="text-3xl font-bold text-accent">{(p.xp ?? 0).toLocaleString()} XP</Text></Card>
+            <Card><Text className="font-semibold text-foreground mb-2">Total XP</Text><Text className="text-3xl font-bold text-accent">{(p.xp ?? 0).toLocaleString()} XP</Text></Card>
           </View>
         ) : (
           <Text className="text-muted-foreground text-center mt-8">No writing progress yet. Start with a prompt!</Text>

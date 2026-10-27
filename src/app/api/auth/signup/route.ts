@@ -1,3 +1,4 @@
+import { isStatelessNativeAuth } from '@/lib/csrf';
 import { clientUser } from '@/lib/user-profile';
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   const response = NextResponse.json({ ok: true, token, user: clientUser(profile), userId: id });
-  response.cookies.set(SESSION_COOKIE, token, {
+  if(!isStatelessNativeAuth(request))response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',

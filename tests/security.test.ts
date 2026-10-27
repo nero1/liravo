@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { validCsrf, sameOrigin } from '../src/lib/csrf';
+import { validCsrf, sameOrigin, isStatelessNativeAuth } from '../src/lib/csrf';
 import { HttpError, isTransientError, withExponentialBackoff } from '../src/lib/retry';
 import { getClientIp } from '../src/lib/utils';
 import { safeModelText } from '../src/lib/ai-safety';
@@ -62,9 +62,9 @@ describe('security controls', () => {
 });
 
 vi.mock('@/lib/auth/getCurrentUser', () => ({ getCurrentUser: vi.fn() }));
-vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn(),createServiceClient:vi.fn() }));
 import { getCurrentUser } from '../src/lib/auth/getCurrentUser';
-import { createClient } from '../src/lib/supabase/server';
+import { createClient,createServiceClient } from '../src/lib/supabase/server';
 import { PUT as updateGoal } from '../src/app/api/users/[id]/reading-goal/route';
 
 describe('reading goal ownership', () => {
@@ -81,12 +81,10 @@ describe('reading goal ownership', () => {
   });
   it('updates only the authenticated owner', async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({id:actor,email:'reader@example.test'});
-    const single=vi.fn().mockResolvedValue({data:{annual_reading_goal:24},error:null});
-    const select=vi.fn().mockReturnValue({single}); const eq=vi.fn().mockReturnValue({select});
-    const update=vi.fn().mockReturnValue({eq}); const from=vi.fn().mockReturnValue({update});
-    vi.mocked(createClient).mockReturnValue({from} as unknown as ReturnType<typeof createClient>);
+    const rpc=vi.fn().mockResolvedValue({data:{},error:null});
+    vi.mocked(createServiceClient).mockReturnValue({rpc} as unknown as ReturnType<typeof createServiceClient>);
     const response=await updateGoal(new Request('https://app.test',{method:'PUT',body:JSON.stringify({goal:24})}),{params:{id:actor}});
-    expect(response.status).toBe(200); expect(eq).toHaveBeenCalledWith('id',actor);
+    expect(response.status).toBe(200); expect(rpc).toHaveBeenCalledWith('set_reading_goal',expect.objectContaining({p_user_id:actor,p_target:24}));
   });
 });
 
@@ -193,4 +191,13 @@ it('accepts app return paths and rejects OAuth authority and header injection', 
   const { safeReturnPath } = await import('@/lib/utils');
   expect(safeReturnPath('/book/123?tab=reviews#latest')).toBe('/book/123?tab=reviews#latest');
   for(const path of [null,'@evil.test','.evil.test','//evil.test','https://evil.test','/\\evil.test','/path\r\nLocation: evil']) expect(safeReturnPath(path)).toBe('/');
+});
+
+it('exempts only cookie-free native first-factor requests from browser CSRF',()=>{
+  const create=(path='/api/auth/login',extra:Record<string,string>={})=>new Request('https://app.test'+path,{method:'POST',headers:{'X-Liravo-Client':'native',...extra}});
+  expect(isStatelessNativeAuth(create())).toBe(true);
+  expect(isStatelessNativeAuth(create('/api/auth/2fa/verify'))).toBe(true);
+  expect(isStatelessNativeAuth(create('/api/tips/create'))).toBe(false);
+  for(const extra of ([{Origin:'https://evil.test'},{Cookie:'liravo-session=browser'},{'Sec-Fetch-Site':'same-origin'},{'Sec-Fetch-Mode':'cors'}] as Record<string,string>[]))expect(isStatelessNativeAuth(create('/api/auth/login',extra))).toBe(false);
+  expect(isStatelessNativeAuth(new Request('https://app.test/api/auth/login',{method:'POST'}))).toBe(false);
 });

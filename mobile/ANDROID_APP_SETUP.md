@@ -49,7 +49,7 @@
    - `EXPO_PUBLIC_DATABASE_PROVIDER` → `supabase` or `digitalocean`
    - If Supabase: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`
    - If DigitalOcean: `EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID` (see below)
-2. Set every variable to **Secret** visibility.
+2. These `EXPO_PUBLIC_*` values are embedded in the app; use **Plain text** or **Sensitive** visibility. Keep service-account credentials on the server.
 
 > **Getting the Android Google Client ID (DigitalOcean mode only):**
 > 1. Google Cloud Console → **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth client ID** → type: **Android**
@@ -68,12 +68,17 @@
 
 ### Option B — CLI
 
+Use Node 24 and the committed mobile lockfile (Expo SDK 52 / React 18.3.1). CI checks mobile ESLint, types and the Android bundle separately from the web app. Native project generation can be checked with `npx expo prebuild --platform android --no-install`; signed builds and Play Billing still require EAS credentials and a real device. Default Expo artwork is used until project icons/splash assets are configured.
+
 ```bash
 npm install -g eas-cli
 eas login
 
 cd mobile
-npm install
+npm ci
+npm run lint -- --max-warnings 0
+npm run typecheck
+npm run export:android
 
 eas build --platform android --profile preview      # APK for testing
 eas build --platform android --profile production   # AAB for Play Store

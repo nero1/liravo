@@ -361,7 +361,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 
 ### 7.3 Shelf and Library System
 
-**Default shelves (every user):**
+**Default shelves (every user, created with the account):**
 - Currently Reading
 - Have Read
 - Want to Read
@@ -376,7 +376,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 - Progress bar on book card within the shelf.
 
 **Annual reading goal:**
-- Set at any time.
+- Set at any time. Goals and profile targets share one current-year value; progress counts distinct books finished that calendar year.
 - Public progress bar on profile.
 - Feed updates at 25%, 50%, 75%, and 100%.
 

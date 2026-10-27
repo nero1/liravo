@@ -1,4 +1,4 @@
-import { View, Text, FlatList, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

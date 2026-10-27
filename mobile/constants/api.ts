@@ -22,7 +22,7 @@ export const ENDPOINTS = {
     export: '/api/users/export',
     accountRecovery: '/api/users/account-recovery',
     unsubscribe: '/api/users/unsubscribe',
-    byId: (id: string) => `/api/users/${id}`,
+    byUsername: (username: string) => `/api/users/${username}`,
     follow: (id: string) => `/api/users/${id}/follow`,
     readingGoal: (id: string) => `/api/users/${id}/reading-goal`,
   },
@@ -51,8 +51,6 @@ export const ENDPOINTS = {
   leaderboards: '/api/leaderboards',
   // Reviews & Quotes
   reviews: {
-    create: '/api/reviews',
-    byId: (id: string) => `/api/reviews/${id}`,
     like: (id: string) => `/api/reviews/${id}/like`,
   },
   quotes: '/api/quotes',
@@ -147,9 +145,6 @@ export const ENDPOINTS = {
   subscriptions: {
     create: '/api/subscriptions/create',
     cancel: '/api/subscriptions/cancel',
-  },
-  payments: {
-    createIntent: '/api/payments/create-intent',
   },
   referral: {
     stats: '/api/referral/stats',

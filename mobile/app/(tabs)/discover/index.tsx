@@ -12,29 +12,16 @@ import { useBookSearch } from '@/hooks/useBooks';
 import { BookCard } from '@/components/books/BookCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
+
 import type { BookRow } from '@/types';
 
 const MOODS = ['Dark', 'Cozy', 'Mind-bending', 'Funny', 'Emotional', 'Inspiring', 'Romantic'];
-
-interface TrendingItem {
-  book_id: string;
-  book: { id: string; title: string; author_name: string; cover_url: string | null } | null;
-}
 
 interface SimpleBook {
   id: string;
   title: string;
   author_name: string;
   cover_url: string | null;
-}
-
-function useTrendingBooks() {
-  return useQuery({
-    queryKey: ['discover', 'trending'],
-    queryFn: () => api.get<{ trending: TrendingItem[] }>('/api/discover/trending'),
-    staleTime: 5 * 60 * 1000,
-  });
 }
 
 function useNewReleasesFromFollowed() {

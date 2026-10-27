@@ -167,13 +167,6 @@ export function OnboardingFlow({ userId, initialUsername, initialDisplayName }: 
       return;
     }
 
-    // Create default shelves
-    await supabase.from('shelves').insert([
-      { user_id: userId, name: 'Currently Reading', slug: 'currently-reading', is_default: true, default_type: 'currently_reading' },
-      { user_id: userId, name: 'Have Read', slug: 'have-read', is_default: true, default_type: 'have_read' },
-      { user_id: userId, name: 'Want to Read', slug: 'want-to-read', is_default: true, default_type: 'want_to_read' },
-    ]);
-
     // Save PIN if set
     if (pin) {
       await fetch('/api/auth/pin', {

@@ -1,4 +1,4 @@
-import { View, Text, Modal, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { X, Check } from 'lucide-react-native';
 import { useShelves } from '@/hooks/useShelf';
 import { useToggleShelf } from '@/hooks/useBooks';
@@ -17,12 +17,13 @@ const DEFAULT_SHELF_LABELS: Record<string, string> = {
 };
 
 export function AddToShelfModal({ book, visible, onClose }: Props) {
-  const { data, isLoading } = useShelves();
+  const { data, isLoading } = useShelves(book.id);
   const toggle = useToggleShelf();
 
-  async function handleSelect(shelfType: string) {
-    await toggle.mutateAsync({ book_id: book.id, shelf_type: shelfType, google_books_id: book.google_books_id ?? undefined });
-    onClose();
+  async function handleSelect(shelfId: string) {
+    try{
+      await toggle.mutateAsync({bookId:book.id,shelfId,action:data?.addedToShelves.includes(shelfId)?'remove':'add'});
+    }catch(error){Alert.alert('Error',error instanceof Error?error.message:'Shelf update failed');}
   }
 
   const shelves = data?.shelves ?? [];
@@ -46,7 +47,10 @@ export function AddToShelfModal({ book, visible, onClose }: Props) {
                 <TouchableOpacity
                   key={shelf.id}
                   className="flex-row items-center py-3 border-b border-border gap-3"
-                  onPress={() => handleSelect(shelf.default_type ?? shelf.slug)}
+                  onPress={() => handleSelect(shelf.id)}
+                  disabled={toggle.isPending}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{checked:data?.addedToShelves.includes(shelf.id),disabled:toggle.isPending}}
                   activeOpacity={0.7}
                 >
                   <Text className="flex-1 text-foreground">
@@ -54,6 +58,7 @@ export function AddToShelfModal({ book, visible, onClose }: Props) {
                       ? DEFAULT_SHELF_LABELS[shelf.default_type] ?? shelf.name
                       : shelf.name}
                   </Text>
+                  {data?.addedToShelves.includes(shelf.id)&&<Check size={18} color="#d97706" />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
