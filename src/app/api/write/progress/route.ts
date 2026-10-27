@@ -1,50 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
-export const dynamic = 'force-dynamic';
-
+export const dynamic='force-dynamic';
 export async function GET() {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('writing_streak, xp')
-    .eq('id', user.id)
-    .single();
-
-  const { data: promptSubs } = await supabase
-    .from('writing_prompt_submissions')
-    .select('word_count')
-    .eq('user_id', user.id);
-
-  const { data: challengeEntries } = await supabase
-    .from('writing_challenge_submissions')
-    .select('word_count')
-    .eq('user_id', user.id);
-
-  const { count: workshopCount } = await supabase
-    .from('workshop_submissions')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id);
-
-  const promptWords = (promptSubs ?? []).reduce(
-    (sum: number, r: { word_count?: number }) => sum + (r.word_count ?? 0),
-    0
-  );
-  const challengeWords = (challengeEntries ?? []).reduce(
-    (sum: number, r: { word_count?: number }) => sum + (r.word_count ?? 0),
-    0
-  );
-
-  return NextResponse.json({
-    total_words: promptWords + challengeWords,
-    prompts_completed: (promptSubs ?? []).length,
-    challenges_completed: (challengeEntries ?? []).length,
-    workshop_critiques: workshopCount ?? 0,
-    writing_streak: profile?.writing_streak ?? 0,
-    xp: profile?.xp ?? 0,
-  });
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  const {data,error}=await createServiceClient().rpc('writing_progress_snapshot' as never,{p_user_id:user.id} as never);
+  if(error||!data)return NextResponse.json({error:'Writing progress unavailable'},{status:503});
+  return NextResponse.json(data);
 }

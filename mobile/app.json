@@ -4,30 +4,25 @@
     "slug": "liravo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "org.liravo.app"
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
       "package": "org.liravo.app",
       "versionCode": 1
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/favicon.png"
+      "output": "static"
     },
     "plugins": [
       "expo-router",
@@ -38,16 +33,11 @@
           "photosPermission": "Allow Liravo to access your photos to set a profile picture."
         }
       ],
-      "react-native-iap",
+      "react-native-iap"
     ],
     "experiments": {
       "typedRoutes": true
     },
-    "scheme": "liravo",
-    "extra": {
-      "eas": {
-        "projectId": "your-eas-project-id"
-      }
-    }
+    "scheme": "liravo"
   }
 }

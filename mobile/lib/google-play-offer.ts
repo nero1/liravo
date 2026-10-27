@@ -1,10 +1,10 @@
 interface OfferProduct {
   productId: string;
-  subscriptionOfferDetails?: Array<{
+  subscriptionOfferDetails?: {
     offerId: string | null;
     offerToken: string;
-    pricingPhases: { pricingPhaseList: Array<{billingPeriod:string;formattedPrice:string}> };
-  }>;
+    pricingPhases: { pricingPhaseList: {billingPeriod:string;formattedPrice:string}[] };
+  }[];
 }
 
 export function monthlyGooglePlayOffer(product: OfferProduct | undefined, sku: string) {

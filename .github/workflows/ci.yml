@@ -75,3 +75,25 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  mobile:
+    name: Mobile lint, types & Android bundle
+    runs-on: ubuntu-latest
+    env:
+      EXPO_OFFLINE: '1'
+      EXPO_NO_TELEMETRY: '1'
+      EXPO_PUBLIC_DATABASE_PROVIDER: digitalocean
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm run lint -- --max-warnings 0
+      - run: npm run typecheck
+      - run: npm run export:android

@@ -12,15 +12,17 @@ interface Challenge {
   type: 'weekly' | 'monthly';
   goal_books: number | null;
   goal_pages: number | null;
-  starts_at: string;
-  ends_at: string;
+  starts_at: string | null;
+  ends_at: string | null;
 }
 
-function formatDate(dateStr: string) {
+function formatDate(dateStr: string | null) {
+  if(!dateStr)return 'Open ended';
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function daysLeft(endStr: string) {
+function daysLeft(endStr: string | null) {
+  if(!endStr)return 0;
   const diff = new Date(endStr).getTime() - Date.now();
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
@@ -33,10 +35,11 @@ export default async function ChallengesPage() {
 
   const { data: activeChallenges } = await supabase 
     .from('challenges')
-    .select('id, name, description, type, goal_books, goal_pages, starts_at, ends_at')
-    .lte('starts_at', now)
-    .gte('ends_at', now)
-    .order('ends_at', { ascending: true });
+    .select('id, name:title, description, type:cadence, goal_books, goal_pages, starts_at:start_date, ends_at:end_date')
+    .eq('is_active',true)
+    .or(`start_date.is.null,start_date.lte.${now}`)
+    .or(`end_date.is.null,end_date.gt.${now}`)
+    .order('end_date', { ascending: true });
 
   let joinedChallengeIds: Set<string> = new Set();
   if (user) {

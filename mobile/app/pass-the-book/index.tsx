@@ -2,7 +2,7 @@ import { View, Text, FlatList, TouchableOpacity, TextInput, ScrollView, Activity
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import Image from 'expo-image';
+import { Image } from 'expo-image';
 import { api } from '@/lib/api';
 import { Avatar } from '@/components/ui/Avatar';
 
@@ -192,7 +192,6 @@ export default function PassTheBookScreen() {
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 12 }}
             renderItem={({ item: chain }) => {
               const sortedNodes = [...chain.nodes].sort((a, b) => a.position - b.position);
-              const myNode = chain.nodes.find((n) => n.user_id === 'me');
               return (
                 <View className="rounded-xl border border-border bg-card p-4 gap-3">
                   <View className="flex-row gap-3">

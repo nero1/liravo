@@ -1,59 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { awardXP } from '@/services/xp';
-import { XP_CONFIG } from '@/constants/config';
+import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { createServiceClient } from '@/lib/supabase/server';
 
-export const dynamic = 'force-dynamic';
-
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const body = await request.json() as { progress_pages?: number; progress_percent?: number };
-
-  // Fetch shelf book to verify ownership and get book page_count
-  const { data: shelfBook } = await supabase
-    .from('shelf_books')
-    .select('id, user_id, book_id, books:book_id(page_count)')
-    .eq('id', params.id)
-    .single();
-
-  if (!shelfBook || shelfBook.user_id !== user.id) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
-  const book = shelfBook.books as unknown as { page_count: number | null } | null;
-  const pageCount = book?.page_count ?? null;
-
-  const updates: { progress_pages?: number; progress_percent?: number } = {};
-
-  if (typeof body.progress_pages === 'number') {
-    updates.progress_pages = body.progress_pages;
-    if (pageCount && pageCount > 0) {
-      updates.progress_percent = Math.min(100, Math.round((body.progress_pages / pageCount) * 100));
-    }
-  } else if (typeof body.progress_percent === 'number') {
-    updates.progress_percent = Math.min(100, Math.max(0, body.progress_percent));
-  }
-
-  const { data: updated, error } = await supabase
-    .from('shelf_books')
-    .update(updates)
-    .eq('id', params.id)
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Award XP for updating progress
-  await awardXP(user.id, XP_CONFIG.WANT_TO_READ_REACTION, 'progress_update', `progress:${params.id}:${new Date().toISOString().slice(0, 10)}`);
-
-  return NextResponse.json(updated);
+export const dynamic='force-dynamic';
+export async function PATCH(request:Request,{params}:{params:{id:string}}){
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid shelf entry'},{status:400});
+  const parsed=z.object({progress_pages:z.number().int().min(0).max(100000).optional(),progress_percent:z.number().min(0).max(100).optional()}).refine(body=>body.progress_pages!==undefined||body.progress_percent!==undefined).safeParse(await request.json().catch(()=>null));
+  if(!parsed.success)return NextResponse.json({error:'Invalid progress'},{status:422});
+  const {data,error}=await createServiceClient().rpc('update_shelf_progress' as never,{p_user_id:user.id,p_entry_id:params.id,p_pages:parsed.data.progress_pages??null,p_percent:parsed.data.progress_percent??null} as never);
+  if(error)return NextResponse.json({error:'Progress update unavailable'},{status:({P1003:403,P1004:422,P1005:404} as Record<string,number>)[error.code]??503});
+  return NextResponse.json(data);
 }

@@ -1,20 +1,22 @@
+import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
-import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { ChallengeRow } from '@/types';
 
 export default function ChallengesScreen() {
   const router = useRouter();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading,error,refetch } = useQuery({
     queryKey: ['challenges'],
     queryFn: () => api.get<{ challenges: ChallengeRow[] }>(ENDPOINTS.challenges.list),
   });
   const challenges = data?.challenges ?? [];
+
+  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
@@ -32,10 +34,10 @@ export default function ChallengesScreen() {
             >
               <View className="flex-row items-center justify-between">
                 <Text className="font-semibold text-foreground flex-1">{item.title}</Text>
-                {item.is_premium && <Badge variant="accent">Premium</Badge>}
+
               </View>
               {item.description && <Text className="text-sm text-muted-foreground" numberOfLines={2}>{item.description}</Text>}
-              <Text className="text-xs text-accent">{item.xp_reward} XP · {item.participant_count} participants</Text>
+              <Text className="text-xs text-accent">{item.goal_books??0} books · {item.goal_pages??0} pages</Text>
             </TouchableOpacity>
           )}
           ListEmptyComponent={<EmptyState title="No challenges yet" />}

@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { getRedisClient } from '@/lib/redis';
+import { getRedisClient,REDIS_KEYS } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
 const BodySchema = z.object({
   shelfId: z.string().uuid(),
-  bookId: z.string(),
+  bookId: z.string().uuid(),
   action: z.enum(['add', 'remove']),
 });
 
@@ -29,33 +29,13 @@ export async function POST(request: NextRequest) {
   }
 
   const { shelfId, bookId, action } = parsed.data;
-  const service = createServiceClient();
-
-  // Verify shelf belongs to user
-  const { data: shelf } = await service
-    .from('shelves')
-    .select('id, default_type')
-    .eq('id', shelfId)
-    .eq('user_id', user.id)
-    .single();
-
-  if (!shelf) return NextResponse.json({ error: 'Shelf not found' }, { status: 404 });
-
-  if (action === 'remove') {
-    await service.from('shelf_books').delete()
-      .eq('shelf_id', shelfId)
-      .eq('book_id', bookId)
-      .eq('user_id', user.id);
-  } else {
-    await service.from('shelf_books').upsert({
-      shelf_id: shelfId,
-      book_id: bookId,
-      user_id: user.id,
-    }, { onConflict: 'shelf_id,book_id' });
-  }
+  const {data,error}=await createServiceClient().rpc('set_shelf_membership' as never,{p_user_id:user.id,p_shelf_id:shelfId,p_book_id:bookId,p_add:action==='add'} as never);
+  if(error)return NextResponse.json({error:'Shelf update unavailable'},{status:error.code==='P1005'?404:error.code==='P1003'?403:503});
+  const shelf=data as {defaultType:string|null};
+  try{await getRedisClient().del(REDIS_KEYS.book(bookId));}catch{}
 
   // Invalidate taste profile cache when a book is added to have_read shelf
-  if (action === 'add' && shelf.default_type === 'have_read') {
+  if (action === 'add' && shelf.defaultType === 'have_read') {
     try {
       const redis = getRedisClient();
       await redis.del(`taste_profile:${user.id}`);
@@ -64,5 +44,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, defaultType: shelf.default_type });
+  return NextResponse.json({ ok: true, defaultType: shelf.defaultType });
 }

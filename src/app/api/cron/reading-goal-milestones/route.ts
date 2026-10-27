@@ -1,88 +1,29 @@
+import { getRedisClient } from '@/lib/redis';
 import { cron } from '@/lib/cron';
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 
-export const dynamic = 'force-dynamic';
-
-const MILESTONES = [25, 50, 75, 100];
-const BATCH_SIZE = 50;
-
-async function run() {
-
-  const supabase = createServiceClient();
-  const currentYear = new Date().getFullYear();
-  const yearStart = `${currentYear}-01-01`;
-  const yearEnd = `${currentYear}-12-31T23:59:59`;
-
-  const { data: users } = await supabase
-    .from('users')
-    .select('id, annual_reading_goal')
-    .not('annual_reading_goal', 'is', null)
-    .gt('annual_reading_goal', 0);
-
-  if (!users || users.length === 0) return NextResponse.json({ checked: 0, milestonesAwarded: 0 });
-
-  let checked = 0;
-  let milestonesAwarded = 0;
-
-  for (let i = 0; i < users.length; i += BATCH_SIZE) {
-    const batch = users.slice(i, i + BATCH_SIZE);
-
-    await Promise.all(batch.map(async (user) => {
-      const { data: shelves } = await supabase
-        .from('shelves')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('default_type', 'have_read');
-
-      if (!shelves || shelves.length === 0) return;
-
-      const { count: booksRead } = await supabase
-        .from('shelf_books')
-        .select('*', { count: 'exact', head: true })
-        .in('shelf_id', shelves.map((s) => s.id))
-        .gte('finished_at', yearStart)
-        .lte('finished_at', yearEnd);
-
-      const goal = user.annual_reading_goal as number;
-      const percent = ((booksRead ?? 0) / goal) * 100;
-
-      for (const milestone of MILESTONES) {
-        if (percent < milestone) continue;
-
-        const { data: existing } = await supabase
-          .from('reading_goal_milestones')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('year', currentYear)
-          .eq('milestone_percent', milestone)
-          .maybeSingle();
-
-        if (existing) continue;
-
-        await supabase.from('reading_goal_milestones').insert({
-          user_id: user.id,
-          year: currentYear,
-          milestone_percent: milestone,
-        });
-
-        await supabase.from('notifications').insert({
-          user_id: user.id,
-          type: 'reading_goal_milestone',
-          message: `You've read ${booksRead} of ${goal} books — you've hit ${milestone}% of your ${currentYear} reading goal!`,
-        });
-
-        milestonesAwarded++;
-      }
-
-      checked++;
-    }));
+export const dynamic='force-dynamic';
+async function run(){
+  const db=createServiceClient(),year=new Date().getUTCFullYear();
+  const redis=getRedisClient(),cursorKey=`reading-goal-milestones:${year}:cursor`,deadline=Date.now()+40000;
+  let after=await redis.get(cursorKey)??undefined,checked=0,milestonesAwarded=0;
+  while(checked<400&&Date.now()<deadline){
+    let query=db.from('reading_goals').select('user_id').eq('year',year).order('user_id').limit(100);
+    if(after)query=query.gt('user_id',after);
+    const {data,error}=await query;
+    if(error)throw new Error('Reading goals unavailable');
+    if(!data?.length){await redis.del(cursorKey);break;}
+    for(let index=0;index<data.length;index+=10){
+      const results=await Promise.all(data.slice(index,index+10).map(row=>db.rpc('award_reading_goal_milestones' as never,{p_user_id:row.user_id,p_year:year} as never)));
+      for(const result of results){if(result.error)throw new Error('Goal milestone unavailable');milestonesAwarded+=Number(result.data);checked++;}
+    }
+    const next=data[data.length-1].user_id as string;
+    after=next;
+    await redis.set(cursorKey,next,{ex:7*86400});
   }
-
-  return NextResponse.json({ checked, milestonesAwarded });
+  return NextResponse.json({checked,milestonesAwarded});
 }
-
-export const GET = cron('reading-goal-milestones', run);
-export const POST = GET;
-
-export const maxDuration = 60;
+export const GET=cron('reading-goal-milestones',run);
+export const POST=GET;
+export const maxDuration=60;

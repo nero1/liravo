@@ -15,6 +15,7 @@ import {
   type SubscriptionAndroid,
   PurchaseStateAndroid,
 } from 'react-native-iap';
+import type { UserRow } from '@/types';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { SUBSCRIPTION_SKUS, PREMIUM_MONTHLY_SKU } from '@/constants/iap';
@@ -57,20 +58,20 @@ export function useGooglePlayBilling() {
             if (mounted) setVerifying(true);
 
             try {
-              const res = await api.post<{ user: Record<string, unknown>; active:boolean; pending:boolean; acknowledged:boolean }>('/api/mobile/verify-purchase', {
+              const res = await api.post<{ user:UserRow; active:boolean; pending:boolean; acknowledged:boolean }>('/api/mobile/verify-purchase', {
                 purchaseToken: sub.purchaseToken,
                 productId: sub.productId,
                 packageName: 'org.liravo.app',
               });
 
-              if (res.user && useAuthStore.getState().user?.id === res.user.id) useAuthStore.getState().setUser(res.user as Parameters<ReturnType<typeof useAuthStore.getState>['setUser']>[0]);
+              if (res.user && useAuthStore.getState().user?.id === res.user.id) useAuthStore.getState().setUser(res.user);
               if (res.pending) {
                 Alert.alert('Verification pending','Your subscription is awaiting Google Play confirmation. Try restoring purchases shortly.');
                 return;
               }
               if (res.active && !res.acknowledged) await finishTransaction({purchase,isConsumable:false});
               if (!res.active) Alert.alert('Subscription inactive','No active Google Play subscription was found. Your account has been refreshed.');
-            } catch (err) {
+            } catch {
               Alert.alert(
                 'Purchase verification failed',
                 'We could not confirm your subscription. Your purchase is retained by Google Play; try restoring purchases or contact support with your order ID.',
@@ -140,13 +141,13 @@ export function useGooglePlayBilling() {
         return;
       }
 
-      const res = await api.post<{ user: Record<string, unknown>; active:boolean; pending:boolean; acknowledged:boolean }>('/api/mobile/verify-purchase', {
+      const res = await api.post<{ user:UserRow; active:boolean; pending:boolean; acknowledged:boolean }>('/api/mobile/verify-purchase', {
         purchaseToken: premiumPurchase.purchaseToken,
         productId: premiumPurchase.productId,
         packageName: 'org.liravo.app',
       });
 
-      if (res.user && useAuthStore.getState().user?.id === res.user.id) useAuthStore.getState().setUser(res.user as Parameters<ReturnType<typeof useAuthStore.getState>['setUser']>[0]);
+      if (res.user && useAuthStore.getState().user?.id === res.user.id) useAuthStore.getState().setUser(res.user);
       if (res.active) Alert.alert('Subscription restored!', 'Your Premium access has been restored.');
       else Alert.alert(res.pending?'Verification pending':'Subscription inactive',res.pending?'Google Play has not confirmed this purchase yet.':'No active Google Play subscription was found.');
     } catch (err) {

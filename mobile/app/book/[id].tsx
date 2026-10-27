@@ -1,9 +1,10 @@
+import { QueryError } from '@/components/ui/EmptyState';
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { BookOpen, MessageSquare, Quote } from 'lucide-react-native';
+import { MessageSquare, Quote } from 'lucide-react-native';
 import { useBook, useBookReviews } from '@/hooks/useBooks';
 import { StarRating } from '@/components/books/StarRating';
 import { AffiliateLinkButtons } from '@/components/books/AffiliateLinkButtons';
@@ -15,11 +16,13 @@ export default function BookDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [shelfModalOpen, setShelfModalOpen] = useState(false);
-  const { data: bookData, isLoading } = useBook(id!);
+  const { data: bookData, isLoading,error,refetch } = useBook(id!);
   const { data: reviewData } = useBookReviews(id!);
 
   const book = bookData?.book;
   const reviews = reviewData?.reviews ?? [];
+
+  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
 
   if (isLoading || !book) {
     return (
@@ -128,7 +131,7 @@ export default function BookDetailScreen() {
           )}
 
           {/* Affiliate links */}
-          <AffiliateLinkButtons book={book} />
+          <AffiliateLinkButtons book={book} links={bookData?.affiliateLinks??[]} />
 
           {/* Reviews */}
           {reviews.length > 0 && (

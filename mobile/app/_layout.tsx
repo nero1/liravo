@@ -14,7 +14,7 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isLoading } = useAuth(true);
   const { user, token, mfaChallenge } = useAuthStore();
-  const segments = useSegments();
+  const segments:string[]=useSegments();
   const router = useRouter();
   usePushNotifications();
 
@@ -36,7 +36,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     } else if (isAuthenticated && user && !user.onboarding_complete && segments[1] !== 'onboarding') {
       router.replace('/auth/onboarding');
     }
-  }, [isLoading,token,user,mfaChallenge,segments]);
+  }, [isLoading,token,user,mfaChallenge,segments,router]);
 
   if (isLoading) return <LoadingSpinner />;
 

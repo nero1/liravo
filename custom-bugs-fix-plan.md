@@ -1,7 +1,7 @@
 # Custom Bugs Fix Plan
 Date/Time: May 23, 2026 09:39 PM UTC
 
-Updated 26 October 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
+Updated 27 October 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
 
 ✅ 1. Identity and authorization invariants (Critical)
 - ✅ Verify self/admin guards for `/api/users/*` mutations; retain verified cross-user social targets.
@@ -42,6 +42,7 @@ Updated 26 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Add metadata/canonical/OG coverage to major dynamic pages.
 - 🟡 Complete translation keys and enforce no hardcoded user-visible strings.
 - 🟡 Add accessibility sweep for forms/navigation/ARIA labels.
+- ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation and verified reading API contracts.
 
 ✅ 8. Pagination and scalability cleanup (Medium)
 - ✅ Standardize cursor pagination for high-volume endpoints.

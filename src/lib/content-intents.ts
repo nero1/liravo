@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { checkRouteRateLimit } from '@/lib/rate-limit';
 import { createServiceClient } from '@/lib/supabase/server';
 
-const contentOwners={reviews:'user_id',quotes:'user_id',buddy_reads:'created_by',ask_writer_questions:'user_id',ask_writer_answers:'user_id',reading_sessions:'user_id',
+const contentOwners={shelves:'user_id',reviews:'user_id',quotes:'user_id',buddy_reads:'created_by',ask_writer_questions:'user_id',ask_writer_answers:'user_id',reading_sessions:'user_id',
   reading_lists:'user_id',content_reports:'reporter_id',events:'organizer_id',reading_rooms:'created_by',book_debates:'user_id',book_passes:'sender_id',author_posts:'author_id',author_qa:'asked_by',arcs:'author_id',
   workshop_rooms:'facilitator_id',workshop_submissions:'user_id',workshop_feedback:'user_id',buddy_read_notes:'user_id',reading_room_posts:'user_id',reading_room_milestones:'created_by',author_verification_requests:'user_id',appeals:'user_id',community_notes:'author_id'} as const;
 type ContentTable=keyof typeof contentOwners;

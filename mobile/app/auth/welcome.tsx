@@ -22,12 +22,6 @@ export default function WelcomeScreen() {
   const {loginWithEmail,signUpWithEmail,loginWithGoogleToken,mfaChallenge,verifySecondFactor,logout}=useAuth();
   const [factorCode,setFactorCode]=useState(''),[useRecovery,setUseRecovery]=useState(false);
 
-  // Google OAuth request (used only in DO mode)
-  const [, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
-    androidClientId: GOOGLE_CLIENT_ID,
-    scopes: ['openid', 'profile', 'email'],
-  });
-
   // ── Supabase Google OAuth ────────────────────────────────────────────────────
   async function signInWithGoogleSupabase() {
     setLoading(true);
@@ -45,22 +39,6 @@ export default function WelcomeScreen() {
         const code = url.searchParams.get('code');
         if (code) await supabase.auth.exchangeCodeForSession(code);
       }
-    } catch (err) {
-      Alert.alert('Sign in failed', (err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ── DO mode Google OAuth ─────────────────────────────────────────────────────
-  async function signInWithGoogleDO() {
-    setLoading(true);
-    try {
-      const result = await promptGoogleAsync();
-      if (result.type !== 'success') return;
-      const idToken = result.authentication?.idToken;
-      if (!idToken) throw new Error('No ID token from Google');
-      await loginWithGoogleToken(idToken);
     } catch (err) {
       Alert.alert('Sign in failed', (err as Error).message);
     } finally {
@@ -88,7 +66,6 @@ export default function WelcomeScreen() {
     }
   }
 
-  const signInWithGoogle = isSupabaseMode ? signInWithGoogleSupabase : signInWithGoogleDO;
 
   if(mfaChallenge)return <SafeAreaView className="flex-1 bg-background px-6 justify-center gap-4">
     <Text className="text-2xl font-bold text-foreground">Two-factor verification</Text>
@@ -117,9 +94,8 @@ export default function WelcomeScreen() {
             </View>
 
             <View className="gap-4">
-              {/* Google button — shown in both modes */}
-              <TouchableOpacity
-                onPress={signInWithGoogle}
+              {isSupabaseMode?<TouchableOpacity
+                onPress={signInWithGoogleSupabase}
                 disabled={loading}
                 className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm"
                 activeOpacity={0.8}
@@ -132,7 +108,7 @@ export default function WelcomeScreen() {
                     <Text className="font-semibold text-foreground text-base">Continue with Google</Text>
                   </>
                 )}
-              </TouchableOpacity>
+              </TouchableOpacity>:GOOGLE_CLIENT_ID?<DirectGoogleButton onLogin={loginWithGoogleToken} />:null}
 
               {/* Email / password — only in DO mode */}
               {!isSupabaseMode && (
@@ -205,4 +181,22 @@ export default function WelcomeScreen() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function DirectGoogleButton({onLogin}:{onLogin:(token:string)=>Promise<void>}){
+  const [loading,setLoading]=useState(false);
+  const [request,,prompt]=Google.useIdTokenAuthRequest({androidClientId:GOOGLE_CLIENT_ID,scopes:['openid','profile','email']});
+  async function login(){
+    setLoading(true);
+    try{
+      const result=await prompt();
+      if(result.type!=='success')return;
+      const token=result.params.id_token??result.authentication?.idToken;
+      if(!token)throw new Error('No ID token from Google');
+      await onLogin(token);
+    }catch(error){Alert.alert('Sign in failed',error instanceof Error?error.message:'Please try again.');}finally{setLoading(false);}
+  }
+  return <TouchableOpacity onPress={()=>void login()} disabled={loading||!request} accessibilityRole="button" className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm">
+    {loading?<ActivityIndicator color="#1a1a1a" />:<Text className="font-semibold text-foreground text-base">Continue with Google</Text>}
+  </TouchableOpacity>;
 }

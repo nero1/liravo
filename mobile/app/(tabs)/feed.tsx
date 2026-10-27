@@ -5,7 +5,7 @@ import { Bell } from 'lucide-react-native';
 import { useFeed } from '@/hooks/useFeed';
 import { FeedItem } from '@/components/social/FeedItem';
 import { EmptyState } from '@/components/ui/EmptyState';
-import type { FeedItem as FeedItemType } from '@/types';
+
 
 export default function FeedScreen() {
   const router = useRouter();

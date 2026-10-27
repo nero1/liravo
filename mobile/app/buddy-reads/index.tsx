@@ -5,7 +5,7 @@ import { Plus } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
-import { BookCard } from '@/components/books/BookCard';
+
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { BuddyReadRow } from '@/types';
 

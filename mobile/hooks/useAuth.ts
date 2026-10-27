@@ -10,43 +10,44 @@ export function useAuth(initialize=false) {
   useEffect(()=>{
     if(!initialize)return;
     let active=true;
+    const current=(accessToken:string)=>active&&useAuthStore.getState().token===accessToken;
     const authenticate=async(accessToken:string)=>{
+      setLoading(true);
       await setToken(accessToken);
+      if(!current(accessToken))return;
       try{
         const result=await api.post<{mfaRequired?:boolean;challengeToken?:string;user?:UserRow}>('/api/auth/session',{});
-        if(!active)return;
+        if(!current(accessToken))return;
         if(result.mfaRequired){setUser(null);setMfaChallenge(result.challengeToken!);}else{setMfaChallenge(null);setUser(result.user??null);}
-      }catch{if(active)await signOut();}finally{if(active)setLoading(false);}
+      }catch{if(current(accessToken))await signOut();}finally{if(current(accessToken))setLoading(false);}
     };
     if(isSupabaseMode){
-      void supabase.auth.getSession().then(({data:{session}})=>{if(active){if(session)void authenticate(session.access_token);else setLoading(false);}});
-      const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{queueMicrotask(()=>{if(active){if(session)void authenticate(session.access_token);else{void signOut();setLoading(false);}}});});
+      const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{queueMicrotask(()=>{if(active){if(session)void authenticate(session.access_token);else void signOut();}});});
       return()=>{active=false;subscription.unsubscribe();};
     }
-    void initDigitalOcean();
+    void (async()=>{
+      const stored=await loadStoredToken();
+      if(!active)return;
+      if(!stored){setLoading(false);return;}
+      try{
+        const result=await api.get<{user:UserRow}>('/api/users/me');
+        if(current(stored))setUser(result.user);
+      }catch{if(current(stored))await signOut();}finally{if(current(stored))setLoading(false);}
+    })();
     return()=>{active=false;};
-  },[initialize]);
-
-  // ── DigitalOcean mode ────────────────────────────────────────────────────────
-  async function initDigitalOcean() {
-    const stored = await loadStoredToken();
-    if (stored) {
-      await fetchProfile();
-    } else {
-      setLoading(false);
-    }
-  }
+  },[initialize,loadStoredToken,setLoading,setMfaChallenge,setToken,setUser,signOut]);
 
   // ── Shared ───────────────────────────────────────────────────────────────────
   async function fetchProfile() {
+    const started=useAuthStore.getState().token;
     try {
       const res = await api.get<{ user: UserRow }>('/api/users/me');
-      setUser(res.user);
+      if(useAuthStore.getState().token===started)setUser(res.user);
     } catch {
       // session may be expired; clear it
-      await signOut();
+      if(useAuthStore.getState().token===started)await signOut();
     } finally {
-      setLoading(false);
+      if(useAuthStore.getState().token===started)setLoading(false);
     }
   }
 
@@ -58,14 +59,16 @@ export function useAuth(initialize=false) {
 
   type LoginResult={token?:string;user?:UserRow;mfaRequired?:boolean;challengeToken?:string};
   async function acceptLogin(result:LoginResult){
-    if(result.mfaRequired){setMfaChallenge(result.challengeToken!);setUser(null);return;}
+    if(result.mfaRequired){await setToken(null);setMfaChallenge(result.challengeToken!);setUser(null);return;}
     await setToken(result.token!);setUser(result.user!);setMfaChallenge(null);
   }
   async function loginWithEmail(email:string,password:string){await acceptLogin(await api.post<LoginResult>('/api/auth/login',{email,password}));}
   async function signUpWithEmail(email:string,password:string){await acceptLogin(await api.post<LoginResult>('/api/auth/signup',{email,password}));}
   async function loginWithGoogleToken(idToken:string){await acceptLogin(await api.post<LoginResult>('/api/auth/google',{idToken}));}
   async function verifySecondFactor(value:string,recovery:boolean){
-    const result=await api.post<LoginResult>('/api/auth/2fa/verify',{challengeToken:useAuthStore.getState().mfaChallenge,...(recovery?{recoveryCode:value}:{code:value})});
+    const challengeToken=useAuthStore.getState().mfaChallenge;
+    const result=await api.post<LoginResult>('/api/auth/2fa/verify',{challengeToken,...(recovery?{recoveryCode:value}:{code:value})});
+    if(useAuthStore.getState().mfaChallenge!==challengeToken)return;
     if(result.token)await setToken(result.token);
     setUser(result.user!);setMfaChallenge(null);
   }

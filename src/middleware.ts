@@ -1,4 +1,4 @@
-import { CSRF_COOKIE, CSRF_HEADER, validCsrf, sameOrigin, getRequestOrigin } from '@/lib/csrf';
+import { CSRF_COOKIE, CSRF_HEADER, validCsrf, sameOrigin, getRequestOrigin, isStatelessNativeAuth } from '@/lib/csrf';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import type { Database } from '@/types/database';
@@ -21,16 +21,18 @@ export async function middleware(request: NextRequest) {
 
   // Bearer handlers authenticate independently and must not fall back to cookies.
   const hasBearerToken = request.headers.get('authorization')?.startsWith('Bearer ');
+  const nativeAuth=isStatelessNativeAuth(request);
   const csrfToken = request.cookies.get(CSRF_COOKIE)?.value ?? crypto.randomUUID();
   const finish = (result = response) => {
     result.headers.set('x-request-id',correlationId);
-    result.cookies.set(CSRF_COOKIE, csrfToken, { secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
+    if(!nativeAuth)result.cookies.set(CSRF_COOKIE, csrfToken, { secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
     return result;
   };
 
   // Bugfix: defense-in-depth CSRF guard for mutating API routes using cookie auth.
   if (
     !hasBearerToken
+    && !nativeAuth
     && pathname.startsWith('/api/')
     && !pathname.startsWith('/api/webhooks/')
     && !pathname.startsWith('/api/cron/')

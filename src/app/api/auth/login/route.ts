@@ -118,5 +118,5 @@ export async function POST(request: Request) {
   await redis.del(failKey);
 
   const {data:profile}=await createServiceClient().from('users').select('*').eq('id',user.id).maybeSingle();
-  return directLoginResponse(user,clientUser(profile));
+  return directLoginResponse(user,clientUser(profile),request);
 }

@@ -15,13 +15,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = createClient();
   const { data } = await supabase 
     .from('challenges')
-    .select('name')
+    .select('name:title')
     .eq('id', params.id)
     .single();
   return { title: data?.name ?? 'Challenge' };
 }
 
-function daysLeft(endStr: string) {
+function daysLeft(endStr: string | null) {
+  if(!endStr)return 0;
   const diff = new Date(endStr).getTime() - Date.now();
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
@@ -32,7 +33,7 @@ export default async function ChallengeDetailPage({ params }: Props) {
 
   const { data: challenge } = await supabase 
     .from('challenges')
-    .select('id, name, description, type, goal_books, goal_pages, starts_at, ends_at')
+    .select('id, name:title, description, type:cadence, goal_books, goal_pages, starts_at:start_date, ends_at:end_date')
     .eq('id', params.id)
     .single();
 
@@ -58,7 +59,8 @@ export default async function ChallengeDetailPage({ params }: Props) {
     participantUsers = data ?? [];
   }
 
-  const isJoined = user ? participantIds.includes(user.id) : false;
+  const {data:membership}=user?await supabase.from('challenge_participants').select('user_id').eq('challenge_id',params.id).eq('user_id',user.id).maybeSingle():{data:null};
+  const isJoined=!!membership;
   const left = daysLeft(challenge.ends_at);
 
   return (

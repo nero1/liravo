@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocalSearchParams } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
@@ -17,7 +17,6 @@ interface AuthorPost { id: string; title: string; body: string; type: string; cr
 export default function AuthorProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
   const { user: currentUser } = useAuthStore();
-  const queryClient = useQueryClient();
 
   const [askQuestion, setAskQuestion] = useState('');
   const [askOpen, setAskOpen] = useState(false);

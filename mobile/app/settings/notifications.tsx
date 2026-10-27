@@ -81,7 +81,7 @@ export default function NotificationSettingsScreen() {
         <Text className="text-muted-foreground text-sm mb-6">Control which notifications you receive.</Text>
 
         <View className="gap-1">
-          {(Object.keys(LABELS) as Array<keyof NotifPrefs>).map((key) => (
+          {(Object.keys(LABELS) as (keyof NotifPrefs)[]).map((key) => (
             <View
               key={key}
               className="flex-row items-center justify-between p-4 rounded-xl border border-border bg-card"

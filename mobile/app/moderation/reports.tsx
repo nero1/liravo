@@ -23,7 +23,7 @@ export default function ModerationReportsScreen() {
           {item.status === 'pending' && (
             <View className="flex-row gap-2">
               <TouchableOpacity onPress={() => action.mutate({ id: item.id, action: 'remove' })} className="bg-destructive rounded-lg px-3 py-1.5" activeOpacity={0.7}><Text className="text-destructive-foreground text-sm font-medium">Remove</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => action.mutate({ id: item.id, action: 'dismiss' })} className="bg-muted rounded-lg px-3 py-1.5" activeOpacity={0.7}><Text className="text-foreground text-sm">Dismiss</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => action.mutate({ id: item.id, action:'approve' })} className="bg-muted rounded-lg px-3 py-1.5" activeOpacity={0.7}><Text className="text-foreground text-sm">Dismiss</Text></TouchableOpacity>
             </View>
           )}
         </View>
