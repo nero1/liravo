@@ -544,7 +544,9 @@
       "failed": "Le paiement de votre pourboire de {amount} a échoué.",
       "pending": "Votre pourboire de {amount} est en attente de confirmation du paiement.",
       "refunded": "Votre pourboire de {amount} a été remboursé.",
-      "partiallyRefunded": "Votre pourboire de {amount} a été partiellement remboursé."
+      "partiallyRefunded": "Votre pourboire de {amount} a été partiellement remboursé.",
+      "returnPending": "Aucun pourboire n’a été crédité. Le paiement est en cours de remboursement.",
+      "returned": "Paiement remboursé. Aucun pourboire n’a été crédité."
     },
     "verificationUnavailable": "Le statut du paiement n’a pas pu être vérifié. Réessayez dans un instant."
   },
@@ -796,5 +798,11 @@
     "maxAttendees": "Nombre maximal de participants (facultatif)",
     "createFailed": "L’événement n’a pas pu être créé. Vérifiez la date, le prix et la capacité, puis réessayez.",
     "creating": "Création…"
+  },
+  "paymentRecovery": {
+    "title": "Remboursements des paiements non crédités",
+    "captured": "{count, plural, one {# paiement non crédité : {amount}} other {# paiements non crédités : {amount}}}",
+    "refunded": "Remboursé : {amount}.",
+    "pending": "Remboursement en attente : {amount}. Aucun avantage n’a été accordé pour ces paiements."
   }
 }

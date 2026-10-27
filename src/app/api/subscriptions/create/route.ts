@@ -6,7 +6,8 @@ import { checkMoneyRateLimit } from '@/lib/rate-limit';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { checkoutResult,type ProviderCheckout, validateDodoSubscriptionProduct } from '@/lib/payment-providers';
+import { checkoutResult,type ProviderCheckout, validateDodoSubscriptionProduct,validateCheckoutUrl } from '@/lib/payment-providers';
+import { readPaymentRecovery } from '@/lib/payment-recovery';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export const dynamic = 'force-dynamic';
@@ -156,12 +157,21 @@ export async function POST(req: Request) {
     p_key: idemKey, p_correlation_id: correlationId,
   } as never);
   if (intentError) return NextResponse.json({ error: 'Subscription unavailable', correlationId }, { status: 503 });
-  const sub = data as { id: string; checkout_url: string | null };
+  const parsedIntent=z.object({id:z.string().uuid(),checkout_url:z.string().nullable()}).safeParse(data);
+  if(!parsedIntent.success)return NextResponse.json({error:'Subscription intent unavailable'},{status:503});
+  const sub=parsedIntent.data;
   const reference = `sub_${sub.id}`;
+  try{
+    if((await readPaymentRecovery(user.id,'subscription',sub.id)).length){
+      const statusUrl='/premium?payment=return';
+      return wantsJson?NextResponse.json({checkoutUrl:statusUrl}):new Response(null,{status:303,headers:{Location:statusUrl}});
+    }
+  }catch{return NextResponse.json({error:'Payment recovery unavailable'},{status:503});}
   if (sub.checkout_url) {
+    let savedUrl:string;try{savedUrl=validateCheckoutUrl(provider,sub.checkout_url);}catch{return NextResponse.json({error:'Invalid stored checkout'},{status:503});}
     return wantsJson
-      ? NextResponse.json({ checkoutUrl: sub.checkout_url })
-      : new Response(null, { status: 303, headers: { Location: sub.checkout_url } });
+      ? NextResponse.json({ checkoutUrl: savedUrl })
+      : new Response(null, { status: 303, headers: { Location: savedUrl } });
   }
 
   const email = user.email;

@@ -18,7 +18,9 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Add capture-linked refunds, cumulative credit/commission adjustments, XP reversal and paid-period access.
 - ✅ Recover missed checkout/renewal captures, persist provider session identities and audit manual promotion controls/clicks.
 - ✅ Add paid-ticket checkout, serialized capacity, verified host/referral settlement and recoverable refunds.
-- 🟡 Complete legacy amount-mismatch recovery and staging-provider validation.
+- ✅ Retain mismatched captures, queue their return and prevent checkout retries from charging again.
+- ✅ Correct subscription referral principals and transaction currencies; repair verified historical commissions with refund-aware audits.
+- 🟡 Complete staging-provider validation.
 
 ✅ 3. Cron hardening and Vercel Hobby compliance (Critical/High)
 - ✅ Standardize cron auth helper (`Authorization: Bearer <CRON_SECRET>`).

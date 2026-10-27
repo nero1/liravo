@@ -544,7 +544,9 @@
       "failed": "Deine Trinkgeldzahlung von {amount} ist fehlgeschlagen.",
       "pending": "Dein Trinkgeld von {amount} wartet auf die Zahlungsbestätigung.",
       "refunded": "Dein Trinkgeld von {amount} wurde erstattet.",
-      "partiallyRefunded": "Dein Trinkgeld von {amount} wurde teilweise erstattet."
+      "partiallyRefunded": "Dein Trinkgeld von {amount} wurde teilweise erstattet.",
+      "returnPending": "Es wurde kein Trinkgeld gutgeschrieben. Die Zahlung wird erstattet.",
+      "returned": "Zahlung erstattet. Es wurde kein Trinkgeld gutgeschrieben."
     },
     "verificationUnavailable": "Der Zahlungsstatus konnte nicht geprüft werden. Versuche es gleich erneut."
   },
@@ -796,5 +798,11 @@
     "maxAttendees": "Maximale Teilnehmerzahl (optional)",
     "createFailed": "Die Veranstaltung konnte nicht erstellt werden. Prüfe Datum, Preis und Kapazität und versuche es erneut.",
     "creating": "Wird erstellt…"
+  },
+  "paymentRecovery": {
+    "title": "Erstattung nicht gutgeschriebener Zahlungen",
+    "captured": "{count, plural, one {# nicht gutgeschriebene Zahlung: {amount}} other {# nicht gutgeschriebene Zahlungen: {amount}}}",
+    "refunded": "Erstattet: {amount}.",
+    "pending": "Ausstehende Erstattung: {amount}. Für diese Zahlungen wurden keine Leistungen gewährt."
   }
 }

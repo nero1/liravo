@@ -7,6 +7,7 @@ import { readPaymentNotice, normalizeSubscription, normalizeTip, normalizeTicket
 import { getRequestCorrelationId } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
+import { fetchCapturedPayment } from '@/lib/refund-reconciliation';
 
 async function settleTransfer(notice:PaymentNotice,correlationId:string) {
   if(notice.provider!=='paystack'||!['transfer.success','transfer.failed','transfer.reversed'].includes(notice.event))return null;
@@ -45,21 +46,27 @@ export async function paymentWebhook(request:Request) {
       return NextResponse.json({received:true,correlationId});
     }
 
-    let event:ReturnType<typeof normalizeTip>|ReturnType<typeof normalizeSubscription>|ReturnType<typeof normalizeTicket>=normalizeTicket(notice)??normalizeTip(notice);
+    let event:ReturnType<typeof normalizeTip>|ReturnType<typeof normalizeSubscription>|ReturnType<typeof normalizeTicket>=null;
+    if(notice.provider==='dodopayments'&&notice.event==='payment.succeeded'){
+      let metadata=paymentMetadata(notice);
+      const remoteId=notice.data.subscription_id??(Array.isArray(notice.data.subscription_ids)&&notice.data.subscription_ids.length===1?notice.data.subscription_ids[0]:undefined);
+      if(!metadata.tip_id&&!metadata.ticket_id&&!metadata.subscription_id&&typeof remoteId==='string'){
+        const {data,error}=await createServiceClient().from('subscriptions').select('id,user_id').eq('provider',notice.provider).eq('provider_subscription_id',remoteId).maybeSingle();
+        if(error)throw new Error('Subscription binding unavailable');
+        if(data){metadata={subscription_id:data.id,user_id:data.user_id};notice.data.metadata=metadata;}
+      }
+      if(!metadata.tip_id&&!metadata.ticket_id&&!metadata.subscription_id)return NextResponse.json({received:true,ignored:true,correlationId});
+      event=await fetchCapturedPayment('dodopayments',z.string().min(1).max(150).parse(notice.data.payment_id));
+      const payload=event.payload as {tipId?:string;ticket_id?:string;subscription_id?:string;user_id?:string};
+      if(metadata.tip_id&&metadata.tip_id!==payload.tipId||metadata.ticket_id&&metadata.ticket_id!==payload.ticket_id||metadata.subscription_id&&metadata.subscription_id!==payload.subscription_id||payload.user_id&&metadata.user_id&&metadata.user_id!==payload.user_id)throw Object.assign(new Error('Verified payment binding mismatch'),{code:'P1003'});
+    }
+    event??=normalizeTicket(notice)??normalizeTip(notice);
     if(!event){
       const remoteId=notice.data.subscription_id??(Array.isArray(notice.data.subscription_ids)&&notice.data.subscription_ids.length===1?notice.data.subscription_ids[0]:undefined);
       if(notice.provider==='dodopayments'&&(notice.event.startsWith('subscription.')||notice.event==='payment.succeeded')&&!paymentMetadata(notice).subscription_id&&typeof remoteId==='string'){
         const {data,error}=await createServiceClient().from('subscriptions').select('id,user_id').eq('provider',notice.provider).eq('provider_subscription_id',remoteId).maybeSingle();
         if(error)throw new Error('Subscription lookup failed');
         if(data)notice.data.metadata={subscription_id:data.id,user_id:data.user_id};
-      }
-      if(notice.provider==='dodopayments'&&notice.event==='payment.succeeded'&&paymentMetadata(notice).subscription_id&&!Array.isArray(notice.data.service_periods)){
-        const id=z.string().min(1).max(150).parse(notice.data.payment_id);const connection=dodoConnection();
-        const response=await fetch(`${connection.base}/payments/${encodeURIComponent(id)}`,{headers:{Authorization:`Bearer ${connection.key}`},signal:AbortSignal.timeout(6_000)});
-        if(!response.ok)throw new Error('Payment service period unavailable');
-        const payment=await response.json();
-        if(payment.payment_id!==id||!Array.isArray(payment.service_periods))throw new Error('Payment service period unavailable');
-        notice.data.service_periods=payment.service_periods;
       }
       event=normalizeSubscription(notice);
     }

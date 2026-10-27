@@ -655,7 +655,7 @@ Each user gets a unique referral code that is a numeric UUID variant — a 12-di
 
 **Commission accounting:**
 - A `referral_commissions` table tracks every commission credit: referrer_id, referred_user_id, transaction_id, transaction_type, gross_transaction_amount, platform_fee_amount, commission_rate, commission_amount, credited_at.
-- All commission calculations use Decimal.js.
+- Commissions use exact decimal arithmetic: 10% of subscription/ticket principal, or 10% of the platform fee for tips, in the paid currency.
 - Commissions are non-reversible once credited unless the underlying transaction is refunded (in which case commission is reversed atomically).
 - Idempotency keys prevent double-crediting on webhook retries.
 
