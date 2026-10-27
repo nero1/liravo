@@ -1382,7 +1382,7 @@ Distinctive display font for headings. System-friendly variable font for body (s
 - Follow / unfollow.
 - Like and "want to read" reactions.
 - In-app notification system.
-- Goodreads CSV import.
+- Goodreads CSV import: web upload/native JSON, maximum 2 MB/2,000 rows, atomic replay-safe shelf/catalog writes, no import XP.
 - Quote posting and display.
 - Basic XP system.
 - Level titles on profiles.
@@ -1606,7 +1606,7 @@ Billing returns users to an entitlement-checked pending-confirmation page; brows
 
 Development audit: migrations 029–031 restrict private profile data and RPC access, add weekly digest receipts, and expose service-only financial reconciliation counts through outbox drain. Public metadata honors profile privacy and supported language URLs. The audit retains unresolved work explicitly; provider sandbox validation is required before enabling live billing.
 
-Content retry handling: primary content, lists, rooms, events, author content, workshop drafts/feedback, reports and appeals commit durable replay snapshots with their records. Workshop capacity, free-event RSVP, list forks and final debate votes are transactional; private discussions enforce membership. Badge awards commit XP/notifications once, and author announcements deliver through a paged outbox. Author replies/verification, ARC decisions, moderation and book-chain passes now commit durable responses and effects together; ARC slots are serialized, appeals require an independent reviewer, and list-follow counts use desired-state transactions. Book/helpfulness toggles, buddy capacity and streak updates are transactional. Login text is localized, with source-reference and untranslated-label checks in CI. Wider translation and provider lifecycle gaps remain tracked in the audit.
+Content retry handling: primary content, lists, rooms, events, author content, workshop drafts/feedback, reports and appeals commit durable replay snapshots with their records. Workshop capacity, free-event RSVP, list forks and final debate votes are transactional; private discussions enforce membership. Badge awards commit XP/notifications once, and author announcements deliver through a paged outbox. Author replies/verification, ARC decisions, moderation and book-chain passes now commit durable responses and effects together; ARC slots are serialized, appeals require an independent reviewer, and list-follow counts use desired-state transactions. Book/helpfulness toggles, buddy capacity/chapter/notes and streak updates are transactional; replies stay within their group. Login text is localized, with source-reference and untranslated-label checks in CI. Wider translation and provider lifecycle gaps remain tracked in the audit.
 
 Admin operations now keep cron credentials server-side, show integrity alerts, and use localized controls. Concurrent provider changes preserve one enabled sign-in provider. Referral binding/reward/notification commit together, and browser profile writes cannot replace referral identity. These paths are included in the database rehearsal.
 

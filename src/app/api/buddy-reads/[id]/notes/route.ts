@@ -10,6 +10,7 @@ export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid buddy read'},{status:400});
   const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,7 +33,7 @@ export async function GET(
 }
 
 const NoteSchema = z.object({
-  content: z.string().min(1).max(2000),
+  content: z.string().trim().min(1).max(2000),
   reply_to_id: z.string().uuid().nullable().optional(),
 });
 
@@ -40,18 +41,20 @@ export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid buddy read'},{status:400});
   const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   // Verify participant
-  const { data: participant } = await supabase
+  const { data: participant,error:membershipError } = await supabase
     .from('buddy_read_members')
     .select('user_id')
     .eq('buddy_read_id', params.id)
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
 
+  if(membershipError)return NextResponse.json({error:'Membership unavailable'},{status:503});
   if (!participant) return NextResponse.json({ error: 'Not a participant' }, { status: 403 });
 
   let body: unknown;

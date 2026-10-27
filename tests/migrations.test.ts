@@ -83,6 +83,20 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
           throw rolledBack;
         });}catch(error){if(error!==rolledBack)throw error;}
       }
+      if(file.startsWith('051_')){
+        const rolledBack=new Error('verified legacy buddy rollback');
+        try{await sql.begin(async tx=>{
+          const user=crypto.randomUUID();await tx`insert into auth.users(id,email,raw_user_meta_data) values(${user},'legacy-buddy@example.test','{"username":"legacy_buddy_scope"}')`;
+          const [book]=await tx`insert into books(title,author_name) values('Legacy buddy','Author') returning id`;
+          const rooms=await tx`insert into buddy_reads(created_by,book_id,max_participants) values(${user},${book.id},3),(${user},${book.id},3) returning id`;
+          for(const room of rooms)await tx`insert into buddy_read_members(buddy_read_id,user_id) values(${room.id},${user})`;
+          const [parent]=await tx`insert into buddy_read_notes(buddy_read_id,user_id,content) values(${rooms[0].id},${user},'Legacy parent') returning id`;
+          const [reply]=await tx`insert into buddy_read_notes(buddy_read_id,user_id,content,reply_to_id) values(${rooms[1].id},${user},'Legacy cross-group reply',${parent.id}) returning id`;
+          await tx.unsafe(readFileSync(`supabase/migrations/${file}`,'utf8')).simple();
+          expect((await tx`select reply_to_id,content from buddy_read_notes where id=${reply.id}`)[0]).toMatchObject({reply_to_id:null,content:'Legacy cross-group reply'});
+          throw rolledBack;
+        });}catch(error){if(error!==rolledBack)throw error;}
+      }
       await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
       if(legacyTicket){
         expect((await sql`select status from event_tickets where id=${legacyUser}`)[0].status).toBe('legacy_hold');
@@ -1222,6 +1236,64 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       if(currency==='NGN')expect((await sql`select status from payout_requests where user_id=${referrer} and currency='NGN'`)[0].status).toBe('cancelled');
     }
     for(const routine of ['process_payment_event_legacy(text,text,jsonb,text)','process_refund_event_047(text,text,text,bigint,text,text)'])expect((await sql`select has_function_privilege('service_role',${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const reader=crypto.randomUUID(),other=crypto.randomUUID();
+    for(const [index,id] of [reader,other].entries())await sql`insert into auth.users(id,email,raw_user_meta_data) values(${id},${'reading-integrity'+index+'@example.test'},${sql.json({username:'reading_integrity_'+index})})`;
+    const [book]=await sql`insert into books(title,author_name) values('Buddy integrity','Author') returning id`;
+    const rooms=await sql`insert into buddy_reads(created_by,book_id,max_participants,current_chapter,is_active) values(${reader},${book.id},3,1,true),(${other},${book.id},3,1,true) returning id`;
+    await sql`insert into buddy_read_members(buddy_read_id,user_id) values(${rooms[0].id},${reader}),(${rooms[1].id},${other})`;
+    await sql`update buddy_reads set is_private=true where id=${rooms[1].id}`;
+    await sql.begin(async tx=>{
+      await tx`select set_config('request.jwt.claim.sub',${reader},true),set_config('request.jwt.claim.role','authenticated',true)`;
+      await tx.unsafe('set local role authenticated');
+      expect((await tx`select count(*)::int as count from buddy_reads where id in (${rooms[0].id},${rooms[1].id})`)[0].count).toBe(1);
+      expect((await tx`select count(*)::int as count from buddy_read_members where buddy_read_id=${rooms[0].id}`)[0].count).toBe(1);
+      expect((await tx`select count(*)::int as count from buddy_read_notes where buddy_read_id=${rooms[1].id}`)[0].count).toBe(0);
+    });
+    const update={current_chapter:3,note:'A shared update'};
+    const updates=await Promise.all(Array.from({length:4},()=>sql`select update_buddy_progress(${reader},${rooms[0].id},'buddy-atomic-update',${sql.json(update)}) as result`));
+    expect(new Set(updates.map(rows=>rows[0].result.note.id)).size).toBe(1);
+    expect((await sql`select count(*)::int as count from buddy_read_notes where buddy_read_id=${rooms[0].id}`)[0].count).toBe(1);
+    await expect(sql`select update_buddy_progress(${reader},${rooms[0].id},'buddy-atomic-update',${sql.json({...update,current_chapter:4})})`).rejects.toThrow('Conflicting');
+    await expect(sql`select update_buddy_progress(${other},${rooms[0].id},'buddy-foreign-update',${sql.json(update)})`).rejects.toThrow('participant');
+    await expect(sql`insert into buddy_read_notes(buddy_read_id,user_id,content,reply_to_id) values(${rooms[1].id},${other},'Foreign reply',${updates[0][0].result.note.id})`).rejects.toThrow('Reply unavailable');
+    await sql.unsafe("create function reject_fixture_note() returns trigger language plpgsql as $$begin if new.content='rollback fixture' then raise exception 'fixture failure'; end if; return new; end $$; create trigger reject_fixture_note before insert on buddy_read_notes for each row execute function reject_fixture_note();").simple();
+    await expect(sql`select update_buddy_progress(${reader},${rooms[0].id},'buddy-rollback-update',${sql.json({current_chapter:9,note:'rollback fixture'})})`).rejects.toThrow('fixture failure');
+    expect((await sql`select current_chapter from buddy_reads where id=${rooms[0].id}`)[0].current_chapter).toBe(3);
+    expect((await sql`select count(*)::int as count from content_intents where actor_id=${reader} and intent_key='buddy-rollback-update'`)[0].count).toBe(0);
+    await sql.unsafe('drop trigger reject_fixture_note on buddy_read_notes;drop function reject_fixture_note();').simple();
+    const [reply]=await sql`insert into buddy_read_notes(buddy_read_id,user_id,content,reply_to_id) values(${rooms[0].id},${reader},'Valid reply',${updates[0][0].result.note.id}) returning id`;
+    await sql`update buddy_reads set is_active=false where id=${rooms[0].id}`;
+    await sql`delete from buddy_read_notes where id=${updates[0][0].result.note.id}`;
+    expect((await sql`select reply_to_id from buddy_read_notes where id=${reply.id}`)[0].reply_to_id).toBeNull();
+    await expect(sql`insert into buddy_read_notes(buddy_read_id,user_id,content) values(${rooms[0].id},${reader},'Closed group')`).rejects.toThrow('unavailable');
+    const {parseGoodreadsImport}=await import('@/lib/goodreads-import');
+    const parsed=parseGoodreadsImport('Book Id,Title,Author,ISBN,Exclusive Shelf,Date Read\n9001,Import One,Author,0306406152,read,2025/10/20\n9002,Import Two,Author,,currently-reading,\n9003,Import One duplicate,Author,0306406152,to-read,\n,Missing identity,Author,,read,');
+    const importRows=parsed.rows;
+    const imports=await Promise.all(Array.from({length:4},()=>sql`select import_goodreads_library(${reader},'reading-import-once',${sql.json(importRows)},${parsed.skipped}) as result`));
+    expect(imports.every(rows=>rows[0].result.imported===2&&rows[0].result.skipped===2)).toBe(true);
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${reader}`)[0].count).toBe(2);
+    expect((await sql`select count(distinct book_id)::int as count from goodreads_book_identities where goodreads_id in ('9001','9003')`)[0].count).toBe(1);
+    expect((await sql`select finished_at::text as date from shelf_books sb join goodreads_book_identities i on i.book_id=sb.book_id where sb.user_id=${reader} and i.goodreads_id='9001'`)[0].date).toBe('2025-10-20');
+    expect((await sql`select count(*)::int as count from xp_ledger where user_id=${reader}`)[0].count).toBe(0);
+    expect((await sql`select books_read_count from users where id=${reader}`)[0].books_read_count).toBe(1);
+    expect((await sql`select currently_reading_count from books where id=(select book_id from goodreads_book_identities where goodreads_id='9002')`)[0].currently_reading_count).toBe(1);
+    expect((await sql`select import_goodreads_library(${reader},'reading-import-new-key',${sql.json(importRows)},${parsed.skipped}) as result`)[0].result).toEqual({imported:0,skipped:4});
+    await expect(sql`select import_goodreads_library(${reader},'reading-import-once',${sql.json(importRows.slice(0,1))},0)`).rejects.toThrow('Conflicting');
+    const invalid=[{book:{title:'Rollback catalog',author_name:'Author',goodreads_id:'999001'},shelf:'want_to_read',finished_at:null},{book:{title:'Invalid',author_name:'Author',goodreads_id:'999002'},shelf:'invalid',finished_at:null}];
+    await expect(sql`select import_goodreads_library(${other},'reading-import-rollback',${sql.json(invalid)},0)`).rejects.toThrow('Invalid shelf');
+    expect((await sql`select count(*)::int as count from books where title='Rollback catalog'`)[0].count).toBe(0);
+    const third=crypto.randomUUID();await sql`insert into auth.users(id,email,raw_user_meta_data) values(${third},'import-third@example.test','{"username":"import_third"}')`;
+    await sql`insert into goodreads_book_identities(goodreads_id,book_id) select case goodreads_id when '9001' then '9004' else '9005' end,book_id from goodreads_book_identities where goodreads_id in ('9001','9002')`;
+    const aliases=(ids:string[])=>ids.map(id=>({book:{title:'Alias '+id,author_name:'Author',goodreads_id:id},shelf:'want_to_read',finished_at:null}));
+    const parallelImports=await Promise.all([
+      sql`select import_goodreads_library(${other},'reading-import-order-a',${sql.json(aliases(['9001','9002']))},0) as result`,
+      sql`select import_goodreads_library(${third},'reading-import-order-b',${sql.json(aliases(['9005','9004']))},0) as result`,
+    ]);
+    expect(parallelImports.every(rows=>rows[0].result.imported===2)).toBe(true);
+    expect((await sql`select want_to_read_count,currently_reading_count from books where id=(select book_id from goodreads_book_identities where goodreads_id='9002')`)[0]).toMatchObject({want_to_read_count:2,currently_reading_count:1});
+    for(const role of ['anon','authenticated'])for(const routine of ['update_buddy_progress(uuid,uuid,text,jsonb)','import_goodreads_library(uuid,text,jsonb,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);
