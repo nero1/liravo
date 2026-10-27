@@ -448,6 +448,8 @@ Unsupported events or unrelated products are acknowledged without changes. Do no
 
 ## 12. Vercel Deployment
 
+`npm run build` checks every server function trace plus the shared runtime against a 200 MB uncompressed budget (Vercel limit: 250 MB). Transformers/ONNX are browser-only dependencies; the build rejects them in server traces. Keep the server webpack alias in place when changing the client tone classifier.
+
 1. Fork or push the repository to GitHub.
 2. Import the project on [Vercel](https://vercel.com).
 3. In the Vercel project settings, add all environment variables from `.env.local.example`.
