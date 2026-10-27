@@ -47,7 +47,7 @@ const remotePatterns = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack(config, { isServer }) {
-    if (isServer) config.externals.push('@huggingface/transformers');
+    if (isServer) config.resolve.alias['@huggingface/transformers'] = false;
     // ONNX emits pre-minified ES module workers; Next 14's script minifier cannot parse import.meta.
     config.plugins.push({
       apply(compiler) {

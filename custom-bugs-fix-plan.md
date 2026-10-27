@@ -58,6 +58,7 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 🟡 10. Validation rollout
 - 🟡 Add concurrency/load tests for payout/webhook/cron paths.
 - ✅ Add security tests (CSRF, replay, IDOR, abuse throttling).
+- ✅ Keep browser inference out of server functions and enforce the uncompressed bundle budget during builds.
 - ✅ Verify remaining content tables, durable creates, group capacity, private discussions, badge rewards and paged author notifications.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.
