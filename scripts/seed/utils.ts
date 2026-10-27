@@ -2,6 +2,8 @@ export interface SeedResult {
   inserted: number;
   skipped: number;
   errors: string[];
+  repaired?:number;
+  pending?:number;
 }
 
 export const isDryRun = process.argv.includes('--dry-run');
@@ -17,11 +19,13 @@ export async function step<T extends SeedResult>(label: string, fn: () => Promis
     const result = await fn();
     const parts: string[] = [];
     if (result.inserted > 0) parts.push(`${result.inserted} inserted`);
+    if (result.repaired) parts.push(`${result.repaired} repaired`);
     if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
     const summary = parts.length ? ` (${parts.join(', ')})` : '';
-    console.log(` done${summary}`);
+    console.log(` ${result.errors.length?'incomplete':'done'}${summary}`);
     if (result.errors.length > 0) {
       result.errors.forEach((e) => console.warn(`    WARN: ${e}`));
+      throw new Error('Seed incomplete; retry after resolving the reported errors');
     }
     return result;
   } catch (err) {

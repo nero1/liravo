@@ -1028,7 +1028,7 @@ Accessible at `/admin`. Every admin route verifies `is_admin = true` against the
 ### 13.9 Theme and UI Configuration
 
 - Toggle between Light, Dark, and custom themes.
-- Upload and activate custom themes (CSS variable overrides stored in the database).
+- Upload, activate and deactivate validated CSS variable themes. One active theme overrides the site’s light/dark defaults; changes and replay receipts commit with audits.
 
 ### 13.10 Feature Flags
 
@@ -1100,7 +1100,7 @@ Create 4 weeks of weekly writing challenges and 2 monthly reading challenges bef
 
 ### 14.7 Liravo Editors Account
 
-A dedicated system account with username `@liravo` and display name "Liravo Editors" is created during the database seed. This account:
+A dedicated system account with username `@liravo_editors` and display name "Liravo Editors" is created during the database seed. This account:
 - Posts the seeded reading lists, reviews, and quotes.
 - Is clearly labelled as the platform's editorial account.
 - Cannot be followed (or can be followed for curated picks — product owner decides).

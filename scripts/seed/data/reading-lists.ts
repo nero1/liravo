@@ -13,7 +13,7 @@ export const SEED_READING_LISTS: SeedReadingList[] = [
       '9780385547345', // Lessons in Chemistry
       '9780593321201', // Tomorrow, and Tomorrow, and Tomorrow
       '9780593135204', // Project Hail Mary
-      '9780593311043', // Klara and the Sun
+      '9780593318171', // Klara and the Sun
       '9780063251922', // Demon Copperhead
       '9781538742006', // The Housemaid
       '9781649374042', // Fourth Wing
@@ -87,7 +87,7 @@ export const SEED_READING_LISTS: SeedReadingList[] = [
       '9780316556347', // Circe
       '9780062060624', // The Song of Achilles
       '9780451166890', // The Pillars of the Earth
-      '9780670026190', // A Gentleman in Moscow
+      '9780670026197', // A Gentleman in Moscow
       '9780062654915', // The Alice Network
       '9780805080681', // Wolf Hall
     ],

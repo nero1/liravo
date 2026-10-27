@@ -274,6 +274,16 @@
     "verificationUnavailable": "Le statut du paiement n’a pas pu être vérifié. Réessayez dans un instant."
   },
   "admin": {
+    "seedRepaired": " {count, plural, one {# réparé} other {# réparés}}.",
+    "themeDeactivated": "Thème « {name} » désactivé.",
+    "eventNameLabel": "Nom de l’événement",
+    "eventBadgeLabel": "Nom du badge",
+    "eventStartUtc": "Début (UTC)",
+    "eventEndUtc": "Fin (UTC)",
+    "eventPublished": "Publié",
+    "editSeasonalEvent": "Modifier l’événement saisonnier",
+    "eventSaveFailed": "Impossible d’enregistrer l’événement. Vérifiez les dates et réessayez.",
+    "saveEvent": "Enregistrer l’événement",
     "cron": {
       "title": "Tâches planifiées et état du système",
       "pending": "Événements en attente",
@@ -444,7 +454,7 @@
     "createLiravoEditorsAccount": "Créer le compte éditorial Liravo",
     "editorsSeedDescription": "Crée le compte système @liravo_editors utilisé pour le contenu éditorial de la plateforme. Commencez par cette étape.",
     "seedBooks": "Ajouter les livres initiaux",
-    "booksSeedDescription": "Ajoute 100 livres sélectionnés dans tous les genres : littérature, thriller, science-fiction, fantasy, romance, histoire, essais, classiques et écriture. Les ISBN-13 existants sont ignorés.",
+    "booksSeedDescription": "Ajoute 101 livres sélectionnés dans tous les genres : littérature, thriller, science-fiction, fantasy, romance, histoire, essais, classiques et écriture. Les ISBN-13 existants sont ignorés.",
     "seedReadingLists": "Ajouter les listes initiales",
     "listsSeedDescription": "Crée 20 listes de lecture optimisées pour le référencement, appartenant à @liravo_editors. Les livres et le compte éditorial doivent déjà exister.",
     "seedWritingPrompts63DaysStatic": "Ajouter les sujets d’écriture (63 jours, fixes)",

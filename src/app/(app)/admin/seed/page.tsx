@@ -18,19 +18,20 @@ export default function AdminSeedPage() {
     try {
       const cron = url.startsWith('/api/cron/');
       const res = await fetch(cron ? '/api/admin/cron-status' : url, { method: 'POST', ...(cron ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job: url.split('/').at(-1) }) } : {}) });
-      const data = await res.json() as { message?: string; error?: string; inserted?: number; skipped?: number };
+      const data = await res.json() as { message?: string; error?: string; inserted?: number; skipped?: number;repaired?:number;errors?:string[];pending?:number };
       if (res.ok) {
         const detail = typeof data.inserted === 'number'
           ? t('seedResult', { inserted: data.inserted, skipped: data.skipped ?? 0 })
           : '';
+        const repairs=data.repaired?t('seedRepaired',{count:data.repaired}):'';
         setResults((r) => ({
           ...r,
-          [key]: { success: true, message: (data.message ?? t('done')) + detail },
+          [key]: { success: true, message: (data.message ?? t('done')) + detail+repairs },
         }));
       } else {
         setResults((r) => ({
           ...r,
-          [key]: { success: false, message: data.error ?? t('actionFailed') },
+          [key]: { success: false, message: t('actionFailed')+(data.errors?.length?' '+data.errors[0]:'') },
         }));
       }
     } catch (e) {
