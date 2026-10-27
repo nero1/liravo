@@ -544,7 +544,9 @@
       "failed": "Your {amount} tip payment failed.",
       "pending": "Your {amount} tip is awaiting payment confirmation.",
       "refunded": "Your tip of {amount} was refunded.",
-      "partiallyRefunded": "Your tip of {amount} was partially refunded."
+      "partiallyRefunded": "Your tip of {amount} was partially refunded.",
+      "returnPending": "No tip was credited. The captured payment is being returned.",
+      "returned": "Payment returned. No tip was credited."
     },
     "verificationUnavailable": "Payment status could not be checked. Please try again shortly."
   },
@@ -796,5 +798,11 @@
     "maxAttendees": "Maximum attendees (optional)",
     "createFailed": "The event could not be created. Check the date, price and capacity, then retry.",
     "creating": "Creating…"
+  },
+  "paymentRecovery": {
+    "title": "Uncredited payment returns",
+    "captured": "{count, plural, one {# uncredited payment: {amount}} other {# uncredited payments: {amount}}}",
+    "refunded": "Returned: {amount}.",
+    "pending": "Awaiting return: {amount}. No benefits were granted for these payments."
   }
 }

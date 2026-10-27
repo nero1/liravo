@@ -7,6 +7,8 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { CancelSubscriptionButton } from '@/components/creator/CancelSubscriptionButton';
+import { readPaymentRecovery } from '@/lib/payment-recovery';
+import { PaymentRecoverySummary } from '@/components/creator/PaymentRecoverySummary';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +41,7 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
   const canCancel=subscriptions.some((item:{provider:string;renewal_cancelled:boolean})=>item.provider==='dodopayments'&&!item.renewal_cancelled);
   const googleManaged=subscriptions.some((item:{provider:string})=>item.provider==='google_play');
   const paystackPass=subscriptions.some((item:{provider:string})=>item.provider==='paystack');
+  const recovery=await readPaymentRecovery(user.id,'subscription');
 
 
   return (
@@ -52,6 +55,7 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
       </div>
 
       {searchParams.verification==='unavailable'&&<p role="alert" className="text-sm text-center mb-4">{t('verificationUnavailable')}</p>}
+      <PaymentRecoverySummary rows={recovery}/>
       {searchParams.payment === 'pending' && !isPremium && <div className="text-center text-sm mb-4 space-y-2"><p role="status">{t('paymentPending')}</p><form action="/api/payments/reconcile" method="POST"><CsrfInput /><button className="underline">{t('checkPayment')}</button></form></div>}
       {isPremium ? (
         <div className="rounded-xl border border-accent bg-accent/10 p-6 text-center mb-8">

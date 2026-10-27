@@ -4,6 +4,8 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { createServiceClient } from '@/lib/supabase/server';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
+import { readPaymentRecovery } from '@/lib/payment-recovery';
+import { PaymentRecoverySummary } from '@/components/creator/PaymentRecoverySummary';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false } };
@@ -17,11 +19,13 @@ export default async function TipStatusPage({ params,searchParams }: { params: {
   if (!data) notFound();
   const t = await getTranslations('tips');
   const formatter = await getFormatter();
-  const status = data.status==='completed'&&Number(data.refunded_recipient_amount)>0?'partiallyRefunded':['completed','failed','refunded'].includes(data.status)?data.status:'pending';
+  const recovery=await readPaymentRecovery(user.id,'tip',params.id);
+  const status = data.status==='completed'&&Number(data.refunded_recipient_amount)>0?'partiallyRefunded':['completed','failed','refunded'].includes(data.status)?data.status:recovery.length?(recovery.some(row=>row.charged_minor>row.refunded_minor)?'returnPending':'returned'):'pending';
   return <div className="max-w-lg mx-auto px-4 py-8 space-y-4">
     <h1 className="font-display text-2xl font-bold">{t('statusTitle')}</h1>
     {searchParams.verification==='unavailable'&&<p role="alert">{t('verificationUnavailable')}</p>}
     <p role="status">{t(`status.${status}`, { amount: formatter.number(Number(data.amount), { style: 'currency', currency: data.currency }) })}</p>
+    <PaymentRecoverySummary rows={recovery}/>
     {status==='pending'?<form action="/api/payments/reconcile" method="POST"><CsrfInput /><input type="hidden" name="_return" value={`/tips/${params.id}`} /><button className="underline">{t('refresh')}</button></form>:<a href={`/tips/${params.id}`} className="underline">{t('refresh')}</a>}
   </div>;
 }

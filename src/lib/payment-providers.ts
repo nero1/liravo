@@ -41,27 +41,7 @@ export async function createTipCheckout(tip: { id: string; amount: string; curre
     const result = await response.json();
     return checkoutResult('paystack',result,reference);
   }
-  const { key, base } = dodoConnection();
-  const productId = process.env[`DODOPAYMENTS_TIP_PRODUCT_ID_${tip.currency}`];
-  if (!productId) throw new Error('Tip product is not configured');
-  const productResponse = await fetch(`${base}/products/${encodeURIComponent(productId)}`, {
-    headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(5_000),
-  });
-  if (!productResponse.ok) throw new Error(`Tip product lookup failed: ${productResponse.status}`);
-  const product = await productResponse.json();
-  if (product.is_recurring !== false || product.price?.type !== 'one_time_price' ||
-    product.price.currency !== tip.currency || product.price.pay_what_you_want !== true ||
-    product.price.price > amount || product.price.tax_inclusive===true || product.price.purchasing_power_parity || product.price.discount_bps || product.price.discount) throw new Error('Invalid tip product pricing');
-  const response = await fetch(`${base}/checkouts`, {
-    method: 'POST', signal: AbortSignal.timeout(8_000),
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'Idempotency-Key': reference },
-    body: JSON.stringify({ customer: { email }, billing_currency: tip.currency,
-      product_cart: [{ product_id: productId, quantity: 1, amount }],
-      feature_flags: { allow_currency_selection: false, allow_discount_code: false },
-      return_url: `${appUrl}/tips/${tip.id}`, metadata: { tip_id: tip.id, reference } }),
-  });
-  if (!response.ok) throw new Error(`Dodo checkout failed: ${response.status}`);
-  return checkoutResult('dodopayments',await response.json(),reference);
+  return createFixedCheckout(reference,amount,tip.currency,email,`${appUrl}/tips/${tip.id}`,{tip_id:tip.id,reference});
 }
 
 export async function createTicketCheckout(ticket:{id:string;user_id:string;amount_paid:string;currency:string},email:string){
@@ -75,14 +55,19 @@ export async function createTicketCheckout(ticket:{id:string;user_id:string;amou
     if(!response.ok)throw new Error('Ticket checkout unavailable');
     return checkoutResult('paystack',await response.json(),reference);
   }
-  const {key,base}=dodoConnection(),headers={Authorization:`Bearer ${key}`,'Content-Type':'application/json'};
-  const productResponse=await fetch(`${base}/products`,{method:'POST',headers:{...headers,'Idempotency-Key':`product_${reference}`},signal:AbortSignal.timeout(8000),body:JSON.stringify({name:`Liravo event ticket ${ticket.id}`,tax_category:'digital_products',price:{type:'one_time_price',price:amount,currency:ticket.currency,pay_what_you_want:false,tax_inclusive:false,purchasing_power_parity:false,discount_bps:0},metadata})});
-  if(!productResponse.ok)throw new Error('Ticket product unavailable');
+  return createFixedCheckout(reference,amount,ticket.currency,email,returnUrl,metadata);
+}
+
+async function createFixedCheckout(reference:string,amount:number,currency:string,email:string,returnUrl:string,metadata:Record<string,string>){
+  if(!Number.isSafeInteger(amount)||amount<=0||!['USD','EUR'].includes(currency))throw new Error('Invalid checkout amount or currency');
+  const {key,base}=dodoConnection(),headers={Authorization:`Bearer ${key}`,'Content-Type':'application/json'},deadline=Date.now()+10000;
+  const productResponse=await fetch(`${base}/products`,{method:'POST',headers:{...headers,'Idempotency-Key':`product_${reference}`},signal:AbortSignal.timeout(5000),body:JSON.stringify({name:`Liravo ${reference}`,tax_category:'digital_products',pricing_mode:null,price:{type:'one_time_price',price:amount,currency,pay_what_you_want:false,tax_inclusive:false,purchasing_power_parity:false,discount_bps:0},metadata})});
+  if(!productResponse.ok)throw new Error(`Product creation unavailable: ${productResponse.status}`);
   const product=await productResponse.json(),price=product.price;
   const productId=z.string().regex(/^[a-zA-Z0-9_-]{1,150}$/).parse(product.product_id);
-  if(product.is_recurring!==false||price?.type!=='one_time_price'||price.currency!==ticket.currency||price.price!==amount||price.pay_what_you_want===true||price.tax_inclusive===true||price.purchasing_power_parity||price.discount_bps||price.discount)throw new Error('Invalid ticket product pricing');
-  const response=await fetch(`${base}/checkouts`,{method:'POST',headers:{...headers,'Idempotency-Key':reference},signal:AbortSignal.timeout(8000),body:JSON.stringify({customer:{email},billing_currency:ticket.currency,product_cart:[{product_id:productId,quantity:1}],feature_flags:{allow_currency_selection:false,allow_discount_code:false},return_url:returnUrl,metadata})});
-  if(!response.ok)throw new Error('Ticket checkout unavailable');
+  if(product.is_recurring!==false||price?.type!=='one_time_price'||price.currency!==currency||price.price!==amount||price.pay_what_you_want===true||price.tax_inclusive===true||price.purchasing_power_parity||price.discount_bps||price.discount||product.pricing_mode!=null)throw new Error('Invalid product pricing');
+  const response=await fetch(`${base}/checkouts`,{method:'POST',headers:{...headers,'Idempotency-Key':reference},signal:AbortSignal.timeout(Math.max(1,deadline-Date.now())),body:JSON.stringify({customer:{email},billing_currency:currency,product_cart:[{product_id:productId,quantity:1}],feature_flags:{allow_currency_selection:false,allow_discount_code:false},return_url:returnUrl,metadata})});
+  if(!response.ok)throw new Error(`Checkout unavailable: ${response.status}`);
   return checkoutResult('dodopayments',await response.json(),reference);
 }
 

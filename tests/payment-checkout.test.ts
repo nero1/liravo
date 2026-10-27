@@ -6,29 +6,29 @@ beforeEach(() => {
   vi.stubGlobal('fetch',fetchMock);
   vi.stubEnv('DODOPAYMENTS_API_KEY','isolated-test-key');
   vi.stubEnv('DODOPAYMENTS_ENVIRONMENT','test_mode');
-  vi.stubEnv('DODOPAYMENTS_TIP_PRODUCT_ID_USD','tip_product');
   vi.stubEnv('NEXT_PUBLIC_APP_URL','https://app.test');
   fetchMock.mockReset();
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 const response=(body: unknown,status=200)=>new Response(JSON.stringify(body),{status});
 const tip={id:'00000000-0000-4000-8000-000000000001',amount:'3.00',currency:'USD'};
-const product={is_recurring:false,price:{type:'one_time_price',currency:'USD',pay_what_you_want:true,price:50}};
+const product={product_id:'tip_product',is_recurring:false,price:{type:'one_time_price',currency:'USD',pay_what_you_want:false,price:300}};
 
 it('opens a checked one-time tip product with exact minor units and a stable provider intent',async()=>{
   fetchMock.mockResolvedValueOnce(response(product)).mockResolvedValueOnce(response({session_id:'cks_tip_fixture',checkout_url:'https://checkout.dodopayments.com/pay/tip'}));
   expect(await createTipCheckout(tip,'reader@example.test')).toEqual({url:'https://checkout.dodopayments.com/pay/tip',checkoutId:'cks_tip_fixture'});
-  expect(fetchMock.mock.calls[0][0]).toBe('https://test.dodopayments.com/products/tip_product');
+  expect(fetchMock.mock.calls[0][0]).toBe('https://test.dodopayments.com/products');
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body).price).toMatchObject({price:300,currency:'USD',pay_what_you_want:false});
   const [url,request]=fetchMock.mock.calls[1];
   expect(url).toBe('https://test.dodopayments.com/checkouts');
   expect(request.headers['Idempotency-Key']).toBe(`tip_${tip.id}`);
-  expect(JSON.parse(request.body)).toMatchObject({product_cart:[{product_id:'tip_product',amount:300,quantity:1}],metadata:{tip_id:tip.id},return_url:`https://app.test/tips/${tip.id}`,feature_flags:{allow_currency_selection:false,allow_discount_code:false}});
+  expect(JSON.parse(request.body)).toMatchObject({product_cart:[{product_id:'tip_product',quantity:1}],metadata:{tip_id:tip.id},return_url:`https://app.test/tips/${tip.id}`,feature_flags:{allow_currency_selection:false,allow_discount_code:false}});
 });
 
-it('refuses a recurring, wrong-currency, fixed-price or discounted tip product before checkout',async()=>{
-  for(const bad of [{...product,is_recurring:true},{...product,price:{...product.price,currency:'EUR'}},{...product,price:{...product.price,pay_what_you_want:false}},{...product,price:{...product.price,discount_bps:100}}]) {
+it('refuses a recurring, wrong-currency, editable or discounted tip product before checkout',async()=>{
+  for(const bad of [{...product,is_recurring:true},{...product,price:{...product.price,currency:'EUR'}},{...product,price:{...product.price,pay_what_you_want:true}},{...product,price:{...product.price,discount_bps:100}}]) {
     fetchMock.mockResolvedValueOnce(response(bad));
-    await expect(createTipCheckout(tip,'reader@example.test')).rejects.toThrow('Invalid tip product');
+    await expect(createTipCheckout(tip,'reader@example.test')).rejects.toThrow('Invalid product');
   }
   expect(fetchMock).toHaveBeenCalledTimes(4);
 });

@@ -7,10 +7,12 @@ import { POST as cancel } from '@/app/api/subscriptions/cancel/route';
 import { POST as createTip } from '@/app/api/tips/create/route';
 import { POST as requestPayout } from '@/app/api/earnings/request-payout/route';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
+import { readPaymentRecovery } from '@/lib/payment-recovery';
 
 vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
-vi.mock('@/lib/payment-providers',()=>({cancelProviderSubscription:vi.fn(),createTipCheckout:vi.fn()}));
+vi.mock('@/lib/payment-providers',async original=>({...await original<typeof import('@/lib/payment-providers')>(),cancelProviderSubscription:vi.fn(),createTipCheckout:vi.fn()}));
+vi.mock('@/lib/payment-recovery',()=>({readPaymentRecovery:vi.fn()}));
 vi.mock('@/lib/metrics',()=>({recordMetric:vi.fn()}));
 vi.mock('@/lib/operational-alerts',()=>({observeOperationalSignal:vi.fn()}));
 vi.mock('@/lib/rate-limit',()=>({checkMoneyRateLimit:async()=>({allowed:true})}));
@@ -32,6 +34,7 @@ const builder={
 };
 beforeEach(()=>{
   vi.clearAllMocks();filters.length=0;googleSubscriptions=[];
+  vi.mocked(readPaymentRecovery).mockResolvedValue([]);
   vi.mocked(getCurrentUser).mockResolvedValue({id:user,email:'authenticated@example.test'});
   vi.mocked(createServiceClient).mockReturnValue({rpc,from:()=>builder} as unknown as ReturnType<typeof createServiceClient>);
   rpc.mockReset();
@@ -86,6 +89,14 @@ it('returns a retryable checkout failure while preserving the durable tip intent
   expect(response.status).toBe(502);
   expect(update).not.toHaveBeenCalled();
   expect(rpc).toHaveBeenCalledWith('create_tip_transaction',expect.objectContaining({p_idempotency_key:'tip-request-key'}));
+});
+
+it('returns the owned receipt for an uncredited capture instead of reopening its checkout',async()=>{
+  rpc.mockResolvedValue({data:{id:tip},error:null});
+  vi.mocked(readPaymentRecovery).mockResolvedValue([{currency:'USD',charged_minor:200,refunded_minor:0,count:1}]);
+  const response=await createTip(new Request('https://app.test/api/tips/create',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'tip-request-key'},body:JSON.stringify({recipientId:recipient,amount:3,currency:'USD'})}));
+  expect(await response.json()).toMatchObject({tipId:tip,redirectUrl:'/tips/'+tip});
+  expect(createTipCheckout).not.toHaveBeenCalled();expect(readPaymentRecovery).toHaveBeenCalledWith(user,'tip',tip);
 });
 
 it('alerts on payout dependencies rather than ordinary insufficient-balance rejections',async()=>{

@@ -6,7 +6,8 @@ import { checkMoneyRateLimit } from '@/lib/rate-limit';
 import { recordMetric } from '@/lib/metrics';
 import { getClientIp, getRequestCorrelationId } from '@/lib/utils';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { createTipCheckout } from '@/lib/payment-providers';
+import { createTipCheckout,validateCheckoutUrl } from '@/lib/payment-providers';
+import { readPaymentRecovery } from '@/lib/payment-recovery';
 import { withRedisLock } from '@/lib/locks';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
 
@@ -103,11 +104,11 @@ export async function POST(req: Request) {
   if (!tip?.id) return NextResponse.json({ error: 'Missing tip identifier', correlationId }, { status: 503 });
   try {
     const result = await withRedisLock(`tip-checkout:${tip.id}`, 30, async () => {
-      const { data, error } = await supabase.from('tips').select('id,amount,currency,status,checkout_url').eq('id', tip.id!).single();
+      const { data, error } = await supabase.from('tips').select('id,amount,currency,status,checkout_url').eq('id', tip.id!).eq('user_id',user.id).single();
       if (error || !data) throw new Error('Tip lookup failed');
       const saved = data as unknown as { id: string; amount: string; currency: string; status: string; checkout_url: string | null };
-      if (saved.status === 'completed'||saved.status==='refunded') return { redirectUrl: `/tips/${tip.id}` };
-      if (saved.checkout_url) return { redirectUrl: saved.checkout_url };
+      if (saved.status === 'completed'||saved.status==='refunded'||(await readPaymentRecovery(user.id,'tip',tip.id)).length) return { redirectUrl: `/tips/${tip.id}` };
+      if (saved.checkout_url) return { redirectUrl: validateCheckoutUrl(saved.currency==='NGN'?'paystack':'dodopayments',saved.checkout_url) };
       if (!z.email().safeParse(user.email).success) throw new Error('Payment contact email is required');
       const checkout = await createTipCheckout(saved, user.email);
       const checkoutUrl=checkout.url;
