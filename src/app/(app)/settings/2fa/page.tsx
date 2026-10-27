@@ -1,31 +1,16 @@
-import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
-import type { Metadata } from 'next';
+import {createServiceClient} from '@/lib/supabase/server';
+import {getCurrentUser} from '@/lib/auth/getCurrentUser';
+import {getTranslations} from 'next-intl/server';
+import {redirect} from 'next/navigation';
+import type {Metadata} from 'next';
 import TwoFAClient from './TwoFAClient';
 
-export const dynamic = 'force-dynamic';
-
-export const metadata: Metadata = { title: '2FA Security — Liravo' };
-
-export default async function TwoFAPage() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('totp_enabled')
-    .eq('id', user.id)
-    .single();
-
-  return (
-    <div className="max-w-lg mx-auto px-4 py-6">
-      <h1 className="font-display text-2xl font-bold mb-2">Two-Factor Authentication</h1>
-      <p className="text-sm text-muted-foreground mb-6">
-        Use an authenticator app (Google Authenticator, Authy, etc.) to add a second layer of
-        security. No SMS — authenticator app only.
-      </p>
-      <TwoFAClient enabled={profile?.totp_enabled ?? false} />
-    </div>
-  );
+export const dynamic='force-dynamic';
+export async function generateMetadata():Promise<Metadata>{const t=await getTranslations('accountSecurity');return {title:t('factorTitle'),robots:{index:false}};}
+export default async function TwoFAPage(){
+  const user=await getCurrentUser();if(!user)redirect('/login');
+  const t=await getTranslations('accountSecurity');
+  const {data:profile,error}=await createServiceClient().from('users').select('totp_enabled,pin_hash').eq('id',user.id).single();
+  if(error||!profile)throw new Error('Security settings unavailable');
+  return <div className="max-w-lg mx-auto px-4 py-6 space-y-4"><h1 className="font-display text-2xl font-bold">{t('factorTitle')}</h1><p className="text-sm text-muted-foreground">{t('factorDescription')}</p><TwoFAClient key={user.id} actorId={user.id} enabled={profile.totp_enabled} pinRequired={!!profile.pin_hash}/></div>;
 }

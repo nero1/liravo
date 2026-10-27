@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { generateSecret, generateSync } from 'otplib';
 import bcrypt from 'bcryptjs';
-import { decryptFactor, encryptFactor, factorHash, factorSessionToken, providerSessionHash, verifyFactorProof, type FactorProfile } from '@/lib/auth/second-factor';
+import { decryptFactor, encryptFactor, factorHash, factorSessionToken, providerSessionHash, providerTokenCurrent, verifyFactorProof, type FactorProfile } from '@/lib/auth/second-factor';
 
 const grantDb=vi.hoisted(()=>({eq:vi.fn(async()=>({error:null}))}));
 vi.mock('@/lib/redis',()=>({getRedisClient:vi.fn(()=>{throw new Error('Redis unavailable');})}));
@@ -40,4 +40,10 @@ it('revokes a database factor session even when Redis is unavailable',async()=>{
   const token=factorSessionToken(crypto.randomUUID());
   await expect(destroySession(token)).resolves.toBeUndefined();
   expect(grantDb.eq).toHaveBeenCalledWith('session_hash',factorHash(token));
+});
+
+it('rejects provider tokens issued before email recovery or without a verifiable issuance time',()=>{
+  const token=(iat:unknown)=>'header.'+Buffer.from(JSON.stringify({iat})).toString('base64url')+'.signature';
+  expect(providerTokenCurrent(token(100),101)).toBe(false);expect(providerTokenCurrent(token(101),101)).toBe(true);
+  expect(providerTokenCurrent(token('101'),101)).toBe(false);expect(providerTokenCurrent(undefined,101)).toBe(false);expect(providerTokenCurrent('malformed',101)).toBe(false);
 });

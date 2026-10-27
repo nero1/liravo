@@ -7,7 +7,7 @@ import { isStatelessNativeAuth } from '@/lib/csrf';
 
 export interface FactorProfile {
   id:string;email:string|null;username:string;totp_enabled:boolean;totp_secret:string|null;recovery_codes:string[]|null;
-  mfa_version:number;mfa_last_step:number|null;is_banned:boolean;deleted_at:string|null;
+  mfa_version:number;mfa_last_step:number|null;is_banned:boolean;deleted_at:string|null;auth_not_before?:number;
 }
 export interface FactorChallenge {
   user_id:string;kind:'login'|'setup';expected_version:number;provider_session_hash:string|null;encrypted_payload:string|null;verified_at:string|null;
@@ -36,7 +36,7 @@ export function decryptFactor(value:string) {
   return Buffer.concat([decipher.update(Buffer.from(encrypted,'base64')),decipher.final()]).toString('utf8');
 }
 export async function factorProfile(userId:string):Promise<FactorProfile|null> {
-  const {data,error}=await (await service()).from('users').select('id,email,username,totp_enabled,totp_secret,recovery_codes,mfa_version,mfa_last_step,is_banned,deleted_at').eq('id',userId).maybeSingle();
+  const {data,error}=await (await service()).from('users').select('id,email,username,totp_enabled,totp_secret,recovery_codes,mfa_version,mfa_last_step,is_banned,deleted_at,auth_not_before').eq('id',userId).maybeSingle();
   if(error)throw new Error('Authentication state unavailable');
   return data as unknown as FactorProfile|null;
 }
@@ -55,10 +55,15 @@ async function readGrant(hash:string) {
 export async function providerFactorAuthorized(userId:string,accessToken:string|undefined) {
   const profile=await factorProfile(userId);
   if(!profile||profile.is_banned||profile.deleted_at)return false;
+  if(!providerTokenCurrent(accessToken,Number(profile.auth_not_before??0)))return false;
   if(!profile.totp_enabled)return true;
   if(!accessToken)return false;
   const grant=await readGrant(providerSessionHash(userId,accessToken));
   return grant?.id===userId;
+}
+export function providerTokenCurrent(token:string|undefined,notBefore:number){
+  if(notBefore===0)return true;
+  try{const claims=JSON.parse(Buffer.from(token!.split('.')[1],'base64url').toString('utf8'));return typeof claims.iat==='number'&&Number.isFinite(claims.iat)&&claims.iat>=notBefore;}catch{return false;}
 }
 export async function readDirectSession(token:string) {
   if(/^mfa_[a-f0-9]{64}$/.test(token))return readGrant(factorHash(token));

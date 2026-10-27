@@ -29,7 +29,7 @@ async function request<T>(
 ): Promise<T> {
   const { token, user } = useAuthStore.getState();
   const mutating = method !== 'GET';
-  const primaryAuth=/^\/api\/auth\/(login|signup|google|telegram|2fa\/verify)$/.test(path);
+  const primaryAuth=/^\/api\/(auth\/(login|signup|google|telegram|2fa\/verify)|users\/(account-recovery|verify-recovery|verify-email))$/.test(path);
   const secret=primaryAuth||!!body&&typeof body==='object'&&Object.keys(body).some(key=>/^(pin|currentPin|current_pin|newPin|password)$/i.test(key));
   const signature = secret?'':JSON.stringify([user?.id ?? token, method, path, body]);
   const trackIntent=mutating&&!secret;

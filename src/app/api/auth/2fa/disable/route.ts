@@ -10,6 +10,7 @@ export const dynamic='force-dynamic';
 const schema=z.object({code:z.string().regex(/^\d{6}$/).optional(),recoveryCode:z.string().regex(/^[a-fA-F0-9]{5}-?[a-fA-F0-9]{5}$/).optional()}).refine(value=>!!value.code!==!!value.recoveryCode);
 export async function POST(request:Request) {
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(request.headers.has('x-liravo-actor')&&request.headers.get('x-liravo-actor')!==user.id)return NextResponse.json({error:'ACCOUNT_CHANGED'},{status:409});
   if(!(await checkCriticalRateLimit(getClientIp(request))).allowed)return NextResponse.json({error:'Too many requests'},{status:429});
   const key=request.headers.get('idempotency-key');if(!key||key.length<8||key.length>200)return NextResponse.json({error:'Invalid request key'},{status:400});
   const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:'Invalid verification request'},{status:400});

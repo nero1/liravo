@@ -42,6 +42,8 @@ it('keeps primary authentication stateless without retaining password mutation i
   const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
   runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
   await exports.api!.post('/api/auth/login',{email:'reader@example.test',password:'test-password'});
+  await exports.api!.post('/api/users/verify-recovery',{token:'one-time-email-proof'});
+  expect(transport.mock.calls[1][1].headers).not.toHaveProperty('Authorization');expect(transport.mock.calls[1][1].headers).not.toHaveProperty('Idempotency-Key');
   const options=transport.mock.calls[0][1];
   expect(options.credentials).toBe('omit');
   expect(options.headers).not.toHaveProperty('Authorization');

@@ -139,7 +139,9 @@ S3_CDN_URL=https://cdn.example.com        # Public CDN/download base URL for the
 
 | Variable | Description |
 |---|---|
-| `RESEND_API_KEY` | Resend.com API key for transactional emails |
+| `MAILGUN_API_KEY` | Server-only Mailgun API key |
+| `MAILGUN_DOMAIN` | Verified sending domain |
+| `MAILGUN_FROM` | Sender address; defaults to `Liravo <noreply@MAILGUN_DOMAIN>` |
 
 ### Amazon Associates
 
@@ -978,7 +980,7 @@ Railway: `pgbouncer` service environment variables — `MAX_CLIENT_CONN` and `DE
 - `DEEPSEEK_API_KEY`
 - `GEMINI_API_KEY`
 - `CRON_SECRET`
-- `RESEND_API_KEY`
+- `MAILGUN_API_KEY`
 - Any `*_WEBHOOK_SECRET`
 - Redis credentials / tokens
 
@@ -986,7 +988,7 @@ The `.gitignore` excludes `.env.local`. Never commit `.env` files with real valu
 
 ### Security and financial migration update
 
-Apply migrations 019–056 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+Apply migrations 019–057 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
 
 Payout requests reserve each USD/NGN/EUR balance atomically; failed/cancelled requests release reservations, completed requests remain deducted. Currencies are never implicitly converted; referral commissions retain their transaction currency. Tip referral commissions are 10% of the platform fee; subscription and ticket referrals are 10% of their purchase price. Migration 050 corrects verified historical commissions, preserves proportional refunds and audits exact adjustments; missing attribution evidence still requires staging reconciliation before withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
 
@@ -1053,3 +1055,5 @@ Migrations 051–052 make buddy chapter/note updates atomic and reject replies o
 Migrations 053–054 serialize and audit theme, affiliate-store and seasonal-event changes. At most one custom theme is active; safe `:root`/`.dark` overrides support the existing colour variables and `--radius`, without arbitrary CSS or external resources. Seasonal forms use UTC dates and the canonical publication fields. Seeds use private durable identities, repair missing list links and preserve prompt dates across retries; the reserved editor account cannot adopt an unrelated user. Keep seed markers when restoring backups. Three seed ISBNs were corrected; if an old and canonical book both exist, the invalid identity is cleared and `catalog_identity_reconciliation_required` records the IDs for content reconciliation.
 
 Migrations 055–056 route core profile/onboarding changes through the validated API; browser database writes to those fields are denied. Onboarding profile and optional PIN commit together. PIN changes require current proof, and configured PINs protect payout reservations and bank-detail changes. Proof checks use per-account/trusted-IP quotas; the database rechecks the current hash while committing. Payout destination writes now require an idempotency key. Web/native clients retain financial keys across reloads in session storage/SecureStore, exclude PINs from stored intents and automatic retry caches, and clear keys after acknowledged success. PIN state responses expose only whether a PIN is configured.
+
+Migration 057 replaces exposed legacy email tokens with private, hashed, purpose-bound proofs (verification: 24 hours; recovery: one hour). Existing links must be reissued. Current email remains active until POST confirmation; opening a link only displays a confirmation page. Configured PINs protect email changes and enrollment recovery codes, with transaction-time rechecks. Recovery preserves 2FA, invalidates older application grants and provider access issued before the recovery second, and revokes other Supabase refresh sessions. Native recovery opens the web flow. Configure the Mailgun variables above; failed delivery does not change the linked email.
