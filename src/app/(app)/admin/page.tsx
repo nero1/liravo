@@ -7,6 +7,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import Decimal from 'decimal.js';
 import { PayoutQueue } from '@/components/creator/PayoutQueue';
+import { PaymentReturnQueue } from '@/components/creator/PaymentReturnQueue';
 
 export const dynamic = 'force-dynamic';
 
@@ -200,6 +201,7 @@ export default async function AdminPage() {
         ))}
       </div>
       <PayoutQueue />
+      <PaymentReturnQueue />
     </div>
   );
 }

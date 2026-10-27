@@ -39,7 +39,17 @@ export async function readPaymentNotice(request: Request): Promise<PaymentNotice
 export function paymentMetadata(notice: PaymentNotice): Record<string, unknown> {
   const metadata = notice.data.metadata;
   if (metadata === undefined || metadata === null || metadata === '') return {};
-  return z.record(z.string(), z.unknown()).parse(typeof metadata === 'string' ? JSON.parse(metadata) : metadata ?? {});
+  const result=z.record(z.string(), z.unknown()).parse(typeof metadata === 'string' ? JSON.parse(metadata) : metadata ?? {});
+  if(['tip_id','subscription_id','ticket_id'].filter(key=>result[key]!=null).length>1)throw new Error('Conflicting payment targets');
+  return result;
+}
+
+export function normalizeTicket(notice:PaymentNotice){
+  const metadata=paymentMetadata(notice);
+  if(notice.event!==(notice.provider==='paystack'?'charge.success':'payment.succeeded')||!metadata.ticket_id)return null;
+  if(notice.provider==='paystack'||notice.data.status!=null)z.literal(notice.provider==='paystack'?'success':'succeeded').parse(notice.data.status);
+  const paymentId=identifier.parse(notice.provider==='paystack'?notice.data.id:notice.data.payment_id).toString();
+  return {eventId:`${notice.provider==='paystack'?'charge':'payment'}:${paymentId}`,payload:{ticket_id:uuid.parse(metadata.ticket_id),user_id:uuid.parse(metadata.user_id),status:'completed',payment_id:paymentId,paid_amount_minor:z.number().int().positive().parse(notice.provider==='paystack'?notice.data.amount:notice.data.total_amount),tax_minor:notice.provider==='dodopayments'?z.number().int().nonnegative().parse(notice.data.tax??0):0,currency:currency.parse(notice.data.currency),provider_reference:z.string().min(1).max(200).parse(notice.provider==='paystack'?notice.data.reference:metadata.reference)}};
 }
 
 export function normalizeSubscription(notice: PaymentNotice) {

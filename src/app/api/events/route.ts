@@ -11,16 +11,16 @@ const createSchema = z.object({
   description: z.string().min(1).max(5000),
   event_date: z.string().datetime(),
   is_paid: z.boolean().default(false),
-  price: z.number().min(0).optional(),
+  price: z.number().min(0.5).max(5000).multipleOf(0.01).optional(),
   currency: z.enum(['USD','NGN','EUR']).default('USD'),
   book_id: z.string().uuid().optional(),
   max_attendees: z.number().int().min(1).optional(),
-});
+}).refine(value=>!value.is_paid||value.price!==undefined).refine(value=>Date.parse(value.event_date)>Date.now());
 
 export async function GET(req: Request) {
   const supabase = createClient();
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '20'), 50);
+  const limit = Math.max(1,Math.min(parseInt(searchParams.get('limit') ?? '20')||20, 50));
   const now = new Date().toISOString();
 
   const { data, error } = await supabase
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ events: data ?? [] });
+  return NextResponse.json({ events: (data??[]).map(event=>({...event,price:event.price===null?null:Number(event.price)})) });
 }
 
 export async function POST(req: Request) {
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Only authors and creators can create events' }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(()=>null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       description: parsed.data.description,
       event_date: parsed.data.event_date,
       is_paid: parsed.data.is_paid,
-      ticket_price: parsed.data.price ?? null,
+      ticket_price: parsed.data.is_paid?parsed.data.price:null,
       currency: parsed.data.currency,
       book_id: parsed.data.book_id ?? null,
       max_attendees: parsed.data.max_attendees ?? null,

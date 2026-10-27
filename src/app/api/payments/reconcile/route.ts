@@ -11,7 +11,7 @@ export async function POST(request:Request){
   if(!await checkRouteRateLimit(user.id,'social'))return NextResponse.json({error:'Too many requests'},{status:429});
   const form=request.headers.get('content-type')?.includes('application/x-www-form-urlencoded');
   let returnPath='/premium?payment=pending';
-  if(form){const body=await request.formData().catch(()=>null);const target=body?.get('_return');if(typeof target==='string'&&/^\/tips\/[0-9a-f-]{36}$/.test(target))returnPath=target;}
+  if(form){const body=await request.formData().catch(()=>null);const target=body?.get('_return');if(typeof target==='string'&&/^\/(tips|tickets)\/[0-9a-f-]{36}$/.test(target))returnPath=target;}
   try{
     const result=await drainCheckoutReconciliation(getRequestCorrelationId(request),user.id);
     if(form)return new Response(null,{status:303,headers:{Location:returnPath+(result.failed?(returnPath.includes('?')?'&':'?')+'verification=unavailable':'')}});
