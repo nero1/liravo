@@ -260,7 +260,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
           await import('@/app/(app)/admin/seasonal-events/page'),
           await import('@/app/(app)/admin/writing-challenges/page'),
         ];
-        for(const page of pages) expect(await page.default()).toBeTruthy();
+        for(const page of pages) expect(await page.default({searchParams:{}})).toBeTruthy();
       } finally { queryGuard.mockRestore(); }
       const answerRequest = new Request('https://app.test/api/content',{headers:{'Idempotency-Key':'answer-intent-key'}});
       const answerPayload = {question_id:questionId,answer:'A sufficiently detailed answer.'};
@@ -918,6 +918,100 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     for(const role of ['anon','authenticated']){
       for(const routine of ['taste_profile_input(uuid)','writing_plan_input(uuid)','save_taste_profile(uuid,jsonb,text,text,jsonb,text)','save_writing_plan(uuid,date,jsonb,text,text,jsonb,text)','update_profile_atomic(uuid,jsonb)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
       for(const table of ['ai_taste_profiles','writing_plans'])expect((await sql`select has_table_privilege(${role},${table},'INSERT') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    vi.stubEnv('DATABASE_PROVIDER','railway');vi.stubEnv('DATABASE_URL',url);vi.stubEnv('DATABASE_SSL','false');
+    vi.stubEnv('DODOPAYMENTS_API_KEY','isolated-provider-fixture');vi.stubEnv('DODOPAYMENTS_ENVIRONMENT','test_mode');vi.stubEnv('PAYSTACK_SECRET_KEY','isolated-provider-fixture');
+    const buyer=crypto.randomUUID(),creator=crypto.randomUUID();
+    await sql`insert into auth.users(id,email,raw_user_meta_data) values(${buyer},'checkout-buyer@example.test',${sql.json({username:'checkout_buyer'})}),(${creator},'checkout-creator@example.test',${sql.json({username:'checkout_creator'})})`;
+    const [created]=await sql`select create_tip_transaction(${buyer},${creator},3,0.3,2.7,'USD','checkout-replay-intent','checkout-test') as tip`;
+    const tipId=created.tip.id;
+    await sql`select record_checkout_session(${buyer},'tip',${tipId},'dodopayments','cks_replay','https://checkout.dodopayments.com/replay')`;
+    await expect(sql`select record_checkout_session(${creator},'tip',${tipId},'dodopayments','cks_replay','https://checkout.dodopayments.com/replay')`).rejects.toThrow('binding');
+    await expect(sql`select record_checkout_session(${buyer},'tip',${tipId},'dodopayments','cks_changed','https://checkout.dodopayments.com/changed')`).rejects.toThrow('identity');
+    const leases=await Promise.all(Array.from({length:4},()=>sql`select * from claim_checkout_reconciliations(${buyer},3)`));
+    expect(leases.flat()).toHaveLength(1);const first=leases.flat()[0];
+    expect(await sql`select * from claim_checkout_reconciliations(${creator},3)`).toHaveLength(0);
+    await sql`update checkout_reconciliations set claimed_at=now()-interval '3 minutes' where entity_id=${tipId}`;
+    const [reclaimed]=await sql`select * from claim_checkout_reconciliations(${buyer},3)`;
+    expect(reclaimed.claim_token).not.toBe(first.claim_token);
+    expect((await sql`select finish_checkout_reconciliation('tip',${tipId},${first.claim_token},true,true,0,60,null,'checkout-test') as applied`)[0].applied).toBe(false);
+    await sql`select finish_checkout_reconciliation('tip',${tipId},${reclaimed.claim_token},false,false,0,60,'DEPENDENCY_FAILURE','checkout-test')`;
+    await sql`update checkout_reconciliations set next_attempt_at=now() where entity_id=${tipId}`;
+    const {drainCheckoutReconciliation}=await import('@/lib/checkout-reconciliation');
+    const {capturedPaymentEvent}=await import('@/lib/refund-reconciliation');
+    const paidAt=new Date().toISOString();
+    const payment={payment_id:'pay_checkout_replay',status:'succeeded',total_amount:300,tax:0,currency:'USD',created_at:paidAt,metadata:{tip_id:tipId}};
+    const transport=vi.spyOn(globalThis,'fetch').mockImplementation(async input=>{
+      const target=String(input);
+      if(target==='https://test.dodopayments.com/checkouts/cks_replay')return Response.json({id:'cks_replay',payment_status:'succeeded',payment_id:payment.payment_id});
+      if(target==='https://test.dodopayments.com/payments/'+payment.payment_id)return Response.json(payment);
+      throw new Error('Unexpected provider request');
+    });
+    try{
+      expect(await drainCheckoutReconciliation('checkout-test',buyer)).toEqual({scanned:1,applied:1,failed:0});
+      expect((await sql`select status from tips where id=${tipId}`)[0].status).toBe('completed');
+      expect((await sql`select count(*)::int as count from payment_captures where entity_id=${tipId}`)[0].count).toBe(1);
+      const event=await capturedPaymentEvent('dodopayments',payment);
+      expect((await sql`select process_payment_event('dodopayments',${event.eventId},${sql.json(event.payload)},'checkout-webhook-replay') as applied`)[0].applied).toBe(false);
+      expect((await drainCheckoutReconciliation('checkout-test',buyer)).scanned).toBe(0);
+      expect(Number((await sql`select creator_balance(${creator},'USD') as balance`)[0].balance.available)).toBe(2.7);
+      const [underpaid]=await sql`select create_tip_transaction(${buyer},${creator},5,0.5,4.5,'USD','checkout-underpaid-intent','checkout-test') as tip`;
+      await sql`select record_checkout_session(${buyer},'tip',${underpaid.tip.id},'dodopayments','cks_underpaid','https://checkout.dodopayments.com/underpaid')`;
+      transport.mockImplementation(async input=>String(input).includes('/checkouts/')?Response.json({id:'cks_underpaid',payment_status:'succeeded',payment_id:'pay_underpaid'}):Response.json({...payment,payment_id:'pay_underpaid',total_amount:400,metadata:{tip_id:underpaid.tip.id}}));
+      expect((await drainCheckoutReconciliation('checkout-test',buyer)).failed).toBe(1);
+      expect((await sql`select status,last_error from checkout_reconciliations where entity_id=${underpaid.tip.id}`)[0]).toMatchObject({status:'failed',last_error:'AMOUNT_MISMATCH'});
+      expect((await sql`select count(*)::int as count from payment_captures where entity_id=${underpaid.tip.id}`)[0].count).toBe(0);
+      const [intent]=await sql`select create_subscription_intent(${buyer},'dodopayments','USD',4.99,'renewal-recovery-intent','checkout-test') as subscription`;
+      const subId=intent.subscription.id,remote='sub_recovery_fixture';
+      await sql`update subscriptions set provider_subscription_id=${remote} where id=${subId}`;
+      const renewal={payment_id:'pay_recovered_renewal',status:'succeeded',total_amount:499,tax:0,currency:'USD',created_at:paidAt,subscription_ids:[remote],service_periods:[{subscription_id:remote,starts_at:paidAt,ends_at:new Date(Date.now()+30*86400000).toISOString()}],metadata:{}};
+      transport.mockImplementation(async input=>{
+        const target=String(input);
+        if(target.startsWith('https://test.dodopayments.com/payments?'))return Response.json({items:[{payment_id:renewal.payment_id}]});
+        if(target==='https://test.dodopayments.com/payments/'+renewal.payment_id)return Response.json(renewal);
+        throw new Error('Unexpected renewal request');
+      });
+      expect((await drainCheckoutReconciliation('checkout-test',buyer)).applied).toBe(1);
+      expect((await sql`select has_premium_access(${buyer}) as active`)[0].active).toBe(true);
+      expect((await sql`select status from checkout_reconciliations where entity_id=${subId}`)[0].status).toBe('pending');
+      await sql`update checkout_reconciliations set next_attempt_at=now() where entity_id=${subId}`;
+      expect((await drainCheckoutReconciliation('checkout-test',buyer)).applied).toBe(0);
+      expect((await sql`select count(*)::int as count from payment_captures where entity_id=${subId}`)[0].count).toBe(1);
+    }finally{transport.mockRestore();}
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'checkout_reconciliations','SELECT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['record_checkout_session(uuid,text,uuid,text,text,text)','claim_checkout_reconciliations(uuid,integer)','finish_checkout_reconciliation(text,uuid,uuid,boolean,boolean,integer,integer,text,text)','financial_integrity_snapshot_046()'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    const admin=crypto.randomUUID(),author=crypto.randomUUID();
+    await sql`insert into auth.users(id,email,raw_user_meta_data) values(${admin},'promotion-admin@example.test',${sql.json({username:'promotion_admin'})}),(${author},'promotion-author@example.test',${sql.json({username:'promotion_author'})})`;
+    await sql`update users set is_admin=true where id=${admin}`;
+    const [book]=await sql`insert into books(title,author_name) values('Promotion fixture','Author') returning id`;
+    const payload={book_id:book.id,author_id:author,start_date:new Date().toISOString(),end_date:new Date(Date.now()+86400000).toISOString(),placement:'discover_top',is_active:true};
+    const created=await Promise.all(Array.from({length:4},()=>sql`select apply_promotion_intent(${admin},'create',null,'manual-promotion-intent',${sql.json(payload)},'promotion-test') as listing`));
+    const id=created[0][0].listing.id;
+    expect(new Set(created.map(rows=>rows[0].listing.id)).size).toBe(1);
+    expect((await sql`select count(*)::int as count from notifications where user_id=${author} and type='promoted_listing_activated'`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${admin} and action='promotion_create'`)[0].count).toBe(1);
+    await expect(sql`select apply_promotion_intent(${admin},'create',null,'manual-promotion-intent',${sql.json({...payload,is_active:false})},'promotion-test')`).rejects.toThrow('Conflicting');
+    const {getActivePromotions}=await import('@/services/promotions');
+    expect((await getActivePromotions('discover_top')).some(item=>item.listing_id===id&&item.id===book.id)).toBe(true);
+    await Promise.all(Array.from({length:4},()=>sql`select record_promotion_click(${author},${id},'promotion-click-once')`));
+    expect((await sql`select clicks from promoted_listings where id=${id}`)[0].clicks).toBe(1);
+    await Promise.all(Array.from({length:3},()=>sql`select apply_promotion_intent(${admin},'update',${id},'manual-promotion-disable','{"is_active":false}'::jsonb,'promotion-test')`));
+    expect((await sql`select is_active,created_by from promoted_listings where id=${id}`)[0]).toMatchObject({is_active:false,created_by:admin});
+    await expect(sql`select record_promotion_click(${author},${id},'promotion-inactive-click')`).rejects.toThrow('not active');
+    await expect(sql`select apply_promotion_intent(${author},'update',${id},'manual-promotion-forbidden','{"is_active":true}'::jsonb,'promotion-test')`).rejects.toThrow('Admin required');
+    await expect(sql`select apply_promotion_intent(${admin},'update',${id},'manual-promotion-invalid',${sql.json({start_date:payload.end_date,end_date:payload.start_date})},'promotion-test')`).rejects.toThrow('Invalid promotion dates');
+    await Promise.all(Array.from({length:3},()=>sql`select apply_promotion_intent(${admin},'delete',${id},'manual-promotion-delete','{}'::jsonb,'promotion-test')`));
+    expect((await sql`select count(*)::int as count from promoted_listings where id=${id}`)[0].count).toBe(0);
+    expect((await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${admin} and action='promotion_delete'`)[0].count).toBe(1);
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_function_privilege(${role},'apply_promotion_intent(uuid,text,uuid,text,jsonb,text)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+      expect((await sql`select has_table_privilege(${role},'promoted_listings','UPDATE') as allowed`)[0].allowed).toBe(false);
     }
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }

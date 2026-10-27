@@ -1,3 +1,4 @@
+import { CsrfInput } from '@/components/layout/CsrfInput';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { isAdmin } from '@/lib/moderation';
 import { getTranslations, getFormatter } from 'next-intl/server';
@@ -24,7 +25,7 @@ interface Listing {
   book: { title: string; author_name: string } | null;
 }
 
-export default async function PromotedListingsPage() {
+export default async function PromotedListingsPage({searchParams={}}:{searchParams?:{error?:string}}) {
   const formatter = await getFormatter();
   const t = await getTranslations('admin');
   const user = await getCurrentUser();
@@ -44,6 +45,7 @@ export default async function PromotedListingsPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <h1 className="font-display text-2xl font-bold mb-6">{t('promotedListings')}</h1>
+      {searchParams.error&&<p role="alert" className="text-sm mb-4">{t('promotionUpdateFailed')}</p>}
 
       {items.length === 0 ? (
         <p className="text-muted-foreground text-sm">{t('noPromotedListingsYet')}</p>
@@ -57,6 +59,7 @@ export default async function PromotedListingsPage() {
                 <th scope="col" className="text-left py-2 pr-4">{t('dates')}</th>
                 <th scope="col" className="text-right py-2 pr-4">{t('clicks')}</th>
                 <th scope="col" className="text-right py-2">{t('price')}</th>
+                <th scope="col" className="text-left py-2">{t('actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -65,7 +68,7 @@ export default async function PromotedListingsPage() {
                   listing.is_active &&
                   listing.start_date && listing.end_date &&
                   new Date(listing.start_date) <= now &&
-                  new Date(listing.end_date) >= now;
+                  new Date(listing.end_date) > now;
 
                 return (
                   <tr key={listing.id} className="border-b border-border/50 hover:bg-muted/30">
@@ -81,7 +84,7 @@ export default async function PromotedListingsPage() {
                             ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
                             : 'bg-muted text-muted-foreground'
                       }`}>
-                        {isLive ? t('live') : listing.is_active ? t('scheduled') : t('inactive')}
+                        {isLive?t('live'):listing.is_active&&listing.end_date&&new Date(listing.end_date)<now?t('expired'):listing.is_active?t('scheduled'):t('inactive')}
                       </span>
                     </td>
                     <td className="py-3 pr-4 text-xs text-muted-foreground">
@@ -93,6 +96,18 @@ export default async function PromotedListingsPage() {
                     <td className="py-3 text-right">
                       {listing.price_usd != null ? formatter.number(Number(listing.price_usd), { style: 'currency', currency: 'USD' }) : '—'}
                     </td>
+                    <td className="py-3 pl-4 space-y-2">
+                      <form action="/api/admin/promoted-listings" method="POST"><CsrfInput />
+                        <input type="hidden" name="_action" value="update" /><input type="hidden" name="id" value={listing.id} /><input type="hidden" name="_idempotency" value={crypto.randomUUID()} /><input type="hidden" name="is_active" value={String(!listing.is_active)} />
+                        <button className="underline text-sm">{listing.is_active?t('deactivate'):t('activate')}</button>
+                      </form>
+                      <form action="/api/admin/promoted-listings" method="POST" className="space-y-2"><CsrfInput />
+                        <input type="hidden" name="_action" value="update" /><input type="hidden" name="id" value={listing.id} /><input type="hidden" name="_idempotency" value={crypto.randomUUID()} />
+                        <label className="block text-xs">{t('promotionStartUtc')}<input type="datetime-local" name="start_date" required defaultValue={listing.start_date?new Date(listing.start_date).toISOString().slice(0,16):''} className="block border rounded p-1 bg-background" /></label>
+                        <label className="block text-xs">{t('promotionEndUtc')}<input type="datetime-local" name="end_date" required defaultValue={listing.end_date?new Date(listing.end_date).toISOString().slice(0,16):''} className="block border rounded p-1 bg-background" /></label>
+                        <button className="underline text-sm">{t('savePromotionDates')}</button>
+                      </form>
+                    </td>
                   </tr>
                 );
               })}
@@ -101,7 +116,7 @@ export default async function PromotedListingsPage() {
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground mt-6">{t('activationHelp', { endpoint: 'POST /api/admin/promoted-listings' })}</p>
+      <p className="text-xs text-muted-foreground mt-6">{t('activationHelp')}</p>
     </div>
   );
 }

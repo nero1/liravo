@@ -16,8 +16,8 @@ const tip={id:'00000000-0000-4000-8000-000000000001',amount:'3.00',currency:'USD
 const product={is_recurring:false,price:{type:'one_time_price',currency:'USD',pay_what_you_want:true,price:50}};
 
 it('opens a checked one-time tip product with exact minor units and a stable provider intent',async()=>{
-  fetchMock.mockResolvedValueOnce(response(product)).mockResolvedValueOnce(response({checkout_url:'https://checkout.dodopayments.com/pay/tip'}));
-  expect(await createTipCheckout(tip,'reader@example.test')).toBe('https://checkout.dodopayments.com/pay/tip');
+  fetchMock.mockResolvedValueOnce(response(product)).mockResolvedValueOnce(response({session_id:'cks_tip_fixture',checkout_url:'https://checkout.dodopayments.com/pay/tip'}));
+  expect(await createTipCheckout(tip,'reader@example.test')).toEqual({url:'https://checkout.dodopayments.com/pay/tip',checkoutId:'cks_tip_fixture'});
   expect(fetchMock.mock.calls[0][0]).toBe('https://test.dodopayments.com/products/tip_product');
   const [url,request]=fetchMock.mock.calls[1];
   expect(url).toBe('https://test.dodopayments.com/checkouts');
@@ -35,7 +35,7 @@ it('refuses a recurring, wrong-currency, fixed-price or discounted tip product b
 
 it('uses Paystack kobo and a stable reference for NGN tips',async()=>{
   vi.stubEnv('PAYSTACK_SECRET_KEY','isolated-test-key');
-  fetchMock.mockResolvedValue(response({data:{authorization_url:'https://checkout.paystack.com/test'}}));
+  fetchMock.mockResolvedValue(response({status:true,data:{reference:`tip_${tip.id}`,authorization_url:'https://checkout.paystack.com/test'}}));
   await createTipCheckout({...tip,amount:'7500.00',currency:'NGN'},'reader@example.test');
   expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({amount:750000,currency:'NGN',reference:`tip_${tip.id}`,callback_url:`https://app.test/tips/${tip.id}`});
 });

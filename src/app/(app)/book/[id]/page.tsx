@@ -1,3 +1,7 @@
+import { clientBook } from '@/lib/catalog-book';
+import { getTranslations } from 'next-intl/server';
+import { getActivePromotions } from '@/services/promotions';
+import { PromotedBookLink } from '@/components/books/PromotedBookLink';
 import { HelpfulnessButtons } from '@/components/books/HelpfulnessButtons';
 import { languageAlternates } from '@/lib/metadata';
 import { singleRelation } from '@/lib/utils';
@@ -77,8 +81,9 @@ export default async function BookPage({ params }: BookPageProps) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: book, error } = await supabase.from('books').select('*').eq('id', params.id).single();
-  if (error || !book) notFound();
+  const { data: rawBook, error } = await supabase.from('books').select('*').eq('id', params.id).single();
+  if (error || !rawBook) notFound();
+  const book=clientBook(rawBook);
 
   // User country for affiliate links
   const { data: userProfile } = await supabase
@@ -91,6 +96,8 @@ export default async function BookPage({ params }: BookPageProps) {
 
   // Affiliate links
   const affiliateLinks = await buildAffiliateLinks(book, country, locale);
+  const promotedBooks=await getActivePromotions('book_page_sidebar',params.id);
+  const promotionText=await getTranslations('promotions');
 
   // Check want-to-read status
   const { data: wantShelf } = await supabase.from('shelves').select('id').eq('user_id', user.id).eq('default_type', 'want_to_read').single();
@@ -305,6 +312,10 @@ export default async function BookPage({ params }: BookPageProps) {
         </div>
       )}
 
+      {promotedBooks.length>0&&<aside className="mb-5 rounded-xl border border-border p-4 space-y-3" aria-label={promotionText('sponsored')}>
+        <h2 className="font-semibold text-sm">{promotionText('sponsored')}</h2>
+        {promotedBooks.map(promoted=><PromotedBookLink key={promoted.listing_id} listingId={promoted.listing_id} bookId={promoted.id} className="block text-sm hover:underline"><span className="font-medium">{promoted.title}</span> — {promoted.author_name}</PromotedBookLink>)}
+      </aside>}
       {/* Description */}
       {book.description && (
         <div className="mb-6">

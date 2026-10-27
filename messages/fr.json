@@ -269,7 +269,9 @@
     "managedByGoogle": "Gérez votre abonnement Google Play dans le Play Store.",
     "manageGoogle": "Gérer dans Google Play",
     "paidUntil": "Accès payé jusqu’au {date}.",
-    "paystackPass": "Les achats Paystack donnent accès pendant 30 jours, sans renouvellement automatique."
+    "paystackPass": "Les achats Paystack donnent accès pendant 30 jours, sans renouvellement automatique.",
+    "checkPayment": "Vérifier le paiement",
+    "verificationUnavailable": "Le statut du paiement n’a pas pu être vérifié. Réessayez dans un instant."
   },
   "admin": {
     "cron": {
@@ -296,7 +298,8 @@
         "pendingRefunds": "Remboursements à rapprocher",
         "unverifiedBillingPeriods": "Périodes payées non vérifiées",
         "overdrawnCreators": "Soldes créateurs négatifs",
-        "duplicatePayments": "Paiements à rapprocher"
+        "duplicatePayments": "Paiements à rapprocher",
+        "unreconciledCheckouts": "Paiements à rapprocher"
       },
       "jobs": {
         "outbox-drain": {
@@ -511,9 +514,15 @@
     "editorsSummary": "Le compte @liravo_editors possède les listes de lecture, avis et citations initiaux. Ce compte éditorial est géré côté serveur.",
     "editorIdentity": "Identifiant : {username} | Nom affiché : {name}",
     "seedResult": " ({inserted, number} ajoutés, {skipped, number} ignorés)",
-    "activationHelp": "Pour activer une annonce, envoyez son identifiant et ses dates d’activation à {endpoint}.",
+    "activationHelp": "Les promotions sont activées manuellement. Leurs dates déterminent leur période d’affichage.",
     "dailyPromptsHint": "Générés par {endpoint}. Les {count, number} plus récents sont affichés.",
-    "loadThemesFailed": "Impossible de charger les thèmes."
+    "loadThemesFailed": "Impossible de charger les thèmes.",
+    "promotionUpdateFailed": "La promotion n’a pas pu être modifiée. Vérifiez ses dates et réessayez.",
+    "promotionStartUtc": "Début (UTC)",
+    "promotionEndUtc": "Fin (UTC)",
+    "savePromotionDates": "Enregistrer les dates",
+    "deactivate": "Désactiver",
+    "expired": "Expirée"
   },
   "tips": {
     "tip": "Pourboire",
@@ -534,7 +543,8 @@
       "pending": "Votre pourboire de {amount} est en attente de confirmation du paiement.",
       "refunded": "Votre pourboire de {amount} a été remboursé.",
       "partiallyRefunded": "Votre pourboire de {amount} a été partiellement remboursé."
-    }
+    },
+    "verificationUnavailable": "Le statut du paiement n’a pas pu être vérifié. Réessayez dans un instant."
   },
   "writing": {
     "promptTitle": "Sujet du jour",
@@ -726,5 +736,8 @@
       "Cookbooks": "Cuisine",
       "Art & Photography": "Art et photographie"
     }
+  },
+  "promotions": {
+    "sponsored": "Sponsorisé"
   }
 }

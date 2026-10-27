@@ -76,7 +76,7 @@ export function normalizeSubscription(notice: PaymentNotice) {
         tax_minor:notice.provider==='dodopayments'?z.number().int().nonnegative().parse(notice.data.tax??0):0,
         paid_amount_minor: z.number().int().nonnegative().parse(notice.provider === 'paystack' ? notice.data.amount : notice.data.total_amount),
         currency: currency.parse(notice.data.currency),
-        provider_reference: notice.provider === 'paystack' ? z.string().parse(notice.data.reference) : metadata.reference ?? null,
+        provider_reference: notice.provider === 'paystack' ? z.string().parse(notice.data.reference) : metadata.reference==null?null:z.string().min(1).max(200).parse(metadata.reference),
       } : {}),
     },
   };

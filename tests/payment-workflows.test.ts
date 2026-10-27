@@ -71,12 +71,12 @@ it('does not report success when the cancellation state cannot be decoded',async
 
 it('opens checkout without claiming a tip has been paid, using the authenticated email',async()=>{
   rpc.mockResolvedValue({data:{id:tip},error:null});
-  vi.mocked(createTipCheckout).mockResolvedValue('https://checkout.dodopayments.com/pay/tip');
+  vi.mocked(createTipCheckout).mockResolvedValue({url:'https://checkout.dodopayments.com/pay/tip',checkoutId:'cks_tip_fixture'});
   const response=await createTip(new Request('https://app.test/api/tips/create',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'tip-request-key'},body:JSON.stringify({recipientId:recipient,amount:3,currency:'USD'})}));
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({tipId:tip,redirectUrl:'https://checkout.dodopayments.com/pay/tip'});
   expect(createTipCheckout).toHaveBeenCalledWith(expect.objectContaining({id:tip}),'authenticated@example.test');
-  expect(update).toHaveBeenCalledWith({checkout_url:'https://checkout.dodopayments.com/pay/tip'});
+  expect(rpc).toHaveBeenCalledWith('record_checkout_session',expect.objectContaining({p_user_id:user,p_kind:'tip',p_entity_id:tip,p_checkout_id:'cks_tip_fixture',p_url:'https://checkout.dodopayments.com/pay/tip'}));
 });
 
 it('returns a retryable checkout failure while preserving the durable tip intent',async()=>{

@@ -1,3 +1,6 @@
+import { bookRating } from '@/lib/catalog-book';
+import { getActivePromotions } from '@/services/promotions';
+import { PromotedBookLink } from '@/components/books/PromotedBookLink';
 import { createClient } from '@/lib/supabase/server';
 import { BookSearch } from '@/components/books/BookSearch';
 import { MOOD_TAGS } from '@/constants/config';
@@ -30,36 +33,7 @@ async function getTopCreators(): Promise<CreatorEntry[]> {
   }
 }
 
-interface PromotedBook {
-  id: string;
-  title: string;
-  author_name: string;
-  cover_url: string | null;
-}
-
-async function getPromotedBooks(): Promise<PromotedBook[]> {
-  const supabase = createClient();
-  const now = new Date().toISOString();
-
-  const { data: listings } = await supabase
-    .from('promoted_listings')
-    .select('book_id')
-    .eq('placement', 'discover_top')
-    .eq('is_active', true)
-    .lte('start_date', now)
-    .gte('end_date', now)
-    .limit(5);
-
-  if (!listings || listings.length === 0) return [];
-
-  const bookIds = (listings as Array<{ book_id: string }>).map((l) => l.book_id);
-  const { data: books } = await supabase
-    .from('books')
-    .select('id, title, author_name, cover_url')
-    .in('id', bookIds);
-
-  return books ?? [];
-}
+const getPromotedBooks=()=>getActivePromotions('discover_top');
 
 interface TrendingBook {
   book_id: string;
@@ -171,7 +145,7 @@ async function getHiddenGems(): Promise<HiddenGem[]> {
     .lt('have_read_count', 50)
     .order('average_rating', { ascending: false })
     .limit(10);
-  return data ?? [];
+  return (data??[]).map(book=>({...book,average_rating:bookRating(book.average_rating)}));
 }
 
 async function getRecommendedBooks(userId: string) {
@@ -383,9 +357,10 @@ export default async function DiscoverPage() {
           </div>
           <div className="grid grid-cols-5 gap-3">
             {promotedBooks.map((book) => (
-              <Link
-                key={book.id}
-                href={`/book/${book.id}`}
+              <PromotedBookLink
+                key={book.listing_id}
+                bookId={book.id}
+                listingId={book.listing_id}
                 className="flex flex-col gap-2 hover:opacity-80 transition-opacity"
               >
                 <div className="relative w-full aspect-[2/3] rounded-md overflow-hidden bg-neutral-200 dark:bg-neutral-700 ring-2 ring-accent/30">
@@ -407,7 +382,7 @@ export default async function DiscoverPage() {
                     {book.author_name}
                   </p>
                 </div>
-              </Link>
+              </PromotedBookLink>
             ))}
           </div>
         </section>

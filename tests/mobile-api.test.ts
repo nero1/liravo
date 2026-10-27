@@ -91,3 +91,27 @@ it('times out an ambiguous mobile request and preserves its mutation key for ret
     expect(transport.mock.calls[1][1].headers['Idempotency-Key']).toBe(first);
   }finally{vi.useRealTimers();}
 });
+
+it('renders numeric-string ratings safely in both mobile book card layouts',()=>{
+  const exports:{BookCard?:(props:unknown)=>unknown}={};
+  const code=ts.transpileModule(readFileSync('mobile/components/books/BookCard.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+  const element=(type:unknown,props:unknown)=>({type,props});
+  runInNewContext(code,{exports,require:(name:string)=>{
+    if(name==='react/jsx-runtime')return {jsx:element,jsxs:element};
+    if(name==='react-native')return {View:'View',Text:'Text',TouchableOpacity:'TouchableOpacity'};
+    if(name==='expo-image')return {Image:'Image'};
+    if(name==='lucide-react-native')return {Star:'Star'};
+    if(name==='expo-router')return {useRouter:()=>({push:()=>{}})};
+    throw new Error(`Unexpected mobile dependency: ${name}`);
+  }});
+  const content=(node:unknown):string=>{
+    if(node==null||typeof node==='boolean')return '';
+    if(typeof node==='string'||typeof node==='number')return String(node);
+    if(Array.isArray(node))return node.map(content).join(' ');
+    return content((node as {props:{children?:unknown}}).props.children);
+  };
+  for(const compact of [true,false]){
+    expect(content(exports.BookCard!({book:{id:'book',title:'Book',author_name:'Author',average_rating:'4.25'},compact}))).toContain('4.3');
+    expect(content(exports.BookCard!({book:{id:'book',title:'Book',author_name:'Author',average_rating:'invalid'},compact}))).not.toContain('NaN');
+  }
+});

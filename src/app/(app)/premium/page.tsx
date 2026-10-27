@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const FEATURES = ['shelves', 'stats', 'taste', 'feedback', 'plan', 'digest', 'badge'] as const;
 
-export default async function PremiumPage({ searchParams }: { searchParams: { payment?: string } }) {
+export default async function PremiumPage({ searchParams }: { searchParams: { payment?: string;verification?:string } }) {
   const t = await getTranslations('premium');
   const formatter = await getFormatter();
   const supabase = createClient();
@@ -51,7 +51,8 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
         </p>
       </div>
 
-      {searchParams.payment === 'pending' && !isPremium && <p role="status" className="text-center text-sm mb-4">{t('paymentPending')}</p>}
+      {searchParams.verification==='unavailable'&&<p role="alert" className="text-sm text-center mb-4">{t('verificationUnavailable')}</p>}
+      {searchParams.payment === 'pending' && !isPremium && <div className="text-center text-sm mb-4 space-y-2"><p role="status">{t('paymentPending')}</p><form action="/api/payments/reconcile" method="POST"><CsrfInput /><button className="underline">{t('checkPayment')}</button></form></div>}
       {isPremium ? (
         <div className="rounded-xl border border-accent bg-accent/10 p-6 text-center mb-8">
           <div className="text-2xl mb-2">★</div>
