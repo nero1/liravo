@@ -4,6 +4,7 @@ import { getRequestCorrelationId } from '@/lib/utils';
 import { cron } from '@/lib/cron';
 import { NextResponse } from 'next/server';
 import { drainCheckoutReconciliation } from '@/lib/checkout-reconciliation';
+import { drainPaymentReturns } from '@/lib/payment-returns';
 import { drainRefundReconciliation } from '@/lib/refund-reconciliation';
 import { drainPayoutSettlements } from '@/lib/payout-settlement';
 import { drainOutbox } from '@/lib/outbox-worker';
@@ -18,12 +19,12 @@ async function run(req: Request) {
   if(factorCleanupError)throw new Error('Factor session cleanup failed');
   const {error:expiryError}=await createServiceClient().rpc('expire_subscription_entitlements' as never,{p_limit:200} as never);
   if (expiryError) throw new Error('Subscription expiry reconciliation failed');
-  const [result, cancellations, payouts, refunds, checkouts] = await Promise.all([drainOutbox(batchSize), drainSubscriptionCancellations(),drainPayoutSettlements(getRequestCorrelationId(req)),drainRefundReconciliation(getRequestCorrelationId(req)),drainCheckoutReconciliation(getRequestCorrelationId(req))]);
+  const [result, cancellations, payouts, refunds, checkouts, returns] = await Promise.all([drainOutbox(batchSize), drainSubscriptionCancellations(),drainPayoutSettlements(getRequestCorrelationId(req)),drainRefundReconciliation(getRequestCorrelationId(req)),drainCheckoutReconciliation(getRequestCorrelationId(req)),drainPaymentReturns(getRequestCorrelationId(req))]);
   const { data, error } = await createServiceClient().rpc('financial_integrity_snapshot' as never);
   if (error) throw new Error('Financial reconciliation failed');
   const anomalies = data as Record<string, number>;
   recordMetric('financial_integrity_snapshot', { ...anomalies, correlationId: getRequestCorrelationId(req) }, Object.values(anomalies).some(value => value > 0) ? 'error' : 'info');
-  return NextResponse.json({ ...result, failed: result.failed + cancellations.failed + refunds.failed + checkouts.failed, cancellations, payouts, refunds, checkouts, anomalies });
+  return NextResponse.json({ ...result, failed: result.failed + cancellations.failed + refunds.failed + checkouts.failed+returns.failed, cancellations, payouts, refunds, checkouts, returns, anomalies });
 }
 
 export const GET = cron('outbox-drain', run);

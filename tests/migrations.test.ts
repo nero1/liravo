@@ -4,6 +4,7 @@ import { it, expect, vi } from 'vitest';
 import postgres from 'postgres';
 import { readFileSync, readdirSync } from 'node:fs';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { INTEGRITY_SIGNALS } from '@/constants/cron';
 
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
 vi.mock('@/lib/rate-limit',async original=>({...await original<typeof import('@/lib/rate-limit')>(),checkRouteRateLimit:vi.fn(async()=>true)}));
@@ -41,6 +42,13 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         insert into payouts(tip_id,recipient_id,amount,currency,status,provider) values('${legacyUser}','${legacyUser}',90,'USD','failed','paystack');
       `).simple();
       const legacyRefund=file.startsWith('041_');
+      const legacyTicket=file.startsWith('048_');
+      if(legacyTicket)await sql.unsafe(`
+        insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
+        insert into events(id,organizer_id,title,event_date,is_paid,ticket_price,currency) values('${legacyUser}','${legacyUser}','Legacy event',now()+interval '2 days',true,10,'USD');
+        insert into event_tickets(id,event_id,user_id,amount_paid,currency,status) values('${legacyUser}','${legacyUser}','${legacyUser}',10,'USD','confirmed');
+        insert into event_revenue(event_id,organizer_id,amount,currency) values('${legacyUser}','${legacyUser}',9,'USD');
+      `).simple();
       if(legacyRefund)await sql.unsafe(`
         insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
         insert into tips(id,user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status) values('${legacyUser}','${legacyUser}','${legacyUser}',100,10,90,'USD','refunded');
@@ -49,6 +57,13 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         insert into payment_events(provider,event_id,payload) values('dodopayments','payment:legacy-sub-paid','{"event":"subscription.activated","subscription_id":"${legacyUser}","user_id":"${legacyUser}","paid_amount_minor":499,"currency":"USD","provider_reference":"sub_${legacyUser}"}');
       `).simple();
       await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
+      if(legacyTicket){
+        expect((await sql`select status from event_tickets where id=${legacyUser}`)[0].status).toBe('legacy_hold');
+        expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.events)).toBe(0);
+        expect((await sql`select count(*)::int as count from financial_audit_log where target_user_id=${legacyUser} and action='legacy_event_revenue_held'`)[0].count).toBe(1);
+        await sql`delete from events where id=${legacyUser}`;
+        await sql`delete from auth.users where id=${legacyUser}`;
+      }
       if(legacyRefund){
         expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.available)).toBe(0);
         expect((await sql`select credited from payment_captures where payment_id='legacy-paid-refund'`)[0].credited).toBe(false);
@@ -1012,6 +1027,108 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     for(const role of ['anon','authenticated']){
       expect((await sql`select has_function_privilege(${role},'apply_promotion_intent(uuid,text,uuid,text,jsonb,text)','EXECUTE') as allowed`)[0].allowed).toBe(false);
       expect((await sql`select has_table_privilege(${role},'promoted_listings','UPDATE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    const host=crypto.randomUUID(),referrer=crypto.randomUUID(),a=crypto.randomUUID(),b=crypto.randomUUID(),c=crypto.randomUUID();
+    for(const [index,id] of [host,referrer,a,b,c].entries())await sql`insert into auth.users(id,email,raw_user_meta_data) values(${id},${'tickets'+index+'@example.test'},${sql.json({username:'ticket_fixture_'+index})})`;
+    await sql`update users set referred_by=${referrer} where id=${a}`;
+    const [event]=await sql`insert into events(organizer_id,title,event_date,is_paid,ticket_price,currency,max_attendees) values(${host},'Paid capacity fixture',now()+interval '2 days',true,10,'USD',1) returning id`;
+    const reserve=(actor:string,key:string,target=event.id)=>sql`select reserve_event_ticket(${actor},${target},${key},'ticket-test') as ticket`;
+    await expect(reserve(host,'ticket-host-self-purchase')).rejects.toThrow('Event unavailable');
+    const reserved=await Promise.all(Array.from({length:4},()=>reserve(a,'ticket-reservation-replay')));
+    const ticket=reserved[0][0].ticket;
+    expect(new Set(reserved.map(rows=>rows[0].ticket.id)).size).toBe(1);
+    expect((await sql`select count(*)::int as count from event_revenue where ticket_id=${ticket.id}`)[0].count).toBe(0);
+    expect((await sql`select count(*)::int as count from referral_commissions where transaction_id=${ticket.id}`)[0].count).toBe(0);
+    await expect(reserve(b,'ticket-full-reservation')).rejects.toThrow('Event full');
+    await expect(sql`select record_ticket_checkout(${b},${ticket.id},'cks_owned','https://checkout.dodopayments.com/ticket')`).rejects.toThrow('binding');
+    await expect(sql`select record_ticket_checkout(${a},${ticket.id},'cks_owned','https://evil.test/ticket')`).rejects.toThrow('Invalid checkout');
+    await sql`select record_ticket_checkout(${a},${ticket.id},'cks_owned','https://checkout.dodopayments.com/ticket')`;
+    expect((await reserve(a,'ticket-alternate-intent'))[0].ticket.id).toBe(ticket.id);
+    await sql`update events set ticket_price=20 where id=${event.id}`;
+    await expect(sql`update event_tickets set amount_paid=20 where id=${ticket.id}`).rejects.toThrow('immutable');
+    const payload={ticket_id:ticket.id,user_id:a,status:'completed',payment_id:'pay_ticket_once',paid_amount_minor:1000,tax_minor:0,currency:'USD',provider_reference:'ticket_'+ticket.id};
+    const settle=(data=payload,id='payment:'+data.payment_id)=>sql`select process_payment_event('dodopayments',${id},${sql.json(data)},'ticket-test') as applied`;
+    await expect(settle({...payload,user_id:b})).rejects.toThrow('binding');
+    const captures=await Promise.all(Array.from({length:4},()=>settle()));
+    expect(captures.filter(rows=>rows[0].applied)).toHaveLength(1);
+    expect((await sql`select status from event_tickets where id=${ticket.id}`)[0].status).toBe('confirmed');
+    expect((await sql`select count(*)::int as count from notifications where user_id=${a} and type='event_ticket_confirmed'`)[0].count).toBe(1);
+    expect(Number((await sql`select creator_balance(${host},'USD') as balance`)[0].balance.available)).toBe(9);
+    expect(Number((await sql`select creator_balance(${referrer},'USD') as balance`)[0].balance.available)).toBe(1);
+    await settle({...payload,payment_id:'pay_ticket_duplicate'});
+    expect((await sql`select credited from payment_captures where payment_id='pay_ticket_duplicate'`)[0].credited).toBe(false);
+    expect((await sql`select status from payment_returns where payment_id='pay_ticket_duplicate'`)[0].status).toBe('pending');
+    await sql`select process_refund_event('dodopayments','ref_ticket_duplicate','pay_ticket_duplicate',1000,'USD','ticket-test')`;
+    expect((await sql`select status from event_tickets where id=${ticket.id}`)[0].status).toBe('confirmed');
+    await sql`select process_refund_event('dodopayments','ref_ticket_partial','pay_ticket_once',400,'USD','ticket-test')`;
+    expect(Number((await sql`select creator_balance(${host},'USD') as balance`)[0].balance.available)).toBe(5.4);
+    expect(Number((await sql`select creator_balance(${referrer},'USD') as balance`)[0].balance.available)).toBe(0.6);
+    expect((await sql`select process_refund_event('dodopayments','ref_ticket_partial','pay_ticket_once',400,'USD','ticket-test') as applied`)[0].applied).toBe(false);
+    await sql`select process_refund_event('dodopayments','ref_ticket_rest','pay_ticket_once',600,'USD','ticket-test')`;
+    expect((await sql`select status from event_tickets where id=${ticket.id}`)[0].status).toBe('refunded');
+    expect(Number((await sql`select creator_balance(${host},'USD') as balance`)[0].balance.available)).toBe(0);
+    expect(Number((await sql`select creator_balance(${referrer},'USD') as balance`)[0].balance.available)).toBe(0);
+    await reserve(b,'ticket-seat-after-refund');
+    const [lateEvent]=await sql`insert into events(organizer_id,title,event_date,is_paid,ticket_price,currency,max_attendees) values(${host},'Late payment fixture',now()+interval '2 days',true,10,'USD',1) returning id`;
+    const [late]=await reserve(a,'ticket-expired-reservation',lateEvent.id);
+    await sql`update event_tickets set reserved_until=now()-interval '1 minute' where id=${late.ticket.id}`;
+    expect((await reserve(a,'ticket-expired-reservation',lateEvent.id))[0].ticket.id).toBe(late.ticket.id);
+    await reserve(b,'ticket-replacement-reservation',lateEvent.id);
+    await settle({...payload,ticket_id:late.ticket.id,payment_id:'pay_ticket_late',provider_reference:'ticket_'+late.ticket.id});
+    expect((await sql`select status from event_tickets where id=${late.ticket.id}`)[0].status).toBe('refund_pending');
+    expect((await sql`select credited from payment_captures where payment_id='pay_ticket_late'`)[0].credited).toBe(false);
+    expect((await sql`select count(*)::int as count from event_revenue where event_id=${lateEvent.id}`)[0].count).toBe(0);
+    await sql`update payment_returns set next_attempt_at=now()+interval '1 day' where payment_id<>'pay_ticket_late'`;
+    const leases=await Promise.all(Array.from({length:4},()=>sql`select * from claim_payment_returns(3)`));
+    expect(leases.flat()).toHaveLength(1);const lease=leases.flat()[0];
+    expect((await sql`select update_payment_return('dodopayments','pay_ticket_late',${lease.claim_token},'processing',null,null) as applied`)[0].applied).toBe(true);
+    await sql`update payment_returns set claimed_at=now()-interval '3 minutes',next_attempt_at=now() where payment_id='pay_ticket_late'`;
+    const [reclaimed]=await sql`select * from claim_payment_returns(3)`;
+    expect(reclaimed.claim_token).not.toBe(lease.claim_token);
+    expect((await sql`select update_payment_return('dodopayments','pay_ticket_late',${lease.claim_token},'completed',null,null) as applied`)[0].applied).toBe(false);
+    expect((await sql`select count(*)::int as count from financial_audit_log where action='payment_return_processing' and metadata->>'payment_id'='pay_ticket_late'`)[0].count).toBe(1);
+    const [raceEvent]=await sql`insert into events(organizer_id,title,event_date,is_paid,ticket_price,currency,max_attendees) values(${host},'Reservation race',now()+interval '2 days',true,10,'NGN',1) returning id`;
+    const race=await Promise.allSettled([reserve(a,'ticket-race-user-a',raceEvent.id),reserve(b,'ticket-race-user-b',raceEvent.id)]);
+    expect(race.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    const [preEvent]=await sql`insert into events(organizer_id,title,event_date,is_paid,ticket_price,currency) values(${host},'Refund before capture',now()+interval '2 days',true,10,'EUR') returning id`;
+    const [before]=await reserve(c,'ticket-pre-refund',preEvent.id);
+    expect((await sql`select process_refund_event('dodopayments','ref_ticket_before','pay_ticket_before',1000,'EUR','ticket-test') as applied`)[0].applied).toBe(null);
+    await settle({...payload,ticket_id:before.ticket.id,user_id:c,payment_id:'pay_ticket_before',currency:'EUR',provider_reference:'ticket_'+before.ticket.id});
+    expect((await sql`select status from event_tickets where id=${before.ticket.id}`)[0].status).toBe('refunded');
+    expect((await sql`select count(*)::int as count from notifications where user_id=${c} and type='event_ticket_confirmed'`)[0].count).toBe(0);
+    expect(Number((await sql`select creator_balance(${host},'EUR') as balance`)[0].balance.available)).toBe(0);
+    const [underEvent]=await sql`insert into events(organizer_id,title,event_date,is_paid,ticket_price,currency) values(${host},'Underpayment fixture',now()+interval '2 days',true,10,'USD') returning id`;
+    const [under]=await reserve(c,'ticket-underpaid',underEvent.id);
+    await settle({...payload,ticket_id:under.ticket.id,user_id:c,payment_id:'pay_ticket_under',paid_amount_minor:900,provider_reference:'ticket_'+under.ticket.id});
+    expect((await sql`select charged_minor,credited from payment_captures where payment_id='pay_ticket_under'`)[0]).toMatchObject({charged_minor:'900',credited:false});
+    expect((await sql`select status from payment_returns where payment_id='pay_ticket_under'`)[0].status).toBe('pending');
+    const evidence={status:'succeeded',refund:{refundId:'ref_ticket_under_verified',paymentId:'pay_ticket_under',amountMinor:900,currency:'USD'}};
+    await expect(sql`select reconcile_payment_return(${a},'dodopayments','pay_ticket_under','ref_ticket_under_verified','ticket-admin-return',${sql.json(evidence)},'ticket-test')`).rejects.toThrow('Admin required');
+    await sql`update users set is_admin=true where id=${host}`;
+    const reconciled=await Promise.all(Array.from({length:3},()=>sql`select reconcile_payment_return(${host},'dodopayments','pay_ticket_under','ref_ticket_under_verified','ticket-admin-return',${sql.json(evidence)},'ticket-test') as result`));
+    expect(reconciled[0][0].result.status).toBe('completed');
+    expect((await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${host} and action='payment_return_reconciled'`)[0].count).toBe(1);
+    expect((await sql`select status from event_tickets where id=${under.ticket.id}`)[0].status).toBe('refunded');
+    expect((await sql`select reconcile_payment_return(${host},'dodopayments','pay_ticket_under','ref_ticket_under_verified','ticket-admin-return-new-key',${sql.json(evidence)},'ticket-test') as result`)[0].result.status).toBe('completed');
+    const firstPart={status:'succeeded',refund:{refundId:'ref_ticket_late_part',paymentId:'pay_ticket_late',amountMinor:400,currency:'USD'}};
+    expect((await sql`select reconcile_payment_return(${host},'dodopayments','pay_ticket_late','ref_ticket_late_part','ticket-admin-partial-return',${sql.json(firstPart)},'ticket-test') as result`)[0].result.status).toBe('submitted');
+    const secondPart={status:'succeeded',refund:{refundId:'ref_ticket_late_remaining',paymentId:'pay_ticket_late',amountMinor:600,currency:'USD'}};
+    expect((await sql`select reconcile_payment_return(${host},'dodopayments','pay_ticket_late','ref_ticket_late_remaining','ticket-admin-remaining-return',${sql.json(secondPart)},'ticket-test') as result`)[0].result.status).toBe('completed');
+    expect(Object.keys((await sql`select financial_integrity_snapshot() as snapshot`)[0].snapshot).sort()).toEqual([...INTEGRITY_SIGNALS].sort());
+    const [localEvent]=await sql`insert into events(organizer_id,title,event_date,is_paid,ticket_price,currency) values(${host},'NGN referral fixture',now()+interval '2 days',true,10,'NGN') returning id`;
+    const [local]=await reserve(a,'ticket-local-currency',localEvent.id);
+    const localPayment={...payload,ticket_id:local.ticket.id,payment_id:'pay_ticket_ngn',currency:'NGN',provider_reference:'ticket_'+local.ticket.id};
+    await sql`select process_payment_event('paystack','charge:pay_ticket_ngn',${sql.json(localPayment)},'ticket-test')`;
+    expect(Number((await sql`select creator_balance(${referrer},'NGN') as balance`)[0].balance.available)).toBe(1);
+    expect(Number((await sql`select creator_balance(${referrer},'USD') as balance`)[0].balance.available)).toBe(0);
+    await sql`select process_refund_event('paystack','ref_ticket_ngn','pay_ticket_ngn',1000,'NGN','ticket-test')`;
+    expect(Number((await sql`select creator_balance(${referrer},'NGN') as balance`)[0].balance.available)).toBe(0);
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'event_tickets','INSERT') as allowed`)[0].allowed).toBe(false);
+      expect((await sql`select has_table_privilege(${role},'payment_returns','SELECT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['reserve_event_ticket(uuid,uuid,text,text)','record_ticket_checkout(uuid,uuid,text,text)','process_payment_event_047(text,text,jsonb,text)','process_refund_event_047(text,text,text,bigint,text,text)','claim_payment_returns(integer)','update_payment_return(text,text,uuid,text,text,text)','reconcile_payment_return(uuid,text,text,text,text,jsonb,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }

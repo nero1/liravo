@@ -64,6 +64,28 @@ export async function createTipCheckout(tip: { id: string; amount: string; curre
   return checkoutResult('dodopayments',await response.json(),reference);
 }
 
+export async function createTicketCheckout(ticket:{id:string;user_id:string;amount_paid:string;currency:string},email:string){
+  const reference=`ticket_${ticket.id}`,amount=Math.round(Number(ticket.amount_paid)*100);
+  if(!Number.isSafeInteger(amount)||amount<50||amount>500000)throw new Error('Invalid ticket amount');
+  const returnUrl=`${process.env.NEXT_PUBLIC_APP_URL??'https://liravo.org'}/tickets/${ticket.id}`;
+  const metadata={ticket_id:ticket.id,user_id:ticket.user_id,reference};
+  if(ticket.currency==='NGN'){
+    const key=process.env.PAYSTACK_SECRET_KEY;if(!key)throw new Error('Paystack unavailable');
+    const response=await fetch('https://api.paystack.co/transaction/initialize',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(8000),body:JSON.stringify({email,amount,currency:ticket.currency,reference,callback_url:returnUrl,metadata})});
+    if(!response.ok)throw new Error('Ticket checkout unavailable');
+    return checkoutResult('paystack',await response.json(),reference);
+  }
+  const {key,base}=dodoConnection(),headers={Authorization:`Bearer ${key}`,'Content-Type':'application/json'};
+  const productResponse=await fetch(`${base}/products`,{method:'POST',headers:{...headers,'Idempotency-Key':`product_${reference}`},signal:AbortSignal.timeout(8000),body:JSON.stringify({name:`Liravo event ticket ${ticket.id}`,tax_category:'digital_products',price:{type:'one_time_price',price:amount,currency:ticket.currency,pay_what_you_want:false,tax_inclusive:false,purchasing_power_parity:false,discount_bps:0},metadata})});
+  if(!productResponse.ok)throw new Error('Ticket product unavailable');
+  const product=await productResponse.json(),price=product.price;
+  const productId=z.string().regex(/^[a-zA-Z0-9_-]{1,150}$/).parse(product.product_id);
+  if(product.is_recurring!==false||price?.type!=='one_time_price'||price.currency!==ticket.currency||price.price!==amount||price.pay_what_you_want===true||price.tax_inclusive===true||price.purchasing_power_parity||price.discount_bps||price.discount)throw new Error('Invalid ticket product pricing');
+  const response=await fetch(`${base}/checkouts`,{method:'POST',headers:{...headers,'Idempotency-Key':reference},signal:AbortSignal.timeout(8000),body:JSON.stringify({customer:{email},billing_currency:ticket.currency,product_cart:[{product_id:productId,quantity:1}],feature_flags:{allow_currency_selection:false,allow_discount_code:false},return_url:returnUrl,metadata})});
+  if(!response.ok)throw new Error('Ticket checkout unavailable');
+  return checkoutResult('dodopayments',await response.json(),reference);
+}
+
 /** Setting the same remote status is replayable after a lost response. */
 export async function cancelProviderSubscription(provider: string, remoteId: string | null, key: string) {
   if (provider === 'paystack') return; // Paystack checkout is a single charge, without a recurring plan.

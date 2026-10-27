@@ -3,7 +3,7 @@ import Decimal from 'decimal.js';
 import { dodoConnection } from '@/lib/payment-providers';
 import { z, ZodError } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
-import { readPaymentNotice, normalizeSubscription, normalizeTip, normalizeRefund, paymentMetadata, type PaymentNotice } from '@/lib/payment-webhooks';
+import { readPaymentNotice, normalizeSubscription, normalizeTip, normalizeTicket, normalizeRefund, paymentMetadata, type PaymentNotice } from '@/lib/payment-webhooks';
 import { getRequestCorrelationId } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
@@ -45,7 +45,7 @@ export async function paymentWebhook(request:Request) {
       return NextResponse.json({received:true,correlationId});
     }
 
-    let event:ReturnType<typeof normalizeTip>|ReturnType<typeof normalizeSubscription>=normalizeTip(notice);
+    let event:ReturnType<typeof normalizeTip>|ReturnType<typeof normalizeSubscription>|ReturnType<typeof normalizeTicket>=normalizeTicket(notice)??normalizeTip(notice);
     if(!event){
       const remoteId=notice.data.subscription_id??(Array.isArray(notice.data.subscription_ids)&&notice.data.subscription_ids.length===1?notice.data.subscription_ids[0]:undefined);
       if(notice.provider==='dodopayments'&&(notice.event.startsWith('subscription.')||notice.event==='payment.succeeded')&&!paymentMetadata(notice).subscription_id&&typeof remoteId==='string'){

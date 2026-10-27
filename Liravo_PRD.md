@@ -625,6 +625,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 - Author or creator hosts a reading event or Q&A.
 - Free events: open RSVP.
 - Paid events: ticketed via Dodopayments or Paystack. Platform fee: 10%.
+- Seats are reserved for 20 minutes; only verified payment confirms a ticket. Late payments without capacity and duplicate charges enter the refund queue. Refunds adjust host revenue and referral credit atomically.
 - Event page includes book recommendations with affiliate links.
 - MVP: events link to external hosting (Zoom, StreamYard, etc.). Native streaming is post-MVP.
 
@@ -740,6 +741,7 @@ When a book page is rendered, the server checks this table for the user's countr
 ### 8.8 Events (Paid)
 
 - Ticketed events: platform fee of 10% of ticket price.
+- Ticket referrals receive 10% of the ticket price in its paid currency; credits are created only after capture and reduced by refunds.
 - Free events: no fee.
 
 ### 8.9 Earnings and Payouts

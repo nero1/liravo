@@ -5,19 +5,19 @@ import { capturedPaymentEvent,fetchCapturedPayment } from '@/lib/refund-reconcil
 import { observeOperationalSignal } from '@/lib/operational-alerts';
 import { recordMetric } from '@/lib/metrics';
 
-const jobs=z.array(z.object({entity_type:z.enum(['tip','subscription']),entity_id:z.string().uuid(),user_id:z.string().uuid(),provider:z.enum(['paystack','dodopayments']),reference:z.string().min(1).max(200),attempts:z.number().int().positive(),claim_token:z.string().uuid(),scan_page:z.number().int().nonnegative()}));
+const jobs=z.array(z.object({entity_type:z.enum(['tip','subscription','ticket']),entity_id:z.string().uuid(),user_id:z.string().uuid(),provider:z.enum(['paystack','dodopayments']),reference:z.string().min(1).max(200),attempts:z.number().int().positive(),claim_token:z.string().uuid(),scan_page:z.number().int().nonnegative()}));
 type CheckoutJob=z.infer<typeof jobs>[number];
 function mismatch(){return Object.assign(new Error('Payment binding mismatch'),{code:'P1003'});}
 async function applyPayment(job:CheckoutJob,event:Awaited<ReturnType<typeof fetchCapturedPayment>>,correlationId:string){
-  const payload=event.payload as {tipId?:string;subscription_id?:string;user_id?:string};
-  if((job.entity_type==='tip'?payload.tipId:payload.subscription_id)!==job.entity_id||job.entity_type==='subscription'&&payload.user_id!==job.user_id)throw mismatch();
+  const payload=event.payload as {tipId?:string;subscription_id?:string;ticket_id?:string;user_id?:string};
+  if((job.entity_type==='tip'?payload.tipId:job.entity_type==='ticket'?payload.ticket_id:payload.subscription_id)!==job.entity_id||job.entity_type!=='tip'&&payload.user_id!==job.user_id)throw mismatch();
   const {data,error}=await createServiceClient().rpc('process_payment_event' as never,{p_provider:job.provider,p_event_id:event.eventId,p_payload:event.payload,p_correlation_id:correlationId} as never);
   if(error)throw Object.assign(new Error('Payment reconciliation failed'),{code:error.code});
   if(typeof data!=='boolean')throw new Error('Payment reconciliation acknowledgement missing');
   return data;
 }
 async function lookup(job:CheckoutJob,correlationId:string){
-  const {data:entity,error}=await createServiceClient().from(job.entity_type==='tip'?'tips':'subscriptions').select('*').eq('id',job.entity_id).maybeSingle();
+  const {data:entity,error}=await createServiceClient().from(job.entity_type==='tip'?'tips':job.entity_type==='ticket'?'event_tickets':'subscriptions').select('*').eq('id',job.entity_id).maybeSingle();
   if(error||!entity)throw new Error('Checkout unavailable');
   if(entity.user_id!==job.user_id||job.provider!==(job.entity_type==='tip'?(entity.currency==='NGN'?'paystack':'dodopayments'):entity.provider))throw mismatch();
   if(job.provider==='paystack'){
@@ -53,7 +53,7 @@ async function lookup(job:CheckoutJob,correlationId:string){
   if(session.id!==entity.provider_checkout_id)throw mismatch();
   if(session.payment_status!=='succeeded'||!session.payment_id)return {settled:false,page:0,delay:60,applied:0};
   const event=await fetchCapturedPayment('dodopayments',session.payment_id);
-  return {settled:job.entity_type==='tip',page:0,delay:300,applied:Number(await applyPayment(job,event,correlationId))};
+  return {settled:job.entity_type!=='subscription',page:0,delay:300,applied:Number(await applyPayment(job,event,correlationId))};
 }
 export async function drainCheckoutReconciliation(correlationId:string,userId?:string){
   const client=createServiceClient();

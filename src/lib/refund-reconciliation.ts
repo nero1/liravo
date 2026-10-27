@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { dodoConnection } from '@/lib/payment-providers';
-import { normalizeSubscription, normalizeTip, paymentMetadata, type PaymentNotice } from '@/lib/payment-webhooks';
+import { normalizeSubscription, normalizeTip, normalizeTicket, paymentMetadata, type PaymentNotice } from '@/lib/payment-webhooks';
 import { observeOperationalSignal } from '@/lib/operational-alerts';
 import { recordMetric } from '@/lib/metrics';
 
@@ -19,7 +19,7 @@ export async function fetchCapturedPayment(provider:'paystack'|'dodopayments',pa
 export async function capturedPaymentEvent(provider:'paystack'|'dodopayments',data:Record<string,unknown>){
   if(data.status!==(provider==='paystack'?'success':'succeeded'))throw new Error('Payment is not captured');
   const notice:PaymentNotice={provider,event:provider==='paystack'?'charge.success':'payment.succeeded',deliveryId:'reconciliation',timestamp:z.string().optional().parse(data.created_at),data};
-  if(provider==='dodopayments'&&!paymentMetadata(notice).subscription_id&&!paymentMetadata(notice).tip_id){
+  if(provider==='dodopayments'&&!paymentMetadata(notice).subscription_id&&!paymentMetadata(notice).tip_id&&!paymentMetadata(notice).ticket_id){
     const remoteId=data.subscription_id??(Array.isArray(data.subscription_ids)&&data.subscription_ids.length===1?data.subscription_ids[0]:null);
     if(typeof remoteId==='string'){
       const {data:subscription,error}=await createServiceClient().from('subscriptions').select('id,user_id').eq('provider',provider).eq('provider_subscription_id',remoteId).maybeSingle();
@@ -27,7 +27,7 @@ export async function capturedPaymentEvent(provider:'paystack'|'dodopayments',da
       notice.data.metadata={subscription_id:subscription.id,user_id:subscription.user_id};
     }
   }
-  const event=normalizeTip(notice)??normalizeSubscription(notice);
+  const event=normalizeTicket(notice)??normalizeTip(notice)??normalizeSubscription(notice);
   if(!event)throw new Error('Captured payment target unavailable');
   return event;
 }

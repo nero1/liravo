@@ -1,164 +1,42 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import Decimal from 'decimal.js';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import { checkMoneyRateLimit } from '@/lib/rate-limit';
+import { getClientIp,getRequestCorrelationId } from '@/lib/utils';
+import { createTicketCheckout,validateCheckoutUrl } from '@/lib/payment-providers';
 
-export const dynamic = 'force-dynamic';
-
-const paramsSchema = z.object({ id: z.string().uuid() });
-
-export async function POST(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  if (!paramsSchema.safeParse(params).success) {
-    return NextResponse.json({ error: 'Invalid event id' }, { status: 400 });
-  }
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { data: event } = await supabase
-    .from('events')
-    .select('id, title, is_paid, price, currency, event_date, host_id')
-    .eq('id', params.id)
-    .single();
-
-  if (!event) {
-    return NextResponse.json({ error: 'Event not found' }, { status: 404 });
-  }
-
-  if (!event.is_paid) {
-    return NextResponse.json(
-      { error: 'This is a free event. Use the RSVP endpoint instead.' },
-      { status: 400 }
-    );
-  }
-
-  // Bugfix: early idempotency support for client retries.
-  const idemKey = _req.headers.get('x-idempotency-key');
-  if (idemKey) {
-    const { data: idemTicket } = await supabase
-      .from('event_tickets')
-      .select('id, amount_paid, platform_fee, host_amount, currency')
-      .eq('event_id', params.id)
-      .eq('user_id', user.id)
-      .eq('idempotency_key', idemKey)
-      .maybeSingle();
-
-    if (idemTicket) {
-      return NextResponse.json({
-        ticketId: idemTicket.id,
-        redirectUrl: `/events/${params.id}/payment-pending?ticket=${idemTicket.id}`,
-        amount: idemTicket.amount_paid,
-        platformFee: idemTicket.platform_fee,
-        hostAmount: idemTicket.host_amount,
-        currency: idemTicket.currency,
-      });
-    }
-  }
-
-  // Check if already purchased
-  const { data: existing } = await supabase
-    .from('event_tickets')
-    .select('id, status, created_at, amount_paid, platform_fee, host_amount, currency')
-    .eq('event_id', params.id)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) {
-    // Bugfix: pending-ticket lifecycle handling to avoid duplicate pending rows.
-    if (existing.status === 'pending') {
-      const createdAtMs = existing.created_at ? new Date(existing.created_at).getTime() : Date.now();
-      const ageMs = Date.now() - createdAtMs;
-      const pendingTtlMs = 15 * 60 * 1000;
-
-      if (ageMs <= pendingTtlMs) {
-        return NextResponse.json({
-          ticketId: existing.id,
-          redirectUrl: `/events/${params.id}/payment-pending?ticket=${existing.id}`,
-          amount: existing.amount_paid,
-          platformFee: existing.platform_fee,
-          hostAmount: existing.host_amount,
-          currency: existing.currency ?? event.currency ?? 'USD',
-          reusedPending: true,
-        });
+export const dynamic='force-dynamic';
+export const maxDuration=60;
+const ticketSchema=z.object({id:z.string().uuid(),user_id:z.string().uuid(),amount_paid:z.coerce.string(),currency:z.enum(['USD','NGN','EUR']),provider:z.enum(['paystack','dodopayments']),status:z.string(),reserved_until:z.string().nullable(),checkout_url:z.string().nullable()});
+export async function POST(request:Request,{params}:{params:{id:string}}){
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid event'},{status:400});
+  if(!(await checkMoneyRateLimit(user.id,getClientIp(request))).allowed)return NextResponse.json({error:'Too many requests'},{status:429});
+  const form=request.headers.get('content-type')?.includes('application/x-www-form-urlencoded');
+  const body=form?await request.formData().catch(()=>null):null;
+  const key=request.headers.get('idempotency-key')??request.headers.get('x-idempotency-key')??body?.get('_idempotency');
+  if(typeof key!=='string'||key.length<8||key.length>200)return NextResponse.json({error:'Missing ticket intent'},{status:400});
+  const fail=(status:number)=>form?new Response(null,{status:303,headers:{Location:`/events/${params.id}?error=ticket`}}):NextResponse.json({error:'Ticket checkout unavailable'},{status});
+  const db=createServiceClient();
+  const {data,error}=await db.rpc('reserve_event_ticket' as never,{p_user_id:user.id,p_event_id:params.id,p_key:key,p_correlation_id:getRequestCorrelationId(request)} as never);
+  if(error)return fail(({P1001:409,P1003:403,P1004:409,P1005:404} as Record<string,number>)[error.code]??503);
+  const parsed=ticketSchema.safeParse(data);if(!parsed.success)return fail(503);
+  const ticket=parsed.data,statusUrl=`/tickets/${ticket.id}`;
+  if(ticket.user_id!==user.id)return fail(503);
+  const status=ticket.status==='pending'&&ticket.reserved_until&&Date.parse(ticket.reserved_until)<=Date.now()?'expired':ticket.status;
+  let redirectUrl=statusUrl;
+  if(status==='pending'&&ticket.reserved_until){
+    try{
+      if(ticket.checkout_url)redirectUrl=validateCheckoutUrl(ticket.provider,ticket.checkout_url);
+      else{
+        const checkout=await createTicketCheckout(ticket,user.email);
+        const {error:saveError}=await db.rpc('record_ticket_checkout' as never,{p_user_id:user.id,p_ticket_id:ticket.id,p_checkout_id:checkout.checkoutId,p_url:checkout.url} as never);
+        if(saveError)throw new Error('Checkout persistence unavailable');
+        redirectUrl=checkout.url;
       }
-
-      await supabase
-        .from('event_tickets')
-        .update({ status: 'expired' })
-        .eq('id', existing.id);
-    }
-
-    return NextResponse.json({ error: 'Already purchased a ticket' }, { status: 409 });
+    }catch{return fail(502);}
   }
-
-  // Calculate fees using Decimal.js
-  const price = new Decimal(event.price ?? 0);
-  const platformFee = price.times(0.1).toDecimalPlaces(2);
-  const hostAmount = price.minus(platformFee).toDecimalPlaces(2);
-
-  const { data: ticket, error } = await supabase
-    .from('event_tickets')
-    .insert({
-      event_id: params.id,
-      user_id: user.id,
-      amount_paid: price.toNumber(),
-      platform_fee: platformFee.toNumber(),
-      host_amount: hostAmount.toNumber(),
-      currency: event.currency ?? 'USD',
-      status: 'pending',
-      idempotency_key: idemKey,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    // Bugfix: clear conflict response for unique(event_id,user_id) and idempotent retries.
-    if (error.code === '23505') {
-      return NextResponse.json({ error: 'Ticket already exists for this user/event' }, { status: 409 });
-    }
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Credit 10% referral commission to the buyer's referrer, if any
-  if (price.greaterThan(0)) {
-    const { data: buyerUser } = await supabase
-      .from('users')
-      .select('referred_by')
-      .eq('id', user.id)
-      .single();
-
-    if (buyerUser?.referred_by) {
-      const commissionAmount = price.times('0.10').toDecimalPlaces(2);
-      await supabase.from('referral_commissions').insert({
-        referrer_id: buyerUser.referred_by,
-        referred_user_id: user.id,
-        transaction_type: 'event_ticket',
-        transaction_id: ticket.id,
-        gross_amount: price.toFixed(2),
-        commission_rate: 0.10,
-        commission_amount: commissionAmount.toFixed(2),
-        currency: event.currency ?? 'USD',
-        status: 'pending',
-      });
-    }
-  }
-
-  // Return payment redirect URL
-  return NextResponse.json({
-    ticketId: ticket.id,
-    redirectUrl: `/events/${params.id}/payment-pending?ticket=${ticket.id}`,
-    amount: price.toNumber(),
-    platformFee: platformFee.toNumber(),
-    hostAmount: hostAmount.toNumber(),
-    currency: event.currency ?? 'USD',
-  });
+  if(form)return new Response(null,{status:303,headers:{Location:redirectUrl}});
+  return NextResponse.json({ticketId:ticket.id,status,redirectUrl,statusUrl},{headers:{'Cache-Control':'private, no-store'}});
 }

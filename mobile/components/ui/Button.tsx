@@ -1,4 +1,4 @@
-import { TouchableOpacity, Text, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
+import { TouchableOpacity, Text, ActivityIndicator, ViewStyle, TextStyle,AccessibilityState } from 'react-native';
 
 interface Props {
   onPress: () => void;
@@ -9,6 +9,8 @@ interface Props {
   disabled?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  accessibilityState?:AccessibilityState;
+  accessibilityLabel?:string;
 }
 
 export function Button({
@@ -20,6 +22,8 @@ export function Button({
   disabled,
   style,
   textStyle,
+  accessibilityState,
+  accessibilityLabel,
 }: Props) {
   const isDisabled = disabled || loading;
 
@@ -46,7 +50,8 @@ export function Button({
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
-      accessibilityState={{disabled:!!isDisabled,busy:!!loading}}
+      accessibilityState={{...accessibilityState,disabled:!!isDisabled,busy:!!loading}}
+      accessibilityLabel={accessibilityLabel}
       className={`${baseContainer} ${sizeMap[size]} ${variantMap[variant]} ${isDisabled ? 'opacity-50' : ''}`}
       style={style}
       activeOpacity={0.7}
