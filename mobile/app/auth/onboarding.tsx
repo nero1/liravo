@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { GENRES, type UserType } from '@/types';
+import { GENRES, type UserType,type UserRow } from '@/types';
 
 const USER_TYPES: { value: UserType; label: string; description: string }[] = [
   { value: 'reader', label: '📖 Reader', description: 'I love discovering and reading books' },
@@ -57,7 +57,7 @@ export default function OnboardingScreen() {
     }
     setLoading(true);
     try {
-      const res = await api.put<{ user: any }>('/api/users/profile', {
+      const res = await api.put<{ user: UserRow }>('/api/users/profile', {
         username: username.trim().toLowerCase(),
         user_types: userTypes.length ? userTypes : ['reader'],
         genres: selectedGenres,

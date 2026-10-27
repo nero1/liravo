@@ -298,7 +298,7 @@ All layouts designed at 375px width first, scaled to desktop. Fixed bottom navig
 
 **Post-sign-in onboarding flow:**
 1. Choose a username (auto-suggested from OAuth display name, editable).
-2. Select user type: Reader / Author / Newbie Writer / Creator. Users can hold multiple types; this selection sets their default home experience and surfaces relevant features.
+2. Select user type: Reader / Author / Newbie Writer / Creator. Users can hold multiple types; this selection sets their default home experience and surfaces relevant features. Roles and genres remain editable in the profile.
 3. Select 5 or more genres of interest (seeds discovery feed).
 4. Optionally import reading history from Goodreads (CSV upload).
 5. Optionally set a 4-digit PIN for additional security on sensitive actions.
@@ -529,7 +529,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 **AI-assisted guidance (paid tier only):**
 - After a user submits a writing challenge response, a paid-tier feature runs an AI review: noting strengths, one area to work on, and a specific next exercise. This AI call is triggered on submit (DeepSeek primary, Gemini fallback) and stored in the database as the user's feedback record.
-- Personalised weekly writing plan: based on the user's goals, past challenges, and areas for improvement, the AI generates a 7-day plan. Generated once per week via cron for paid-tier Newbie Writer users.
+- Personalised weekly writing plan: based on the user's goals, past challenges, and areas for improvement, the AI generates a 7-day plan. Generated once per week via cron for paid-tier Newbie Writer users, with on-demand generation when a current plan is missing.
 - These features are sparingly AI-powered (one AI call per submit, one per week per user) to keep costs manageable.
 
 **Craft Resources Section:**
@@ -719,7 +719,7 @@ When a book page is rendered, the server checks this table for the user's countr
 - Email digests (weekly activity, new release alerts, challenge reminders)
 - Advanced reading statistics dashboard (pace, genre distribution over time, seasonal patterns)
 - Unlimited custom shelves
-- AI taste profile analysis (generated on demand, refreshed when reading history changes significantly)
+- AI taste profile analysis (requires three finished books; generated on demand with actual genre/mood counts and validated prose, refreshed when reading history changes)
 - AI-powered personalised writing challenges and weekly plan (for Newbie Writer users on premium)
 - Priority matching in buddy read finder
 - Exclusive seasonal badge designs

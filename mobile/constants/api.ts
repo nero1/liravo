@@ -59,7 +59,7 @@ export const ENDPOINTS = {
     reading: '/api/stats/reading',
   },
   wrapped: '/api/wrapped',
-  tasteProfile: '/api/taste-profile',
+  tasteProfile: '/api/ai/taste-profile',
   // Community
   buddyReads: {
     list: '/api/buddy-reads',
@@ -117,6 +117,7 @@ export const ENDPOINTS = {
     submitChallenge: (id: string) => `/api/write/challenges/${id}/submit`,
     aiFeedback: '/api/write/ai-feedback',
     progress: '/api/write/progress',
+    plan:'/api/write/plan',
     workshops: '/api/write/workshops',
     workshopById: (id: string) => `/api/write/workshops/${id}`,
     joinWorkshop: (id: string) => `/api/write/workshops/${id}/join`,
