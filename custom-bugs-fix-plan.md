@@ -20,6 +20,7 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Add paid-ticket checkout, serialized capacity, verified host/referral settlement and recoverable refunds.
 - ✅ Retain mismatched captures, queue their return and prevent checkout retries from charging again.
 - ✅ Correct subscription referral principals and transaction currencies; repair verified historical commissions with refund-aware audits.
+- ✅ Enforce configured PINs for payout/bank intents with transaction-time proof checks and audited destinations.
 - 🟡 Complete staging-provider validation.
 
 ✅ 3. Cron hardening and Vercel Hobby compliance (Critical/High)
@@ -64,6 +65,7 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Keep browser inference out of server functions and enforce the uncompressed bundle budget during builds.
 - ✅ Verify remaining content tables, durable creates, group capacity, private discussions, badge rewards and paged author notifications.
 - ✅ Make admin theme/store/seasonal configuration atomic and repair partial/repeated content seeds through shared API/CLI routines.
+- ✅ Unify profile/onboarding API validation across providers and commit optional PINs with onboarding.
 - ✅ Make buddy chapter/notes atomic and verify bounded, replay-safe Goodreads imports on web/native.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.

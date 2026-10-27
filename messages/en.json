@@ -38,11 +38,48 @@
     "description": "Sign in to Liravo to discover and track books."
   },
   "onboarding": {
+    "welcome": "Welcome to Liravo",
+    "displayName": "Display name",
+    "displayPlaceholder": "Your name",
+    "displayRequired": "Enter a display name of 1–50 characters.",
+    "saveFailed": "Could not save your profile. Please try again.",
+    "followFailed": "Could not update the follow. Please try again.",
+    "importTitle": "Import your reading history",
+    "importDescription": "Optional. Upload your Goodreads export to pre-fill your shelves.",
+    "importHelp": "Export from Goodreads → My Books → Import/Export",
+    "importContinue": "Import and continue",
+    "skip": "Skip",
+    "continue": "Continue",
+    "followTitle": "Follow some readers and authors",
+    "followDescription": "Personalise your feed by following people you are interested in.",
+    "noSuggestions": "No suggestions available yet.",
+    "verifiedAuthor": "Verified Author",
+    "following": "Following",
+    "follow": "Follow",
+    "continueFollowed": "Continue ({count} followed)",
+    "pinTitle": "Set a security PIN",
+    "pinDescription": "Optional. A 4-digit PIN protects payout requests and bank-detail changes.",
+    "pin": "PIN",
+    "confirmPin": "Confirm PIN",
+    "pinInvalid": "PIN must be exactly four digits.",
+    "pinMismatch": "PINs do not match.",
+    "settingUp": "Setting up…",
+    "finishPin": "Finish with PIN",
+    "skipFinish": "Skip and finish",
+    "ready": "You are ready!",
+    "readyDescription": "Your reading community is waiting.",
+    "usernameDescription": "This is how others will find you.",
+    "errorTitle": "Profile error",
+    "selectGenres": "Choose at least five genres.",
+    "roleDescriptions": {"reader": "I love discovering and reading books", "author": "I write and publish books", "newbie_writer": "I am learning to write", "creator": "I create book content online"},
     "title": "Let's set up your profile",
     "username": {
       "title": "Choose your username",
       "placeholder": "yourname",
-      "hint": "Letters, numbers, and underscores only"
+      "hint": "Letters, numbers and underscores; 3–30 characters.",
+      "label": "Username",
+      "invalid": "Use 3–30 letters, numbers or underscores.",
+      "taken": "This username is already taken."
     },
     "userType": {
       "title": "How do you describe yourself?",
@@ -53,6 +90,7 @@
       "creator": "Book Content Creator"
     },
     "genres": {
+      "selected": "Pick at least 5 genres — {count} selected",
       "title": "What do you love to read?",
       "subtitle": "Pick at least 5 genres to personalise your feed",
       "error": "Please select at least 5 genres"
@@ -76,6 +114,22 @@
     "writtenBy": "by {author}"
   },
   "profile": {
+    "countryPlaceholder": "GB",
+    "avatarTooLarge": "Avatar must be under 5 MB.",
+    "displayRequired": "Display name is required.",
+    "bioTooLong": "Bio must be 280 characters or fewer.",
+    "saveFailed": "Could not save your profile. Please try again.",
+    "photo": "Profile photo",
+    "preview": "Profile photo preview",
+    "uploadPhoto": "Upload photo",
+    "displayName": "Display name",
+    "bio": "Bio",
+    "countryOptional": "Country (optional)",
+    "externalLinks": "External links (up to 3)",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "saveChanges": "Save changes",
+    "aboutPlaceholder": "Tell readers about yourself…",
     "editProfile": "Edit Profile",
     "followers": "Followers",
     "following": "Following",
@@ -630,6 +684,11 @@
     "shareMessage": "Join the challenge and share your writing."
   },
   "earnings": {
+    "pin": "Account PIN",
+    "pinHelp": "If you set a PIN, enter it to save bank details or request a payout.",
+    "pinFailed": "Check your current PIN and try again.",
+    "pinRateLimit": "Too many attempts. Please wait before trying again.",
+    "retry": "Retry",
     "pageTitle": "Earnings — Liravo",
     "title": "Earnings dashboard",
     "tips": "Tips received",
@@ -858,5 +917,25 @@
     "replyTo": "Reply to {name}",
     "join": "Join this Buddy Read",
     "save": "Save progress and note"
+  },
+  "accountSecurity": {
+    "factorFailed": "Could not update two-factor authentication. Check your code and try again.",
+    "pinTitle": "Account PIN",
+    "pinDescription": "A four-digit PIN protects payout requests and bank-detail changes. Changing an existing PIN requires the current PIN.",
+    "currentPin": "Current PIN",
+    "newPin": "New PIN (4 digits)",
+    "confirmPin": "Confirm PIN",
+    "saved": "PIN saved.",
+    "failed": "Could not update the PIN. Check your current PIN and try again.",
+    "mismatch": "The PINs do not match.",
+    "saving": "Saving…",
+    "savePin": "Save PIN",
+    "errorTitle": "Security error",
+    "factorTitle": "Two-factor authentication",
+    "factorEnabled": "Enabled",
+    "factorDisabled": "Disabled",
+    "factorCode": "Authenticator or recovery code",
+    "disableFactor": "Disable two-factor authentication",
+    "enableFactorWeb": "Enable two-factor authentication from the web app."
   }
 }

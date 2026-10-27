@@ -1,87 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import {useEffect,useState} from 'react';
+import {useTranslations} from 'next-intl';
 
-export default function PINSettingsClient() {
-  const [pin, setPin] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
-
-  const handleSave = async () => {
-    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      setMessage({ text: 'PIN must be exactly 4 digits', ok: false });
-      return;
-    }
-    if (pin !== confirm) {
-      setMessage({ text: 'PINs do not match', ok: false });
-      return;
-    }
-    setSaving(true);
-    setMessage(null);
-    const res = await fetch('/api/auth/pin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin }),
-    });
-    setSaving(false);
-    if (res.ok) {
-      setMessage({ text: 'PIN set successfully', ok: true });
-      setPin('');
-      setConfirm('');
-    } else {
-      const data = await res.json();
-      setMessage({ text: data.error ?? 'Failed to set PIN', ok: false });
-    }
-  };
-
-  return (
-    <div className="max-w-lg mx-auto px-4 py-6">
-      <h1 className="font-display text-2xl font-bold mb-2">4-Digit PIN</h1>
-      <p className="text-sm text-muted-foreground mb-6">
-        Set an optional PIN for additional security on sensitive actions.
-      </p>
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1.5">New PIN</label>
-          <input
-            type="password"
-            inputMode="numeric"
-            maxLength={4}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            placeholder="••••"
-            className="w-full px-3 py-2.5 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 tracking-widest text-center text-xl"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1.5">Confirm PIN</label>
-          <input
-            type="password"
-            inputMode="numeric"
-            maxLength={4}
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            placeholder="••••"
-            className="w-full px-3 py-2.5 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 tracking-widest text-center text-xl"
-          />
-        </div>
-
-        {message && (
-          <p className={`text-sm ${message.ok ? 'text-accent' : 'text-destructive'}`}>
-            {message.text}
-          </p>
-        )}
-
-        <button
-          onClick={handleSave}
-          disabled={saving || pin.length !== 4}
-          className="w-full py-3 bg-accent text-accent-foreground rounded-lg font-medium text-sm hover:bg-accent/90 transition-colors disabled:opacity-60"
-        >
-          {saving ? 'Saving...' : 'Set PIN'}
-        </button>
-      </div>
-    </div>
-  );
+export default function PINSettingsClient({actorId}:{actorId:string}){
+  const t=useTranslations('accountSecurity');
+  const [configured,setConfigured]=useState<boolean|null>(null),[currentPin,setCurrentPin]=useState(''),[pin,setPin]=useState(''),[confirm,setConfirm]=useState(''),[saving,setSaving]=useState(false),[message,setMessage]=useState<'saved'|'failed'|'mismatch'|null>(null);
+  useEffect(()=>{const controller=new AbortController();fetch('/api/auth/pin',{signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error('PIN unavailable');const data=await response.json();if(typeof data.configured!=='boolean')throw new Error('PIN unavailable');setConfigured(data.configured);}).catch(()=>{if(!controller.signal.aborted)setMessage('failed');});return()=>controller.abort();},[]);
+  async function save(event:React.FormEvent){
+    event.preventDefault();if(saving)return;if(pin!==confirm){setMessage('mismatch');return;}
+    setSaving(true);setMessage(null);
+    try{
+      const response=await fetch('/api/auth/pin',{method:'POST',headers:{'Content-Type':'application/json','X-Liravo-Actor':actorId},body:JSON.stringify({pin,...(configured?{currentPin}:{})})});
+      const data=await response.json();if(!response.ok||!data.success)throw new Error('PIN unavailable');
+      setConfigured(true);setPin('');setConfirm('');setCurrentPin('');setMessage('saved');
+    }catch{setMessage('failed');}finally{setSaving(false);}
+  }
+  const field=(id:string,value:string,set:(value:string)=>void,label:string)=><label htmlFor={id} className="block text-sm space-y-1"><span>{label}</span><input id={id} type="password" inputMode="numeric" autoComplete="off" minLength={4} maxLength={4} pattern="[0-9]{4}" required value={value} onChange={event=>set(event.target.value.replace(/\D/g,'').slice(0,4))} className="block w-full px-3 py-2.5 border border-border rounded-lg bg-background tracking-widest text-center"/></label>;
+  return <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
+    <h1 className="font-display text-2xl font-bold">{t('pinTitle')}</h1><p className="text-sm text-muted-foreground">{t('pinDescription')}</p>
+    {message&&<p role={message==='saved'?'status':'alert'}>{t(message)}</p>}
+    <form onSubmit={save} aria-busy={saving}><fieldset disabled={saving||configured===null} className="space-y-4">
+      {configured&&field('current-pin',currentPin,setCurrentPin,t('currentPin'))}
+      {field('new-pin',pin,setPin,t('newPin'))}{field('confirm-pin',confirm,setConfirm,t('confirmPin'))}
+      <button disabled={saving||configured===null||pin.length!==4} className="w-full py-3 rounded-lg bg-accent text-accent-foreground disabled:opacity-60">{t(saving?'saving':'savePin')}</button>
+    </fieldset></form>
+  </div>;
 }

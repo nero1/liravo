@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { getCreatorBalance, PAYOUT_CURRENCIES } from '@/lib/earnings';
+import {readAccountPin} from '@/lib/account-pin';
 import { decodeCursor, encodeCursor } from '@/lib/pagination';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,6 @@ export async function GET(request:Request) {
     if(error || !Array.isArray(data)) throw new Error('Payout history unavailable');
     const payouts=data.slice(0,50);
     const last=payouts[payouts.length-1];
-    return NextResponse.json({...summary,tipsReceived:summary.tips,referralCommissions:summary.referrals,eventRevenue:summary.events,totalEarnings:summary.earned,payouts,nextCursor:data.length>50?encodeCursor({at:last.created_at,id:last.id}):null});
+    return NextResponse.json({...summary,pinRequired:!!await readAccountPin(user.id),tipsReceived:summary.tips,referralCommissions:summary.referrals,eventRevenue:summary.events,totalEarnings:summary.earned,payouts,nextCursor:data.length>50?encodeCursor({at:last.created_at,id:last.id}):null});
   }catch { return NextResponse.json({error:'Earnings unavailable'},{status:503}); }
 }

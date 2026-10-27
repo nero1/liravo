@@ -30,8 +30,9 @@ async function request<T>(
   const { token, user } = useAuthStore.getState();
   const mutating = method !== 'GET';
   const primaryAuth=/^\/api\/auth\/(login|signup|google|telegram|2fa\/verify)$/.test(path);
-  const signature = primaryAuth?'':JSON.stringify([user?.id ?? token, method, path, body]);
-  const trackIntent=mutating&&!primaryAuth;
+  const secret=primaryAuth||!!body&&typeof body==='object'&&Object.keys(body).some(key=>/^(pin|currentPin|current_pin|newPin|password)$/i.test(key));
+  const signature = secret?'':JSON.stringify([user?.id ?? token, method, path, body]);
+  const trackIntent=mutating&&!secret;
   const suppliedKey = Object.entries(extraHeaders ?? {}).find(([name]) => /^(x-)?idempotency-key$/i.test(name))?.[1];
   let intentKey = suppliedKey ?? pendingIntents.get(signature);
   if (trackIntent && !intentKey) {
@@ -42,7 +43,7 @@ async function request<T>(
   const headers: Record<string, string> = {
     'Content-Type':'application/json',
     'X-Liravo-Client':'native',
-    ...(trackIntent ? { 'Idempotency-Key': intentKey!, 'X-Idempotency-Key': intentKey! } : {}),
+    ...(intentKey ? { 'Idempotency-Key': intentKey!, 'X-Idempotency-Key': intentKey! } : {}),
     ...Object.fromEntries(Object.entries(extraHeaders ?? {}).filter(([name]) => !/^(x-)?idempotency-key$/i.test(name))),
   };
   if (token&&!primaryAuth) {
@@ -89,7 +90,7 @@ export const api = {
     request<T>(path, 'GET', undefined, params),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
     request<T>(path, 'POST', body, undefined, headers),
-  put: <T>(path: string, body?: unknown) => request<T>(path, 'PUT', body),
+  put: <T>(path: string, body?: unknown,headers?:Record<string,string>) => request<T>(path, 'PUT', body,undefined,headers),
   patch: <T>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
   delete: <T>(path: string) => request<T>(path, 'DELETE'),
 };

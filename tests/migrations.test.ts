@@ -995,7 +995,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await expect(sql`select save_taste_profile(${reader},${sql.json(source)},${'f'.repeat(64)},'profile-sql-race',${sql.json(generated.profile)},'deepseek')`).rejects.toThrow('Premium required');
     }finally{model.mockRestore();lease.mockRestore();}
     for(const role of ['anon','authenticated']){
-      for(const routine of ['taste_profile_input(uuid)','writing_plan_input(uuid)','save_taste_profile(uuid,jsonb,text,text,jsonb,text)','save_writing_plan(uuid,date,jsonb,text,text,jsonb,text)','update_profile_atomic(uuid,jsonb)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['taste_profile_input(uuid)','writing_plan_input(uuid)','save_taste_profile(uuid,jsonb,text,text,jsonb,text)','save_writing_plan(uuid,date,jsonb,text,text,jsonb,text)','update_profile_atomic(uuid,jsonb,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
       for(const table of ['ai_taste_profiles','writing_plans'])expect((await sql`select has_table_privilege(${role},${table},'INSERT') as allowed`)[0].allowed).toBe(false);
     }
     }
@@ -1403,6 +1403,51 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       expect((await sql`select has_function_privilege(${role},'seed_content_item(text,text,jsonb,uuid)','EXECUTE') as allowed`)[0].allowed).toBe(false);
       expect((await sql`select has_table_privilege(${role},'seed_records','SELECT') as allowed`)[0].allowed).toBe(false);
     }
+    }
+    {
+    const reader=crypto.randomUUID();await sql`insert into auth.users(id,email,raw_user_meta_data) values(${reader},'onboarding-pin@example.test','{"username":"onboarding_pin_fixture"}')`;
+    const bcrypt=(await import('bcryptjs')).default,hash=await bcrypt.hash('2468',12);
+    const changes={username:'onboarding_pin_saved',display_name:'Reader',user_types:['reader'],genres:['Fantasy','Mystery','Thriller','Romance','Poetry'],onboarding_complete:true};
+    await expect(sql`select update_profile_atomic(${reader},${sql.json({...changes,genres:['Fantasy']})},${hash})`).rejects.toThrow('five genres');
+    expect((await sql`select onboarding_complete,pin_hash from users where id=${reader}`)[0]).toMatchObject({onboarding_complete:false,pin_hash:null});
+    await sql`select update_profile_atomic(${reader},${sql.json(changes)},${hash})`;
+    expect((await sql`select onboarding_complete,pin_hash from users where id=${reader}`)[0]).toMatchObject({onboarding_complete:true,pin_hash:hash});
+    await sql`select update_profile_atomic(${reader},${sql.json(changes)},${hash})`;
+    expect((await sql`select count(*)::int as count from security_events where user_id=${reader} and event_type='pin_set'`)[0].count).toBe(1);
+    await expect(sql`select update_profile_atomic(${reader},${sql.json(changes)},${await bcrypt.hash('1357',12)})`).rejects.toThrow('PIN changed');
+    await expect(sql.begin(async tx=>{await tx`select set_config('request.jwt.claim.role','authenticated',true)`;await tx`update users set display_name='Bypass' where id=${reader}`;})).rejects.toThrow('profile API');
+    await sql.begin(async tx=>{await tx`select set_config('request.jwt.claim.role','authenticated',true)`;await tx`update users set profile_visibility='followers_only' where id=${reader}`;});
+    expect((await sql`select display_name,profile_visibility from users where id=${reader}`)[0]).toMatchObject({display_name:'Reader',profile_visibility:'followers_only'});
+    expect((await sql`select has_function_privilege('service_role','update_profile_046(uuid,jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const buyer=crypto.randomUUID(),owner=crypto.randomUUID();
+    for(const [index,id] of [buyer,owner].entries())await sql`insert into auth.users(id,email,raw_user_meta_data) values(${id},${'pin-wallet'+index+'@example.test'},${sql.json({username:'pin_wallet_'+index})})`;
+    const bcrypt=(await import('bcryptjs')).default,hashA=await bcrypt.hash('2468',12),hashB=await bcrypt.hash('1357',12);
+    const first=await Promise.allSettled([sql`select set_account_pin(${owner},null,${hashA})`,sql`select set_account_pin(${owner},null,${hashB})`]);
+    expect(first.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    const current=(await sql`select pin_hash from users where id=${owner}`)[0].pin_hash;
+    expect((await sql`select set_account_pin(${owner},${current},${current}) as changed`)[0].changed).toBe(false);
+    const bank={provider:'manual',display_name:'PIN fixture',account_number:'1234567890',bank_code:'AUDIT',currency:'USD'};
+    await expect(sql`select save_payout_destination(${owner},'pin-bank-denied',${sql.json(bank)},null,'pin-test')`).rejects.toThrow('PIN confirmation');
+    const banks=await Promise.all(Array.from({length:3},()=>sql`select save_payout_destination(${owner},'pin-bank-saved',${sql.json(bank)},${current},'pin-test') as result`));
+    expect(banks.every(rows=>rows[0].result.saved)).toBe(true);
+    expect((await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${owner} and action='payout_destination_saved'`)[0].count).toBe(1);
+    const [tip]=await sql`select create_tip_transaction(${buyer},${owner},100,10,90,'USD','pin-wallet-funding','pin-test') as tip`;
+    await sql`select process_payment_event('paystack','charge:pin-wallet-funding',${sql.json({tipId:tip.tip.id,status:'completed',payment_id:'pin-wallet-funding',paid_amount_minor:10000,tax_minor:0,currency:'USD'})},'pin-test')`;
+    await expect(sql`select create_payout_request_atomic(${owner},60,'manual','pin-payout-denied','pin-test','USD')`).rejects.toThrow('PIN confirmation');
+    const payouts=await Promise.all(Array.from({length:3},()=>sql`select create_payout_request_atomic(${owner},60,'manual','pin-payout-once','pin-test','USD',${current}) as id`));
+    expect(new Set(payouts.map(rows=>rows[0].id)).size).toBe(1);
+    expect(Number((await sql`select creator_balance(${owner},'USD') as balance`)[0].balance.available)).toBe(30);
+    const next=current===hashA?hashB:hashA;
+    await sql`select set_account_pin(${owner},${current},${next})`;
+    await expect(sql`select save_payout_destination(${owner},'pin-bank-stale-proof',${sql.json(bank)},${current},'pin-test')`).rejects.toThrow('PIN confirmation');
+    await expect(sql`select create_payout_request_atomic(${owner},20,'manual','pin-payout-stale-proof','pin-test','USD',${current})`).rejects.toThrow('PIN confirmation');
+    expect(Number((await sql`select creator_balance(${owner},'USD') as balance`)[0].balance.available)).toBe(30);
+    await sql`select cancel_payout_request(${owner},${payouts[0][0].id},'pin-test')`;
+    expect(Number((await sql`select creator_balance(${owner},'USD') as balance`)[0].balance.available)).toBe(90);
+    for(const role of ['anon','authenticated'])for(const routine of ['set_account_pin(uuid,text,text)','create_payout_request_atomic(uuid,numeric,text,text,text,text,text)','save_payout_destination(uuid,text,jsonb,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    expect((await sql`select has_function_privilege('service_role','create_payout_request_040(uuid,numeric,text,text,text,text)','EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

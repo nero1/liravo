@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { clientUser } from '@/lib/user-profile';
+import bcrypt from 'bcryptjs';
+import {checkRouteRateLimit,checkCriticalRateLimit} from '@/lib/rate-limit';
 import { GENRES,USER_TYPES } from '@/constants/config';
 
 export const dynamic='force-dynamic';
@@ -15,13 +17,25 @@ const BodySchema=z.object({
   avatar_url:link.nullable().optional(),external_links:z.array(link).max(3).optional(),
   user_types:z.array(z.enum(USER_TYPES)).min(1).max(4).transform(value=>[...new Set(value)]).optional(),
   genres:z.array(z.enum(GENRES)).max(20).transform(value=>[...new Set(value)]).optional(),
-  onboarding_complete:z.literal(true).optional(),
+  onboarding_complete:z.literal(true).optional(),pin:z.string().regex(/^\d{4}$/).optional(),
 }).strict().refine(value=>Object.keys(value).length>0);
 export async function PUT(request:NextRequest){
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(request.headers.get('x-liravo-actor')&&request.headers.get('x-liravo-actor')!==user.id)return NextResponse.json({error:'Account changed',code:'ACCOUNT_CHANGED'},{status:409});
   const parsed=BodySchema.safeParse(await request.json().catch(()=>null));
-  if(!parsed.success)return NextResponse.json({error:'Invalid profile'},{status:422});
-  const {data,error}=await createServiceClient().rpc('update_profile_atomic' as never,{p_user_id:user.id,p_changes:parsed.data} as never);
-  if(error)return NextResponse.json({error:error.code==='23505'?'Username is already taken':error.code==='P1004'?'Check your profile and choose at least five genres':'Profile update unavailable'},{status:({23505:409,P1003:403,P1004:422} as Record<string,number>)[error.code]??503});
-  return NextResponse.json({ok:true,user:clientUser(data)},{headers:{'Cache-Control':'private, no-store'}});
+  if(!parsed.success)return NextResponse.json({error:'Invalid profile',code:'INVALID_PROFILE'},{status:422});
+  if(!await checkRouteRateLimit(user.id,'social'))return NextResponse.json({error:'Too many requests'},{status:429});
+  const {pin,...changes}=parsed.data;let pinHash:string|null=null;
+  if(pin!==undefined){
+    if(changes.onboarding_complete!==true)return NextResponse.json({error:'PIN setup requires onboarding'},{status:422});
+    if(!(await checkCriticalRateLimit('pin:user:'+user.id)).allowed)return NextResponse.json({error:'Too many PIN attempts'},{status:429});
+    const state=await createServiceClient().from('users').select('pin_hash,onboarding_complete').eq('id',user.id).single();
+    if(state.error||!state.data)return NextResponse.json({error:'Profile unavailable'},{status:503});
+    if(state.data.pin_hash){if(!await bcrypt.compare(pin,state.data.pin_hash))return NextResponse.json({error:'Incorrect current PIN'},{status:403});pinHash=state.data.pin_hash;}
+    else{if(state.data.onboarding_complete)return NextResponse.json({error:'Use PIN settings after onboarding'},{status:422});pinHash=await bcrypt.hash(pin,12);}
+  }
+  const {data,error}=await createServiceClient().rpc('update_profile_atomic' as never,{p_user_id:user.id,p_changes:changes,p_pin_hash:pinHash} as never);
+  if(error)return NextResponse.json({code:error.code==='23505'?'USERNAME_TAKEN':error.code==='P1001'?'PIN_CHANGED':'PROFILE_UNAVAILABLE',error:error.code==='23505'?'Username is already taken':error.code==='P1004'?'Check your profile and choose at least five genres':'Profile update unavailable'},{status:({23505:409,P1001:409,P1003:403,P1004:422} as Record<string,number>)[error.code]??503});
+  const safe=clientUser(data);if(!safe||safe.id!==user.id)return NextResponse.json({error:'Profile result unavailable'},{status:503});
+  return NextResponse.json({ok:true,user:safe},{headers:{'Cache-Control':'private, no-store'}});
 }

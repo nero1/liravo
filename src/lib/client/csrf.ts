@@ -15,7 +15,8 @@ export function browserFetch(original: typeof fetch, origin: string, cookie:()=>
     if(supplied){headers.set('Idempotency-Key',supplied);headers.set('X-Idempotency-Key',supplied);}
     else if(url.pathname.startsWith('/api/')&&!url.pathname.startsWith('/api/auth/')){
       const body=init?.body??(input instanceof Request?(input.body===null?null:headers.get('Content-Type')?.includes('application/json')?await input.clone().text():input.body):undefined);
-      if(body===undefined||body===null||typeof body==='string'){
+      const secret=typeof body==='string'&&/"(?:pin|currentPin|current_pin|newPin|password)"\s*:/i.test(body);
+      if(!secret&&(body===undefined||body===null||typeof body==='string')){
         const bytes=new TextEncoder().encode(JSON.stringify([method,url.pathname+url.search,body??null]));
         const digest=await crypto.subtle.digest('SHA-256',bytes);
         signature='liravo:mutation:'+Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,'0')).join('');

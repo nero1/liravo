@@ -38,11 +38,48 @@
     "description": "Connectez-vous à Liravo pour découvrir des livres et suivre vos lectures."
   },
   "onboarding": {
+    "welcome": "Bienvenue sur Liravo",
+    "displayName": "Nom affiché",
+    "displayPlaceholder": "Votre nom",
+    "displayRequired": "Saisissez un nom de 1 à 50 caractères.",
+    "saveFailed": "Impossible d’enregistrer votre profil. Réessayez.",
+    "followFailed": "Impossible de modifier cet abonnement. Réessayez.",
+    "importTitle": "Importez votre historique de lecture",
+    "importDescription": "Facultatif. Importez votre export Goodreads pour remplir vos étagères.",
+    "importHelp": "Exportez depuis Goodreads → My Books → Import/Export",
+    "importContinue": "Importer et continuer",
+    "skip": "Passer",
+    "continue": "Continuer",
+    "followTitle": "Suivez des lecteurs et des auteurs",
+    "followDescription": "Personnalisez votre fil en suivant les personnes qui vous intéressent.",
+    "noSuggestions": "Aucune suggestion disponible.",
+    "verifiedAuthor": "Auteur vérifié",
+    "following": "Abonné",
+    "follow": "Suivre",
+    "continueFollowed": "Continuer ({count} suivis)",
+    "pinTitle": "Définir un code PIN",
+    "pinDescription": "Facultatif. Un code PIN à 4 chiffres protège les demandes de paiement et les coordonnées bancaires.",
+    "pin": "Code PIN",
+    "confirmPin": "Confirmer le code PIN",
+    "pinInvalid": "Le code PIN doit contenir exactement quatre chiffres.",
+    "pinMismatch": "Les codes PIN ne correspondent pas.",
+    "settingUp": "Configuration…",
+    "finishPin": "Terminer avec le code PIN",
+    "skipFinish": "Passer et terminer",
+    "ready": "Tout est prêt !",
+    "readyDescription": "Votre communauté de lecteurs vous attend.",
+    "usernameDescription": "C’est ainsi que les autres vous trouveront.",
+    "errorTitle": "Erreur de profil",
+    "selectGenres": "Choisissez au moins cinq genres.",
+    "roleDescriptions": {"reader": "J’aime découvrir et lire des livres", "author": "J’écris et publie des livres", "newbie_writer": "J’apprends à écrire", "creator": "Je crée du contenu sur les livres"},
     "title": "Configurons votre profil",
     "username": {
       "title": "Choisissez votre nom d'utilisateur",
       "placeholder": "votreprenom",
-      "hint": "Lettres, chiffres et tirets bas uniquement"
+      "hint": "Lettres, chiffres et tirets bas ; 3 à 30 caractères.",
+      "label": "Identifiant",
+      "invalid": "Utilisez 3 à 30 lettres, chiffres ou tirets bas.",
+      "taken": "Cet identifiant est déjà utilisé."
     },
     "userType": {
       "title": "Comment vous décrivez-vous ?",
@@ -53,6 +90,7 @@
       "creator": "Créateur de contenu littéraire"
     },
     "genres": {
+      "selected": "Choisissez au moins 5 genres — {count} sélectionnés",
       "title": "Qu'aimez-vous lire ?",
       "subtitle": "Choisissez au moins 5 genres pour personnaliser votre fil",
       "error": "Veuillez sélectionner au moins 5 genres"
@@ -76,6 +114,22 @@
     "writtenBy": "par {author}"
   },
   "profile": {
+    "countryPlaceholder": "FR",
+    "avatarTooLarge": "La photo doit faire moins de 5 Mo.",
+    "displayRequired": "Le nom affiché est obligatoire.",
+    "bioTooLong": "La biographie doit contenir 280 caractères maximum.",
+    "saveFailed": "Impossible d’enregistrer votre profil. Réessayez.",
+    "photo": "Photo de profil",
+    "preview": "Aperçu de la photo de profil",
+    "uploadPhoto": "Importer une photo",
+    "displayName": "Nom affiché",
+    "bio": "Biographie",
+    "countryOptional": "Pays (facultatif)",
+    "externalLinks": "Liens externes (3 maximum)",
+    "cancel": "Annuler",
+    "saving": "Enregistrement…",
+    "saveChanges": "Enregistrer les modifications",
+    "aboutPlaceholder": "Présentez-vous aux lecteurs…",
     "editProfile": "Modifier le profil",
     "followers": "Abonnés",
     "following": "Abonnements",
@@ -630,6 +684,11 @@
     "shareMessage": "Rejoignez le défi et partagez vos textes."
   },
   "earnings": {
+    "pin": "Code PIN du compte",
+    "pinHelp": "Si vous avez un code PIN, saisissez-le pour enregistrer les coordonnées bancaires ou demander un paiement.",
+    "pinFailed": "Vérifiez votre code PIN actuel et réessayez.",
+    "pinRateLimit": "Trop de tentatives. Veuillez patienter avant de réessayer.",
+    "retry": "Réessayer",
     "pageTitle": "Revenus — Liravo",
     "title": "Tableau des revenus",
     "tips": "Pourboires reçus",
@@ -858,5 +917,25 @@
     "replyTo": "Réponse à {name}",
     "join": "Rejoindre cette lecture",
     "save": "Enregistrer la progression et la note"
+  },
+  "accountSecurity": {
+    "factorFailed": "Impossible de modifier l’authentification à deux facteurs. Vérifiez votre code et réessayez.",
+    "pinTitle": "Code PIN du compte",
+    "pinDescription": "Un code PIN à quatre chiffres protège les paiements et les coordonnées bancaires. Le code actuel est nécessaire pour le modifier.",
+    "currentPin": "Code PIN actuel",
+    "newPin": "Nouveau code PIN (4 chiffres)",
+    "confirmPin": "Confirmer le code PIN",
+    "saved": "Code PIN enregistré.",
+    "failed": "Impossible de modifier le code PIN. Vérifiez le code actuel et réessayez.",
+    "mismatch": "Les codes PIN ne correspondent pas.",
+    "saving": "Enregistrement…",
+    "savePin": "Enregistrer le code PIN",
+    "errorTitle": "Erreur de sécurité",
+    "factorTitle": "Authentification à deux facteurs",
+    "factorEnabled": "Activée",
+    "factorDisabled": "Désactivée",
+    "factorCode": "Code d’authentification ou de récupération",
+    "disableFactor": "Désactiver l’authentification à deux facteurs",
+    "enableFactorWeb": "Activez l’authentification à deux facteurs sur le site web."
   }
 }

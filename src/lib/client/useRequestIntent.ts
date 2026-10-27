@@ -1,16 +1,33 @@
 'use client';
 
-import { useRef } from 'react';
+import {useRef} from 'react';
 
-/** Retains one key across network retries; edited payloads and acknowledged successes start a new intent. */
-export function useRequestIntent() {
-  const current = useRef(new Map<string,{ payload: string; key: string }>());
+const serialize=(payload:unknown)=>JSON.stringify(payload,(key,value)=>/^(pin|currentPin|current_pin|newPin|password)$/i.test(key)?undefined:value);
+export function useRequestIntent(ownerId?:string){
+  const current=useRef(new Map<string,{payload:string;key:string}>()),actor=useRef(ownerId);
+  if(actor.current!==ownerId){current.current.clear();actor.current=ownerId;}
+  const storageKey=(scope:string)=>`liravo:financial-intent:${ownerId}:${scope}`;
+  const headers=(payload:unknown,scope='default')=>{
+    const serialized=serialize(payload);
+    if(current.current.get(scope)?.payload!==serialized)current.current.set(scope,{payload:serialized,key:crypto.randomUUID()});
+    return {'Idempotency-Key':current.current.get(scope)!.key};
+  };
   return {
-    headers(payload: unknown, scope = 'default') {
-      const serialized = JSON.stringify(payload);
-      if (current.current.get(scope)?.payload !== serialized) current.current.set(scope,{ payload: serialized, key: crypto.randomUUID() });
-      return { 'Idempotency-Key': current.current.get(scope)!.key };
+    headers,
+    async durableHeaders(payload:unknown,scope='default'){
+      if(!ownerId)return headers(payload,scope);
+      const serialized=serialize(payload),digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(serialized));
+      if(actor.current!==ownerId)throw new Error('Account changed');
+      const fingerprint=Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,'0')).join('');
+      try{
+        const saved=JSON.parse(sessionStorage.getItem(storageKey(scope))??'null');
+        if(saved?.fingerprint===fingerprint&&typeof saved.key==='string'&&saved.key.length>=8&&saved.key.length<=200)current.current.set(scope,{payload:serialized,key:saved.key});
+        const result=headers(payload,scope);sessionStorage.setItem(storageKey(scope),JSON.stringify({fingerprint,key:result['Idempotency-Key']}));return {...result,'X-Liravo-Actor':ownerId};
+      }catch{return {...headers(payload,scope),'X-Liravo-Actor':ownerId};}
     },
-    complete(scope = 'default') { current.current.delete(scope); },
+    complete(scope='default'){
+      if(ownerId)try{const saved=JSON.parse(sessionStorage.getItem(storageKey(scope))??'null');if(saved?.key===current.current.get(scope)?.key)sessionStorage.removeItem(storageKey(scope));}catch{}
+      current.current.delete(scope);
+    },
   };
 }

@@ -1,14 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState,useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import type { PublicUserRow } from '@/lib/user-profile';
 import { useTranslations } from 'next-intl';
 import { USER_TYPES,GENRES,type UserType } from '@/constants/config';
 import { cn } from '@/lib/utils';
-
-const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supabase') !== 'supabase';
 
 interface ProfileEditFormProps {
   profile: PublicUserRow;
@@ -16,7 +13,7 @@ interface ProfileEditFormProps {
 
 export function ProfileEditForm({ profile }: ProfileEditFormProps) {
   const router = useRouter();
-  const t=useTranslations('aiProfiles');
+  const t=useTranslations('aiProfiles'),p=useTranslations('profile');
   const [genres,setGenres]=useState<string[]>(profile.genres);
   const [roles,setRoles]=useState<UserType[]>(profile.user_types.filter((value):value is UserType=>USER_TYPES.includes(value as UserType)));
   const [displayName, setDisplayName] = useState(profile.display_name);
@@ -28,11 +25,13 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(()=>()=>{if(avatarPreview?.startsWith('blob:'))URL.revokeObjectURL(avatarPreview);},[avatarPreview]);
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      setError('Avatar must be under 5MB');
+      setError(p('avatarTooLarge'));
       return;
     }
     setAvatarFile(file);
@@ -42,102 +41,34 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
   const handleSave = async () => {
     if(genres.length<5){setError(t('genresRequired'));return;}
     if(!roles.length){setError(t('rolesRequired'));return;}
-    if (!displayName.trim()) { setError('Display name is required'); return; }
-    if (bio.length > 280) { setError('Bio must be 280 characters or fewer'); return; }
+    if (!displayName.trim()) { setError(p('displayRequired')); return; }
+    if (bio.length > 280) { setError(p('bioTooLong')); return; }
     setSaving(true);
     setError(null);
 
-    let avatarUrl = profile.avatar_url;
-
-    if (avatarFile) {
-      if (isDirectPostgresMode) {
-        // Direct-postgres mode: upload via API endpoint that uses S3
-        const fd = new FormData();
-        fd.append('file', avatarFile);
-        const res = await fetch('/api/users/avatar', { method: 'POST', body: fd });
-        if (!res.ok) {
-          setError('Failed to upload avatar');
-          setSaving(false);
-          return;
-        }
-        const { publicUrl } = await res.json();
-        avatarUrl = publicUrl;
-      } else {
-        const supabase = createClient();
-        const ext = avatarFile.name.split('.').pop();
-        const path = `avatars/${profile.id}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(path, avatarFile, { upsert: true });
-
-        if (uploadError) {
-          setError('Failed to upload avatar');
-          setSaving(false);
-          return;
-        }
-
-        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
-        avatarUrl = publicUrl;
+    try{
+      let avatarUrl=profile.avatar_url;
+      if(avatarFile){
+        const data=new FormData();data.append('file',avatarFile);
+        const response=await fetch('/api/users/avatar',{method:'POST',headers:{'X-Liravo-Actor':profile.id},body:data});
+        if(!response.ok)throw new Error('Avatar unavailable');const result=await response.json();avatarUrl=result.publicUrl;
       }
-    }
-
-    // Profile fields update goes through an API route in direct-postgres mode too
-    if (isDirectPostgresMode) {
-      const res = await fetch('/api/users/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          display_name: displayName.trim(),
-          bio: bio.trim() || null,
-          country: country.trim() || null,
-          avatar_url: avatarUrl,
-          external_links: links.filter(Boolean),
-          user_types:roles,
-          genres,
-        }),
-      });
-      if (!res.ok) {
-        const { error: msg } = await res.json();
-        setError(msg ?? 'Failed to save');
-        setSaving(false);
-        return;
-      }
-      router.push('/profile');
-      router.refresh();
-      return;
-    }
-
-    const supabase = createClient();
-    const { error: updateError } = await supabase.from('users').update({
-      display_name: displayName.trim(),
-      bio: bio.trim() || null,
-      country: country.trim() || null,
-      avatar_url: avatarUrl,
-      external_links: links.filter(Boolean),
-      user_types:roles,
-      genres,
-    }).eq('id', profile.id);
-
-    if (updateError) {
-      setError(updateError.message);
-      setSaving(false);
-      return;
-    }
-
-    router.push('/profile');
-    router.refresh();
+      const response=await fetch('/api/users/profile',{method:'PUT',headers:{'Content-Type':'application/json','X-Liravo-Actor':profile.id},body:JSON.stringify({display_name:displayName.trim(),bio:bio.trim()||null,country:country.trim()||null,avatar_url:avatarUrl,external_links:links.filter(Boolean),user_types:roles,genres})});
+      if(!response.ok)throw new Error('Profile unavailable');
+      await response.json();router.push('/profile');router.refresh();
+    }catch{setError(p('saveFailed'));}finally{setSaving(false);}
   };
 
   return (
-    <div className="space-y-5">
+    <fieldset disabled={saving} aria-busy={saving} className="space-y-5">
       {/* Avatar */}
       <div>
-        <label className="block text-sm font-medium mb-2">Profile photo</label>
+        <label className="block text-sm font-medium mb-2">{p('photo')}</label>
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-muted overflow-hidden flex-shrink-0">
             {avatarPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+              <img src={avatarPreview} alt={p('preview')} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-xl font-bold text-muted-foreground">
                 {displayName.charAt(0).toUpperCase()}
@@ -145,15 +76,15 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
             )}
           </div>
           <label className="cursor-pointer px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted transition-colors">
-            Upload photo
+            {p('uploadPhoto')}
             <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
           </label>
         </div>
       </div>
 
-      {/* Display name */}
+      {/* {p('displayName')} */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">Display name</label>
+        <label className="block text-sm font-medium mb-1.5">{p('displayName')}</label>
         <input
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
@@ -171,7 +102,7 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
       {/* Bio */}
       <div>
         <label className="block text-sm font-medium mb-1.5">
-          Bio <span className="text-muted-foreground font-normal">({bio.length}/280)</span>
+          {p('bio')} <span className="text-muted-foreground font-normal">({bio.length}/280)</span>
         </label>
         <textarea
           value={bio}
@@ -179,25 +110,25 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
           maxLength={280}
           rows={3}
           className="w-full px-3 py-2.5 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-accent/50 text-sm resize-none"
-          placeholder="Tell readers about yourself..."
+          placeholder={p('aboutPlaceholder')}
         />
       </div>
 
       {/* Country */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">Country (optional)</label>
+        <label className="block text-sm font-medium mb-1.5">{p('countryOptional')}</label>
         <input
           value={country}
           onChange={(e) => setCountry(e.target.value)}
           maxLength={2}
-          placeholder="US, GB, AU..."
+          placeholder={p('countryPlaceholder')}
           className="w-full px-3 py-2.5 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-accent/50 text-sm uppercase"
         />
       </div>
 
       {/* External links */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">External links (up to 3)</label>
+        <label className="block text-sm font-medium mb-1.5">{p('externalLinks')}</label>
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <input
@@ -216,7 +147,7 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
         </div>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       <div className="flex gap-3 pt-2">
         <button
@@ -224,7 +155,7 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
           onClick={() => router.back()}
           className="flex-1 py-3 border border-border rounded-lg font-medium hover:bg-muted transition-colors text-sm"
         >
-          Cancel
+          {p('cancel')}
         </button>
         <button
           onClick={handleSave}
@@ -234,9 +165,9 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
             saving ? 'opacity-60 cursor-not-allowed' : 'hover:bg-accent/90'
           )}
         >
-          {saving ? 'Saving...' : 'Save changes'}
+          {saving ? p('saving') : p('saveChanges')}
         </button>
       </div>
-    </div>
+    </fieldset>
   );
 }
