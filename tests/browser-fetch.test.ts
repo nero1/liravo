@@ -1,4 +1,7 @@
 import { expect, it, vi } from 'vitest';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import ts from 'typescript';
 import { browserFetch } from '@/lib/client/csrf';
 
 function storage():Storage {
@@ -57,4 +60,28 @@ it('does not collapse streamed or multipart Request bodies into an empty-body in
   expect(key(transport,0)).toBeNull();
   await managed(new Request('https://app.test/api/quotes',payload));
   expect(key(transport,1)).toBeTruthy();
+});
+
+it('keeps PIN-bearing bodies out of implicit persistent retry signatures while preserving supplied keys',async()=>{
+  const transport=vi.fn<typeof fetch>().mockRejectedValue(new Error('Connection reset')),saved=storage(),managed=browserFetch(transport,'https://app.test',()=>'',saved);
+  const body={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:'2468',currentPin:'1357'})};
+  await expect(managed('/api/auth/pin',body)).rejects.toThrow('Connection reset');
+  expect(saved.length).toBe(0);expect(key(transport,0)).toBeNull();
+  await expect(managed('/api/earnings/request-payout',{...body,headers:{'Content-Type':'application/json','Idempotency-Key':'owned-payout-key'}})).rejects.toThrow('Connection reset');
+  expect(key(transport,1)).toBe('owned-payout-key');expect(saved.length).toBe(0);
+});
+
+it('retains owner-scoped financial intents across remounts without binding them to the PIN',async()=>{
+  const saved=storage(),exports:{useRequestIntent?:(owner:string)=>{durableHeaders(payload:unknown,scope:string):Promise<Record<string,string>>;complete(scope:string):void}}={};
+  const code=ts.transpileModule(readFileSync('src/lib/client/useRequestIntent.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,crypto,TextEncoder,sessionStorage:saved,require:()=>({useRef:(current:unknown)=>({current})})});
+  const first=exports.useRequestIntent!('reader-a'),payload={amount:'5',currency:'USD',pin:'2468'};
+  const key=(await first.durableHeaders(payload,'payout:USD'))['Idempotency-Key'];
+  const restored=exports.useRequestIntent!('reader-a');
+  expect((await restored.durableHeaders({...payload,pin:'1357'},'payout:USD'))['Idempotency-Key']).toBe(key);
+  const record=JSON.parse(saved.getItem('liravo:financial-intent:reader-a:payout:USD')!);expect(Object.keys(record).sort()).toEqual(['fingerprint','key']);
+  expect((await exports.useRequestIntent!('reader-b').durableHeaders(payload,'payout:USD'))['Idempotency-Key']).not.toBe(key);
+  expect((await restored.durableHeaders({...payload,currency:'EUR'},'payout:EUR'))['Idempotency-Key']).not.toBe(key);
+  restored.complete('payout:USD');expect(saved.getItem('liravo:financial-intent:reader-a:payout:USD')).toBeNull();
+  expect((await exports.useRequestIntent!('reader-a').durableHeaders(payload,'payout:USD'))['Idempotency-Key']).not.toBe(key);
 });

@@ -8,6 +8,7 @@ import { DELETE } from '@/app/api/earnings/payouts/[id]/route';
 import { POST as process } from '@/app/api/admin/payouts/[id]/process/route';
 
 vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
+vi.mock('@/lib/account-pin',async original=>({...await original<typeof import('@/lib/account-pin')>(),readAccountPin:vi.fn(async()=>null),verifyAccountPin:vi.fn(async()=>null)}));
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
 vi.mock('@/lib/moderation',()=>({isAdmin:vi.fn()}));
 vi.mock('@/lib/rate-limit',()=>({checkMoneyRateLimit:async()=>({allowed:true})}));
@@ -42,10 +43,12 @@ it('returns currency-specific earned, reserved and available values with owned p
 });
 
 it('binds payout destinations to the session and rejects implicit currency conversion',async()=>{
-  const save=(currency:string)=>PUT(new Request('https://app.test/api/earnings/payout-method',{method:'PUT',body:JSON.stringify({provider:'paystack',display_name:'Reader',account_number:'1234567890',bank_code:'058',currency,user_id:id,paystack_recipient_code:'RCP_injected'})}));
+  const save=(currency:string)=>PUT(new Request('https://app.test/api/earnings/payout-method',{method:'PUT',headers:{'Idempotency-Key':'payout-destination-intent'},body:JSON.stringify({provider:'paystack',display_name:'Reader',account_number:'1234567890',bank_code:'058',currency,user_id:id,paystack_recipient_code:'RCP_injected'})}));
   expect((await save('USD')).status).toBe(400);expect(upsert).not.toHaveBeenCalled();
+  rpc.mockResolvedValue({data:{saved:true},error:null});
   expect((await save('NGN')).status).toBe(200);
-  expect(upsert).toHaveBeenCalledWith(expect.objectContaining({user_id:user,currency:'NGN',paystack_recipient_code:null}),{onConflict:'user_id,provider'});
+  expect(rpc).toHaveBeenCalledWith('save_payout_destination',expect.objectContaining({p_user_id:user,p_key:'payout-destination-intent',p_pin_hash:null,p_data:{provider:'paystack',display_name:'Reader',account_number:'1234567890',bank_code:'058',currency:'NGN'}}));
+  expect(upsert).not.toHaveBeenCalled();
 });
 
 it('uses the caller identity for cancellation and reports processing conflicts',async()=>{
@@ -64,4 +67,9 @@ it('requires admin authorization for manual approval and a matching settlement r
   rpc.mockResolvedValue({data:null,error:{code:'P1002'}});
   expect((await process(new Request('https://app.test',{method:'POST',body:JSON.stringify({settlementReference:'bank-receipt',amount:'25.00',currency:'USD'})}),{params:{id}})).status).toBe(409);
   expect(rpc).toHaveBeenCalledWith('settle_payout_request',expect.objectContaining({p_actor_id:user,p_payout_id:id,p_amount:'25.00',p_currency:'USD',p_reference:'bank-receipt'}));
+});
+
+it('rejects stale financial actor headers before resolving a destination or balance',async()=>{
+  const response=await PUT(new Request('https://app.test/api/earnings/payout-method',{method:'PUT',headers:{'X-Liravo-Actor':id,'Idempotency-Key':'actor-bound-destination'},body:'{}'}));
+  expect(response.status).toBe(409);expect((await response.json()).code).toBe('ACCOUNT_CHANGED');expect(rpc).not.toHaveBeenCalled();
 });

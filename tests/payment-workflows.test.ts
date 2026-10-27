@@ -10,6 +10,7 @@ import { observeOperationalSignal } from '@/lib/operational-alerts';
 import { readPaymentRecovery } from '@/lib/payment-recovery';
 
 vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
+vi.mock('@/lib/account-pin',async original=>({...await original<typeof import('@/lib/account-pin')>(),readAccountPin:vi.fn(async()=>null),verifyAccountPin:vi.fn(async()=>null)}));
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
 vi.mock('@/lib/payment-providers',async original=>({...await original<typeof import('@/lib/payment-providers')>(),cancelProviderSubscription:vi.fn(),createTipCheckout:vi.fn()}));
 vi.mock('@/lib/payment-recovery',()=>({readPaymentRecovery:vi.fn()}));

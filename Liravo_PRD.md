@@ -301,7 +301,7 @@ All layouts designed at 375px width first, scaled to desktop. Fixed bottom navig
 2. Select user type: Reader / Author / Newbie Writer / Creator. Users can hold multiple types; this selection sets their default home experience and surfaces relevant features. Roles and genres remain editable in the profile.
 3. Select 5 or more genres of interest (seeds discovery feed).
 4. Optionally import reading history from Goodreads (CSV upload).
-5. Optionally set a 4-digit PIN for additional security on sensitive actions.
+5. Optionally set a 4-digit PIN; profile completion and PIN setup commit together.
 
 **Post-onboarding: optional account hardening (periodic prompts):**
 
@@ -643,7 +643,7 @@ Each user gets a unique referral code that is a numeric UUID variant — a 12-di
 
 - 200 XP per confirmed sign-up.
 - **10% commission** on all paid transactions completed by any user they referred, for as long as that user remains on the platform. This applies to: premium subscription payments, tips sent to others (the 10% is of the platform's gross take, not of the full tip amount), promoted listing purchases, paid event ticket purchases, and any other future paid product on the platform.
-- Referral commission is credited to the referrer's earnings balance. Withdrawable once it reaches a minimum threshold (suggested: $10).
+- Referral commission is credited to the referrer's earnings balance. Withdrawable from 5 units in the paid currency.
 - "Brought to Liravo by [username]" shown on the referred user's public profile (toggleable by the referred user from their settings).
 - Referral leaderboard: top referrers by confirmed sign-ups and by total commission earned (two separate lists).
 - Milestone badges: Connector (10 referrals), Ambassador (50 referrals), Liravo Builder (200 referrals).
@@ -746,7 +746,7 @@ When a book page is rendered, the server checks this table for the user's countr
 
 ### 8.9 Earnings and Payouts
 
-All platform earnings (tips, event tickets, referral commissions) are tracked in an `earnings` table per user. Users can see their running balance in their account dashboard. Payout is initiated by the user once they reach the minimum threshold ($10). Payouts processed via Dodopayments or Paystack depending on user's country.
+Verified tip, event and referral entries form each user’s currency balance; pending payouts reserve available funds. Users request payouts from their dashboard from a minimum of 5 units in the selected currency. NGN supports Paystack; manual settlement requires an audited receipt. Configured PINs protect bank-detail changes and payout requests, including concurrent PIN changes.
 
 ---
 

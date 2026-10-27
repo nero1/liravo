@@ -115,3 +115,35 @@ it('renders numeric-string ratings safely in both mobile book card layouts',()=>
     expect(content(exports.BookCard!({book:{id:'book',title:'Book',author_name:'Author',average_rating:'invalid'},compact}))).not.toContain('NaN');
   }
 });
+
+it('does not cache PIN-bearing mutation signatures and preserves explicit payout keys',async()=>{
+  const transport=vi.fn().mockRejectedValue(new Error('Connection reset'));
+  const exports:{api?:{post(path:string,body:unknown,headers?:Record<string,string>):Promise<unknown>}}={};
+  const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>{
+    if(name==='@/constants/api')return {API_BASE:'https://app.test'};
+    if(name==='@/stores/auth')return {useAuthStore:{getState:()=>({user:{id:'pin-reader'},token:'pin-token'})}};
+    throw new Error('Unexpected dependency');
+  }});
+  await expect(exports.api!.post('/api/auth/pin',{pin:'2468'})).rejects.toThrow();
+  expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Idempotency-Key');
+  await expect(exports.api!.post('/api/earnings/request-payout',{pin:'2468',amount:'5'},{'Idempotency-Key':'owned-payout-key'})).rejects.toThrow();
+  expect(transport.mock.calls[1][1].headers['Idempotency-Key']).toBe('owned-payout-key');
+});
+
+it('restores native financial keys from secure storage across remounts and omits PIN proof',async()=>{
+  const saved=new Map<string,string>();
+  const exports:{useRequestIntent?:(owner:string)=>{durableHeaders(payload:unknown,scope:string):Promise<Record<string,string>>;complete(scope:string):Promise<void>}}={};
+  const code=ts.transpileModule(readFileSync('mobile/hooks/useRequestIntent.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,require:(name:string)=>{
+    if(name==='react')return {useRef:(current:unknown)=>({current})};
+    if(name==='expo-secure-store')return {getItemAsync:async(key:string)=>saved.get(key)??null,setItemAsync:async(key:string,value:string)=>{saved.set(key,value);},deleteItemAsync:async(key:string)=>{saved.delete(key);}};
+    throw new Error('Unexpected dependency');
+  }});
+  const payload={amount:'5',currency:'USD',pin:'2468'},first=exports.useRequestIntent!('reader-a');
+  const key=(await first.durableHeaders(payload,'payout:USD'))['Idempotency-Key'];
+  const restored=exports.useRequestIntent!('reader-a');expect((await restored.durableHeaders({...payload,pin:'1357'},'payout:USD'))['Idempotency-Key']).toBe(key);
+  const record=JSON.parse(saved.get('financial.reader-a.payout_USD')!);expect(JSON.parse(record.payload)).toEqual({amount:'5',currency:'USD'});
+  expect((await exports.useRequestIntent!('reader-b').durableHeaders(payload,'payout:USD'))['Idempotency-Key']).not.toBe(key);
+  await restored.complete('payout:USD');expect(saved.has('financial.reader-a.payout_USD')).toBe(false);
+});

@@ -2,10 +2,11 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { OnboardingFlow } from '@/components/auth/OnboardingFlow';
 import type { Metadata } from 'next';
+import {getTranslations} from 'next-intl/server';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Set up your profile' };
+export async function generateMetadata():Promise<Metadata>{return {title:(await getTranslations('onboarding'))('title'),robots:{index:false}};}
 
 export default async function OnboardingPage() {
   const supabase = createClient();
@@ -23,8 +24,7 @@ export default async function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <OnboardingFlow
-        userId={user.id}
+      <OnboardingFlow key={user.id} actorId={user.id}
         initialUsername={profile?.username ?? ''}
         initialDisplayName={profile?.display_name ?? ''}
       />

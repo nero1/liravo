@@ -38,11 +38,48 @@
     "description": "Melde dich bei Liravo an, um Bücher zu entdecken und deine Lektüre zu verfolgen."
   },
   "onboarding": {
+    "welcome": "Willkommen bei Liravo",
+    "displayName": "Anzeigename",
+    "displayPlaceholder": "Dein Name",
+    "displayRequired": "Gib einen Anzeigenamen mit 1–50 Zeichen ein.",
+    "saveFailed": "Dein Profil konnte nicht gespeichert werden. Versuche es erneut.",
+    "followFailed": "Die Folgeaktion ist fehlgeschlagen. Versuche es erneut.",
+    "importTitle": "Importiere deinen Leseverlauf",
+    "importDescription": "Optional. Importiere deinen Goodreads-Export in deine Regale.",
+    "importHelp": "Exportiere aus Goodreads → My Books → Import/Export",
+    "importContinue": "Importieren und fortfahren",
+    "skip": "Überspringen",
+    "continue": "Weiter",
+    "followTitle": "Folge Lesenden und Schreibenden",
+    "followDescription": "Gestalte deinen Feed, indem du interessanten Personen folgst.",
+    "noSuggestions": "Noch keine Vorschläge verfügbar.",
+    "verifiedAuthor": "Verifizierte Autorenschaft",
+    "following": "Gefolgt",
+    "follow": "Folgen",
+    "continueFollowed": "Weiter ({count} gefolgt)",
+    "pinTitle": "Sicherheits-PIN festlegen",
+    "pinDescription": "Optional. Eine vierstellige PIN schützt Auszahlungsanträge und Änderungen der Bankdaten.",
+    "pin": "PIN",
+    "confirmPin": "PIN bestätigen",
+    "pinInvalid": "Die PIN muss genau vier Ziffern enthalten.",
+    "pinMismatch": "Die PINs stimmen nicht überein.",
+    "settingUp": "Wird eingerichtet…",
+    "finishPin": "Mit PIN abschließen",
+    "skipFinish": "Überspringen und abschließen",
+    "ready": "Du bist bereit!",
+    "readyDescription": "Deine Lesegemeinschaft wartet auf dich.",
+    "usernameDescription": "So finden dich andere.",
+    "errorTitle": "Profilfehler",
+    "selectGenres": "Wähle mindestens fünf Genres.",
+    "roleDescriptions": {"reader": "Ich entdecke und lese gerne Bücher", "author": "Ich schreibe und veröffentliche Bücher", "newbie_writer": "Ich lerne zu schreiben", "creator": "Ich erstelle Buchinhalte im Internet"},
     "title": "Richten wir Ihr Profil ein",
     "username": {
       "title": "Wählen Sie Ihren Benutzernamen",
       "placeholder": "ihrname",
-      "hint": "Nur Buchstaben, Zahlen und Unterstriche"
+      "hint": "Buchstaben, Zahlen und Unterstriche; 3–30 Zeichen.",
+      "label": "Benutzername",
+      "invalid": "Verwende 3–30 Buchstaben, Zahlen oder Unterstriche.",
+      "taken": "Dieser Benutzername ist bereits vergeben."
     },
     "userType": {
       "title": "Wie würden Sie sich beschreiben?",
@@ -53,6 +90,7 @@
       "creator": "Buch-Content-Creator"
     },
     "genres": {
+      "selected": "Wähle mindestens 5 Genres — {count} ausgewählt",
       "title": "Was lesen Sie gerne?",
       "subtitle": "Wählen Sie mindestens 5 Genres, um Ihren Feed zu personalisieren",
       "error": "Bitte wählen Sie mindestens 5 Genres aus"
@@ -76,6 +114,22 @@
     "writtenBy": "von {author}"
   },
   "profile": {
+    "countryPlaceholder": "DE",
+    "avatarTooLarge": "Das Profilbild muss kleiner als 5 MB sein.",
+    "displayRequired": "Ein Anzeigename ist erforderlich.",
+    "bioTooLong": "Die Biografie darf höchstens 280 Zeichen enthalten.",
+    "saveFailed": "Dein Profil konnte nicht gespeichert werden. Versuche es erneut.",
+    "photo": "Profilbild",
+    "preview": "Vorschau des Profilbilds",
+    "uploadPhoto": "Foto hochladen",
+    "displayName": "Anzeigename",
+    "bio": "Biografie",
+    "countryOptional": "Land (optional)",
+    "externalLinks": "Externe Links (höchstens 3)",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "saveChanges": "Änderungen speichern",
+    "aboutPlaceholder": "Erzähle anderen von dir…",
     "editProfile": "Profil bearbeiten",
     "followers": "Follower",
     "following": "Gefolgt",
@@ -630,6 +684,11 @@
     "shareMessage": "Mach bei der Challenge mit und teile deine Texte."
   },
   "earnings": {
+    "pin": "Konto-PIN",
+    "pinHelp": "Gib deine PIN ein, um Bankdaten zu speichern oder eine Auszahlung anzufordern.",
+    "pinFailed": "Prüfe deine aktuelle PIN und versuche es erneut.",
+    "pinRateLimit": "Zu viele Versuche. Bitte warte, bevor du es erneut versuchst.",
+    "retry": "Erneut versuchen",
     "pageTitle": "Einnahmen — Liravo",
     "title": "Einnahmenübersicht",
     "tips": "Erhaltene Trinkgelder",
@@ -858,5 +917,25 @@
     "replyTo": "Antwort an {name}",
     "join": "Dieser Leserunde beitreten",
     "save": "Fortschritt und Notiz speichern"
+  },
+  "accountSecurity": {
+    "factorFailed": "Die Zwei-Faktor-Authentifizierung konnte nicht geändert werden. Prüfe deinen Code und versuche es erneut.",
+    "pinTitle": "Konto-PIN",
+    "pinDescription": "Eine vierstellige PIN schützt Auszahlungen und Bankdatenänderungen. Zum Ändern brauchst du deine aktuelle PIN.",
+    "currentPin": "Aktuelle PIN",
+    "newPin": "Neue PIN (4 Ziffern)",
+    "confirmPin": "PIN bestätigen",
+    "saved": "PIN gespeichert.",
+    "failed": "Die PIN konnte nicht geändert werden. Prüfe deine aktuelle PIN und versuche es erneut.",
+    "mismatch": "Die PINs stimmen nicht überein.",
+    "saving": "Wird gespeichert…",
+    "savePin": "PIN speichern",
+    "errorTitle": "Sicherheitsfehler",
+    "factorTitle": "Zwei-Faktor-Authentifizierung",
+    "factorEnabled": "Aktiviert",
+    "factorDisabled": "Deaktiviert",
+    "factorCode": "Authentifikator- oder Wiederherstellungscode",
+    "disableFactor": "Zwei-Faktor-Authentifizierung deaktivieren",
+    "enableFactorWeb": "Aktiviere die Zwei-Faktor-Authentifizierung in der Web-App."
   }
 }

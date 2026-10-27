@@ -6,20 +6,17 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import {useTranslations} from '@/hooks/useTranslations';
 import { GENRES, type UserType,type UserRow } from '@/types';
 
-const USER_TYPES: { value: UserType; label: string; description: string }[] = [
-  { value: 'reader', label: '📖 Reader', description: 'I love discovering and reading books' },
-  { value: 'author', label: '✍️ Author', description: 'I write and publish books' },
-  { value: 'newbie_writer', label: '🌱 Newbie Writer', description: 'I am learning to write' },
-  { value: 'creator', label: '🎙️ Creator', description: 'I create book content online' },
-];
+const USER_TYPES: {value:UserType;icon:string}[]=[{value:'reader',icon:'📖'},{value:'author',icon:'✍️'},{value:'newbie_writer',icon:'🌱'},{value:'creator',icon:'🎙️'}];
 
 const TOTAL_STEPS = 4;
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { setUser } = useAuthStore();
+  const {t}=useTranslations('onboarding'),{t:ai}=useTranslations('aiProfiles');
+  const { user,setUser } = useAuthStore();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -43,16 +40,16 @@ export default function OnboardingScreen() {
   async function validateUsername() {
     const trimmed = username.trim().toLowerCase();
     if (!/^[a-z0-9_]{3,30}$/.test(trimmed)) {
-      setUsernameError('3-30 chars, letters, numbers and _ only');
+      setUsernameError(t('username.invalid'));
       return;
     }
-    setUsernameError('');
-    setStep(2);
+    setUsernameError('');setLoading(true);
+    try{const result=await api.get<{available:boolean}>('/api/users/username',{value:trimmed});if(!result.available){setUsernameError(t('username.taken'));return;}setUsername(trimmed);setStep(2);}catch{setUsernameError(t('saveFailed'));}finally{setLoading(false);}
   }
 
   async function finish() {
     if (selectedGenres.length < 5) {
-      Alert.alert('Select more genres', 'Please pick at least 5 genres.');
+      Alert.alert(t('errorTitle'),t('genres.error'));
       return;
     }
     setLoading(true);
@@ -62,11 +59,11 @@ export default function OnboardingScreen() {
         user_types: userTypes.length ? userTypes : ['reader'],
         genres: selectedGenres,
         onboarding_complete: true,
-      });
+      },user?.id?{'X-Liravo-Actor':user.id}:undefined);
       setUser(res.user);
       router.replace('/(tabs)/feed');
-    } catch (err) {
-      Alert.alert('Error', (err as Error).message);
+    } catch {
+      Alert.alert(t('errorTitle'),t('saveFailed'));
     } finally {
       setLoading(false);
     }
@@ -94,15 +91,15 @@ export default function OnboardingScreen() {
           {step === 1 && (
             <View className="gap-5">
               <View>
-                <Text className="text-2xl font-bold text-foreground">Choose your username</Text>
-                <Text className="text-muted-foreground mt-1">This is how others will find you.</Text>
+                <Text className="text-2xl font-bold text-foreground">{t('username.title')}</Text>
+                <Text className="text-muted-foreground mt-1">{t('usernameDescription')}</Text>
               </View>
               <Input
-                label="Username"
+                label={t('username.label')}
                 value={username}
                 onChangeText={setUsername}
                 error={usernameError}
-                placeholder="e.g. bookworm_42"
+                placeholder={t('username.placeholder')}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
@@ -112,21 +109,22 @@ export default function OnboardingScreen() {
           {step === 2 && (
             <View className="gap-5">
               <View>
-                <Text className="text-2xl font-bold text-foreground">I am a...</Text>
-                <Text className="text-muted-foreground mt-1">Select all that apply.</Text>
+                <Text className="text-2xl font-bold text-foreground">{t('userType.title')}</Text>
+                <Text className="text-muted-foreground mt-1">{t('userType.subtitle')}</Text>
               </View>
               <View className="gap-3">
-                {USER_TYPES.map(({ value, label, description }) => {
+                {USER_TYPES.map(({ value, icon }) => {
                   const selected = userTypes.includes(value);
                   return (
                     <TouchableOpacity
                       key={value}
+                      accessibilityRole="checkbox" accessibilityState={{checked:selected,disabled:loading}} disabled={loading}
                       onPress={() => toggleType(value)}
                       className={`border rounded-xl p-4 ${selected ? 'border-accent bg-accent/10' : 'border-border bg-card'}`}
                       activeOpacity={0.7}
                     >
-                      <Text className={`font-semibold ${selected ? 'text-accent' : 'text-foreground'}`}>{label}</Text>
-                      <Text className="text-sm text-muted-foreground mt-0.5">{description}</Text>
+                      <Text className={`font-semibold ${selected ? 'text-accent' : 'text-foreground'}`}>{icon} {t(`userType.${value}`)}</Text>
+                      <Text className="text-sm text-muted-foreground mt-0.5">{t(`roleDescriptions.${value}`)}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -137,9 +135,9 @@ export default function OnboardingScreen() {
           {step === 3 && (
             <View className="gap-5">
               <View>
-                <Text className="text-2xl font-bold text-foreground">Pick your genres</Text>
+                <Text className="text-2xl font-bold text-foreground">{t('genres.title')}</Text>
                 <Text className="text-muted-foreground mt-1">
-                  Choose at least 5 — {selectedGenres.length} selected.
+                  {t('genres.selected',{count:selectedGenres.length})}.
                 </Text>
               </View>
               <View className="flex-row flex-wrap gap-2">
@@ -148,12 +146,13 @@ export default function OnboardingScreen() {
                   return (
                     <TouchableOpacity
                       key={genre}
+                      accessibilityRole="checkbox" accessibilityState={{checked:selected,disabled:loading}} disabled={loading}
                       onPress={() => toggleGenre(genre)}
                       className={`border rounded-full px-4 py-2 ${selected ? 'border-accent bg-accent' : 'border-border bg-card'}`}
                       activeOpacity={0.7}
                     >
                       <Text className={`text-sm font-medium ${selected ? 'text-accent-foreground' : 'text-foreground'}`}>
-                        {genre}
+                        {ai(`genreLabels.${genre}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -165,15 +164,15 @@ export default function OnboardingScreen() {
           {step === 4 && (
             <View className="gap-5">
               <View>
-                <Text className="text-2xl font-bold text-foreground">You're all set! 🎉</Text>
+                <Text className="text-2xl font-bold text-foreground">{t('ready')}</Text>
                 <Text className="text-muted-foreground mt-1">
-                  Welcome to Liravo, {username}. Start discovering books.
+                  {t('readyDescription')}
                 </Text>
               </View>
               <View className="bg-accent/10 border border-accent/30 rounded-xl p-4 gap-2">
-                <Text className="font-semibold text-foreground">📖 Username: @{username}</Text>
-                <Text className="text-foreground">👤 Types: {userTypes.join(', ') || 'reader'}</Text>
-                <Text className="text-foreground">🎭 Genres: {selectedGenres.length} selected</Text>
+                <Text className="font-semibold text-foreground">{t('username.label')}: @{username}</Text>
+                <Text className="text-foreground">{t('userType.title')}: {userTypes.map(type=>t(`userType.${type}`)).join(', ')}</Text>
+                <Text className="text-foreground">{t('genres.selected',{count:selectedGenres.length})}</Text>
               </View>
             </View>
           )}
@@ -185,13 +184,14 @@ export default function OnboardingScreen() {
           <Button
             onPress={step === 1 ? validateUsername : step < TOTAL_STEPS ? () => setStep(step + 1) : finish}
             loading={loading}
+            disabled={step===2&&!userTypes.length||step===3&&selectedGenres.length<5}
             size="lg"
           >
-            {step < TOTAL_STEPS ? 'Continue' : 'Start Reading'}
+            {step < TOTAL_STEPS ? t('continue') : t('finish')}
           </Button>
           {step > 1 && (
-            <Button onPress={() => setStep(step - 1)} variant="ghost" size="md">
-              Back
+            <Button disabled={loading} onPress={() => setStep(step - 1)} variant="ghost" size="md">
+              {t('back')}
             </Button>
           )}
         </View>

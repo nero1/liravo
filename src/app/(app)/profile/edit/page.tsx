@@ -19,7 +19,7 @@ export default async function ProfileEditPage() {
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
       <h1 className="font-display text-2xl font-bold mb-6">Edit Profile</h1>
-      <ProfileEditForm profile={profile} />
+      <ProfileEditForm key={user.id} profile={profile} />
     </div>
   );
 }
