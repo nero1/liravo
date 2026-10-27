@@ -274,6 +274,16 @@
     "verificationUnavailable": "Der Zahlungsstatus konnte nicht geprüft werden. Versuche es gleich erneut."
   },
   "admin": {
+    "seedRepaired": " {count, plural, one {# repariert} other {# repariert}}.",
+    "themeDeactivated": "Design „{name}“ deaktiviert.",
+    "eventNameLabel": "Name des Ereignisses",
+    "eventBadgeLabel": "Name des Abzeichens",
+    "eventStartUtc": "Beginn (UTC)",
+    "eventEndUtc": "Ende (UTC)",
+    "eventPublished": "Veröffentlicht",
+    "editSeasonalEvent": "Saisonales Ereignis bearbeiten",
+    "eventSaveFailed": "Ereignis konnte nicht gespeichert werden. Prüfe die Daten und versuche es erneut.",
+    "saveEvent": "Ereignis speichern",
     "cron": {
       "title": "Geplante Aufgaben und Systemstatus",
       "pending": "Ausstehende Ereignisse",
@@ -444,7 +454,7 @@
     "createLiravoEditorsAccount": "Liravo-Redaktionskonto erstellen",
     "editorsSeedDescription": "Erstellt das Systemkonto @liravo_editors für die redaktionellen Inhalte der Plattform. Führe diesen Schritt zuerst aus.",
     "seedBooks": "Startbücher hinzufügen",
-    "booksSeedDescription": "Fügt 100 ausgewählte Bücher aus allen Genres hinzu: Literatur, Thriller, Science-Fiction, Fantasy, Liebesromane, Geschichte, Sachbücher, Klassiker und Schreibhandwerk. Vorhandene ISBN-13 werden übersprungen.",
+    "booksSeedDescription": "Fügt 101 ausgewählte Bücher aus allen Genres hinzu: Literatur, Thriller, Science-Fiction, Fantasy, Liebesromane, Geschichte, Sachbücher, Klassiker und Schreibhandwerk. Vorhandene ISBN-13 werden übersprungen.",
     "seedReadingLists": "Startleselisten hinzufügen",
     "listsSeedDescription": "Erstellt 20 für Suchmaschinen optimierte Leselisten des Kontos @liravo_editors. Bücher und Redaktionskonto müssen bereits vorhanden sein.",
     "seedWritingPrompts63DaysStatic": "Schreibimpulse hinzufügen (63 Tage, vorgegeben)",

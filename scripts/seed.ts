@@ -19,7 +19,7 @@
  *   export $(grep -v '^#' .env.local | xargs) && npm run seed
  */
 
-import { getSeedClient } from './seed/client.js';
+import { getSeedClient,closeSeedClient } from './seed/client.js';
 import { step, isDryRun, getOnlyFlag } from './seed/utils.js';
 import { seedEditorsAccount, getEditorsId } from './seed/seeders/editors-account.js';
 import { seedBooks } from './seed/seeders/books.js';
@@ -34,6 +34,7 @@ async function main() {
   }
 
   const only = getOnlyFlag();
+  if(only&&!['books','prompts','challenges','reading-lists','editors-account','reviews-quotes'].includes(only))throw new Error('Unknown seed selection');
   // In dry-run mode the client is never used (all seeders return early).
   // Avoid requiring env vars so `npm run seed:dry` works without credentials.
   const client = isDryRun
@@ -62,15 +63,15 @@ async function main() {
 
   // Step 2: Books (must come before reviews, quotes, and reading-list books)
   if (!only || only === 'books') {
-    const r = await step('Books (100 titles)', () => seedBooks(client));
-    bookIdsByIsbn = r.bookIdsByIsbn;
+    const r = await step('Books (101 titles)', () => seedBooks(client));
     bookIdsByIsbn = r.bookIdsByIsbn;
   }
 
   // Reload book IDs if we skipped books step but need them later
   if (!isDryRun && bookIdsByIsbn.size === 0 && (only === 'reviews-quotes' || only === 'reading-lists')) {
     const { SEED_BOOKS } = await import('./seed/data/books.js');
-    const { data } = await client.from('books').select('id, isbn_13').in('isbn_13', SEED_BOOKS.map((b) => b.isbn_13));
+    const { data,error } = await client.from('books').select('id, isbn_13').in('isbn_13', SEED_BOOKS.map((b) => b.isbn_13));
+    if(error)throw new Error(error.message);
     for (const row of data ?? []) {
       if (row.isbn_13) bookIdsByIsbn.set(row.isbn_13, row.id);
     }
@@ -130,16 +131,18 @@ async function verify(client: ReturnType<typeof getSeedClient>) {
         query = query.eq(k, v);
       }
     }
-    const { count } = await query;
+    const { count,error } = await query;
+    if(error)throw new Error(error.message);
     const n = count ?? 0;
     const pass = check.min ? n >= check.min : n > 0;
     const label = `  [${pass ? 'PASS' : 'FAIL'}] ${check.label}`;
     const detail = check.min ? ` — ${n} rows (min ${check.min})` : ` — found`;
     console.log(label + detail);
+    if(!pass)throw new Error('Seed verification failed: '+check.label);
   }
 }
 
-main().catch((err) => {
+main().finally(()=>{if(!isDryRun)return closeSeedClient();}).catch((err) => {
   console.error('\nSeed failed:', err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

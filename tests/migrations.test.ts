@@ -97,6 +97,29 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
           throw rolledBack;
         });}catch(error){if(error!==rolledBack)throw error;}
       }
+      if(file.startsWith('053_')){
+        const rolledBack=new Error('verified legacy theme rollback');
+        try{await sql.begin(async tx=>{
+          await tx`insert into custom_themes(name,is_active,updated_at) values('Legacy old',true,now()-interval '1 day'),('Legacy recent',true,now())`;
+          await tx.unsafe(readFileSync(`supabase/migrations/${file}`,'utf8')).simple();
+          expect((await tx`select name from custom_themes where is_active`).map(row=>row.name)).toEqual(['Legacy recent']);
+          expect((await tx`select count(*)::int as count from financial_audit_log where action='theme_activation_reconciled'`)[0].count).toBe(1);
+          throw rolledBack;
+        });}catch(error){if(error!==rolledBack)throw error;}
+      }
+      if(file.startsWith('054_')){
+        const rolledBack=new Error('verified legacy catalog rollback');
+        try{await sql.begin(async tx=>{
+          const [old]=await tx`insert into books(title,author_name,isbn_13,cover_url) values('A Gentleman in Moscow','Amor Towles','9780670026190','https://covers.openlibrary.org/b/isbn/9780670026190-L.jpg') returning id`;
+          const [duplicate]=await tx`insert into books(title,author_name,isbn_13) values('Klara and the Sun','Kazuo Ishiguro','9780593311043') returning id`;
+          await tx`insert into books(title,author_name,isbn_13) values('Klara and the Sun','Kazuo Ishiguro','9780593318171')`;
+          await tx.unsafe(readFileSync(`supabase/migrations/${file}`,'utf8')).simple();
+          expect((await tx`select isbn_13,cover_url from books where id=${old.id}`)[0]).toMatchObject({isbn_13:'9780670026197',cover_url:'https://covers.openlibrary.org/b/isbn/9780670026197-L.jpg'});
+          expect((await tx`select isbn_13 from books where id=${duplicate.id}`)[0].isbn_13).toBeNull();
+          expect((await tx`select count(*)::int as count from financial_audit_log where action='catalog_identity_reconciliation_required'`)[0].count).toBe(1);
+          throw rolledBack;
+        });}catch(error){if(error!==rolledBack)throw error;}
+      }
       await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
       if(legacyTicket){
         expect((await sql`select status from event_tickets where id=${legacyUser}`)[0].status).toBe('legacy_hold');
@@ -1294,6 +1317,92 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect(parallelImports.every(rows=>rows[0].result.imported===2)).toBe(true);
     expect((await sql`select want_to_read_count,currently_reading_count from books where id=(select book_id from goodreads_book_identities where goodreads_id='9002')`)[0]).toMatchObject({want_to_read_count:2,currently_reading_count:1});
     for(const role of ['anon','authenticated'])for(const routine of ['update_buddy_progress(uuid,uuid,text,jsonb)','import_goodreads_library(uuid,text,jsonb,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const admin=crypto.randomUUID(),other=crypto.randomUUID();
+    for(const [index,id] of [admin,other].entries())await sql`insert into auth.users(id,email,raw_user_meta_data) values(${id},${'configuration'+index+'@example.test'},${sql.json({username:'configuration_'+index})})`;
+    await sql`update users set is_admin=true where id=${admin}`;
+    const apply=(action:string,key:string,payload:Record<string,unknown>,actor=admin)=>sql`select apply_admin_configuration(${actor},${action},${key},${sql.json(payload as never)},'configuration-test') as result`;
+    const themes=await Promise.all(Array.from({length:4},()=>apply('theme_create','config-theme-create',{name:'Audit theme A',css_overrides:':root{--accent:#123456;}\n.dark{--background:#000;}'})));
+    expect(new Set(themes.map(rows=>rows[0].result.id)).size).toBe(1);
+    await apply('theme_create','config-theme-second',{name:'Audit theme B',css_overrides:''});
+    await apply('theme_set','config-theme-activate',{name:'Audit theme A',is_active:true});
+    await expect(apply('theme_set','config-theme-missing',{name:'Unknown theme',is_active:true})).rejects.toThrow('unavailable');
+    expect((await sql`select name from custom_themes where is_active`)[0].name).toBe('Audit theme A');
+    await Promise.all([apply('theme_set','config-theme-race-a',{name:'Audit theme A',is_active:true}),apply('theme_set','config-theme-race-b',{name:'Audit theme B',is_active:true})]);
+    expect((await sql`select count(*)::int as count from custom_themes where is_active`)[0].count).toBe(1);
+    await expect(sql`update custom_themes set is_active=true where not is_active`).rejects.toThrow('custom_theme_single_active');
+    const [active]=await sql`select name from custom_themes where is_active`;
+    const [inactive]=await sql`select name from custom_themes where not is_active limit 1`;
+    await apply('theme_set','config-inactive-disable',{name:inactive.name,is_active:false});
+    expect((await sql`select name from custom_themes where is_active`)[0].name).toBe(active.name);
+    await expect(apply('theme_create','config-theme-create',{name:'Changed theme',css_overrides:''})).rejects.toThrow('Conflicting');
+    await expect(apply('theme_create','config-unsafe-css',{name:'Unsafe theme',css_overrides:':root{--accent:url(https://evil.test);}' })).rejects.toThrow('Invalid theme CSS');
+    expect((await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${admin} and action='admin_theme_create' and idempotency_key='config-theme-create'`)[0].count).toBe(1);
+    const store={name:'Fixture store',countries:['NG','NG'],url_template:'https://shop.example.test/?isbn={isbn}',affiliate_tag:null,is_active:true,priority:1,is_non_affiliate:false};
+    const stores=await Promise.all(Array.from({length:3},()=>apply('store_create','config-store-create',store)));
+    expect(new Set(stores.map(rows=>rows[0].result.id)).size).toBe(1);expect(stores[0][0].result.countries).toEqual(['NG']);
+    await apply('store_update','config-store-edit',{...store,id:stores[0][0].result.id,is_active:false});
+    const season={name:'Fixture season',theme:'Reading',badge_name:'Reader',start_date:new Date().toISOString(),end_date:new Date(Date.now()+86400000).toISOString(),is_published:true};
+    const seasons=await Promise.all(Array.from({length:3},()=>apply('season_create','config-season-create',season)));
+    expect(new Set(seasons.map(rows=>rows[0].result.id)).size).toBe(1);
+    await apply('season_update','config-season-edit',{...season,id:seasons[0][0].result.id,is_published:false});
+    await expect(apply('season_create','config-invalid-dates',{...season,end_date:season.start_date})).rejects.toThrow('Invalid seasonal');
+    await expect(apply('theme_set','config-foreign-admin',{name:'Audit theme A',is_active:true},other)).rejects.toThrow('Admin required');
+    await sql`update users set is_admin=false where id=${admin}`;
+    await expect(apply('theme_create','config-theme-create',{name:'Audit theme A',css_overrides:':root{--accent:#123456;}\n.dark{--background:#000;}'})).rejects.toThrow('Admin required');
+    for(const role of ['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'apply_admin_configuration(uuid,text,text,jsonb,text)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const admin=crypto.randomUUID();await sql`insert into auth.users(id,email,raw_user_meta_data) values(${admin},'seed-admin@example.test','{"username":"seed_admin_fixture"}')`;
+    await sql`update users set is_admin=true where id=${admin}`;
+    const seed=(kind:string,key:string,data:Record<string,unknown>)=>sql`select seed_content_item(${kind},${key},${sql.json(data as never)},${admin}) as result`;
+    const hostile=crypto.randomUUID();await sql`insert into auth.users(id,email,raw_user_meta_data) values(${hostile},'hostile-editor@example.test','{"username":"liravo_editors"}')`;
+    await expect(seed('editors','system',{})).rejects.toThrow('Editors identity requires reconciliation');
+    expect((await sql`select is_verified_author from users where id=${hostile}`)[0].is_verified_author).toBe(false);
+    await sql`update users set username='hostile_editor_fixture' where id=${hostile}`;
+    const legacyEditor=crypto.randomUUID();await sql`insert into auth.users(id,email,raw_user_meta_data) values(${legacyEditor},'liravo_editors_system@liravo.internal','{"username":"liravo_editors"}')`;
+    await sql`update users set is_verified_author=true where id=${legacyEditor}`;
+    expect((await seed('editors','system',{}))[0].result).toMatchObject({id:legacyEditor,created:false});
+    await sql`delete from auth.users where id=${legacyEditor}`;
+    const editors=await Promise.all(Array.from({length:3},()=>seed('editors','system',{})));
+    expect(editors.filter(rows=>rows[0].result.created)).toHaveLength(1);const editor=editors[0][0].result.id;
+    expect((await sql`select count(*)::int as count from shelves where user_id=${editor}`)[0].count).toBe(3);
+    expect((await sql`select id from auth.users where id=${editor}`)[0].id).toBe(editor);
+    await sql`update users set password_hash='fixture-login-identity' where id=${editor}`;
+    await expect(seed('editors','system',{})).rejects.toThrow('login identities');
+    await sql`update users set password_hash=null where id=${editor}`;
+    const {seedCollection}=await import('../scripts/seed/items');
+    const client={rpc:async(_name:string,args:{p_kind:string;p_key:string;p_data:Record<string,unknown>;p_actor_id:string|null})=>{
+      try{return {data:(await seed(args.p_kind,args.p_key,args.p_data))[0].result,error:null};}catch(error){return {data:null,error:{message:error instanceof Error?error.message:'Seed failed'}};}
+    }} as never;
+    const books=await seedCollection(client,'books',admin);
+    expect(books.errors).toEqual([]);expect(books.inserted+books.skipped).toBe(101);expect(Object.keys(books.ids)).toHaveLength(101);
+    const list={title:'Partial seed list',description:'Fixture',book_isbns:['9780670026197','9780593318171']};
+    const [partial]=await sql`insert into reading_lists(user_id,name,is_public) values(${editor},${list.title},true) returning id`;
+    const lists=await Promise.all(Array.from({length:3},()=>seed('lists','partial-list',list)));
+    expect(new Set(lists.map(rows=>rows[0].result.id))).toEqual(new Set([partial.id]));
+    expect(lists.filter(rows=>rows[0].result.repaired)).toHaveLength(1);
+    expect((await sql`select count(*)::int as count from reading_list_books where list_id=${partial.id}`)[0].count).toBe(2);
+    await sql`delete from reading_list_books where list_id=${partial.id} and book_id=${books.ids['9780670026197']}`;
+    expect((await seed('lists','partial-list',list))[0].result.repaired).toBe(true);
+    await expect(seed('lists','missing-list',{...list,title:'Missing dependency',book_isbns:['0000000000000']})).rejects.toThrow('Seed books before');
+    expect((await sql`select count(*)::int as count from reading_lists where user_id=${editor} and name='Missing dependency'`)[0].count).toBe(0);
+    const challenge={title:'Seed race challenge',description:'Fixture',type:'weekly',start_date:new Date().toISOString(),end_date:new Date(Date.now()+86400000).toISOString(),is_active:true};
+    const challenges=await Promise.all(Array.from({length:4},()=>seed('challenges','race-challenge',challenge)));
+    expect(challenges.filter(rows=>rows[0].result.created)).toHaveLength(1);
+    const prompt={prompt_text:'A sufficient seed prompt for the next day.',topic_seed:'Fixture',offset:90};
+    const firstPrompt=(await seed('prompts','stable-prompt',prompt))[0].result.id;
+    await sql`update seed_records set metadata=jsonb_build_object('start_date',(now() at time zone 'UTC')::date+20) where kind='anchor' and key='prompts'`;
+    expect((await seed('prompts','stable-prompt',prompt))[0].result.id).toBe(firstPrompt);
+    for(const kind of ['lists','challenges','prompts'] as const){const result=await seedCollection(client,kind,admin);expect(result.errors).toEqual([]);expect(result.inserted+result.skipped).toBe(kind==='lists'?20:kind==='challenges'?6:63);}
+    expect((await sql`select count(*)::int as count from xp_ledger where user_id=${editor}`)[0].count).toBe(0);
+    await sql`update users set is_admin=false where id=${admin}`;
+    await expect(seed('challenges','race-challenge',challenge)).rejects.toThrow('Admin required');
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_function_privilege(${role},'seed_content_item(text,text,jsonb,uuid)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+      expect((await sql`select has_table_privilege(${role},'seed_records','SELECT') as allowed`)[0].allowed).toBe(false);
+    }
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

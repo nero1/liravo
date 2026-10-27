@@ -274,6 +274,16 @@
     "verificationUnavailable": "Payment status could not be checked. Please try again shortly."
   },
   "admin": {
+    "seedRepaired": " {count, plural, one {# repaired} other {# repaired}}.",
+    "themeDeactivated": "Theme “{name}” deactivated.",
+    "eventNameLabel": "Event name",
+    "eventBadgeLabel": "Badge name",
+    "eventStartUtc": "Start (UTC)",
+    "eventEndUtc": "End (UTC)",
+    "eventPublished": "Published",
+    "editSeasonalEvent": "Edit seasonal event",
+    "eventSaveFailed": "Could not save the event. Check the dates and try again.",
+    "saveEvent": "Save event",
     "cron": {
       "title": "Cron & System Status",
       "pending": "Pending outbox events",
@@ -444,7 +454,7 @@
     "createLiravoEditorsAccount": "Create Liravo Editors Account",
     "editorsSeedDescription": "Creates the @liravo_editors system account used for all platform-curated content. Run this first.",
     "seedBooks": "Seed Books",
-    "booksSeedDescription": "Inserts 100 curated books across all genres (Literary Fiction, Thriller, Sci-Fi, Fantasy, Romance, Historical, Nonfiction, Classics, Craft). Idempotent — skips existing ISBN-13s.",
+    "booksSeedDescription": "Inserts 101 curated books across all genres (Literary Fiction, Thriller, Sci-Fi, Fantasy, Romance, Historical, Nonfiction, Classics, Craft). Idempotent — skips existing ISBN-13s.",
     "seedReadingLists": "Seed Reading Lists",
     "listsSeedDescription": "Creates 20 SEO-optimised reading lists owned by @liravo_editors. Requires books and editors account to already exist.",
     "seedWritingPrompts63DaysStatic": "Seed Writing Prompts (63 days, static)",

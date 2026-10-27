@@ -56,7 +56,7 @@ export const SEED_REVIEWS: SeedReview[] = [
     mood_tags: ['epic', 'emotional', 'historical'],
   },
   {
-    book_isbn_13: '9780670026190',
+    book_isbn_13: '9780670026197',
     review_type: 'short',
     rating: 5,
     content: 'Towles writes the kind of novel that makes you want to slow down. A Gentleman in Moscow is a perfect room of a book — small in its setting, vast in everything else. Count Rostov under house arrest for thirty years is one of fiction\'s great characters. Witty, sad, and deeply civilised.',
@@ -168,7 +168,7 @@ export const SEED_REVIEWS: SeedReview[] = [
     mood_tags: ['atmospheric', 'emotional', 'beautiful'],
   },
   {
-    book_isbn_13: '9780593311043',
+    book_isbn_13: '9780593318171',
     review_type: 'short',
     rating: 4,
     content: 'Ishiguro is at his most direct here and it suits him. Klara\'s narration — polite, precise, achingly literal — becomes the novel\'s emotional engine. A meditation on love, consciousness, and what we are willing to substitute for what we\'ve lost. Quieter than Never Let Me Go, and comparably affecting.',
@@ -251,8 +251,8 @@ export const SEED_QUOTES: SeedQuote[] = [
   { book_isbn_13: '9781455563937', content: 'There are things in life we cannot choose: how we are born, where we come from. But we can choose what we do with the time we have.' },
 
   // A Gentleman in Moscow
-  { book_isbn_13: '9780670026190', content: 'Do not be fooled by its commonplace appearance. Like so many things, its greatest beauty is beyond what the eyes can see.' },
-  { book_isbn_13: '9780670026190', content: 'A man must make his own amusements. A man must pick up his character where he can.' },
+  { book_isbn_13: '9780670026197', content: 'Do not be fooled by its commonplace appearance. Like so many things, its greatest beauty is beyond what the eyes can see.' },
+  { book_isbn_13: '9780670026197', content: 'A man must make his own amusements. A man must pick up his character where he can.' },
 
   // Gone Girl
   { book_isbn_13: '9780307588371', content: 'I am the craziest bitch you\'ve ever met. I am the nicest person you\'ve ever met. Both things are true.' },

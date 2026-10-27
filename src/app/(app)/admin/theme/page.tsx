@@ -24,18 +24,20 @@ export default function ThemeAdminPage() {
       .catch(() => setMessage({ text: t('loadThemesFailed'), ok: false }));
   }, [t]);
 
-  const activate = async (name: string) => {
+  const activate = async (name: string,is_active:boolean) => {
     setSaving(true);
     setMessage(null);
     try {
       const res = await fetch('/api/admin/themes', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, is_active: true }),
+        body: JSON.stringify({ name, is_active }),
       });
       if (res.ok) {
-        setThemes((prev) => prev.map((t) => ({ ...t, is_active: t.name === name })));
-        setMessage({ text: t('themeActivated', { name }), ok: true });
+        const current=await fetch('/api/admin/themes');if(!current.ok)throw new Error('Themes unavailable');
+        const state=await current.json() as {themes:ThemeRecord[]};setThemes(state.themes);
+        window.dispatchEvent(new Event('liravo:theme-changed'));
+        setMessage({ text: t(is_active?'themeActivated':'themeDeactivated', { name }), ok: true });
       } else {
         setMessage({ text: t('activateThemeFailed'), ok: false });
       }
@@ -58,7 +60,7 @@ export default function ThemeAdminPage() {
       });
       if (res.ok) {
         const data = await res.json() as { theme?: ThemeRecord };
-        if (data.theme) setThemes((prev) => [...prev, data.theme!]);
+        if (data.theme) setThemes((prev) => [...prev.filter(theme=>theme.name!==data.theme!.name), data.theme!]);
         setNewName('');
         setNewCss('');
         setMessage({ text: t('themeCreated'), ok: true });
@@ -92,22 +94,22 @@ export default function ThemeAdminPage() {
                 <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-700 dark:text-green-400 font-medium">{t('active')}</span>
               )}
             </div>
-            {!theme.is_active && (
+            {(
               <button
-                onClick={() => activate(theme.name)}
+                onClick={() => activate(theme.name,!theme.is_active)}
                 disabled={saving}
                 className="text-xs px-3 py-1.5 bg-accent text-accent-foreground rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-60"
-              >{t('activate')}</button>
+              >{t(theme.is_active?'deactivate':'activate')}</button>
             )}
           </div>
         ))}
       </div>
 
-      <div className="border border-border rounded-xl p-4 space-y-4">
+      <div aria-busy={saving} className="border border-border rounded-xl p-4 space-y-4">
         <h2 className="font-medium">{t('addNewTheme')}</h2>
         <div>
           <label htmlFor="theme-name" className="block text-xs font-medium mb-1.5">{t('themeName')}</label>
-          <input id="theme-name"
+          <input id="theme-name" maxLength={80} disabled={saving}
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -117,7 +119,7 @@ export default function ThemeAdminPage() {
         </div>
         <div>
           <label htmlFor="theme-css" className="block text-xs font-medium mb-1.5">{t('cssVariableOverrides')}</label>
-          <textarea id="theme-css"
+          <textarea id="theme-css" maxLength={50000} disabled={saving}
             value={newCss}
             onChange={(e) => setNewCss(e.target.value)}
             rows={8}

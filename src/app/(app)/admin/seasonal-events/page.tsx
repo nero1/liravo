@@ -31,12 +31,13 @@ export default async function SeasonalEventsPage() {
   if (!await isAdmin(user.id)) redirect('/');
   const supabase = createServiceClient();
 
-  const { data: events } = await supabase
+  const { data: events,error } = await supabase
     .from('seasonal_events')
     .select('id, name, theme, start_date, end_date, badge_name, is_published')
     .order('start_date', { ascending: false })
     .limit(50);
 
+  if(error)throw new Error('Seasonal events unavailable');
   const items = (events ?? []) as SeasonalEvent[];
   const now = new Date();
 
@@ -81,7 +82,7 @@ export default async function SeasonalEventsPage() {
                   {event.theme && <p className="text-sm text-muted-foreground">{event.theme}</p>}
                   <p className="text-xs text-muted-foreground mt-1">
                     {formatter.dateTime(new Date(event.start_date), { dateStyle: 'medium' })} — {formatter.dateTime(new Date(event.end_date), { dateStyle: 'medium' })}
-                    {event.badge_name && ` · Badge: ${event.badge_name}`}
+                    {event.badge_name && ` · ${t('eventBadgeLabel')}: ${event.badge_name}`}
                   </p>
                 </div>
                 <Link

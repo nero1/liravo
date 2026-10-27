@@ -637,7 +637,7 @@ psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" -c \
 ### Step 2 — Seed via CLI (recommended for initial setup)
 
 The CLI seed script runs directly against the database and does not require the app server
-to be running. It requires Supabase credentials only.
+to be running. It supports Supabase credentials or a direct PostgreSQL connection.
 
 ```bash
 # Load env vars first (choose one method):
@@ -659,12 +659,11 @@ npx tsx scripts/seed.ts --only=challenges
 npx tsx scripts/seed.ts --only=reading-lists
 ```
 
-**Required env vars for CLI seed:**
+**Required env vars for CLI seed (Supabase):**
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-> **DigitalOcean / Railway mode**: The CLI seed script connects via the Supabase SDK and requires Supabase credentials.
-> If you're not running Supabase at all, use the **Admin UI seed** (Step 3 below) instead — it works in all three modes.
+**DigitalOcean / Railway:** set `DATABASE_PROVIDER` to `digitalocean` or `railway`, and supply `DATABASE_URL` and the appropriate `DATABASE_SSL` setting. The CLI and Admin UI use the same service-only seed routines. Failed seeds exit nonzero; retry after resolving reported dependencies. Existing lists repair missing book links and prompts keep their original schedule.
 
 The seed script prints a verification summary on completion:
 
@@ -987,7 +986,7 @@ The `.gitignore` excludes `.env.local`. Never commit `.env` files with real valu
 
 ### Security and financial migration update
 
-Apply migrations 019–052 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+Apply migrations 019–054 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
 
 Payout requests reserve each USD/NGN/EUR balance atomically; failed/cancelled requests release reservations, completed requests remain deducted. Currencies are never implicitly converted; referral commissions retain their transaction currency. Tip referral commissions are 10% of the platform fee; subscription and ticket referrals are 10% of their purchase price. Migration 050 corrects verified historical commissions, preserves proportional refunds and audits exact adjustments; missing attribution evidence still requires staging reconciliation before withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
 
@@ -1050,3 +1049,5 @@ Migration 048 adds paid tickets with immutable price/organizer snapshots, 20-min
 Migration 049 records verified tip/subscription amount or currency mismatches without granting benefits and queues their return. Receipt and premium pages show captured, refunded and remaining amounts by currency; quarantined checkouts cannot reopen. Dodo capture verification reads authoritative payment totals and tax before settlement.
 
 Migrations 051–052 make buddy chapter/note updates atomic and reject replies outside their group. Legacy foreign reply links are detached without deleting notes. The shared visibility function also removes recursive buddy RLS policies; open listings exclude private groups. Goodreads import accepts web CSV uploads and native JSON (`csv`), up to 2 MB/2,000 rows. One transaction commits catalog identities, shelf counts and the replay receipt; retry the same file/key after failure. Goodreads IDs retain their own mapping, ISBNs use canonical validation, existing shelf entries stay unchanged and imports award no XP. Malformed CSV fails before writes; rows without a usable source identity are counted as skipped. Conflicting catalog identities require reconciliation rather than title-only matching.
+
+Migrations 053–054 serialize and audit theme, affiliate-store and seasonal-event changes. At most one custom theme is active; safe `:root`/`.dark` overrides support the existing colour variables and `--radius`, without arbitrary CSS or external resources. Seasonal forms use UTC dates and the canonical publication fields. Seeds use private durable identities, repair missing list links and preserve prompt dates across retries; the reserved editor account cannot adopt an unrelated user. Keep seed markers when restoring backups. Three seed ISBNs were corrected; if an old and canonical book both exist, the invalid identity is cleared and `catalog_identity_reconciliation_required` records the IDs for content reconciliation.
