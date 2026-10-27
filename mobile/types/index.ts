@@ -309,3 +309,14 @@ export interface AffiliateLink {
   isAffiliate:boolean;
   isPrimary:boolean;
 }
+
+export interface TasteProfile {
+  summary:string;
+  top_genres:string[];
+  mood_preferences:string[];
+}
+export interface WritingPlan {
+  week_start:string;
+  generatedAt:string;
+  tasks:{day:'Monday'|'Tuesday'|'Wednesday'|'Thursday'|'Friday'|'Saturday'|'Sunday';task:string;goal:string}[];
+}

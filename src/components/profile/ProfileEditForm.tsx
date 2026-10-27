@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { PublicUserRow } from '@/lib/user-profile';
+import { useTranslations } from 'next-intl';
+import { USER_TYPES,GENRES,type UserType } from '@/constants/config';
 import { cn } from '@/lib/utils';
 
 const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supabase') !== 'supabase';
@@ -14,6 +16,9 @@ interface ProfileEditFormProps {
 
 export function ProfileEditForm({ profile }: ProfileEditFormProps) {
   const router = useRouter();
+  const t=useTranslations('aiProfiles');
+  const [genres,setGenres]=useState<string[]>(profile.genres);
+  const [roles,setRoles]=useState<UserType[]>(profile.user_types.filter((value):value is UserType=>USER_TYPES.includes(value as UserType)));
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [bio, setBio] = useState(profile.bio ?? '');
   const [country, setCountry] = useState(profile.country ?? '');
@@ -35,6 +40,8 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
   };
 
   const handleSave = async () => {
+    if(genres.length<5){setError(t('genresRequired'));return;}
+    if(!roles.length){setError(t('rolesRequired'));return;}
     if (!displayName.trim()) { setError('Display name is required'); return; }
     if (bio.length > 280) { setError('Bio must be 280 characters or fewer'); return; }
     setSaving(true);
@@ -85,6 +92,8 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
           country: country.trim() || null,
           avatar_url: avatarUrl,
           external_links: links.filter(Boolean),
+          user_types:roles,
+          genres,
         }),
       });
       if (!res.ok) {
@@ -105,6 +114,8 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
       country: country.trim() || null,
       avatar_url: avatarUrl,
       external_links: links.filter(Boolean),
+      user_types:roles,
+      genres,
     }).eq('id', profile.id);
 
     if (updateError) {
@@ -151,6 +162,12 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
         />
       </div>
 
+      <fieldset className="space-y-2"><legend className="block text-sm font-medium">{t('rolesTitle')}</legend>
+        {USER_TYPES.map(role=><label key={role} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={roles.includes(role)} onChange={()=>setRoles(current=>current.includes(role)?current.filter(value=>value!==role):[...current,role])} />{t(`roles.${role}`)}</label>)}
+      </fieldset>
+      <fieldset className="space-y-2"><legend className="block text-sm font-medium">{t('genresTitle')}</legend><div className="flex flex-wrap gap-2">
+        {GENRES.map(genre=><label key={genre} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={genres.includes(genre)} onChange={()=>setGenres(current=>current.includes(genre)?current.filter(value=>value!==genre):[...current,genre])} />{t(`genreLabels.${genre}`)}</label>)}
+      </div></fieldset>
       {/* Bio */}
       <div>
         <label className="block text-sm font-medium mb-1.5">

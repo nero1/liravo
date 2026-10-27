@@ -6,6 +6,7 @@
  */
 import { getRedisClient } from '@/lib/redis';
 import { AI_MODELS } from '@/constants/ai';
+import { safeModelText } from '@/lib/ai-safety';
 import { fetchWithRetry } from '@/lib/retry';
 
 const FAIL_KEY = 'ai:deepseek:failures';
@@ -41,6 +42,8 @@ export interface AICallOptions {
   system?: string;
   temperature?: number;
   maxTokens?: number;
+  signal?:AbortSignal;
+  validate?:(text:string)=>boolean;
 }
 
 async function callDeepSeek(prompt: string, opts: AICallOptions): Promise<string> {
@@ -61,7 +64,7 @@ async function callDeepSeek(prompt: string, opts: AICallOptions): Promise<string
         temperature: opts.temperature ?? 0.7,
         ...(opts.maxTokens && { max_tokens: opts.maxTokens }),
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.any([AbortSignal.timeout(8000),...(opts.signal?[opts.signal]:[])]),
     });
 
   if (!res.ok) throw new Error(`DeepSeek error: ${res.status}`);
@@ -78,8 +81,8 @@ async function callGemini(prompt: string, opts: AICallOptions): Promise<string> 
   const res = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.GEMINI_MODEL}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, ...(opts.system ? { system_instruction: { parts: [{ text: opts.system }] } } : {}) }),
-        signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({ contents,generationConfig:{temperature:opts.temperature??0.7,maxOutputTokens:opts.maxTokens??800}, ...(opts.system ? { system_instruction: { parts: [{ text: opts.system }] } } : {}) }),
+        signal: AbortSignal.any([AbortSignal.timeout(8000),...(opts.signal?[opts.signal]:[])]),
       });
 
   if (!res.ok) throw new Error(`Gemini error: ${res.status}`);
@@ -95,18 +98,23 @@ export async function callAI(
   prompt: string,
   opts: AICallOptions = {}
 ): Promise<{ text: string; provider: 'deepseek' | 'gemini' }> {
-  const circuitOpen = await isCircuitOpen();
+  opts={...opts,signal:opts.signal??AbortSignal.timeout(18000)};
+  const valid=opts.validate??safeModelText;
+  const circuitOpen = AI_MODELS.PRIMARY_PROVIDER==='gemini'||await isCircuitOpen();
 
   if (!circuitOpen) {
     try {
       const text = await callDeepSeek(prompt, opts);
+      if(!valid(text))throw new Error('Invalid model output');
       return { text, provider: 'deepseek' };
     } catch {
+      if(opts.signal?.aborted)throw new Error('AI deadline exceeded');
       await recordFailure();
       // Fall through to Gemini
     }
   }
 
   const text = await callGemini(prompt, opts);
+  if(!valid(text))throw new Error('Invalid model output');
   return { text, provider: 'gemini' };
 }

@@ -34,15 +34,15 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Introduce jitter and max concurrency caps for fan-out workloads.
 
 ✅ 6. AI privacy and prompt-injection controls (Critical/High)
-- ✅ Scope AI cache keys by user/tenant and policy version.
-- ✅ Validate model outputs against strict schema and reject malformed payloads.
+- ✅ Scope AI caches/profiles by user, source data, locale, models and policy; classify full review text.
+- ✅ Validate model outputs and stored profiles, enforce paid seven-day Newbie Writer plans, and reject malformed results without fabricated success.
 - ✅ Add prompt-injection filtering and unsafe-output redaction.
 
 🟡 7. SEO, i18n, accessibility, and UX quality (Medium)
 - ✅ Add metadata/canonical/OG coverage to major dynamic pages.
 - 🟡 Complete translation keys and enforce no hardcoded user-visible strings.
 - 🟡 Add accessibility sweep for forms/navigation/ARIA labels.
-- ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation and verified reading API contracts.
+- ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
 ✅ 8. Pagination and scalability cleanup (Medium)
 - ✅ Standardize cursor pagination for high-volume endpoints.

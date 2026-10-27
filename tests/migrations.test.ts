@@ -866,5 +866,59 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect(new Set([...firstPage.books,...secondPage.books].map(book=>book.id)).size).toBe(3);
     for(const role of ['anon','authenticated'])for(const routine of ['store_catalog_book(jsonb)','set_reading_goal(uuid,integer,integer)','reading_goal_snapshot(uuid,integer)','writing_progress_snapshot(uuid)','update_shelf_progress(uuid,uuid,integer,numeric)','set_shelf_membership(uuid,uuid,uuid,boolean)','join_reading_challenge(uuid,uuid)','reading_challenge_progress(uuid,uuid)','award_reading_goal_milestones(uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
+    {
+    vi.stubEnv('DATABASE_PROVIDER','railway');vi.stubEnv('DATABASE_URL',url);vi.stubEnv('DATABASE_SSL','false');
+    const reader=crypto.randomUUID();
+    await sql`insert into auth.users(id,email,raw_user_meta_data) values(${reader},'ai-profile-reader@example.test',${sql.json({username:'ai_profile_reader'})})`;
+    await sql`update users set premium_override=true,user_types=array['newbie_writer'],genres=array['Fantasy'],preferred_locale='fr' where id=${reader}`;
+    const {PUT:updateProfile}=await import('@/app/api/users/profile/route');
+    const {NextRequest}=await import('next/server');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:reader,email:'ai-profile-reader@example.test'});
+    const onboarding=await updateProfile(new NextRequest('https://app.test/api/users/profile',{method:'PUT',body:JSON.stringify({username:'ai_writer_onboarded',user_types:['newbie_writer'],genres:['Fantasy','Mystery','Thriller','Romance','Poetry'],onboarding_complete:true})}));
+    expect(onboarding.status).toBe(200);
+    const onboarded=(await onboarding.json()).user;
+    expect(onboarded).toMatchObject({id:reader,username:'ai_writer_onboarded',onboarding_complete:true,user_types:['newbie_writer']});
+    expect(onboarded).not.toHaveProperty('password_hash');expect(onboarded).not.toHaveProperty('totp_secret');
+    expect((await updateProfile(new NextRequest('https://app.test/api/users/profile',{method:'PUT',body:JSON.stringify({is_admin:true})}))).status).toBe(422);
+    await expect(sql`select update_profile_atomic(${reader},'{"is_admin":true}'::jsonb)`).rejects.toThrow('Invalid profile fields');
+    await expect(sql`select update_profile_atomic(${reader},'{"genres":["Fantasy"]}'::jsonb)`).rejects.toThrow('five genres');
+    const [shelf]=await sql`select id from shelves where user_id=${reader} and default_type='have_read'`;
+    const books=await sql`insert into books(title,author_name,genres) values('Profile one','Author',array['Fantasy']),('Profile two','Author',array['Fantasy']),('Profile three','Author',array['History']) returning id`;
+    for(const book of books)await sql`select set_shelf_membership(${reader},${shelf.id},${book.id},true)`;
+    const source=(await sql`select taste_profile_input(${reader}) as source`)[0].source;
+    expect(source.books).toHaveLength(3);
+    const client=await import('@/lib/ai-client'),locks=await import('@/lib/locks'),profiles=await import('@/services/ai-profiles');
+    const model=vi.spyOn(client,'callAI').mockResolvedValue({text:'{"summary":"Vous aimez les histoires imaginatives."}',provider:'deepseek'});
+    const lease=vi.spyOn(locks,'withRedisLock').mockImplementation(async(_key,_ttl,task)=>task());
+    try{
+      const generated=await profiles.generateTasteProfile(reader);
+      expect(generated.profile.top_genres).toEqual(['Fantasy','History']);
+      expect((await profiles.generateTasteProfile(reader)).cached).toBe(true);
+      expect(model).toHaveBeenCalledOnce();
+      expect((await profiles.readTasteProfile(reader)).profile?.summary).toContain('imaginatives');
+      const tasks=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(day=>({day,task:'Écrivez une scène.',goal:'300 mots'}));
+      model.mockResolvedValueOnce({text:JSON.stringify(tasks),provider:'gemini'});
+      const plan=await profiles.generateWritingPlan(reader);
+      expect(plan.plan.tasks).toHaveLength(7);
+      expect((await sql`select week_start::text from writing_plans where user_id=${reader}`)[0].week_start).toBe(profiles.writingWeekStart());
+      await sql`update users set preferred_locale='de' where id=${reader}`;
+      expect((await profiles.readTasteProfile(reader)).profile).toBeNull();
+      await expect(sql`select save_taste_profile(${reader},${sql.json(source)},${'f'.repeat(64)},'profile-stale',${sql.json(generated.profile)},'deepseek')`).rejects.toThrow('changed');
+      await sql`update users set preferred_locale='fr' where id=${reader}`;
+      const raced=await Promise.all(Array.from({length:4},()=>sql`select save_taste_profile(${reader},${sql.json(source)},${'f'.repeat(64)},'profile-sql-race',${sql.json(generated.profile)},'deepseek') as profile`));
+      expect(new Set(raced.map(rows=>rows[0].profile.generated_at)).size).toBe(1);
+      expect((await sql`select count(*)::int as count from ai_taste_profiles where user_id=${reader}`)[0].count).toBe(1);
+      async function browserProfiles(){return sql.begin(async tx=>{await tx`select set_config('request.jwt.claim.sub',${reader},true)`;await tx`select set_config('request.jwt.claim.role','authenticated',true)`;await tx`set local role authenticated`;return tx`select user_id from ai_taste_profiles`;});}
+      expect(await browserProfiles()).toHaveLength(1);
+      await sql`update users set premium_override=false where id=${reader}`;
+      expect(await browserProfiles()).toHaveLength(0);
+      await expect(profiles.readTasteProfile(reader)).rejects.toMatchObject({status:403});
+      await expect(sql`select save_taste_profile(${reader},${sql.json(source)},${'f'.repeat(64)},'profile-sql-race',${sql.json(generated.profile)},'deepseek')`).rejects.toThrow('Premium required');
+    }finally{model.mockRestore();lease.mockRestore();}
+    for(const role of ['anon','authenticated']){
+      for(const routine of ['taste_profile_input(uuid)','writing_plan_input(uuid)','save_taste_profile(uuid,jsonb,text,text,jsonb,text)','save_writing_plan(uuid,date,jsonb,text,text,jsonb,text)','update_profile_atomic(uuid,jsonb)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+      for(const table of ['ai_taste_profiles','writing_plans'])expect((await sql`select has_table_privilege(${role},${table},'INSERT') as allowed`)[0].allowed).toBe(false);
+    }
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);
