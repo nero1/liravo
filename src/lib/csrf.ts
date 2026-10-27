@@ -23,7 +23,7 @@ export function getRequestOrigin(request: Request): string | null {
 }
 
 export function isStatelessNativeAuth(request:Request):boolean {
-  return request.method==='POST'&&['/api/auth/login','/api/auth/signup','/api/auth/google','/api/auth/telegram','/api/auth/2fa/verify'].includes(new URL(request.url).pathname)
+  return request.method==='POST'&&['/api/auth/login','/api/auth/signup','/api/auth/google','/api/auth/telegram','/api/auth/2fa/verify','/api/users/account-recovery','/api/users/verify-recovery','/api/users/verify-email'].includes(new URL(request.url).pathname)
     &&request.headers.get('x-liravo-client')==='native'
     &&!['cookie','origin','sec-fetch-site','sec-fetch-mode'].some(header=>request.headers.has(header));
 }

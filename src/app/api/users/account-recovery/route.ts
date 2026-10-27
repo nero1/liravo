@@ -1,77 +1,29 @@
-import { createServiceClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { sendEmail, buildRecoveryEmail } from '@/lib/email';
-import { checkCriticalRateLimit } from '@/lib/rate-limit';
-import { getClientIp } from '@/lib/utils';
-import crypto from 'crypto';
+import {createServiceClient} from '@/lib/supabase/server';
+import {sendEmail,buildRecoveryEmail} from '@/lib/email';
+import {checkCriticalRateLimit} from '@/lib/rate-limit';
+import {getClientIp} from '@/lib/utils';
+import {factorToken} from '@/lib/auth/second-factor';
+import {discardEmailProof,emailHash,emailLink,emailRequest,emailResponse} from '@/lib/auth/email-links';
+import {recordMetric} from '@/lib/metrics';
 
-export const dynamic = 'force-dynamic';
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
-
-const schema = z.object({
-  email: z.string().email().max(254).toLowerCase(),
-});
-
-export async function POST(req: Request) {
-  const ip = getClientIp(req);
-  const rate = await checkCriticalRateLimit(ip);
-  if (!rate.allowed) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-  }
-
-  const raw = await req.text().catch(() => '');
-  if (raw.length > 500) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
-  let body: unknown;
-  try { body = raw ? JSON.parse(raw) : {}; } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const { email } = parsed.data;
-
-  const service = createServiceClient();
-
-  // Look up user by verified email — always respond with same message to prevent enumeration
-  const { data: user } = await service
-    .from('users')
-    .select('id, display_name, username')
-    .eq('email', email)
-    .eq('email_verified', true)
-    .single();
-
-  if (user) {
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
-
-    await service.from('email_verification_tokens').upsert({
-      user_id: user.id,
-      email,
-      token,
-      expires_at: expiresAt,
-    }, { onConflict: 'user_id' });
-
-    const recoveryUrl = `${APP_URL}/api/users/verify-recovery?token=${token}`;
-    const displayName = user.display_name ?? user.username ?? 'there';
-
-    const { subject, html, text } = buildRecoveryEmail(displayName, recoveryUrl);
-
-    await sendEmail({
-      to: email,
-      type: 'account_recovery',
-      isPaidUser: false, // transactional — always allowed
-      subject,
-      html,
-      text,
-    });
-  }
-
-  // Always return success to prevent email enumeration
-  return NextResponse.json({
-    ok: true,
-    message: 'If an account with that email exists, a recovery link has been sent.',
-  });
+export const dynamic='force-dynamic';
+export async function POST(request:Request){
+  if(!(await checkCriticalRateLimit('recovery:ip:'+getClientIp(request))).allowed)return emailResponse({error:'Too many requests'},429);
+  const raw=await request.text();if(raw.length>500)return emailResponse({error:'Payload too large'},413);
+  let body:unknown;try{body=JSON.parse(raw);}catch{return emailResponse({error:'Invalid JSON'},400);}
+  const parsed=emailRequest.omit({pin:true}).safeParse(body);if(!parsed.success)return emailResponse({error:'Invalid email request'},422);
+  if(!(await checkCriticalRateLimit('recovery:address:'+emailHash(parsed.data.email))).allowed)return emailResponse({error:'Too many requests'},429);
+  try{
+    const service=createServiceClient(),token=factorToken(),hash=emailHash(token);
+    const {data,error}=await service.rpc('issue_account_recovery' as never,{p_email:parsed.data.email,p_hash:hash} as never);
+    if(error)throw new Error('Account lookup unavailable');
+    const user=data as unknown as {id:string;display_name:string|null;username:string}|null;
+    if(user){
+      try{
+        const sent=await sendEmail({to:parsed.data.email,type:'account_recovery',isPaidUser:false,...buildRecoveryEmail(user.display_name??user.username,emailLink('recover',token))});
+        if(!sent.ok){await discardEmailProof(hash);recordMetric('account_recovery_delivery_failed',{userId:user.id},'error');}
+      }catch{recordMetric('account_recovery_delivery_failed',{userId:user.id},'error');}
+    }
+    return emailResponse({ok:true,message:'If this address belongs to a verified account, a recovery link will arrive shortly.'},202);
+  }catch{return emailResponse({error:'RECOVERY_UNAVAILABLE'},503);}
 }

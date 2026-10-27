@@ -6,6 +6,7 @@ import { SecondFactorForm } from '@/components/auth/SecondFactorForm';
 import { createClient } from '@/lib/supabase/client';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface LoginFormProps {
   googleEnabled: boolean;
@@ -17,6 +18,7 @@ const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supa
 export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   const t = useTranslations('auth');
   const common = useTranslations('common');
+  const emailSecurity=useTranslations('emailSecurity');
   const router = useRouter();
   const [loading, setLoading] = useState<'google' | 'telegram' | 'email' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +143,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
         <p className="text-center text-xs text-muted-foreground pt-2">
           {t('terms')}
         </p>
+        <Link href="/account/recover" className="block text-center text-sm text-accent">{emailSecurity('recover')}</Link>
       </div>
     );
   }
@@ -178,6 +181,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
     return (
       <div className="text-center p-4 bg-muted rounded-lg text-muted-foreground">
         {t('unavailable')}
+        <Link href="/account/recover" className="block text-sm text-accent">{emailSecurity('recover')}</Link>
       </div>
     );
   }
@@ -227,6 +231,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
       <p className="text-center text-xs text-muted-foreground pt-2">
         {t('terms')}
       </p>
+      <Link href="/account/recover" className="block text-center text-sm text-accent">{emailSecurity('recover')}</Link>
     </div>
   );
 }

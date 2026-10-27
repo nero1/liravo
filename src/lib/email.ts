@@ -106,12 +106,14 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
 // Template helpers
 // ---------------------------------------------------------------------------
 
+const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]!));
+
 export function buildVerificationEmail(displayName: string, verificationUrl: string) {
   return {
     subject: 'Verify your email — Liravo',
-    html: `<p>Hi ${displayName},</p>
+    html: `<p>Hi ${escapeHtml(displayName)},</p>
 <p>Click the button below to verify your email address. This link expires in 24 hours.</p>
-<p><a href="${verificationUrl}" style="display:inline-block;padding:12px 24px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Verify email</a></p>
+<p><a href="${escapeHtml(verificationUrl)}" style="display:inline-block;padding:12px 24px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Verify email</a></p>
 <p>If you didn't add this email to your Liravo account, you can safely ignore this message.</p>`,
     text: `Hi ${displayName},\n\nVerify your email address:\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't add this email to Liravo, ignore this message.`,
   };
@@ -120,9 +122,9 @@ export function buildVerificationEmail(displayName: string, verificationUrl: str
 export function buildRecoveryEmail(displayName: string, recoveryUrl: string) {
   return {
     subject: 'Account recovery — Liravo',
-    html: `<p>Hi ${displayName},</p>
+    html: `<p>Hi ${escapeHtml(displayName)},</p>
 <p>We received a request to recover access to your Liravo account. Click the button below to continue. This link expires in 1 hour.</p>
-<p><a href="${recoveryUrl}" style="display:inline-block;padding:12px 24px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Recover my account</a></p>
+<p><a href="${escapeHtml(recoveryUrl)}" style="display:inline-block;padding:12px 24px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Recover my account</a></p>
 <p>If you didn't request this, you can safely ignore it.</p>`,
     text: `Hi ${displayName},\n\nRecover your Liravo account:\n${recoveryUrl}\n\nThis link expires in 1 hour.\n\nIf you didn't request this, ignore this message.`,
   };
@@ -132,9 +134,9 @@ export function buildTwoFARecoveryCodesEmail(displayName: string, codes: string[
   const codeList = codes.map((c) => `  ${c}`).join('\n');
   return {
     subject: 'Your 2FA recovery codes — Liravo',
-    html: `<p>Hi ${displayName},</p>
+    html: `<p>Hi ${escapeHtml(displayName)},</p>
 <p>Here are your single-use 2FA recovery codes. Store them somewhere safe. Each code can only be used once.</p>
-<pre style="background:#f5f5f5;padding:16px;border-radius:8px;font-family:monospace;font-size:14px">${codes.join('\n')}</pre>
+<pre style="background:#f5f5f5;padding:16px;border-radius:8px;font-family:monospace;font-size:14px">${codes.map(escapeHtml).join('\n')}</pre>
 <p><strong>Do not share these codes with anyone.</strong></p>`,
     text: `Hi ${displayName},\n\nYour 2FA recovery codes (each is single-use):\n\n${codeList}\n\nDo not share these codes.`,
   };
@@ -147,7 +149,7 @@ export function buildWeeklyDigestEmail(
 ) {
   return {
     subject: `Your Liravo week, ${displayName}`,
-    html: `<p>Hi ${displayName},</p>
+    html: `<p>Hi ${escapeHtml(displayName)},</p>
 <p>Here's what happened on your Liravo account this week:</p>
 <ul>
   <li><strong>${stats.newFollowers}</strong> new follower${stats.newFollowers !== 1 ? 's' : ''}</li>
@@ -167,10 +169,10 @@ export function buildNewReleaseEmail(
 ) {
   return {
     subject: `New release from ${authorName} — Liravo`,
-    html: `<p>Hi ${displayName},</p>
-<p><strong>${authorName}</strong>, an author you follow on Liravo, just announced a new release:</p>
-<p style="font-size:18px;font-weight:600">${bookTitle}</p>
-<p><a href="${bookUrl}" style="display:inline-block;padding:10px 20px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">View on Liravo</a></p>`,
+    html: `<p>Hi ${escapeHtml(displayName)},</p>
+<p><strong>${escapeHtml(authorName)}</strong>, an author you follow on Liravo, just announced a new release:</p>
+<p style="font-size:18px;font-weight:600">${escapeHtml(bookTitle)}</p>
+<p><a href="${escapeHtml(bookUrl)}" style="display:inline-block;padding:10px 20px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">View on Liravo</a></p>`,
     text: `Hi ${displayName},\n\n${authorName} has a new release: ${bookTitle}\n\nView it: ${bookUrl}`,
   };
 }
@@ -183,9 +185,9 @@ export function buildChallengeReminderEmail(
 ) {
   return {
     subject: `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left in "${challengeName}" — Liravo`,
-    html: `<p>Hi ${displayName},</p>
-<p>You have <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''} left</strong> to complete <strong>${challengeName}</strong>.</p>
-<p><a href="${challengeUrl}" style="display:inline-block;padding:10px 20px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Continue challenge</a></p>`,
+    html: `<p>Hi ${escapeHtml(displayName)},</p>
+<p>You have <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''} left</strong> to complete <strong>${escapeHtml(challengeName)}</strong>.</p>
+<p><a href="${escapeHtml(challengeUrl)}" style="display:inline-block;padding:10px 20px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Continue challenge</a></p>`,
     text: `Hi ${displayName},\n\n${daysLeft} day${daysLeft !== 1 ? 's' : ''} left in "${challengeName}".\n\nContinue: ${challengeUrl}`,
   };
 }

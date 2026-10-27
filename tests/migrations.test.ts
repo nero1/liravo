@@ -1449,5 +1449,63 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     for(const role of ['anon','authenticated'])for(const routine of ['set_account_pin(uuid,text,text)','create_payout_request_atomic(uuid,numeric,text,text,text,text,text)','save_payout_destination(uuid,text,jsonb,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     expect((await sql`select has_function_privilege('service_role','create_payout_request_040(uuid,numeric,text,text,text,text)','EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
+    {
+    const owner=crypto.randomUUID(),other=crypto.randomUUID(),hashA='$2b$12$'+'a'.repeat(53),hashB='$2b$12$'+'b'.repeat(53);
+    await sql`select create_direct_account(${owner},'email-old@example.test','email_proof_fixture','Email fixture')`;
+    await sql`select create_direct_account(${other},'email-taken@example.test','email_other_fixture','Other email fixture')`;
+    await sql`update users set email_verified=true,pin_hash=${hashA} where id=${owner}`;
+    await expect(sql`select issue_email_challenge(${owner},'email-new@example.test','verify',${'a'.repeat(64)},null)`).rejects.toThrow('PIN confirmation');
+    await sql`select issue_email_challenge(${owner},'email-new@example.test','verify',${'a'.repeat(64)},${hashA})`;
+    expect((await sql`select email,email_verified from users where id=${owner}`)[0]).toEqual({email:'email-old@example.test',email_verified:true});
+    await sql`select issue_account_recovery('email-old@example.test',${'b'.repeat(64)})`;
+    expect((await sql`select count(*)::int as count from auth_email_challenges where user_id=${owner}`)[0].count).toBe(2);
+    expect((await sql`select consume_email_challenge(${'a'.repeat(64)},'recover') as proof`)[0].proof).toBeNull();
+    const verified=await Promise.all(Array.from({length:3},()=>sql`select consume_email_challenge(${'a'.repeat(64)},'verify') as proof`));
+    expect(verified.filter(rows=>rows[0].proof!==null)).toHaveLength(1);
+    expect((await sql`select email,email_verified from users where id=${owner}`)[0]).toEqual({email:'email-new@example.test',email_verified:true});
+    expect((await sql`select count(*)::int as count from security_events where user_id=${owner} and event_type='email_verified'`)[0].count).toBe(1);
+    expect((await sql`select consume_email_challenge(${'b'.repeat(64)},'recover') as proof`)[0].proof).toBeNull();
+    await sql`select issue_account_recovery('email-new@example.test',${'c'.repeat(64)})`;
+    const recovered=await Promise.all(Array.from({length:3},()=>sql`select consume_email_challenge(${'c'.repeat(64)},'recover') as proof`));
+    expect(recovered.filter(rows=>rows[0].proof!==null)).toHaveLength(1);
+    expect((await sql`select mfa_version,pin_hash from users where id=${owner}`)[0]).toMatchObject({mfa_version:1,pin_hash:hashA});
+    expect((await sql`select count(*)::int as count from security_events where user_id=${owner} and event_type='account_recovery'`)[0].count).toBe(1);
+    const cutoff=Number((await sql`select auth_not_before from users where id=${owner}`)[0].auth_not_before);expect(cutoff).toBeGreaterThan(0);
+    await sql.begin(async tx=>{
+      await tx`select set_config('request.jwt.claim.sub',${owner},true),set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claims',${JSON.stringify({sub:owner,iat:cutoff-1})},true)`;
+      await tx`set local role authenticated`;
+      expect((await tx`select factor_session_authorized() as allowed`)[0].allowed).toBe(false);
+      await tx`select set_config('request.jwt.claims',${JSON.stringify({sub:owner,iat:cutoff+1})},true)`;
+      expect((await tx`select factor_session_authorized() as allowed`)[0].allowed).toBe(true);
+    });
+
+    await sql`select issue_email_challenge(${owner},'email-later@example.test','verify',${'d'.repeat(64)},${hashA})`;
+    await sql`select set_account_pin(${owner},${hashA},${hashB})`;
+    expect((await sql`select consume_email_challenge(${'d'.repeat(64)},'verify') as proof`)[0].proof).toBeNull();
+    await sql`select issue_email_challenge(${owner},'email-later@example.test','verify',${'e'.repeat(64)},${hashB})`;
+    await sql`update auth_email_challenges set expires_at=now()-interval '1 second' where user_id=${owner} and purpose='verify'`;
+    expect((await sql`select consume_email_challenge(${'e'.repeat(64)},'verify') as proof`)[0].proof).toBeNull();
+    await expect(sql`select issue_email_challenge(${owner},'email-taken@example.test','verify',${'f'.repeat(64)},${hashB})`).rejects.toThrow('Email unavailable');
+    await sql`select issue_email_challenge(${owner},'email-later@example.test','verify',${'1'.repeat(64)},${hashB})`;
+    await sql`select issue_email_challenge(${other},'email-later@example.test','verify',${'2'.repeat(64)},null)`;
+    const competing=await Promise.allSettled(['1','2'].map(char=>sql`select consume_email_challenge(${char.repeat(64)},'verify')`));
+    expect(competing.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    expect((await sql`select count(*)::int as count from users where email='email-later@example.test'`)[0].count).toBe(1);
+    await sql`update users set email='EMAIL-MIXED@example.test',email_verified=true where id=${other}`;
+    expect((await sql`select issue_account_recovery('email-mixed@example.test',${'3'.repeat(64)}) as proof`)[0].proof.id).toBe(other);
+    expect((await sql`select issue_account_recovery('missing@example.test',${'4'.repeat(64)}) as proof`)[0].proof).toBeNull();
+    const setup='5'.repeat(64),session='6'.repeat(64),recoveries=Array.from({length:8},(_,i)=>'fixture-'+i);
+    await sql`select begin_factor_challenge(${owner},${setup},'setup',${session},'v1:fixture')`;
+    await sql`select claim_factor_challenge(${setup},'setup')`;
+    await expect(sql`select finish_factor_challenge(${setup},'setup',1,1,null,${session},'v1:fixture',${recoveries})`).rejects.toThrow('PIN confirmation');
+    await expect(sql`select finish_factor_challenge(${setup},'setup',1,1,null,${session},'v1:fixture',${recoveries},${hashA})`).rejects.toThrow('PIN confirmation');
+    await sql`select finish_factor_challenge(${setup},'setup',1,1,null,${session},'v1:fixture',${recoveries},${hashB})`;
+    expect((await sql`select totp_enabled from users where id=${owner}`)[0].totp_enabled).toBe(true);
+    for(const role of ['anon','authenticated']){
+      for(const table of ['email_verification_tokens','auth_email_challenges'])expect((await sql`select has_table_privilege(${role},${table},'SELECT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['issue_email_challenge(uuid,text,text,text,text)','issue_account_recovery(text,text)','consume_email_challenge(text,text)','finish_factor_challenge(text,text,integer,bigint,text,text,text,text[],text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    expect((await sql`select has_function_privilege('service_role','finish_factor_challenge_044(text,text,integer,bigint,text,text,text,text[])','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

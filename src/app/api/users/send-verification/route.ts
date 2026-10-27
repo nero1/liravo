@@ -1,99 +1,28 @@
-import { createServiceClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { sendEmail, buildVerificationEmail } from '@/lib/email';
-import { checkCriticalRateLimit } from '@/lib/rate-limit';
-import { getClientIp } from '@/lib/utils';
-import crypto from 'crypto';
-import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import {createServiceClient} from '@/lib/supabase/server';
+import {sendEmail,buildVerificationEmail} from '@/lib/email';
+import {getCurrentUser} from '@/lib/auth/getCurrentUser';
+import {verifyAccountPin,PinError} from '@/lib/account-pin';
+import {factorToken} from '@/lib/auth/second-factor';
+import {discardEmailProof,emailHash,emailLink,emailRequest,emailResponse} from '@/lib/auth/email-links';
 
-export const dynamic = 'force-dynamic';
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
-
-const schema = z.object({
-  email: z.string().email().max(254).toLowerCase(),
-});
-
-export async function POST(req: Request) {
-  const ip = getClientIp(req);
-  const rate = await checkCriticalRateLimit(ip);
-  if (!rate.allowed) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-  }
-
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const raw = await req.text().catch(() => '');
-  if (raw.length > 1000) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
-  let body: unknown;
-  try { body = raw ? JSON.parse(raw) : {}; } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const { email } = parsed.data;
-
-  const service = createServiceClient();
-
-  // Check email is not already used by another user
-  const { data: existing } = await service
-    .from('users')
-    .select('id')
-    .eq('email', email)
-    .neq('id', user.id)
-    .single();
-
-  if (existing) {
-    return NextResponse.json({ error: 'This email is already associated with another account' }, { status: 409 });
-  }
-
-  // Get user profile for display name
-  const { data: profile } = await service
-    .from('users')
-    .select('display_name, username')
-    .eq('id', user.id)
-    .single();
-
-  // Generate a secure verification token
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-  // Store token in DB
-  await service.from('email_verification_tokens').upsert({
-    user_id: user.id,
-    email,
-    token,
-    expires_at: expiresAt,
-  }, { onConflict: 'user_id' });
-
-  // Update user record with the pending email
-  await service.from('users').update({
-    email,
-    email_verified: false,
-  }).eq('id', user.id);
-
-  const verificationUrl = `${APP_URL}/api/users/verify-email?token=${token}`;
-  const displayName = profile?.display_name ?? profile?.username ?? 'there';
-
-  const { subject, html, text } = buildVerificationEmail(displayName, verificationUrl);
-
-  const result = await sendEmail({
-    to: email,
-    type: 'email_verification',
-    isPaidUser: false, // transactional — always allowed
-    subject,
-    html,
-    text,
-  });
-
-  if (!result.ok) {
-    console.error('[send-verification] Mailgun error:', result.error);
-    return NextResponse.json({ error: 'Failed to send verification email. Please try again.' }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, message: 'Verification email sent. Check your inbox.' });
+export const dynamic='force-dynamic';
+export async function POST(request:Request){
+  const user=await getCurrentUser();if(!user)return emailResponse({error:'Unauthorized'},401);
+  if(request.headers.has('x-liravo-actor')&&request.headers.get('x-liravo-actor')!==user.id)return emailResponse({error:'ACCOUNT_CHANGED'},409);
+  const raw=await request.text();if(raw.length>1000)return emailResponse({error:'Payload too large'},413);
+  let body:unknown;try{body=JSON.parse(raw);}catch{return emailResponse({error:'Invalid JSON'},400);}
+  const parsed=emailRequest.safeParse(body);if(!parsed.success)return emailResponse({error:'Invalid email request'},422);
+  try{
+    const pinHash=await verifyAccountPin(user.id,parsed.data.pin,request);
+    const service=createServiceClient(),token=factorToken(),hash=emailHash(token);
+    const {data:profile,error:profileError}=await service.from('users').select('display_name,username').eq('id',user.id).single();
+    if(profileError||!profile)throw new Error('Profile unavailable');
+    const {data,error}=await service.rpc('issue_email_challenge' as never,{p_user_id:user.id,p_email:parsed.data.email,p_purpose:'verify',p_hash:hash,p_pin_hash:pinHash} as never);
+    if(error)return emailResponse({error:error.code==='P1001'?'EMAIL_OR_PIN_CHANGED':'EMAIL_UNAVAILABLE'},error.code==='P1001'?409:503);
+    if(!data)return emailResponse({error:'Account unavailable'},403);
+    const message=buildVerificationEmail(profile.display_name??profile.username,emailLink('verify',token));
+    const sent=await sendEmail({to:parsed.data.email,type:'email_verification',isPaidUser:false,...message});
+    if(!sent.ok){await discardEmailProof(hash);return emailResponse({error:'EMAIL_DELIVERY_FAILED'},503);}
+    return emailResponse({ok:true});
+  }catch(error){return error instanceof PinError?emailResponse({error:error.code},error.status):emailResponse({error:'EMAIL_UNAVAILABLE'},503);}
 }

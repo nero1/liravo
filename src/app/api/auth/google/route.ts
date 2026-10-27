@@ -64,11 +64,14 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
 
   // Find or create user
-  let { data: user } = await supabase
+  let { data: user,error:lookupError } = await supabase
     .from('users')
     .select('*')
-    .eq('email', googleInfo.email)
+    .eq('google_id', googleInfo.sub)
     .maybeSingle();
+  if(lookupError)return NextResponse.json({error:'Authentication unavailable'},{status:503});
+  if(!user){const lookup=await supabase.from('users').select('*').eq('email',googleInfo.email).maybeSingle();user=lookup.data;lookupError=lookup.error;}
+  if(lookupError)return NextResponse.json({error:'Authentication unavailable'},{status:503});
 
   if (!user) {
     const id = crypto.randomUUID();
@@ -83,7 +86,8 @@ export async function POST(request: Request) {
     return NextResponse.json({error:'Google account identity conflict'},{status:403});
   } else if (!user.google_id) {
     // Link Google to existing account
-    await supabase.from('users').update({ google_id: googleInfo.sub }).eq('id', user.id);
+    const {error}=await supabase.from('users').update({google_id:googleInfo.sub}).eq('id',user.id);
+    if(error)return NextResponse.json({error:'Google identity link unavailable'},{status:503});
   }
 
   if(!user)return NextResponse.json({error:'Account unavailable'},{status:503});

@@ -197,6 +197,7 @@ it('exempts only cookie-free native first-factor requests from browser CSRF',()=
   const create=(path='/api/auth/login',extra:Record<string,string>={})=>new Request('https://app.test'+path,{method:'POST',headers:{'X-Liravo-Client':'native',...extra}});
   expect(isStatelessNativeAuth(create())).toBe(true);
   expect(isStatelessNativeAuth(create('/api/auth/2fa/verify'))).toBe(true);
+  for(const path of ['/api/users/account-recovery','/api/users/verify-recovery','/api/users/verify-email']){expect(isStatelessNativeAuth(create(path))).toBe(true);expect(isStatelessNativeAuth(create(path,{Cookie:'liravo-session=browser'}))).toBe(false);}
   expect(isStatelessNativeAuth(create('/api/tips/create'))).toBe(false);
   for(const extra of ([{Origin:'https://evil.test'},{Cookie:'liravo-session=browser'},{'Sec-Fetch-Site':'same-origin'},{'Sec-Fetch-Mode':'cors'}] as Record<string,string>[]))expect(isStatelessNativeAuth(create('/api/auth/login',extra))).toBe(false);
   expect(isStatelessNativeAuth(new Request('https://app.test/api/auth/login',{method:'POST'}))).toBe(false);

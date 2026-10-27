@@ -307,7 +307,7 @@ All layouts designed at 375px width first, scaled to desktop. Fixed bottom navig
 
 After onboarding, the platform periodically (non-intrusively) encourages the user to:
 
-- **Add an email address** for account recovery purposes. This is optional. Email is not used for marketing. A verification link is sent to confirm the address.
+- **Add an email address** for account recovery purposes. This is optional. Email is not used for marketing. A verification link opens a confirmation page; the current address remains active until confirmation. Configured PINs protect changes.
 - **Set a password** associated with their email (optional, only if they added an email).
 - **Enable 2FA** via an authenticator app (Google Authenticator, Authy, etc.). Optional but prominently recommended. No SMS 2FA at any point. Enrollment is session-bound; encrypted factors, one-time recovery codes and versioned session proofs enforce verification before application access, including Supabase RLS.
 
@@ -322,7 +322,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 **Account access recovery:**
 - If only Google auth: user recovers via Google account recovery.
 - If only Telegram auth: user recovers via Telegram account recovery.
-- If email was added: email-based recovery link sent.
+- If a verified email was added: a one-hour recovery link restores access through the existing 2FA check; recovery invalidates earlier sessions.
 - If PIN was set: PIN required for sensitive operations.
 - If 2FA was enabled: authenticator app required.
 - Admin-assisted recovery: user submits a recovery request form with account details. Admin verifies and manually re-links auth. Process documented in SETUP.md.
@@ -1534,7 +1534,7 @@ Assume a developer who has not deployed a Next.js app before. Cover in full:
 - Affiliate store registry: how to add a new store from the admin panel.
 - Paystack: account creation, API keys, webhook configuration and secret.
 - Dodopayments: account creation, API keys, webhook configuration and secret.
-- Transactional email (Resend or equivalent free tier): account setup, domain verification.
+- Transactional email (Mailgun): account setup, sending-domain and sender verification.
 - Vercel: link GitHub repo, configure env vars in dashboard, domain setup for liravo.org.
 - cron-job.org: how to set up each sub-daily cron job, the `CRON_SECRET` header pattern, and which endpoints to target.
 - How to seed the database (running the seed script, Liravo Editors account creation).
@@ -1586,7 +1586,7 @@ Detail every feature, technical decision, and operational process. Cover:
 | DeepSeek API: occasional unavailability | Gemini fallback fully implemented. Circuit breaker: 3 failures in 5 minutes routes to Gemini for 10 minutes. |
 | On-device AI: 50 MB model size cap | Quantised ONNX / WASM models. MobileBERT or DistilBERT variants for classification. |
 | No SMS: account recovery | Google and Telegram native recovery, optional email recovery, optional 2FA recovery codes, admin-assisted recovery. All documented and accessible in the UI. |
-| Email only for paid tiers | All transactional email infrastructure still needed (email verification link, recovery links). Use Resend free tier which covers transactional volume. Marketing/digest email gated behind paid tier in the product logic. |
+| Email only for paid tiers | All transactional email infrastructure still needed (email verification link, recovery links). Configure Mailgun for transactional delivery. Marketing/digest email gated behind paid tier in the product logic. |
 | AI cost management | All AI features are pre-computed in batch (nightly cron) wherever possible. Per-request AI calls limited to paid tier features. On-device models used for free-tier inference where quality is acceptable. |
 | Books not on Amazon | Non-affiliate external link system covers this from day one. Click data on non-affiliate links informs future affiliate program priorities. Admin can add new affiliate stores via the registry without code changes. |
 | Database vendor lock-in | Database abstraction layer (`src/lib/db/`) isolates all provider-specific code. Supabase is the default and lowest-friction starting point. Switching to DigitalOcean or Railway requires only environment variable changes. Adding a further provider (Neon, Render, PlanetScale) requires editing five files and no application-layer code. |
