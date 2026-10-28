@@ -34,7 +34,26 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
+    let legacyEditions:{owner:string;ids:string[];reviewId:string}|undefined;
+    let legacyImport:{owner:string;rows:unknown[];response:unknown}|undefined;
     for (const file of migrations) {
+      if(file.startsWith('066_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-import-066@example.test','legacy_import_066','Legacy import')`;
+        const {parseGoodreadsImport}=await import('@/lib/goodreads-import');
+        const rows=parseGoodreadsImport('Book Id,Title,Author,Language,Publisher,Number of Pages,Exclusive Shelf\n966001,Legacy import,Author,fr,Éditeur,320,read').rows.map(row=>({...row,book:{...row.book,publisher:null,page_count:null,published_year:null,language:'en'}}));
+        const response=(await sql`select import_goodreads_library(${owner},'legacy-parser-receipt',${sql.json(rows)},0) as result`)[0].result;
+        legacyImport={owner,rows,response};
+      }
+      if(file.startsWith('065_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-editions@example.test','legacy_editions_reader','Legacy edition reader')`;
+        const rows=await sql`insert into books(title,author_name,isbn_10,isbn_13,open_library_id,page_count) values('Legacy C book','Legacy author','0-13-110362-8',null,'/works/OL980001W',200),('Legacy C edition','Legacy author',null,'9780131103627',null,300) returning id`;
+        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='have_read'`)[0].id;await sql`select set_shelf_membership(${owner},${shelf},${rows[1].id},true)`;
+        const entry=(await sql`select id from shelf_books where user_id=${owner} and book_id=${rows[1].id}`)[0].id;await sql`select update_shelf_progress(${owner},${entry},100,null)`;
+        const review=(await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,idempotency_key,request_hash) values(${owner},${rows[1].id},4,'Legacy edition history','short','published','legacy-edition-review',${'e'.repeat(64)}) returning id`)[0].id;
+        await sql`insert into books(title,author_name,isbn_13,google_books_id) values('Legacy corrupt ISBN','Legacy author','9780306406158','legacy-corrupt-edition')`;
+        await sql`select award_xp_once(${owner},20,'write_review',${'review:'+rows[1].id})`;
+        legacyEditions={owner,ids:rows.map(row=>row.id),reviewId:review};
+      }
       if(file.startsWith('063_')){
         const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-completion@example.test','legacy_completion_owner','Legacy completion')`;
         const book=(await sql`insert into books(title,author_name) values('Legacy completion','Fixture') returning id`)[0].id;
@@ -945,7 +964,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect(profileResponse.status).toBe(200);
     const profile=(await profileResponse.json()).user;
     expect(profile).not.toHaveProperty('email');expect(profile).not.toHaveProperty('totp_secret');
-    const searchable=await new PgQueryBuilder<{id:string}[]>('books').select('id').textSearch('search_vector','Concurrent catalog',{type:'websearch',config:'english'});
+    const searchable=await new PgQueryBuilder<{id:string}[]>('books').select('id').textSearch('search_vector','Concurrent catalog',{type:'websearch',config:'simple'});
     expect(searchable.error).toBeNull();expect(searchable.data).toEqual([{id:bookId}]);
     const {GET:adminBooks}=await import('@/app/api/admin/books/route');
     await sql`update users set is_admin=true where id=${other}`;
@@ -1813,6 +1832,136 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       expect((await sql`select has_table_privilege(${role},'reading_sessions','INSERT') as allowed`)[0].allowed).toBe(false);
       for(const routine of ['rebuild_reading_streak(uuid)','process_outbox_event_atomic_042(uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
+    }
+    {
+    const payload={title:'Edition integrity',author_name:'An author',open_library_work_id:'/works/OL990001W',work_title:'Edition integrity work'};
+    const store=async(data:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({...payload,...data})}) as book`)[0].book;
+    const saved=await Promise.all(Array.from({length:4},()=>store({open_library_id:'/books/OL990001M',google_books_id:'edition-integrity-a',isbn_13:'9780306406157',isbn_10:'0306406152',language:'en',page_count:200,format:'hardcover'})));
+    expect(new Set(saved.map(book=>book.id)).size).toBe(1);const first=saved[0];
+    const second=await store({title:'Une autre édition',open_library_id:'/books/OL990002M',google_books_id:'edition-integrity-b',isbn_13:'9780141439518',language:'fr',page_count:320,format:'paperback'});
+    expect(first.id).not.toBe(second.id);expect(first.work_id).toBe(second.work_id);
+    const alias=await store({google_books_id:'edition-integrity-alias',isbn_13:'9780306406157'});expect(alias.id).toBe(first.id);
+    expect((await sql`select book_id from book_edition_identifiers where provider='google' and identifier='edition-integrity-alias'`)[0].book_id).toBe(first.id);
+    await expect(store({google_books_id:'edition-integrity-a',isbn_13:'9780062316097'})).rejects.toMatchObject({code:'P1001'});
+    await expect(store({open_library_id:'/works/OL990001W'})).rejects.toThrow('Invalid catalog edition');
+    await expect(store({isbn_10:'0306406152',isbn_13:'9780141439518'})).rejects.toThrow('Invalid edition ISBN');
+    await expect(store({isbn_13:'4006381333931'})).rejects.toThrow('Invalid edition ISBN');
+    await expect(store({open_library_id:'/books/OL990001M',isbn_13:'9780306406157',format:'paperback'})).rejects.toMatchObject({code:'P1001'});
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'edition-integrity@example.test','edition_integrity_reader','Edition reader')`;
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+    const results=await Promise.all([first,second].map(book=>sql`select set_shelf_membership(${actor},${shelf},${book.id},true) as result`));
+    expect(results.map(rows=>rows[0].result.xp_awarded).sort((a,b)=>a-b)).toEqual([0,50]);
+    expect((await sql`select books_read_count,xp from users where id=${actor}`)[0]).toEqual({books_read_count:1,xp:50});
+    expect((await sql`select reading_goal_snapshot(${actor},extract(year from now() at time zone 'UTC')::integer) as result`)[0].result.progress.books_read).toBe(1);
+    const snapshot=(await sql`select book_work_snapshot(${first.work_id},null,1) as result`)[0].result;expect(snapshot.editions).toHaveLength(1);expect(snapshot.nextCursor).toBeTruthy();
+    const next=(await sql`select book_work_snapshot(${first.work_id},${snapshot.nextCursor},1) as result`)[0].result;expect(next.editions).toHaveLength(1);expect(next.editions[0].id).not.toBe(snapshot.editions[0].id);expect(next.nextCursor).toBeNull();
+    await sql`delete from books where id in (${first.id},${second.id})`;
+    const third=await store({open_library_id:'/books/OL990003M',isbn_13:'9780062316097'});expect(third.work_id).toBe(first.work_id);
+    expect((await sql`select set_shelf_membership(${actor},${shelf},${third.id},true) as result`)[0].result.xp_awarded).toBe(0);
+    expect((await sql`select count(*)::int as count from reading_work_completions where user_id=${actor} and rewarded_at is not null`)[0].count).toBe(1);
+    const unrelated=await store({open_library_work_id:'/works/OL990002W',open_library_id:'/books/OL990004M',isbn_13:'9780525559474'});
+    expect(unrelated.work_id).not.toBe(third.work_id);
+    await expect(store({open_library_work_id:'/works/OL990002W',isbn_13:'9780062316097'})).rejects.toThrow('Conflicting work');
+    for(const role of ['anon','authenticated'])for(const routine of ['store_catalog_book(jsonb)','book_work_snapshot(uuid,uuid,integer)','canonical_book_work(uuid)','claim_reading_reward_063(uuid,text,uuid)','import_goodreads_library_052(uuid,text,jsonb,integer)','seed_content_item_054(text,text,jsonb,uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    expect(legacyEditions).toBeTruthy();const legacy=legacyEditions!;
+    const rows=await sql`select id,work_id,canonical_edition_id,isbn_13,open_library_id from books where id in (${legacy.ids[0]},${legacy.ids[1]}) order by id`;
+    const canonical=rows.find(row=>row.canonical_edition_id===null)!,alias=rows.find(row=>row.canonical_edition_id!==null)!;
+    expect(alias.canonical_edition_id).toBe(canonical.id);expect(alias.work_id).toBe(canonical.work_id);expect(canonical.isbn_13).toBe('9780131103627');
+    expect((await sql`select book_id from reviews where id=${legacy.reviewId}`)[0].book_id).toBe(legacy.ids[1]);
+    expect((await sql`select book_id from shelf_books where user_id=${legacy.owner}`)[0].book_id).toBe(legacy.ids[1]);
+    expect((await sql`select book_work_snapshot(${canonical.work_id}) as result`)[0].result.work.open_library_id).toBe('/works/OL980001W');
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id in (${legacy.ids[0]},${legacy.ids[1]})`)[0].count).toBeGreaterThanOrEqual(1);
+    expect((await sql`select isbn_13 from books where google_books_id='legacy-corrupt-edition'`)[0].isbn_13).toBeNull();
+    const {getBookById,getEditionIds}=await import('@/services/books');expect((await getBookById(alias.id))?.id).toBe(canonical.id);expect((await getEditionIds(canonical.id)).sort()).toEqual([...legacy.ids].sort());
+    const shelf=(await sql`select id from shelves where user_id=${legacy.owner} and default_type='have_read'`)[0].id;
+    const before=(await sql`select xp from users where id=${legacy.owner}`)[0].xp;
+    expect((await sql`select award_xp_once(${legacy.owner},20,'write_review',${'review:'+canonical.id}) as result`)[0].result.awarded).toBe(0);
+    expect((await sql`select set_shelf_membership(${legacy.owner},${shelf},${canonical.id},true) as result`)[0].result.xp_awarded).toBe(0);
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${legacy.owner} and shelf_id=${shelf}`)[0].count).toBe(1);
+    expect((await sql`select xp from users where id=${legacy.owner}`)[0].xp).toBe(before);
+    expect((await getBookById(alias.id))?.have_read_count).toBe(1);
+    const progress=(await sql`select sb.progress_percent,round(sb.progress_pages*100.0/b.page_count,2) as expected from shelf_books sb join books b on b.id=${canonical.id} where sb.user_id=${legacy.owner} and sb.shelf_id=${shelf}`)[0];expect(Number(progress.progress_percent)).toBe(Number(progress.expected));
+    await sql`select set_shelf_membership(${legacy.owner},${shelf},${canonical.id},false)`;
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${legacy.owner} and shelf_id=${shelf}`)[0].count).toBe(0);
+    }
+    {
+    const store=async(data:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({title:'Work resolution fixture',author_name:'An author',...data})}) as book`)[0].book;
+    const unknown=await store({google_books_id:'unresolved-work-fixture',isbn_13:'9780132350884'}),known=await store({open_library_id:'/books/OL970001M',open_library_work_id:'/works/OL970001W',isbn_13:'9780201616224'});
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'work-resolution@example.test','work_resolution_reader','Work resolution reader')`;
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+    await sql`select set_shelf_membership(${actor},${shelf},${known.id},true)`;
+    const {getBookById}=await import('@/services/books');expect((await getBookById(unknown.id))?.work_id).toBe(unknown.work_id);
+    await Promise.all([store({open_library_id:'/books/OL970002M',open_library_work_id:'/works/OL970001W',isbn_13:'9780132350884'}),sql`select set_shelf_membership(${actor},${shelf},${unknown.id},true)`]);
+    expect((await sql`select books_read_count from users where id=${actor}`)[0].books_read_count).toBe(1);
+    expect((await getBookById(unknown.id))?.work_id).toBe(known.work_id);
+    expect((await sql`select book_work_snapshot(${unknown.work_id}) as result`)[0].result.work.id).toBe(known.work_id);
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${unknown.id} and reason='provider_work_resolved'`)[0].count).toBe(1);
+    const extra=await store({open_library_id:'/books/OL970003M',open_library_work_id:'/works/OL970001W',isbn_13:'9780735619678'});
+    expect((await sql`select set_shelf_membership(${actor},${shelf},${extra.id},true) as result`)[0].result.xp_awarded).toBe(0);
+    }
+    {
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'work-resolution-race@example.test','work_resolution_race','Work race')`;
+    const store=async(data:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({title:'Catalog lock race',author_name:'An author',...data})}) as book`)[0].book;
+    const source=await store({google_books_id:'catalog-lock-source'}),target=await store({open_library_id:'/books/OL960001M',open_library_work_id:'/works/OL960001W'});
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+    let signal:()=>void=()=>{},release:()=>void=()=>{};const ready=new Promise<void>(resolve=>{signal=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
+    const first=sql.begin(async tx=>{await tx`select apply_shelf_membership_intent(${actor},${shelf},${source.id},true,'catalog-lock-race-source')`;signal();await held;});
+    await ready;
+    const resolveWork=store({google_books_id:'catalog-lock-source',open_library_work_id:'/works/OL960001W'}),second=sql`select apply_shelf_membership_intent(${actor},${shelf},${target.id},true,'catalog-lock-race-target')`;
+    await new Promise(resolve=>setTimeout(resolve,100));release();await Promise.all([first,resolveWork,second]);
+    expect((await sql`select books_read_count from users where id=${actor}`)[0].books_read_count).toBe(1);
+    expect((await sql`select count_verified_books(${actor}) as count`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${actor} and shelf_id=${shelf}`)[0].count).toBe(2);
+    }
+    {
+    expect(legacyImport).toBeTruthy();const legacy=legacyImport!;
+    const {parseGoodreadsImport}=await import('@/lib/goodreads-import');
+    const csv='Book Id,Title,Author,Language,Publisher,Binding,Number of Pages,Exclusive Shelf\n966001,Legacy import,Author,fr,Éditeur,Relié,320,read';
+    const rows=parseGoodreadsImport(csv).rows;
+    expect((await sql`select import_goodreads_library_v2(${legacy.owner},'legacy-parser-receipt',${sql.json(rows)},0) as result`)[0].result).toEqual(legacy.response);
+    expect((await sql`select xp from users where id=${legacy.owner}`)[0].xp).toBe(0);
+    const current=parseGoodreadsImport(csv.replaceAll('966001','966002')).rows;
+    expect((await sql`select import_goodreads_library_v2(${legacy.owner},'new-parser-receipt',${sql.json(current)},0) as result`)[0].result.imported).toBe(1);
+    const imported=(await sql`select b.* from books b join goodreads_book_identities g on g.book_id=b.id where g.goodreads_id='966002'`)[0];
+    expect(imported).toMatchObject({language:'fr',publisher:'Éditeur',format:'hardcover',page_count:320,metadata_source:'goodreads'});
+    const changed=current.map(row=>({...row,book:{...row.book,page_count:400}}));
+    await expect(sql`select import_goodreads_library_v2(${legacy.owner},'new-parser-receipt',${sql.json(changed)},0)`).rejects.toThrow('Conflicting');
+    const oldRows=legacy.rows.map(row=>{const item=row as {book:Record<string,unknown>};return {...item,book:{...item.book,goodreads_id:'966003'}};});
+    const oldResponse=(await sql`select import_goodreads_library(${legacy.owner},'rolling-parser-receipt',${sql.json(oldRows)},0) as result`)[0].result;
+    const rolling=rows.map(row=>({...row,book:{...row.book,goodreads_id:'966003'}}));
+    expect((await sql`select import_goodreads_library_v2(${legacy.owner},'rolling-parser-receipt',${sql.json(rolling)},0) as result`)[0].result).toEqual(oldResponse);
+    }
+    {
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'metadata-066@example.test','metadata_066','Metadata reader')`;
+    const store=async(data:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({title:'Verified title',author_name:'Verified author',google_books_id:'metadata-066',...data})}) as book`)[0].book;
+    const first=await store({language:'und'});
+    const fill=(await sql.begin(async tx=>{await tx`select set_config('liravo.catalog_source','goodreads',true)`;return tx`select store_catalog_book(${tx.json({title:'CSV title',author_name:'Author',google_books_id:'metadata-066',goodreads_id:'966004',isbn_13:'9780999660669',language:'fr',page_count:320,format:'paperback'})}) as book`;}))[0].book;
+    const linked=await store({isbn_13:'9780999660669',language:'und'});
+    expect(linked.id).toBe(first.id);
+    expect(linked).toMatchObject({title:'Verified title',page_count:320,language:'fr',format:'paperback'});
+    expect(linked.metadata_provenance).toMatchObject({title:'google',page_count:'goodreads',language:'goodreads',format:'goodreads'});
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='currently_reading'`)[0].id;
+    await sql`select set_shelf_membership(${actor},${shelf},${linked.id},true)`;
+    const entry=(await sql`select id from shelf_books where user_id=${actor} and book_id=${linked.id}`)[0].id;
+    await sql`select update_shelf_progress(${actor},${entry},160,null)`;
+    const before=(await sql`select xp from users where id=${actor}`)[0].xp;
+    const verified=await store({isbn_13:'9780999660669',open_library_id:'/books/OL966001M',language:'de',page_count:400,format:'hardcover',publisher:'Verified publisher'});
+    expect(verified).toMatchObject({title:'Verified title',language:'de',page_count:400,format:'hardcover',publisher:'Verified publisher'});
+    await expect(store({isbn_13:'9780999660669',open_library_id:'/books/OL966001M',language:'fr'})).rejects.toMatchObject({code:'P1001'});
+    expect(verified.metadata_provenance).toMatchObject({title:'google',page_count:'openlibrary',language:'openlibrary',format:'openlibrary'});
+    expect(Number((await sql`select progress_percent from shelf_books where id=${entry}`)[0].progress_percent)).toBe(40);
+    expect((await sql`select xp from users where id=${actor}`)[0].xp).toBe(before);
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${verified.id} and reason='provider_progress_recalculated'`)[0].count).toBe(1);
+    const again=await store({google_books_id:null,goodreads_id:'966004',isbn_13:'9780999660669',title:'CSV overwrite',language:'fr',page_count:800,publisher:'CSV publisher',format:'paperback'});
+    expect(again).toMatchObject({title:'Verified title',language:'de',page_count:400,publisher:'Verified publisher',format:'hardcover'});
+    const audit=(await sql`select count(*)::int as count from book_catalog_audit where book_id=${verified.id}`)[0].count;
+    await store({isbn_13:'9780999660669',open_library_id:'/books/OL966001M',language:'de',page_count:400,format:'hardcover',publisher:'Verified publisher'});
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${verified.id}`)[0].count).toBe(audit);
+    for(const role of ['anon','authenticated'])for(const routine of ['import_goodreads_library_v2(uuid,text,jsonb,integer)','store_catalog_book_065(jsonb)','apply_book_interaction_060(uuid,uuid,text,text,uuid,boolean)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    expect((await sql`select has_function_privilege('service_role','store_catalog_book_065(jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    expect(fill.id).toBe(first.id);
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

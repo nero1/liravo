@@ -44,8 +44,28 @@ export interface UserRow {
   badges?: { icon: string; name: string }[];
 }
 
+export interface BookWorkRow {
+  id:string;
+  title:string;
+  author_name:string;
+  open_library_id:string|null;
+  merged_into:string|null;
+  created_at:string;
+}
+export interface WorkCatalog {
+  work:BookWorkRow;
+  editions:BookRow[];
+  nextCursor:string|null;
+  statistics:{ratings_count:number;average_rating:number|null;readers_count:number};
+}
 export interface BookRow {
   id: string;
+  work_id:string;
+  canonical_edition_id:string|null;
+  metadata_source:'legacy'|'seed'|'goodreads'|'google'|'openlibrary';
+  metadata_provenance:Record<string,string>;
+  edition_name:string|null;
+  format:'hardcover'|'paperback'|'ebook'|'audiobook'|null;
   google_books_id: string | null;
   open_library_id: string | null;
   isbn_10: string | null;

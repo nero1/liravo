@@ -3,7 +3,7 @@
 import { useState,useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import {useTranslations} from 'next-intl';
+import {useTranslations,useLocale} from 'next-intl';
 import { Search } from 'lucide-react';
 
 interface BookResult {
@@ -13,14 +13,15 @@ interface BookResult {
   author_name: string;
   cover_url?: string;
   published_year?: number;
-  _external?: boolean;
+  _external?:boolean;
+  isbn_10?:string;isbn_13?:string;publisher?:string;language?:string;format?:string;edition_name?:string;
 }
 
 export function BookSearch() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<BookResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const t=useTranslations('books'),common=useTranslations('common'),[error,setError]=useState(false),[generation,setGeneration]=useState(0);
+  const t=useTranslations('books'),common=useTranslations('common'),editionText=useTranslations('editions'),locale=useLocale(),[error,setError]=useState(false),[generation,setGeneration]=useState(0);
   useEffect(()=>{
     const controller=new AbortController(),term=query.trim();setResults([]);setError(false);
     if(term.length<2){setLoading(false);return()=>controller.abort();}
@@ -52,7 +53,9 @@ export function BookSearch() {
 
       {!loading && results.length > 0 && (
         <div className="space-y-2">
-          {results.map((book, i) => {
+          {results.map((book,i)=>{
+            let language=book.language;try{if(language)language=new Intl.DisplayNames([locale],{type:'language'}).of(language)??language;}catch{}
+            const details=[language,book.format?editionText('formats.'+book.format):null,book.edition_name,book.publisher,book.published_year].filter(Boolean).join(' · ');
             const href = book.id
               ? `/book/${book.id}`
               : `/book/lookup?gid=${encodeURIComponent(book.google_books_id??'')}`;
@@ -81,9 +84,8 @@ export function BookSearch() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{book.title}</p>
                   <p className="text-xs text-muted-foreground truncate">{book.author_name}</p>
-                  {book.published_year && (
-                    <p className="text-xs text-muted-foreground">{book.published_year}</p>
-                  )}
+                  {details&&<p className="text-xs text-muted-foreground">{details}</p>}
+                  {(book.isbn_13||book.isbn_10)&&<p className="text-xs text-muted-foreground">{editionText('isbn',{value:book.isbn_13??book.isbn_10!})}</p>}
                 </div>
               </Link>
             );

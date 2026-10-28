@@ -1,3 +1,5 @@
+import {singleRelation} from '@/lib/utils';
+import {resolveEditionMetadata} from '@/services/books';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { decodeCursor,encodeCursor,cursorFilter } from '@/lib/pagination';
@@ -34,5 +36,8 @@ export async function GET(request:Request,{params}:{params:{id:string}}){
   if(booksError)return NextResponse.json({error:'Shelf books unavailable'},{status:503});
   const page=(books??[]).slice(0,limit),last=page[page.length-1];
   const nextCursor=books&&books.length>limit&&last?encodeCursor({at:last.added_at,id:last.id}):null;
-  return NextResponse.json({shelf,books:page.map(entry=>({...entry,progress_percent:entry.progress_percent===null?null:Number(entry.progress_percent)})),nextCursor});
+  const previews=page.map(entry=>singleRelation(entry.book)).filter((book):book is NonNullable<typeof book>=>!!book);
+  let resolved:typeof previews;try{resolved=await resolveEditionMetadata(previews);}catch{return NextResponse.json({error:'Edition metadata unavailable'},{status:503});}
+  const canonical=new Map(previews.map((book,index)=>[book.id,resolved[index]]));
+  return NextResponse.json({shelf,books:page.map(entry=>({...entry,book:entry.book?canonical.get(singleRelation(entry.book)!.id)??singleRelation(entry.book):null,progress_percent:entry.progress_percent===null?null:Number(entry.progress_percent)})),nextCursor});
 }

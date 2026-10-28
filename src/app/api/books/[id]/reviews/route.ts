@@ -1,3 +1,4 @@
+import {getEditionIds} from '@/services/books';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -27,7 +28,8 @@ export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createClient();
+  const supabase=createClient();
+  let editionIds:string[];try{editionIds=await getEditionIds(params.id);}catch{return NextResponse.json({error:'Edition identities unavailable'},{status:503});}
 
   const { data: reviews, error } = await supabase
     .from('reviews')
@@ -36,7 +38,7 @@ export async function GET(
       likes_count, created_at, moderation_status,
       user:user_id (display_name, avatar_url, username)
     `)
-    .eq('book_id', params.id)
+    .in('book_id',editionIds)
     .eq('moderation_status', 'published')
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })

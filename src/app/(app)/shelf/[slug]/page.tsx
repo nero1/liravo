@@ -1,3 +1,5 @@
+import {singleRelation} from '@/lib/utils';
+import {resolveEditionMetadata} from '@/services/books';
 import { createClient } from '@/lib/supabase/server';
 import { notFound, redirect } from 'next/navigation';
 import Image from 'next/image';
@@ -13,11 +15,12 @@ interface ShelfPageProps {
 }
 
 export async function generateMetadata({ params }: ShelfPageProps): Promise<Metadata> {
-  const supabase = createClient();
+  const supabase=createClient();
+  const {data:{user}}=await supabase.auth.getUser();if(!user)return {title:'Shelf'};
   const { data: shelf } = await supabase
     .from('shelves')
     .select('name, description')
-    .eq('slug', params.slug)
+    .eq('slug',params.slug).eq('user_id',user.id)
     .single();
   return { title: shelf ? shelf.name : 'Shelf' };
 }
@@ -36,14 +39,19 @@ export default async function ShelfDetailPage({ params }: ShelfPageProps) {
 
   if (!shelf) notFound();
 
-  const { data: items } = await supabase
+  const { data: rawItems } = await supabase
     .from('shelf_books')
     .select(`
       id, progress_pages, progress_percent, started_at, finished_at, added_at,
-      books:book_id (id, title, author_name, cover_url, page_count, average_rating, isbn_13)
+      books:book_id (id,canonical_edition_id,title, author_name, cover_url, page_count, average_rating, isbn_13)
     `)
     .eq('shelf_id', shelf.id)
     .order('added_at', { ascending: false });
+
+  const previews=(rawItems??[]).map(item=>singleRelation(item.books)).filter((book):book is NonNullable<typeof book>=>!!book);
+  const resolved=await resolveEditionMetadata(previews);
+  const canonical=new Map(previews.map((book,index)=>[book.id,resolved[index]]));
+  const items=(rawItems??[]).map(item=>{const book=singleRelation(item.books);return {...item,books:book?canonical.get(book.id)??book:null};});
 
   // Build "Buy All on Amazon" URL for want_to_read shelves with ISBN-13s
   const booksWithIsbn = (items ?? [])

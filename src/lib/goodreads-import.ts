@@ -1,4 +1,4 @@
-import { catalogBookData } from '@/lib/catalog-book';
+import {catalogBookData,editionFormat,bookLanguage} from '@/lib/catalog-book';
 
 export const GOODREADS_MAX_BYTES=2_000_000;
 export const GOODREADS_MAX_ROWS=2000;
@@ -41,7 +41,10 @@ export function parseGoodreadsImport(text:string){
     const title=get(record,'title'),author=get(record,'author')||'Unknown',sourceId=get(record,'book id');
     if(!title||title.length>500||author.length>200){skipped++;continue;}
     try{
-      const book=catalogBookData({title,author_name:author,goodreads_id:/^[1-9]\d{0,19}$/.test(sourceId)?sourceId:null,isbn_10:cleanIsbn(get(record,'isbn')),isbn_13:cleanIsbn(get(record,'isbn13','isbn 13'))});
+      const number=(value:string,max:number)=>{const parsed=Number(value);return Number.isInteger(parsed)&&parsed>0&&parsed<=max?parsed:null;};
+      const language=(get(record,'language')||get(record,'language code')).replaceAll('_','-').toLowerCase();
+      const binding=get(record,'binding'),format=editionFormat(binding);
+      const book=catalogBookData({title,author_name:author,language:bookLanguage(language),publisher:get(record,'publisher').slice(0,500)||null,page_count:number(get(record,'number of pages','page count'),100000),published_year:number(get(record,'year published','publication year'),9999),format,edition_name:get(record,'edition','edition name').slice(0,200)||(!format?binding.slice(0,200):null)||null,goodreads_id:/^[1-9]\d{0,19}$/.test(sourceId)?sourceId:null,isbn_10:cleanIsbn(get(record,'isbn')),isbn_13:cleanIsbn(get(record,'isbn13','isbn 13'))});
       const shelves=get(record,'exclusive shelf','bookshelves','shelf').toLowerCase().split(',').map(value=>value.trim());
       const shelf=shelves.includes('read')?'have_read':shelves.includes('currently-reading')?'currently_reading':'want_to_read';
       rows.push({book,shelf,finished_at:shelf==='have_read'?readDate(get(record,'date read')):null});

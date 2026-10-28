@@ -11,7 +11,7 @@ function queryError(error: unknown): { message: string; code?: string } {
   return { message: String(error) };
 }
 
-type FilterOp = { col: string; op: string; val: unknown };
+type FilterOp = {col:string;op:string;val:unknown;config?:'english'|'simple'};
 
 type MutationType = 'insert' | 'update' | 'delete' | 'upsert';
 
@@ -112,9 +112,9 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
   }
 
   textSearch(column:string,query:string,options?:{type?:'plain'|'websearch';config?:string}){
-    if(options?.config&&options.config!=='english')throw new Error('Unsupported search language');
+    if(options?.config&&!['english','simple'].includes(options.config))throw new Error('Unsupported search language');
     if(options?.type&&!['plain','websearch'].includes(options.type))throw new Error('Unsupported search mode');
-    this._filters.push({col:column,op:options?.type==='websearch'?'@@websearch':'@@plain',val:query});
+    this._filters.push({col:column,op:options?.type==='websearch'?'@@websearch':'@@plain',val:query,config:options?.config==='simple'?'simple':'english'});
     return this;
   }
 
@@ -208,8 +208,8 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
           else if (f.val === true) parts.push(sql`${sql(f.col)} IS NOT TRUE`);
           else if (f.val === false) parts.push(sql`${sql(f.col)} IS NOT FALSE`);
           break;
-        case '@@websearch': parts.push(sql`${sql(f.col)} @@ websearch_to_tsquery('english',${f.val as string})`); break;
-        case '@@plain': parts.push(sql`${sql(f.col)} @@ plainto_tsquery('english',${f.val as string})`); break;
+        case '@@websearch': parts.push(sql`${sql(f.col)} @@ websearch_to_tsquery(${f.config??'english'}::regconfig,${f.val as string})`); break;
+        case '@@plain': parts.push(sql`${sql(f.col)} @@ plainto_tsquery(${f.config??'english'}::regconfig,${f.val as string})`); break;
         case 'IS':
           if (f.val === null)       parts.push(sql`${sql(f.col)} IS NULL`);
           else if (f.val === true)  parts.push(sql`${sql(f.col)} IS TRUE`);

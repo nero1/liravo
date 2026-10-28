@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import {createServiceClient,createClient} from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
@@ -31,7 +31,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'has_audiobook must be boolean' }, { status: 400 });
   }
 
-  const { error } = await supabase
+  const { error } = await createServiceClient()
     .from('books')
     .update({ has_audiobook })
     .eq('id', params.id);

@@ -3,7 +3,7 @@ import {useAuthStore} from '@/stores/auth';
 import {useRequestIntent} from '@/hooks/useRequestIntent';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
-import type { AffiliateLink, BookRow, ReviewRow, QuoteRow,UserRow } from '@/types';
+import type { AffiliateLink, BookRow, ReviewRow, QuoteRow,UserRow,WorkCatalog } from '@/types';
 
 export function useBookSearch(query: string) {
   return useQuery({
@@ -17,7 +17,7 @@ export function useBookSearch(query: string) {
 export function useBook(id: string) {
   return useQuery({
     queryKey: ['book', id],
-    queryFn: () => api.get<{ book: BookRow;affiliateLinks:AffiliateLink[];audibleLink:AffiliateLink|null }>(ENDPOINTS.books.byId(id)),
+    queryFn: () => api.get<WorkCatalog&{book:BookRow;affiliateLinks:AffiliateLink[];audibleLink:AffiliateLink|null}>(ENDPOINTS.books.byId(id)),
   });
 }
 

@@ -47,7 +47,7 @@ export async function checkCriticalRateLimit(ip: string) {
   return checkRateLimit(ip, false);
 }
 
-const ROUTE_LIMITS = { ai: { max: 30, seconds: 60 }, social: { max: 120, seconds: 60 } } as const;
+const ROUTE_LIMITS = { catalog:{max:20,seconds:60}, ai: { max: 30, seconds: 60 }, social: { max: 120, seconds: 60 } } as const;
 
 /** Per-account risk quotas fail closed when the shared counter is unavailable. */
 export async function checkRouteRateLimit(identity: string, tier: keyof typeof ROUTE_LIMITS): Promise<boolean> {

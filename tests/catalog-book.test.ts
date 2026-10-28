@@ -1,5 +1,5 @@
 import { expect,it } from 'vitest';
-import { catalogBookData,clientBook,bookRating } from '@/lib/catalog-book';
+import { catalogBookData,clientBook,bookRating,normalizedIsbn,bookLanguage } from '@/lib/catalog-book';
 import type { BookRow } from '@/types/database';
 
 it('normalizes valid ISBN-10 identities across catalog providers and rejects corrupt ISBN checksums',()=>{
@@ -16,4 +16,19 @@ it('rejects unusable catalog data and serializes PostgreSQL numeric ratings',()=
 it('normalizes numeric rating projections and excludes malformed or out-of-range cached values',()=>{
   expect(bookRating('4.25')).toBe(4.25);expect(bookRating(0)).toBe(0);
   for(const value of [null,undefined,'','invalid',Infinity,-1,6])expect(bookRating(value)).toBeNull();
+});
+
+it('keeps edition ISBN pairs consistent and rejects work IDs as edition identities',()=>{
+  const base={title:'An edition',author_name:'An author'};
+  expect(()=>catalogBookData({...base,isbn_10:'0306406152',isbn_13:'9780141439518'})).toThrow('Conflicting edition');
+  expect(()=>catalogBookData({...base,open_library_id:'/works/OL1W'})).toThrow();
+  expect(catalogBookData({...base,open_library_id:'/books/OL1M',open_library_work_id:'/works/OL1W'})).toMatchObject({open_library_id:'/books/OL1M',open_library_work_id:'/works/OL1W'});
+  expect(normalizedIsbn('4006381333931',13)).toBeNull();
+  expect(normalizedIsbn('9790123456785',13)).toBeNull();
+});
+
+it('canonicalizes edition language tags and leaves unknown languages undetermined',()=>{
+  expect(['eng','fre','fra','ger','deu','en_us'].map(bookLanguage)).toEqual(['en','fr','fr','de','de','en-US']);
+  for(const value of [null,undefined,'','English','garbage-lang','en-@'])expect(bookLanguage(value)).toBe('und');
+  expect(catalogBookData({title:'Unknown language',author_name:'Author',goodreads_id:'96602'}).language).toBe('und');
 });

@@ -1,3 +1,4 @@
+import {getEditionIds} from '@/services/books';
 import { z } from 'zod';
 import { contentIntent,ContentIntentError } from '@/lib/content-intents';
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,14 +24,16 @@ export async function GET(request: NextRequest) {
 
   if(error)return NextResponse.json({error:'Shelves unavailable'},{status:503});
   let addedToShelves: string[] = [];
+  if(bookId&&!z.string().uuid().safeParse(bookId).success)return NextResponse.json({error:'Invalid book'},{status:400});
   if (bookId) {
+    let editionIds:string[];try{editionIds=await getEditionIds(bookId);}catch{return NextResponse.json({error:'Edition identities unavailable'},{status:503});}
     const { data: existing,error:membershipError } = await supabase
       .from('shelf_books')
       .select('shelf_id')
-      .eq('book_id', bookId)
+      .in('book_id',editionIds)
       .eq('user_id', user.id);
     if(membershipError)return NextResponse.json({error:'Shelf membership unavailable'},{status:503});
-    addedToShelves = (existing ?? []).map((e: { shelf_id: string }) => e.shelf_id);
+    addedToShelves=[...new Set((existing??[]).map((e:{shelf_id:string})=>e.shelf_id))];
   }
 
   return NextResponse.json({ shelves: shelves ?? [], addedToShelves });

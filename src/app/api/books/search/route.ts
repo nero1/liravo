@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
+import {checkRouteRateLimit} from '@/lib/rate-limit';
+import {normalizedIsbn,isbn13From10} from '@/lib/catalog-book';
 import { searchBooks,storeCatalogBook } from '@/services/books';
 import { createServiceClient } from '@/lib/supabase/server';
 
@@ -10,7 +12,8 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const q = searchParams.get('q')?.trim();
+  const raw=searchParams.get('q')?.trim(),isbn10=normalizedIsbn(raw,10);
+  const q=normalizedIsbn(raw,13)??(isbn10?isbn13From10(isbn10):raw);
   if (!q || q.length < 2) return NextResponse.json({ books: [] });
 
   if(q.length>200)return NextResponse.json({error:'Search is too long'},{status:400});
@@ -20,13 +23,16 @@ export async function GET(request: Request) {
   // Search local DB first
   const { data: localBooks } = await supabase
     .from('books')
-    .select('id, title, author_name, cover_url, published_year, google_books_id, isbn_13')
-    .textSearch('search_vector', q,{type:'websearch',config:'english'})
+    .select('id,work_id,title,author_name,cover_url,published_year,google_books_id,isbn_10,isbn_13,publisher,language,edition_name,format')
+    .is('canonical_edition_id',null)
+    .textSearch('search_vector', q,{type:'websearch',config:'simple'})
     .limit(10);
 
   if (localBooks && localBooks.length >= 5) {
     return NextResponse.json({ books: localBooks, source: 'local' });
   }
+
+  if(!await checkRouteRateLimit(user.id,'catalog'))return localBooks?.length?NextResponse.json({books:localBooks,source:'local'}):NextResponse.json({error:'Search limit reached'},{status:429});
 
   try{
     const results=await searchBooks(q);

@@ -221,7 +221,25 @@
     "similarBooks": "Readers Also Enjoyed",
     "helpfulVote": "Helpful",
     "unhelpfulVote": "Not Helpful",
-    "replyCount": "{count, plural, one {# reply} other {# replies}}"
+    "replyCount": "{count, plural, one {# reply} other {# replies}}",
+    "review": "Review",
+    "quote": "Quote",
+    "publishedYear": "Published: {year}",
+    "pageCount": "{count, plural, one {# page} other {# pages}}",
+    "about": "About this book",
+    "reviewCount": "{count, plural, one {# review} other {# reviews}}",
+    "reader": "Reader",
+    "notFound": "Book not found",
+    "metadataTitle": "{title} by {author}",
+    "metadataDescription": "Read reviews and discover {title} on Liravo",
+    "readingCount": "{count, plural, one {# reading} other {# reading}}",
+    "wantedCount": "{count, plural, one {# wants to read} other {# want to read}}",
+    "authorOnLiravo": "{author} is on Liravo",
+    "verifiedAuthor": "Verified author",
+    "followAuthor": "View profile →",
+    "noReviews": "No reviews yet. Be the first!",
+    "spoilers": "Contains spoilers",
+    "writeReview": "Write a review"
   },
   "badges": {
     "earned": "Badge Earned",
@@ -1263,5 +1281,28 @@
     "saySomething": "Say something…",
     "post": "Post",
     "joinToDiscuss": "Join this room to participate in the discussion."
+  },
+  "editions": {
+    "title": "Book editions",
+    "ofWork": "Editions of {title}",
+    "viewWork": "View this work across editions",
+    "trackingHint": "Choose your edition. Shelves, quotes and page progress belong to that edition.",
+    "selected": "Selected edition",
+    "isbn": "ISBN: {value}",
+    "noIsbn": "No ISBN supplied",
+    "empty": "No verified editions are available yet.",
+    "failed": "Could not load editions. Please try again.",
+    "moreSaved": "More saved editions",
+    "findMore": "Find more editions",
+    "workNotFound": "Work not found",
+    "workDescription": "Explore editions of {title} by {author}.",
+    "workRatings": "{count, plural, one {# community rating across editions} other {# community ratings across editions}}",
+    "formats": {
+      "hardcover": "Hardcover",
+      "paperback": "Paperback",
+      "ebook": "E-book",
+      "audiobook": "Audiobook"
+    },
+    "skipped": "{count, plural, one {# record was skipped because its edition details conflicted.} other {# records were skipped because their edition details conflicted.}}"
   }
 }

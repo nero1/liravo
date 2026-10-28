@@ -221,7 +221,25 @@
     "similarBooks": "Leser mochten auch",
     "helpfulVote": "Hilfreich",
     "unhelpfulVote": "Nicht hilfreich",
-    "replyCount": "{count, plural, one {# Antwort} other {# Antworten}}"
+    "replyCount": "{count, plural, one {# Antwort} other {# Antworten}}",
+    "review": "Rezension",
+    "quote": "Zitat",
+    "publishedYear": "Veröffentlicht: {year}",
+    "pageCount": "{count, plural, one {# Seite} other {# Seiten}}",
+    "about": "Über dieses Buch",
+    "reviewCount": "{count, plural, one {# Rezension} other {# Rezensionen}}",
+    "reader": "Leser",
+    "notFound": "Buch nicht gefunden",
+    "metadataTitle": "{title} von {author}",
+    "metadataDescription": "Entdecke {title} und Rezensionen auf Liravo",
+    "readingCount": "{count, plural, one {# Person liest gerade} other {# Personen lesen gerade}}",
+    "wantedCount": "{count, plural, one {# Person möchte es lesen} other {# Personen möchten es lesen}}",
+    "authorOnLiravo": "{author} ist auf Liravo",
+    "verifiedAuthor": "Verifizierter Autor",
+    "followAuthor": "Profil ansehen →",
+    "noReviews": "Noch keine Rezensionen. Schreibe die erste!",
+    "spoilers": "Enthält Spoiler",
+    "writeReview": "Rezension schreiben"
   },
   "badges": {
     "earned": "Abzeichen erhalten",
@@ -1263,5 +1281,28 @@
     "saySomething": "Schreibe etwas…",
     "post": "Veröffentlichen",
     "joinToDiscuss": "Tritt diesem Leseraum bei, um an der Diskussion teilzunehmen."
+  },
+  "editions": {
+    "title": "Buchausgaben",
+    "ofWork": "Ausgaben von {title}",
+    "viewWork": "Dieses Werk und seine Ausgaben ansehen",
+    "trackingHint": "Wähle deine Ausgabe. Regale, Zitate und Seitenfortschritt beziehen sich auf diese Ausgabe.",
+    "selected": "Gewählte Ausgabe",
+    "isbn": "ISBN: {value}",
+    "noIsbn": "Keine ISBN angegeben",
+    "empty": "Noch keine geprüften Ausgaben verfügbar.",
+    "failed": "Die Ausgaben konnten nicht geladen werden. Bitte versuche es erneut.",
+    "moreSaved": "Weitere gespeicherte Ausgaben",
+    "findMore": "Weitere Ausgaben suchen",
+    "workNotFound": "Werk nicht gefunden",
+    "workDescription": "Entdecke Ausgaben von {title} von {author}.",
+    "workRatings": "{count, plural, one {# Community-Bewertung über alle Ausgaben} other {# Community-Bewertungen über alle Ausgaben}}",
+    "formats": {
+      "hardcover": "Gebundene Ausgabe",
+      "paperback": "Taschenbuch",
+      "ebook": "E-Book",
+      "audiobook": "Hörbuch"
+    },
+    "skipped": "{count, plural, one {# Eintrag wurde wegen widersprüchlicher Angaben zur Ausgabe übersprungen.} other {# Einträge wurden wegen widersprüchlicher Angaben zu den Ausgaben übersprungen.}}"
   }
 }

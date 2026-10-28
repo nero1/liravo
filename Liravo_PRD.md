@@ -390,14 +390,14 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 
 ### 7.4 Book Pages and the Book Catalogue
 
-Every saved book has an internal UUID and a canonical page on Liravo. The catalog stores metadata, reviews, quotes and shelf relationships, not full book text. The seed dataset contains 101 English books. ISBN-10/13 checksums are validated; ISBNs identify editions, while provider IDs also support books without an ISBN. The current schema does not separate works from editions, so provider identity matches can combine editions.
+Works group editions through verified provider relationships. Each edition retains its book UUID, ISBNs, language, format, publisher and page count; existing links, reviews, quotes and shelf history are preserved. ISBN-10/13 pairs must identify the same edition. The seed dataset contains 101 English editions; the catalog stores metadata, not full book text. Web/native readers can choose an edition, resolve Google-only records through an exact ISBN lookup and discover further editions in bounded pages. Reading goals and completion XP count a known work once; historical awards remain intact.
 
 **Book data sources (in priority order):**
 1. Liravo internal database (manually added or previously cached)
 2. Google Books API (primary lookup)
 3. Open Library API (fallback)
 
-All metadata fetched from external APIs is saved to the local database on first lookup. Subsequent requests are served from the database, not the API.
+Validated edition metadata is saved to the local database on lookup. Mutable reading counts and work identities are read from the database; further provider lookups are explicit.
 
 **Book page components:**
 - Cover image, title, author, publisher, year, ISBN, genre tags
@@ -1383,7 +1383,7 @@ Distinctive display font for headings. System-friendly variable font for body (s
 - Follow / unfollow.
 - Like and "want to read" reactions.
 - In-app notification system.
-- Goodreads CSV import: web upload/native JSON, maximum 2 MB/2,000 rows, atomic replay-safe shelf/catalog writes, no import XP.
+- Goodreads CSV import: web upload/native JSON, maximum 2 MB/2,000 rows, atomic replay-safe shelf/catalog writes, edition language/publisher/binding/pages/year when supplied, no import XP. Verified provider metadata can correct imported fields while preserving recorded pages.
 - Quote posting and display.
 - Basic XP system.
 - Level titles on profiles.

@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text } from 'react-native';
 import { BookOpen } from 'lucide-react-native';
 import { Button } from './Button';
@@ -20,9 +21,10 @@ export function EmptyState({ title, description, icon }: Props) {
   );
 }
 
-export function QueryError({error,retry}:{error:unknown;retry:()=>void}){
+export function QueryError({retry}:{error:unknown;retry:()=>void}){
+  const {t}=useTranslations('common');
   return <View className="flex-1 items-center justify-center bg-background p-6 gap-4" accessibilityLiveRegion="polite">
-    <Text className="text-foreground text-center">{error instanceof Error?error.message:'Unable to load this page.'}</Text>
-    <Button onPress={retry}>Try again</Button>
+    <Text className="text-foreground text-center">{t('error')}</Text>
+    <Button onPress={retry}>{t('retry')}</Button>
   </View>;
 }

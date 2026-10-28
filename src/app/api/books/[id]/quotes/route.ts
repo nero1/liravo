@@ -1,3 +1,4 @@
+import {getEditionIds} from '@/services/books';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
@@ -7,7 +8,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createClient();
+  const supabase=createClient();
+  let editionIds:string[];try{editionIds=await getEditionIds(params.id);}catch{return NextResponse.json({error:'Edition identities unavailable'},{status:503});}
 
   const { searchParams } = new URL(request.url);
   const cursor = searchParams.get('cursor');
@@ -19,7 +21,7 @@ export async function GET(
       id, content, page_number, created_at,
       users:user_id (username, display_name, avatar_url)
     `)
-    .eq('book_id', params.id)
+    .in('book_id',editionIds)
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit + 1);

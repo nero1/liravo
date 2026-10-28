@@ -47,8 +47,28 @@ export interface UserRow {
   badges?: Array<{ icon: string; name: string }>;
 }
 
+export interface BookWorkRow {
+  id:string;
+  title:string;
+  author_name:string;
+  open_library_id:string|null;
+  merged_into:string|null;
+  created_at:string;
+}
+export interface WorkCatalog {
+  work:BookWorkRow;
+  editions:BookRow[];
+  nextCursor:string|null;
+  statistics:{ratings_count:number;average_rating:number|null;readers_count:number};
+}
 export interface BookRow {
   id: string;
+  work_id:string;
+  canonical_edition_id:string|null;
+  metadata_source:'legacy'|'seed'|'goodreads'|'google'|'openlibrary';
+  metadata_provenance:Record<string,string>;
+  edition_name:string|null;
+  format:'hardcover'|'paperback'|'ebook'|'audiobook'|null;
   google_books_id: string | null;
   open_library_id: string | null;
   isbn_10: string | null;
@@ -221,6 +241,8 @@ export interface Database {
         Insert: Partial<UserRow> & { id: string; username: string; display_name: string; referral_code: string };
         Update: Partial<UserRow>;
       } & NoRelationships;
+      book_works: {Row:BookWorkRow;Insert:Partial<BookWorkRow>&{title:string;author_name:string};Update:Partial<BookWorkRow>} & NoRelationships;
+      book_edition_identifiers: {Row:{provider:string;identifier:string;book_id:string};Insert:{provider:string;identifier:string;book_id:string};Update:never} & NoRelationships;
       books: {
         Row: BookRow;
         Insert: Partial<BookRow> & { title: string; author_name: string };

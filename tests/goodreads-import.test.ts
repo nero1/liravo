@@ -16,3 +16,8 @@ it('rejects malformed CSV, ambiguous headers, oversized files and excess rows be
   expect(()=>parseGoodreadsImport('a'.repeat(GOODREADS_MAX_BYTES+1))).toThrow('2 MB');
   expect(()=>parseGoodreadsImport('Title,Author\n'+Array.from({length:GOODREADS_MAX_ROWS+1},()=> 'A,Author').join('\n'))).toThrow('2000 rows');
 });
+
+it('retains edition language, publisher, binding, pages and publication year from Goodreads',()=>{
+  const result=parseGoodreadsImport('Book Id,Title,Author,ISBN13,Language,Publisher,Binding,Number of Pages,Year Published,Exclusive Shelf\n96601,Une édition,Auteur,9780306406157,fr,Éditeur,Relié,320,2020,to-read');
+  expect(result.rows[0].book).toMatchObject({language:'fr',publisher:'Éditeur',format:'hardcover',page_count:320,published_year:2020});
+});

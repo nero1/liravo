@@ -221,7 +221,25 @@
     "similarBooks": "Les lecteurs ont aussi aimé",
     "helpfulVote": "Utile",
     "unhelpfulVote": "Pas utile",
-    "replyCount": "{count, plural, one {# réponse} other {# réponses}}"
+    "replyCount": "{count, plural, one {# réponse} other {# réponses}}",
+    "review": "Avis",
+    "quote": "Citation",
+    "publishedYear": "Publication : {year}",
+    "pageCount": "{count, plural, one {# page} other {# pages}}",
+    "about": "À propos de ce livre",
+    "reviewCount": "{count, plural, one {# avis} other {# avis}}",
+    "reader": "Lecteur",
+    "notFound": "Livre introuvable",
+    "metadataTitle": "{title}, par {author}",
+    "metadataDescription": "Découvrez {title} et ses avis sur Liravo",
+    "readingCount": "{count, plural, one {# personne en cours de lecture} other {# personnes en cours de lecture}}",
+    "wantedCount": "{count, plural, one {# personne souhaite le lire} other {# personnes souhaitent le lire}}",
+    "authorOnLiravo": "{author} est sur Liravo",
+    "verifiedAuthor": "Auteur vérifié",
+    "followAuthor": "Voir le profil →",
+    "noReviews": "Aucun avis pour le moment. Soyez le premier !",
+    "spoilers": "Contient des révélations",
+    "writeReview": "Rédiger un avis"
   },
   "badges": {
     "earned": "Badge obtenu",
@@ -1263,5 +1281,28 @@
     "saySomething": "Écrivez un message…",
     "post": "Publier",
     "joinToDiscuss": "Rejoignez ce salon pour participer à la discussion."
+  },
+  "editions": {
+    "title": "Éditions du livre",
+    "ofWork": "Éditions de {title}",
+    "viewWork": "Voir cette œuvre et ses éditions",
+    "trackingHint": "Choisissez votre édition. Les étagères, citations et pages lues sont liées à cette édition.",
+    "selected": "Édition sélectionnée",
+    "isbn": "ISBN : {value}",
+    "noIsbn": "ISBN non renseigné",
+    "empty": "Aucune édition vérifiée n’est disponible pour le moment.",
+    "failed": "Impossible de charger les éditions. Veuillez réessayer.",
+    "moreSaved": "Autres éditions enregistrées",
+    "findMore": "Rechercher d’autres éditions",
+    "workNotFound": "Œuvre introuvable",
+    "workDescription": "Découvrez les éditions de {title} de {author}.",
+    "workRatings": "{count, plural, one {# note de la communauté pour l’ensemble des éditions} other {# notes de la communauté pour l’ensemble des éditions}}",
+    "formats": {
+      "hardcover": "Relié",
+      "paperback": "Broché",
+      "ebook": "Livre numérique",
+      "audiobook": "Livre audio"
+    },
+    "skipped": "{count, plural, one {# résultat a été ignoré car les informations sur son édition étaient contradictoires.} other {# résultats ont été ignorés car les informations sur leurs éditions étaient contradictoires.}}"
   }
 }

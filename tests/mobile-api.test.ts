@@ -104,6 +104,7 @@ it('renders numeric-string ratings safely in both mobile book card layouts',()=>
     if(name==='expo-image')return {Image:'Image'};
     if(name==='lucide-react-native')return {Star:'Star'};
     if(name==='expo-router')return {useRouter:()=>({push:()=>{}})};
+    if(name==='@/hooks/useTranslations')return {useTranslations:()=>({locale:'en',t:(key:string)=>key})};
     throw new Error(`Unexpected mobile dependency: ${name}`);
   }});
   const content=(node:unknown):string=>{
