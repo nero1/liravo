@@ -770,8 +770,8 @@ Verified tip, event and referral entries form each user’s currency balance; pe
 | Refer milestone: 50 referrals | 2,000 XP bonus |
 | Start a buddy read | 25 XP |
 | Daily login | 3 XP |
-| 7-day login streak bonus | 50 XP |
-| 30-day login streak bonus | 200 XP |
+| 7-day reading streak bonus | 50 XP |
+| 30-day reading streak bonus | 200 XP |
 | Follow a user | 2 XP |
 | Receive a new follower | 5 XP |
 | Submit a writing prompt response | 15 XP |

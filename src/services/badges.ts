@@ -130,7 +130,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
   const { data: profile, error:profileError} = await supabase
     .from('users')
-    .select('books_read_count, reading_streak, writing_streak, xp')
+    .select('books_read_count, reading_streak, max_reading_streak, writing_streak, xp')
     .eq('id', userId)
     .single();
   if(profileError)throw new Error('Badge eligibility unavailable');
@@ -156,9 +156,9 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
       case 'century_reader': qualifies = (profile.books_read_count ?? 0) >= 100; break;
 
       // ── Reading streaks ──
-      case 'streak_7': qualifies = (profile.reading_streak ?? 0) >= 7; break;
-      case 'streak_30': qualifies = (profile.reading_streak ?? 0) >= 30; break;
-      case 'streak_365': qualifies = (profile.reading_streak ?? 0) >= 365; break;
+      case 'streak_7': qualifies = (profile.max_reading_streak??profile.reading_streak??0) >= 7; break;
+      case 'streak_30': qualifies = (profile.max_reading_streak??profile.reading_streak??0) >= 30; break;
+      case 'streak_365': qualifies = (profile.max_reading_streak??profile.reading_streak??0) >= 365; break;
 
       // ── Writing streaks (use writing_streak field) ──
       case 'writing_streak_7': qualifies = (profile.writing_streak ?? 0) >= 7; break;

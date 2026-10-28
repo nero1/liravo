@@ -135,7 +135,12 @@
     "openLinkFailed": "Impossible d’ouvrir ce lien. Réessayez.",
     "onShelf": "Dans une étagère",
     "noShelves": "Aucune étagère disponible.",
-    "shelfUpdateFailed": "Impossible de modifier l’étagère. Réessayez."
+    "shelfUpdateFailed": "Impossible de modifier l’étagère. Réessayez.",
+    "logSession": "Noter une séance",
+    "sessionLogged": "Séance enregistrée !",
+    "sessionFailed": "Impossible d’enregistrer la séance. Réessayez.",
+    "pagesRead": "Pages lues",
+    "log": "Enregistrer"
   },
   "profile": {
     "countryPlaceholder": "FR",

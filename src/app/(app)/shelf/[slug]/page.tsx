@@ -133,7 +133,7 @@ export default async function ShelfDetailPage({ params }: ShelfPageProps) {
                       Added {new Date(item.added_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                     {shelf.default_type === 'currently_reading' && (
-                      <LogReadingSessionButton bookId={book.id} />
+                      <LogReadingSessionButton bookId={book.id} userId={user.id}/>
                     )}
                     {shelf.default_type === 'have_read' && (
                       <Link

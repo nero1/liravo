@@ -135,7 +135,12 @@
     "openLinkFailed": "This link could not be opened. Please try again.",
     "onShelf": "On shelf",
     "noShelves": "No shelves are available.",
-    "shelfUpdateFailed": "The shelf could not be updated. Please try again."
+    "shelfUpdateFailed": "The shelf could not be updated. Please try again.",
+    "logSession": "Log session",
+    "sessionLogged": "Session logged!",
+    "sessionFailed": "Unable to log the session. Please try again.",
+    "pagesRead": "Pages read",
+    "log": "Log"
   },
   "profile": {
     "countryPlaceholder": "GB",

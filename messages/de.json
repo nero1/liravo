@@ -135,7 +135,12 @@
     "openLinkFailed": "Dieser Link konnte nicht geöffnet werden. Bitte versuche es erneut.",
     "onShelf": "Im Regal",
     "noShelves": "Keine Regale verfügbar.",
-    "shelfUpdateFailed": "Das Regal konnte nicht aktualisiert werden. Bitte versuche es erneut."
+    "shelfUpdateFailed": "Das Regal konnte nicht aktualisiert werden. Bitte versuche es erneut.",
+    "logSession": "Lesesitzung erfassen",
+    "sessionLogged": "Lesesitzung gespeichert!",
+    "sessionFailed": "Die Lesesitzung konnte nicht gespeichert werden. Bitte versuche es erneut.",
+    "pagesRead": "Gelesene Seiten",
+    "log": "Erfassen"
   },
   "profile": {
     "countryPlaceholder": "DE",

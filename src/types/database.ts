@@ -21,6 +21,7 @@ export interface UserRow {
   suspension_reason: string | null;
   xp: number;
   reading_streak: number;
+  max_reading_streak:number;
   streak_freeze_tokens: number;
   last_streak_date: string | null;
   annual_reading_goal: number | null;

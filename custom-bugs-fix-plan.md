@@ -73,6 +73,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Enforce feed privacy before stable pagination and share authenticated web/native feed contracts.
 - ✅ Validate book-link identities and record clicks atomically with replay-safe receipts.
 - ✅ Commit owned live completion rewards once, exclude imported history and deliver reviewer-conversion XP through the outbox.
+- ✅ Bind reading-session XP and streaks to recorded dates, including delayed deliveries and reload-safe retries.
 - ✅ Make buddy chapter/notes atomic and verify bounded, replay-safe Goodreads imports on web/native.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.

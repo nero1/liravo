@@ -1774,5 +1774,45 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     for(const role of ['anon','authenticated'])for(const routine of ['claim_reading_reward(uuid,text,uuid)','set_shelf_membership_045(uuid,uuid,uuid,boolean)','apply_shelf_membership_intent(uuid,uuid,uuid,boolean,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     expect((await sql`select has_function_privilege('service_role','set_shelf_membership_045(uuid,uuid,uuid,boolean)','EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
+    {
+    const actor=crypto.randomUUID(),other=crypto.randomUUID();
+    for(const [index,id] of [actor,other].entries())await sql`select create_direct_account(${id},${'streak-proof'+index+'@example.test'},${'streak_proof_'+index},'Streak proof')`;
+    const book=(await sql`insert into books(title,author_name) values('Streak proof','Fixture') returning id`)[0].id;
+    const {createHash}=await import('node:crypto'),payload={book_id:book,pages_read:10,ended_at:null,notes:null},hash=createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+    const sessions=new Map<number,string>();
+    const add=async(day:number)=>{const id=crypto.randomUUID();sessions.set(day,id);await sql`insert into reading_sessions(id,user_id,book_id,pages_read,idempotency_key,request_hash,created_at) values(${id},${actor},${book},10,${'streak-proof-day-'+day},${hash},((now() at time zone 'UTC')::date-40+${day}::integer)::timestamptz)`;};
+    for(const day of [0,1,2,3,4,5,7])await add(day);
+    expect((await sql`select reading_streak from users where id=${actor}`)[0].reading_streak).toBe(1);
+    await add(6);expect((await sql`select reading_streak,streak_freeze_tokens,xp from users where id=${actor}`)[0]).toEqual({reading_streak:8,streak_freeze_tokens:1,xp:90});
+    await add(9);expect((await sql`select reading_streak,streak_freeze_tokens from users where id=${actor}`)[0]).toEqual({reading_streak:9,streak_freeze_tokens:0});
+    await add(8);expect((await sql`select reading_streak,streak_freeze_tokens,xp,last_streak_date::text as last_day from users where id=${actor}`)[0]).toEqual({reading_streak:10,streak_freeze_tokens:1,xp:100,last_day:(await sql`select ((now() at time zone 'UTC')::date-31)::text as day`)[0].day});
+    const {POST:logSession}=await import('@/app/api/reading-sessions/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor,email:'streak-proof0@example.test'});
+    const replay=await logSession(new Request('https://app.test/api/reading-sessions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'streak-proof-day-0'},body:JSON.stringify({book_id:book,pages_read:10})}));
+    expect(replay.status).toBe(201);expect((await replay.json()).session.id).toBe(sessions.get(0));expect((await sql`select reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:10,xp:100});
+    await expect(sql`insert into reading_sessions(user_id,book_id,pages_read,idempotency_key,request_hash) values(${actor},${book},10,'streak-proof-day-0',${hash})`).rejects.toThrow('already committed');
+    expect((await sql`select count(*)::int as count from reading_activity_days where user_id=${actor}`)[0].count).toBe(10);
+    expect((await sql`select reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:10,xp:100});
+    const event=(await sql`insert into outbox_events(aggregate_type,aggregate_id,event_type,status,payload) values('reading_sessions',${sessions.get(0)!},'award_xp','processing',${sql.json({userId:other,amount:9999,readingStreak:true,eventKey:'forged-fixture-key'})}) returning id`)[0].id;
+    const results=await Promise.all(Array.from({length:3},()=>sql`select process_outbox_event_atomic(${event}) as processed`));expect(results.filter(rows=>rows[0].processed)).toHaveLength(1);
+    expect((await sql`select reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:10,xp:100});expect((await sql`select xp from users where id=${other}`)[0].xp).toBe(0);
+    const fakeKey='streak:reading:'+(await sql`select (now() at time zone 'UTC')::date::text as day`)[0].day;
+    await sql`select award_xp_once(${actor},200,'reading_streak_30',${fakeKey})`;await sql`update users set reading_streak=99,last_streak_date=(now() at time zone 'UTC')::date,max_reading_streak=99 where id=${actor}`;
+    await sql`select rebuild_reading_streak(${actor})`;expect((await sql`select reading_streak,max_reading_streak,streak_freeze_tokens,xp from users where id=${actor}`)[0]).toEqual({reading_streak:10,max_reading_streak:10,streak_freeze_tokens:1,xp:100});
+    expect((await sql`select count(*)::int as count from xp_ledger where user_id=${actor} and event_key=${fakeKey}`)[0].count).toBe(0);
+    const audits=(await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${actor} and action='reading_streak_reconciled'`)[0].count;
+    await sql`select rebuild_reading_streak(${actor})`;expect((await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${actor} and action='reading_streak_reconciled'`)[0].count).toBe(audits);
+    const denied=await logSession(new Request('https://app.test/api/reading-sessions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'streak-proof-switched','X-Liravo-Actor':other},body:JSON.stringify({book_id:book,pages_read:10})}));expect(denied.status).toBe(409);
+    const today=await logSession(new Request('https://app.test/api/reading-sessions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'streak-proof-today'},body:JSON.stringify({book_id:book,pages_read:10})}));expect(today.status).toBe(201);
+    expect((await sql`select reading_streak,max_reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:1,max_reading_streak:10,xp:105});
+    const {checkAndAwardBadges}=await import('@/services/badges');expect(await checkAndAwardBadges(actor,'streak')).toEqual(['streak_7']);expect(await checkAndAwardBadges(actor,'streak')).toEqual([]);
+    expect((await sql`select xp from users where id=${actor}`)[0].xp).toBe(155);
+    await sql`delete from books where id=${book}`;await sql`select rebuild_reading_streak(${actor})`;
+    expect((await sql`select reading_streak,max_reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:1,max_reading_streak:10,xp:155});
+    expect((await sql`select count(*)::int as count from reading_activity_days where user_id=${actor}`)[0].count).toBe(11);
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'reading_sessions','INSERT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['rebuild_reading_streak(uuid)','process_outbox_event_atomic_042(uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

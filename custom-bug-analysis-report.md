@@ -15,7 +15,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
 ✅ 7: BUG-007: CSRF defense is partial (origin/referer heuristic) and does not uniformly require anti-CSRF tokens for cookie-auth mutating routes.
 ✅ 8: BUG-008: Several money/auth endpoints trust raw forwarding headers for client identity; this can enable rate-limit bypass.
 ✅ 9: BUG-009: Retry logic can still classify non-transient failures too broadly by message substring matching, raising retry-storm risk.
-🟡 10: BUG-010: Idempotency usage is inconsistent across side-effecting endpoints (likes/follows/notifications/XP), enabling duplicate outcomes under retries.
+✅ 10: BUG-010: Idempotency usage is inconsistent across side-effecting endpoints (likes/follows/notifications/XP), enabling duplicate outcomes under retries.
 ✅ 11: BUG-011: Setup docs schedule multiple jobs more than once daily despite Vercel Hobby constraint requirement from stakeholder note.
 ✅ 12: BUG-012: Cron endpoints lack a single centralized runner policy (timeout, lock, and overlap controls), increasing thundering-herd/overlap risk.
 
@@ -72,7 +72,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
    FILES: src/lib/retry.ts
    FIX: Replace message heuristics with explicit error classes/status codes (429/5xx/network timeout). Add circuit-breaker and per-provider retry budgets.
 
-🟡 10: BUG-010: Idempotency usage is inconsistent across side-effecting endpoints (likes/follows/notifications/XP), enabling duplicate outcomes under retries.
+✅ 10: BUG-010: Idempotency usage is inconsistent across side-effecting endpoints (likes/follows/notifications/XP), enabling duplicate outcomes under retries.
     FILES: src/lib/idempotency.ts, src/app/api/reviews/[id]/like/route.ts, src/app/api/users/[id]/follow/route.ts, src/services/xp.ts
     FIX: Require idempotency key for all non-read POST/PATCH with side effects; enforce unique DB constraints keyed to business event identity.
 
