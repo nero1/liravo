@@ -1122,7 +1122,7 @@ A dedicated system account with username `@liravo_editors` and display name "Lir
 
 - All input validated server-side with Zod schemas.
 - User HTML content (long reviews, bio) sanitised with DOMPurify before storage and rendering.
-- File uploads validated for MIME type (not just extension) and size server-side.
+- Avatar uploads are decoded and re-encoded server-side (JPEG/PNG/static WebP, at most 3 MB and 25 million input pixels). Metadata is stripped; the stored WebP is at most 512×512. Staged uploads become active with the profile transaction; abandoned objects are cleaned asynchronously.
 - `dangerouslySetInnerHTML` is never used.
 
 ### 15.3 OWASP Top 10

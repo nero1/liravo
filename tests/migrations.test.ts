@@ -35,6 +35,15 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
     for (const file of migrations) {
+      if(file.startsWith('058_'))await sql.unsafe(`
+        create schema storage;
+        create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null);
+        alter table storage.objects enable row level security;
+        grant usage on schema storage to anon,authenticated;
+        grant select,insert,update,delete on storage.objects to anon,authenticated;
+        create policy fixture_storage_access on storage.objects for all to anon,authenticated using(true) with check(true);
+        insert into storage.objects(bucket_id) values('avatars');
+      `).simple();
       const legacy=file.startsWith('040_');
       if(legacy)await sql.unsafe(`
         insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
@@ -1506,6 +1515,69 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       for(const routine of ['issue_email_challenge(uuid,text,text,text,text)','issue_account_recovery(text,text)','consume_email_challenge(text,text)','finish_factor_challenge(text,text,integer,bigint,text,text,text,text[],text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
     expect((await sql`select has_function_privilege('service_role','finish_factor_challenge_044(text,text,integer,bigint,text,text,text,text[])','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const owner=crypto.randomUUID(),other=crypto.randomUUID(),hashA='a'.repeat(64),hashB='b'.repeat(64);
+    await sql`select create_direct_account(${owner},'avatar-owner@example.test','avatar_owner_fixture','Avatar owner')`;
+    await sql`select create_direct_account(${other},'avatar-other@example.test','avatar_other_fixture','Avatar other')`;
+    await sql`update users set avatar_url='https://cdn.test/original.jpg' where id=${owner}`;
+    const staged=await Promise.all(Array.from({length:3},()=>sql`select begin_avatar_upload(${owner},${hashA},'s3','avatars') as upload`));
+    expect(new Set(staged.map(rows=>rows[0].upload.id)).size).toBe(1);const first=staged[0][0].upload;
+    expect(first.path).toBe('avatars/'+owner+'/'+first.id+'.webp');
+    await expect(sql`select update_profile_atomic(${owner},${sql.json({avatar_upload_id:first.id})})`).rejects.toThrow('Avatar expired');
+    await expect(sql`select finish_avatar_upload(${other},${first.id},${'https://cdn.test/'+first.path})`).rejects.toThrow('Upload expired');
+    await sql`select finish_avatar_upload(${owner},${first.id},${'https://cdn.test/'+first.path})`;
+    await expect(sql`select update_profile_atomic(${owner},${sql.json({display_name:'',avatar_upload_id:first.id})})`).rejects.toThrow('Invalid profile');
+    expect((await sql`select avatar_url from users where id=${owner}`)[0].avatar_url).toBe('https://cdn.test/original.jpg');
+    expect((await sql`select state from profile_avatar_uploads where id=${first.id}`)[0].state).toBe('uploaded');
+    const changes={display_name:'Committed avatar',avatar_upload_id:first.id};
+    for(let replay=0;replay<2;replay++)expect((await sql`select update_profile_atomic(${owner},${sql.json(changes)}) as profile`)[0].profile.avatar_url).toBe('https://cdn.test/'+first.path);
+    expect((await sql`select count(*)::int as count from security_events where user_id=${owner} and event_type='avatar_changed'`)[0].count).toBe(1);
+    await expect(sql`select update_profile_atomic(${other},${sql.json({avatar_upload_id:first.id})})`).rejects.toThrow('Avatar expired');
+    await expect(sql`select update_profile_atomic(${other},${sql.json({avatar_url:'https://cdn.test/'+first.path})})`).rejects.toThrow('owned avatar');
+    expect((await sql`select begin_avatar_upload(${owner},${hashA},'s3','avatars') as upload`)[0].upload.id).toBe(first.id);
+    const second=(await sql`select begin_avatar_upload(${owner},${hashB},'s3','avatars') as upload`)[0].upload;
+    await sql`select finish_avatar_upload(${owner},${second.id},${'https://cdn.test/'+second.path})`;
+    await sql`select update_profile_atomic(${owner},${sql.json({avatar_upload_id:second.id})})`;
+    expect((await sql`select state from profile_avatar_uploads where id=${first.id}`)[0].state).toBe('abandoned');
+    await sql`update profile_avatar_uploads set expires_at=now()-interval '1 day' where id=${second.id}`;
+    const claimed=(await Promise.all([sql`select * from claim_avatar_cleanup('s3',5)`,sql`select * from claim_avatar_cleanup('s3',5)`])).flat();
+    expect(claimed.map(row=>row.id)).toEqual([first.id]);
+    await expect(sql`select update_profile_atomic(${owner},${sql.json({avatar_upload_id:first.id})})`).rejects.toThrow('Avatar expired');
+    expect((await sql`select finish_avatar_cleanup(${first.id},${crypto.randomUUID()},true) as finished`)[0].finished).toBe(false);
+    expect((await sql`select finish_avatar_cleanup(${first.id},${claimed[0].claim_token},true) as finished`)[0].finished).toBe(true);
+    expect((await sql`select finish_avatar_cleanup(${first.id},${claimed[0].claim_token},true) as finished`)[0].finished).toBe(true);
+    expect((await sql`select count(*)::int as count from profile_avatar_uploads where id=${first.id}`)[0].count).toBe(0);
+    const retry=(await sql`select begin_avatar_upload(${owner},${hashA},'s3','avatars') as upload`)[0].upload;expect(retry.path).not.toBe(first.path);
+    await sql`update profile_avatar_uploads set expires_at=now()-interval '1 day' where id=${retry.id}`;
+    const failed=(await sql`select * from claim_avatar_cleanup('s3',5)`)[0];expect(failed.id).toBe(retry.id);
+    await sql`select finish_avatar_cleanup(${retry.id},${failed.claim_token},false)`;
+    expect(await sql`select * from claim_avatar_cleanup('s3',5)`).toHaveLength(0);
+    await sql`update profile_avatar_uploads set expires_at=now()-interval '1 day' where id=${retry.id}`;
+    const reclaimed=(await sql`select * from claim_avatar_cleanup('s3',5)`)[0];expect(reclaimed.claim_token).not.toBe(failed.claim_token);
+    expect((await sql`select finish_avatar_cleanup(${retry.id},${failed.claim_token},true) as finished`)[0].finished).toBe(false);
+    await sql`select finish_avatar_cleanup(${retry.id},${reclaimed.claim_token},true)`;
+    expect((await sql`select avatar_url from users where id=${owner}`)[0].avatar_url).toBe('https://cdn.test/'+second.path);
+    await sql`delete from auth.users where id=${owner}`;
+    expect((await sql`select user_id from profile_avatar_uploads where id=${second.id}`)[0].user_id).toBeNull();
+    const orphan=(await sql`select * from claim_avatar_cleanup('s3',5)`)[0];expect(orphan.id).toBe(second.id);
+    await sql`select finish_avatar_cleanup(${orphan.id},${orphan.claim_token},true)`;
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'profile_avatar_uploads','SELECT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['begin_avatar_upload(uuid,text,text,text)','finish_avatar_upload(uuid,uuid,text)','claim_avatar_cleanup(text,integer)','finish_avatar_cleanup(uuid,uuid,boolean)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    expect((await sql`select has_function_privilege('service_role','update_profile_055(uuid,jsonb,text)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    for(const role of ['anon','authenticated'])await sql.begin(async tx=>{
+      await tx.unsafe('set local role '+role);
+      expect((await tx`select count(*)::int as count from storage.objects where bucket_id='avatars'`)[0].count).toBe(1);
+      await expect(tx.savepoint(async save=>{await save`insert into storage.objects(bucket_id) values('avatars')`;})).rejects.toThrow('row-level security');
+      expect(await tx`update storage.objects set bucket_id='other' where bucket_id='avatars' returning id`).toHaveLength(0);
+      expect(await tx`delete from storage.objects where bucket_id='avatars' returning id`).toHaveLength(0);
+      const [other]=await tx`insert into storage.objects(bucket_id) values('other') returning id`;
+      await expect(tx.savepoint(async save=>{await save`update storage.objects set bucket_id='avatars' where id=${other.id}`;})).rejects.toThrow('row-level security');
+      expect(await tx`delete from storage.objects where id=${other.id} returning id`).toHaveLength(1);
+    });
+
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

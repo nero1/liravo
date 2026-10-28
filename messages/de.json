@@ -120,7 +120,7 @@
   },
   "profile": {
     "countryPlaceholder": "DE",
-    "avatarTooLarge": "Das Profilbild muss kleiner als 5 MB sein.",
+    "avatarTooLarge": "Das Profilbild darf höchstens 3 MB groß sein.",
     "displayRequired": "Ein Anzeigename ist erforderlich.",
     "bioTooLong": "Die Biografie darf höchstens 280 Zeichen enthalten.",
     "saveFailed": "Dein Profil konnte nicht gespeichert werden. Versuche es erneut.",
@@ -140,7 +140,11 @@
     "following": "Gefolgt",
     "booksRead": "Gelesene Bücher",
     "streak": "{days, plural, one {#-Tages-Serie} other {#-Tage-Serie}}",
-    "level": "Level"
+    "level": "Level",
+    "avatarInvalid": "Wähle ein gültiges JPEG-, PNG- oder statisches WebP-Bild.",
+    "photoDenied": "Erlaube den Zugriff auf deine Fotomediathek, um ein Profilbild auszuwählen.",
+    "displayPlaceholder": "Dein Name",
+    "externalLink": "Externer Link {number}"
   },
   "discover": {
     "newReleasesFromAuthors": "Neuerscheinungen von Autoren, denen du folgst",

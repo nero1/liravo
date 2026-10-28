@@ -1,7 +1,7 @@
 # Custom Bugs Fix Plan
 Date/Time: May 23, 2026 09:39 PM UTC
 
-Updated 27 October 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
+Updated 28 October 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
 
 ✅ 1. Identity and authorization invariants (Critical)
 - ✅ Verify self/admin guards for `/api/users/*` mutations; retain verified cross-user social targets.
@@ -67,6 +67,7 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Verify remaining content tables, durable creates, group capacity, private discussions, badge rewards and paged author notifications.
 - ✅ Make admin theme/store/seasonal configuration atomic and repair partial/repeated content seeds through shared API/CLI routines.
 - ✅ Unify profile/onboarding API validation across providers and commit optional PINs with onboarding.
+- ✅ Validate and stage avatar uploads; commit owned media with profiles and clean abandoned objects.
 - ✅ Make buddy chapter/notes atomic and verify bounded, replay-safe Goodreads imports on web/native.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.

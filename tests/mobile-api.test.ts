@@ -149,3 +149,13 @@ it('restores native financial keys from secure storage across remounts and omits
   expect((await exports.useRequestIntent!('reader-b').durableHeaders(payload,'payout:USD'))['Idempotency-Key']).not.toBe(key);
   await restored.complete('payout:USD');expect(saved.has('financial.reader-a.payout_USD')).toBe(false);
 });
+
+it('sends native file uploads as multipart without inventing a JSON body or caching file intents',async()=>{
+  const state={user:{id:'reader-a'},token:'token-a'},transport=vi.fn().mockResolvedValue({ok:true,json:async()=>({uploadId:'owned-upload'})});
+  const exports:{api?:{upload(path:string,body:FormData,headers:Record<string,string>):Promise<unknown>}}={};
+  const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,FormData,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
+  const body=new FormData();body.set('file',new File(['fixture'],'photo.jpg',{type:'image/jpeg'}));
+  await exports.api!.upload('/api/users/avatar',body,{'X-Liravo-Actor':'reader-a'});const options=transport.mock.calls[0][1];
+  expect(options.body).toBe(body);expect(options.headers).not.toHaveProperty('Content-Type');expect(options.headers).not.toHaveProperty('Idempotency-Key');expect(options.headers.Authorization).toBe('Bearer token-a');expect(options.headers['X-Liravo-Actor']).toBe('reader-a');
+});

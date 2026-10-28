@@ -5,8 +5,8 @@ const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 const provider = process.env.DATABASE_PROVIDER ?? 'supabase';
 const isDirectPostgres = provider !== 'supabase';
 
-const s3CdnHostname = process.env.S3_CDN_URL
-  ? (() => { try { return new URL(process.env.S3_CDN_URL).hostname; } catch { return null; } })()
+const s3CdnUrl = process.env.S3_CDN_URL
+  ? (() => { try { const url=new URL(process.env.S3_CDN_URL);return ['https:','http:'].includes(url.protocol)&&!url.username&&!url.password&&!url.search&&!url.hash?url:null; } catch { return null; } })()
   : null;
 
 const supabaseConnectSrc = isDirectPostgres
@@ -40,7 +40,7 @@ const remotePatterns = [
   { protocol: 'https', hostname: 'covers.openlibrary.org' },
   { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
   ...(isDirectPostgres
-    ? s3CdnHostname ? [{ protocol: 'https', hostname: s3CdnHostname }] : []
+    ? s3CdnUrl ? [{ protocol:s3CdnUrl.protocol.slice(0,-1),hostname:s3CdnUrl.hostname,port:s3CdnUrl.port,pathname:s3CdnUrl.pathname.replace(/\/$/,'')+'/**' }] : []
     : [{ protocol: 'https', hostname: '*.supabase.co' }]),
 ];
 

@@ -61,6 +61,7 @@ S3_SECRET=<secret-access-key>
 S3_BUCKET=liravo-avatars
 S3_REGION=auto                             # "auto" for R2; "nyc3" for DO Spaces; "us-west-004" for B2
 S3_CDN_URL=https://cdn.example.com        # Public CDN/download base URL for the bucket
+S3_OBJECT_ACL=none                        # Default; bucket/CDN policy grants reads
 
 # Provider-specific examples (uncomment the one you use):
 
@@ -78,6 +79,7 @@ S3_CDN_URL=https://cdn.example.com        # Public CDN/download base URL for the
 # S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
 # S3_REGION=nyc3
 # S3_CDN_URL=https://<bucket>.nyc3.cdn.digitaloceanspaces.com
+# S3_OBJECT_ACL=public-read                # If Spaces requires object ACLs
 
 ## AWS S3 (5 GB free for 12 months; egress charged after)
 # S3_ENDPOINT=https://s3.us-east-1.amazonaws.com
@@ -216,6 +218,7 @@ S3_SECRET=<DO-Spaces-secret>
 S3_BUCKET=liravo-avatars
 S3_REGION=nyc3
 S3_CDN_URL=https://liravo-avatars.nyc3.cdn.digitaloceanspaces.com
+S3_OBJECT_ACL=public-read
 
 # ── AWS S3 ────────────────────────────────────────────────────────────────────
 S3_ENDPOINT=https://s3.us-east-1.amazonaws.com
@@ -988,7 +991,7 @@ The `.gitignore` excludes `.env.local`. Never commit `.env` files with real valu
 
 ### Security and financial migration update
 
-Apply migrations 019–057 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+Apply migrations 019–058 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
 
 Payout requests reserve each USD/NGN/EUR balance atomically; failed/cancelled requests release reservations, completed requests remain deducted. Currencies are never implicitly converted; referral commissions retain their transaction currency. Tip referral commissions are 10% of the platform fee; subscription and ticket referrals are 10% of their purchase price. Migration 050 corrects verified historical commissions, preserves proportional refunds and audits exact adjustments; missing attribution evidence still requires staging reconciliation before withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
 
@@ -1057,3 +1060,5 @@ Migrations 053–054 serialize and audit theme, affiliate-store and seasonal-eve
 Migrations 055–056 route core profile/onboarding changes through the validated API; browser database writes to those fields are denied. Onboarding profile and optional PIN commit together. PIN changes require current proof, and configured PINs protect payout reservations and bank-detail changes. Proof checks use per-account/trusted-IP quotas; the database rechecks the current hash while committing. Payout destination writes now require an idempotency key. Web/native clients retain financial keys across reloads in session storage/SecureStore, exclude PINs from stored intents and automatic retry caches, and clear keys after acknowledged success. PIN state responses expose only whether a PIN is configured.
 
 Migration 057 replaces exposed legacy email tokens with private, hashed, purpose-bound proofs (verification: 24 hours; recovery: one hour). Existing links must be reissued. Current email remains active until POST confirmation; opening a link only displays a confirmation page. Configured PINs protect email changes and enrollment recovery codes, with transaction-time rechecks. Recovery preserves 2FA, invalidates older application grants and provider access issued before the recovery second, and revokes other Supabase refresh sessions. Native recovery opens the web flow. Configure the Mailgun variables above; failed delivery does not change the linked email.
+
+Migration 058 stages avatar uploads until the profile transaction commits. The API accepts JPEG, PNG and static WebP up to 3 MB, bounds decoded pixels, strips metadata and stores a WebP no larger than 512×512. Clients submit the returned `uploadId` as `avatar_upload_id` to the profile API; uploading alone never changes the profile. Supabase avatar writes require the service API; public reads remain available. Outbox drain removes abandoned/expired objects in leased batches of five, preserves referenced images and retries deletion failures. Native builds require the added Expo image manipulator; rebuild the development client after installing dependencies. `S3_CDN_URL` must be the public HTTP(S) asset base without credentials, query or fragment; its origin/path also constrain Next image requests. S3 uploads omit ACL headers by default for ACL-disabled buckets; configure public bucket/CDN reads, or opt into `S3_OBJECT_ACL=public-read` on supporting backends. Per-object S3 deletion errors retain cleanup records for retry.

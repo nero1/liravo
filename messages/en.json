@@ -120,7 +120,7 @@
   },
   "profile": {
     "countryPlaceholder": "GB",
-    "avatarTooLarge": "Avatar must be under 5 MB.",
+    "avatarTooLarge": "Avatar must be 3 MB or smaller.",
     "displayRequired": "Display name is required.",
     "bioTooLong": "Bio must be 280 characters or fewer.",
     "saveFailed": "Could not save your profile. Please try again.",
@@ -140,7 +140,11 @@
     "following": "Following",
     "booksRead": "Books Read",
     "streak": "{days, plural, one {# day streak} other {# day streak}}",
-    "level": "Level"
+    "level": "Level",
+    "avatarInvalid": "Choose a valid JPEG, PNG or static WebP image.",
+    "photoDenied": "Allow access to your photo library to choose a profile photo.",
+    "displayPlaceholder": "Your name",
+    "externalLink": "External link {number}"
   },
   "discover": {
     "newReleasesFromAuthors": "New Releases from Authors You Follow",

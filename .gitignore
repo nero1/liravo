@@ -42,3 +42,6 @@ next-env.d.ts
 /mobile/android/
 /mobile/ios/
 /mobile/expo-env.d.ts
+
+# Agent worktrees
+/.claude/worktrees/

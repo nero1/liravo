@@ -4,7 +4,7 @@ import { useState,useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PublicUserRow } from '@/lib/user-profile';
 import { useTranslations } from 'next-intl';
-import { USER_TYPES,GENRES,type UserType } from '@/constants/config';
+import { AVATAR_MAX_BYTES,USER_TYPES,GENRES,type UserType } from '@/constants/config';
 import { cn } from '@/lib/utils';
 
 interface ProfileEditFormProps {
@@ -30,10 +30,12 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > AVATAR_MAX_BYTES) {
       setError(p('avatarTooLarge'));
       return;
     }
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)){setError(p('avatarInvalid'));return;}
+    setError(null);
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
   };
@@ -47,13 +49,13 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
     setError(null);
 
     try{
-      let avatarUrl=profile.avatar_url;
+      let avatarUploadId:string|undefined;
       if(avatarFile){
         const data=new FormData();data.append('file',avatarFile);
         const response=await fetch('/api/users/avatar',{method:'POST',headers:{'X-Liravo-Actor':profile.id},body:data});
-        if(!response.ok)throw new Error('Avatar unavailable');const result=await response.json();avatarUrl=result.publicUrl;
+        if(!response.ok)throw new Error('Avatar unavailable');const result=await response.json();if(typeof result.uploadId!=='string')throw new Error('Avatar unavailable');avatarUploadId=result.uploadId;
       }
-      const response=await fetch('/api/users/profile',{method:'PUT',headers:{'Content-Type':'application/json','X-Liravo-Actor':profile.id},body:JSON.stringify({display_name:displayName.trim(),bio:bio.trim()||null,country:country.trim()||null,avatar_url:avatarUrl,external_links:links.filter(Boolean),user_types:roles,genres})});
+      const response=await fetch('/api/users/profile',{method:'PUT',headers:{'Content-Type':'application/json','X-Liravo-Actor':profile.id},body:JSON.stringify({display_name:displayName.trim(),bio:bio.trim()||null,country:country.trim()||null,...(avatarUploadId?{avatar_upload_id:avatarUploadId}:{}),external_links:links.filter(Boolean),user_types:roles,genres})});
       if(!response.ok)throw new Error('Profile unavailable');
       await response.json();router.push('/profile');router.refresh();
     }catch{setError(p('saveFailed'));}finally{setSaving(false);}
@@ -77,15 +79,16 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
           </div>
           <label className="cursor-pointer px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted transition-colors">
             {p('uploadPhoto')}
-            <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} className="sr-only" />
           </label>
         </div>
       </div>
 
       {/* {p('displayName')} */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">{p('displayName')}</label>
+        <label htmlFor="profile-display" className="block text-sm font-medium mb-1.5">{p('displayName')}</label>
         <input
+          id="profile-display"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           maxLength={50}
@@ -101,10 +104,11 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
       </div></fieldset>
       {/* Bio */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">
+        <label htmlFor="profile-bio" className="block text-sm font-medium mb-1.5">
           {p('bio')} <span className="text-muted-foreground font-normal">({bio.length}/280)</span>
         </label>
         <textarea
+          id="profile-bio"
           value={bio}
           onChange={(e) => setBio(e.target.value)}
           maxLength={280}
@@ -116,8 +120,9 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
 
       {/* Country */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">{p('countryOptional')}</label>
+        <label htmlFor="profile-country" className="block text-sm font-medium mb-1.5">{p('countryOptional')}</label>
         <input
+          id="profile-country"
           value={country}
           onChange={(e) => setCountry(e.target.value)}
           maxLength={2}
@@ -140,6 +145,7 @@ export function ProfileEditForm({ profile }: ProfileEditFormProps) {
                 setLinks(next);
               }}
               type="url"
+              aria-label={p('externalLink',{number:i+1})}
               placeholder="https://yoursite.com"
               className="w-full px-3 py-2.5 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-accent/50 text-sm"
             />

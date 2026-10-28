@@ -29,8 +29,9 @@ async function request<T>(
 ): Promise<T> {
   const { token, user } = useAuthStore.getState();
   const mutating = method !== 'GET';
+  const multipart=typeof FormData!=='undefined'&&body instanceof FormData;
   const primaryAuth=/^\/api\/(auth\/(login|signup|google|telegram|2fa\/verify)|users\/(account-recovery|verify-recovery|verify-email))$/.test(path);
-  const secret=primaryAuth||!!body&&typeof body==='object'&&Object.keys(body).some(key=>/^(pin|currentPin|current_pin|newPin|password)$/i.test(key));
+  const secret=primaryAuth||multipart||!!body&&typeof body==='object'&&Object.keys(body).some(key=>/^(pin|currentPin|current_pin|newPin|password)$/i.test(key));
   const signature = secret?'':JSON.stringify([user?.id ?? token, method, path, body]);
   const trackIntent=mutating&&!secret;
   const suppliedKey = Object.entries(extraHeaders ?? {}).find(([name]) => /^(x-)?idempotency-key$/i.test(name))?.[1];
@@ -41,7 +42,7 @@ async function request<T>(
   }
 
   const headers: Record<string, string> = {
-    'Content-Type':'application/json',
+    ...(!multipart?{'Content-Type':'application/json'}:{}),
     'X-Liravo-Client':'native',
     ...(intentKey ? { 'Idempotency-Key': intentKey!, 'X-Idempotency-Key': intentKey! } : {}),
     ...Object.fromEntries(Object.entries(extraHeaders ?? {}).filter(([name]) => !/^(x-)?idempotency-key$/i.test(name))),
@@ -67,7 +68,7 @@ async function request<T>(
     credentials:'omit',
     signal:controller.signal,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body:multipart?body as FormData:body!==undefined?JSON.stringify(body):undefined,
   });
 
   if (!res.ok) {
@@ -91,6 +92,7 @@ export const api = {
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
     request<T>(path, 'POST', body, undefined, headers),
   put: <T>(path: string, body?: unknown,headers?:Record<string,string>) => request<T>(path, 'PUT', body,undefined,headers),
+  upload:<T>(path:string,body:FormData,headers?:Record<string,string>)=>request<T>(path,'POST',body,undefined,headers),
   patch: <T>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
   delete: <T>(path: string) => request<T>(path, 'DELETE'),
 };

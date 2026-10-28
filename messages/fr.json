@@ -120,7 +120,7 @@
   },
   "profile": {
     "countryPlaceholder": "FR",
-    "avatarTooLarge": "La photo doit faire moins de 5 Mo.",
+    "avatarTooLarge": "La photo ne doit pas dépasser 3 Mo.",
     "displayRequired": "Le nom affiché est obligatoire.",
     "bioTooLong": "La biographie doit contenir 280 caractères maximum.",
     "saveFailed": "Impossible d’enregistrer votre profil. Réessayez.",
@@ -140,7 +140,11 @@
     "following": "Abonnements",
     "booksRead": "Livres lus",
     "streak": "{days, plural, one {Série de # jour} other {Série de # jours}}",
-    "level": "Niveau"
+    "level": "Niveau",
+    "avatarInvalid": "Choisissez une image JPEG, PNG ou WebP statique valide.",
+    "photoDenied": "Autorisez l’accès à votre photothèque pour choisir une photo de profil.",
+    "displayPlaceholder": "Votre nom",
+    "externalLink": "Lien externe {number}"
   },
   "discover": {
     "newReleasesFromAuthors": "Nouvelles sorties des auteurs que vous suivez",
