@@ -6,35 +6,35 @@ import { z } from 'zod';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { checkCriticalRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/utils';
-import { createHmac } from 'crypto';
+import { createHash,createHmac,timingSafeEqual } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
 // Telegram Login Widget sends these fields
 const TelegramAuthSchema = z.object({
-  id: z.number(),
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
-  username: z.string().optional(),
-  photo_url: z.string().url().optional(),
-  auth_date: z.number(),
-  hash: z.string().min(64).max(64),
-});
+  id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  first_name: z.string().max(256).optional(),
+  last_name: z.string().max(256).optional(),
+  username: z.string().max(256).optional(),
+  photo_url: z.string().url().max(2048).optional(),
+  auth_date: z.number().int().positive(),
+  hash: z.string().regex(/^[a-f0-9]{64}$/),
+}).catchall(z.union([z.string().max(4096),z.number().finite(),z.boolean()]));
 
-function verifyTelegramHash(data: Record<string, string | number>, hash: string): boolean {
+function verifyTelegramHash(data: Record<string, string | number | boolean>, hash: string): boolean {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN not configured');
 
   // Build data-check-string: sorted key=value lines (excluding hash)
   const checkString = Object.entries(data)
     .filter(([k]) => k !== 'hash')
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a],[b])=>a<b?-1:a>b?1:0)
     .map(([k, v]) => `${k}=${v}`)
     .join('\n');
 
-  const secretKey = createHmac('sha256', 'WebAppData').update(botToken).digest();
-  const expectedHash = createHmac('sha256', secretKey).update(checkString).digest('hex');
-  return expectedHash === hash;
+  const secretKey = createHash('sha256').update(botToken).digest();
+  const expectedHash = createHmac('sha256', secretKey).update(checkString).digest();
+  return timingSafeEqual(expectedHash,Buffer.from(hash,'hex'));
 }
 
 export async function POST(request: Request) {
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
   // Verify the hash
   try {
-    const valid = verifyTelegramHash(telegramData as Record<string, string | number>, hash);
+    const valid = verifyTelegramHash(telegramData as Record<string, string | number | boolean>, hash);
     if (!valid) return NextResponse.json({ error: 'Invalid Telegram signature' }, { status: 401 });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
@@ -74,32 +74,10 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
   const telegramId = String(telegramData.id);
 
-  // Find existing user by telegram_id
-  let { data: user } = await supabase
-    .from('users')
-    .select('*')
-    .eq('telegram_id', telegramId)
-    .maybeSingle();
-
-  if (!user) {
-    // Create new user
-    const displayName = [telegramData.first_name, telegramData.last_name].filter(Boolean).join(' ')
-      || telegramData.username
-      || `tg_${telegramId}`;
-
-    const baseUsername = (telegramData.username ?? `tg${telegramId}`).toLowerCase().replace(/[^a-z0-9_]/g, '');
-    const username = `${baseUsername}_${Math.floor(Math.random() * 9999)}`;
-
-    const {data:newUser,error}=await supabase.rpc('create_direct_account' as never,{p_id:crypto.randomUUID(),p_email:null,p_username:username,p_display_name:displayName,p_telegram_id:telegramId,p_avatar_url:telegramData.photo_url??null} as never);
-
-    if (error || !newUser) {
-      return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
-    }
-    user=newUser as unknown as typeof user;
-  }
-
-  if(!user)return NextResponse.json({error:'Account unavailable'},{status:503});
-  return directLoginResponse(user,clientUser(user),request);
+  const displayName=[telegramData.first_name,telegramData.last_name].filter(Boolean).join(' ')||telegramData.username||'tg_'+telegramId;
+  const {data:user,error}=await supabase.rpc('resolve_direct_social_identity' as never,{p_provider:'telegram',p_subject:telegramId,p_email:null,p_display_name:displayName,p_avatar_url:telegramData.photo_url??null} as never);
+  if(error||!user)return NextResponse.json({error:'Authentication unavailable'},{status:error?.code==='P1003'?403:error?.code==='P1001'?409:503});
+  return directLoginResponse(user as unknown as {id:string;email:string|null},clientUser(user),request);
 }
 
 // Supabase mode: redirect to Supabase Telegram OAuth

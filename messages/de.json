@@ -35,7 +35,17 @@
     "passwordResetRequired": "Dieses Konto hat kein Passwort. Nutze die soziale Anmeldung oder deine bestätigte Wiederherstellungs-E-Mail.",
     "signInFailed": "Anmeldung fehlgeschlagen. Prüfe deine Angaben und versuche es erneut.",
     "tagline": "Dein soziales Netzwerk zum Entdecken von Büchern",
-    "description": "Melde dich bei Liravo an, um Bücher zu entdecken und deine Lektüre zu verfolgen."
+    "description": "Melde dich bei Liravo an, um Bücher zu entdecken und deine Lektüre zu verfolgen.",
+    "captchaTitle": "Sicherheitsprüfung",
+    "captchaDescription": "Schließe die Prüfung ab, um die Anmeldung fortzusetzen.",
+    "captchaUnavailable": "Die Prüfung ist nicht verfügbar. Versuche es später erneut.",
+    "captchaRequired": "Schließe die Sicherheitsprüfung ab und versuche es erneut.",
+    "captchaRetry": "Erneut versuchen",
+    "captchaClose": "Prüfung schließen",
+    "captchaLoading": "Prüfung wird geladen…",
+    "captchaComplete": "Prüfung abgeschlossen. Kehre zur App zurück.",
+    "passwordTooLong": "Wähle ein kürzeres Passwort.",
+    "accountLinkRequired": "Melde dich mit deiner bisherigen Methode an und bestätige deine E-Mail, bevor du Google verknüpfst."
   },
   "onboarding": {
     "welcome": "Willkommen bei Liravo",

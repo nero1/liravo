@@ -105,6 +105,9 @@ S3_OBJECT_ACL=none                        # Default; bucket/CDN policy grants re
 | `AUTH_ENCRYPTION_KEY` | Server-only base64 value encoding 32 random bytes; required to enroll/encrypt 2FA secrets (`openssl rand -base64 32`). Preserve this key with backups; rotation requires re-encrypting stored factors. |
 | `GOOGLE_ALLOWED_CLIENT_IDS` | Optional comma-separated native Google OAuth audiences for direct PostgreSQL sign-in; `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is also accepted. |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token from BotFather |
+| `HCAPTCHA_SECRET_KEY` | Server-only hCaptcha secret; enables challenges for direct sign-up and after three failed password attempts. |
+| `HCAPTCHA_SITE_KEY` | Public hCaptcha site key served by `/api/auth/config`; required when the secret is configured. |
+| `HCAPTCHA_ALLOWED_HOSTNAMES` | Optional comma-separated challenge hostnames; defaults to the hostname of `NEXT_PUBLIC_APP_URL`. |
 
 ### AI
 
@@ -931,24 +934,9 @@ If updates seem slow or stale, check the EventSource connection in browser DevTo
 → filter by `eventsource`). Verify the SSE endpoint returns 200 and is streaming events.
 Polling interval is typically 5–30 seconds.
 
-### "Login returns PASSWORD_RESET_REQUIRED"
+### "Password login fails after migrating an OAuth account"
 
-**Cause**: The user was created via OAuth (Google or Telegram) in Supabase mode and has no
-`password_hash`. After migrating to DO mode, their first email+password login fails.
-
-**Recovery**: Generate a bcrypt hash and set it manually:
-
-```bash
-# 1. Generate hash (requires Node.js and bcryptjs)
-node -e "const b = require('bcryptjs'); b.hash('NewPassword123', 12).then(console.log)"
-```
-
-```sql
--- 2. Set the hash via direct psql connection (port 25432)
-UPDATE users SET password_hash = '<paste-hash-here>' WHERE email = 'user@example.com';
-```
-
-Then ask the user to log in with `NewPassword123` and immediately change their password.
+OAuth-only accounts have no password hash. Use the original identity provider or `/account/recover` with a verified recovery email. Password login deliberately returns the same failure for missing accounts and accounts without passwords. Direct passwords must fit within bcrypt's 72-byte UTF-8 limit; use account recovery for legacy longer passwords.
 
 ### "Avatar uploads fail in DigitalOcean or Railway mode"
 
@@ -991,7 +979,7 @@ The `.gitignore` excludes `.env.local`. Never commit `.env` files with real valu
 
 ### Security and financial migration update
 
-Apply migrations 019–058 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+Apply migrations 019–059 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
 
 Payout requests reserve each USD/NGN/EUR balance atomically; failed/cancelled requests release reservations, completed requests remain deducted. Currencies are never implicitly converted; referral commissions retain their transaction currency. Tip referral commissions are 10% of the platform fee; subscription and ticket referrals are 10% of their purchase price. Migration 050 corrects verified historical commissions, preserves proportional refunds and audits exact adjustments; missing attribution evidence still requires staging reconciliation before withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
 
@@ -1062,3 +1050,5 @@ Migrations 055–056 route core profile/onboarding changes through the validated
 Migration 057 replaces exposed legacy email tokens with private, hashed, purpose-bound proofs (verification: 24 hours; recovery: one hour). Existing links must be reissued. Current email remains active until POST confirmation; opening a link only displays a confirmation page. Configured PINs protect email changes and enrollment recovery codes, with transaction-time rechecks. Recovery preserves 2FA, invalidates older application grants and provider access issued before the recovery second, and revokes other Supabase refresh sessions. Native recovery opens the web flow. Configure the Mailgun variables above; failed delivery does not change the linked email.
 
 Migration 058 stages avatar uploads until the profile transaction commits. The API accepts JPEG, PNG and static WebP up to 3 MB, bounds decoded pixels, strips metadata and stores a WebP no larger than 512×512. Clients submit the returned `uploadId` as `avatar_upload_id` to the profile API; uploading alone never changes the profile. Supabase avatar writes require the service API; public reads remain available. Outbox drain removes abandoned/expired objects in leased batches of five, preserves referenced images and retries deletion failures. Native builds require the added Expo image manipulator; rebuild the development client after installing dependencies. `S3_CDN_URL` must be the public HTTP(S) asset base without credentials, query or fragment; its origin/path also constrain Next image requests. S3 uploads omit ACL headers by default for ACL-disabled buckets; configure public bucket/CDN reads, or opt into `S3_OBJECT_ACL=public-read` on supporting backends. Per-object S3 deletion errors retain cleanup records for retry.
+
+Migration 059 resolves direct social identities atomically by provider subject before considering a verified email. It rejects unverified-email linking, conflicting identities and ambiguous legacy case variants; changing a recovery email preserves the original Google identity. Telegram payloads use the Login Widget SHA-256/HMAC protocol. Direct sign-up and repeated password failures require hCaptcha when configured; missing provider configuration or verification outages fail closed. Allow `api.hcaptcha.com` for server verification, `hcaptcha.com` and its subdomains for the widget, and `oauth2.googleapis.com` for Google token verification. Fonts are installed dependencies, so builds do not download Google Fonts. Native CAPTCHA uses the hosted `/auth/captcha` bridge with an origin- and nonce-bound response; rebuild the development client after installing Expo Crypto.

@@ -159,3 +159,12 @@ it('sends native file uploads as multipart without inventing a JSON body or cach
   await exports.api!.upload('/api/users/avatar',body,{'X-Liravo-Actor':'reader-a'});const options=transport.mock.calls[0][1];
   expect(options.body).toBe(body);expect(options.headers).not.toHaveProperty('Content-Type');expect(options.headers).not.toHaveProperty('Idempotency-Key');expect(options.headers.Authorization).toBe('Bearer token-a');expect(options.headers['X-Liravo-Actor']).toBe('reader-a');
 });
+
+it('preserves structured challenge failures without retaining primary credentials as mutation intents',async()=>{
+  const state={user:null,token:null},transport=vi.fn().mockResolvedValue({ok:false,status:400,json:async()=>({error:'CAPTCHA_REQUIRED',code:'CAPTCHA_REQUIRED',requireCaptcha:true})});
+  const exports:{api?:{post(path:string,body:unknown):Promise<unknown>}}={};
+  const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
+  await expect(exports.api!.post('/api/auth/login',{email:'fixture@example.test',password:'fixture-password'})).rejects.toMatchObject({status:400,code:'CAPTCHA_REQUIRED',requireCaptcha:true});
+  expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Idempotency-Key');expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Authorization');
+});

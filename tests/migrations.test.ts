@@ -1579,5 +1579,38 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     });
 
     }
+    {
+    const owner=crypto.randomUUID(),collision=crypto.randomUUID(),hash='$2b$12$'+'a'.repeat(53);
+    await sql`select create_direct_account(${owner},'MiXeD.Auth@example.test','auth_identity_fixture','Native account',${hash})`;
+    expect((await sql`select find_direct_account(' mixed.AUTH@example.test ') as profile`)[0].profile.id).toBe(owner);
+    expect((await sql`select find_direct_account('missing.auth@example.test') as profile`)[0].profile).toBeNull();
+    await sql`select create_direct_account(${collision},'mixed.auth@example.test','auth_collision_fixture','Ambiguous account')`;
+    await expect(sql`select find_direct_account('mixed.auth@example.test')`).rejects.toThrow('Ambiguous email');
+    await sql`delete from auth.users where id=${collision}`;
+    await expect(sql`select resolve_direct_social_identity('google','google-unverified','mixed.auth@example.test','Google name',null)`).rejects.toThrow('existing sign-in method');
+    expect((await sql`select google_id from users where id=${owner}`)[0].google_id).toBeNull();
+    await sql`update users set email_verified=true,totp_enabled=true,mfa_version=7,pin_hash=${hash} where id=${owner}`;
+    const links=await Promise.allSettled(['google-race-a','google-race-b'].map(subject=>sql`select resolve_direct_social_identity('google',${subject},'mixed.auth@example.test','Google name',null) as profile`));
+    expect(links.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    const linked=(await sql`select google_id,email,pin_hash,mfa_version,totp_enabled from users where id=${owner}`)[0];
+    expect(linked).toMatchObject({email:'MiXeD.Auth@example.test',pin_hash:hash,mfa_version:7,totp_enabled:true});
+    await sql`update users set email='recovery.auth@example.test' where id=${owner}`;
+    const stable=(await sql`select resolve_direct_social_identity('google',${linked.google_id},'mixed.auth@example.test','New name',null) as profile`)[0].profile;
+    expect(stable).toMatchObject({id:owner,email:'recovery.auth@example.test',mfa_version:7,totp_enabled:true});
+    expect((await sql`select count(*)::int as count from auth_factor_grants where user_id=${owner}`)[0].count).toBe(0);
+    const google=await Promise.all(Array.from({length:3},()=>sql`select resolve_direct_social_identity('google','google-canonical-new','created.auth@example.test',${'Long name '.repeat(20)},null) as profile`));
+    expect(new Set(google.map(rows=>rows[0].profile.id)).size).toBe(1);const created=google[0][0].profile;
+    expect(created.email_verified).toBe(true);expect(created.username).toMatch(/^[a-z0-9_]{3,30}$/);expect(created.display_name.length).toBeLessThanOrEqual(50);expect(created.is_admin).toBe(false);
+    const telegram=await Promise.all(Array.from({length:3},()=>sql`select resolve_direct_social_identity('telegram','599900000001',null,'Telegram fixture',null) as profile`));
+    expect(new Set(telegram.map(rows=>rows[0].profile.id)).size).toBe(1);const social=telegram[0][0].profile;
+    expect(social).toMatchObject({email:null,email_verified:false,telegram_id:'599900000001',is_admin:false});expect(social.username).toMatch(/^[a-z0-9_]{3,30}$/);
+    await sql`update users set is_banned=true where id=${social.id}`;
+    await expect(sql`select resolve_direct_social_identity('telegram','599900000001',null,'Telegram fixture',null)`).rejects.toThrow('Account unavailable');
+    await sql`update users set deleted_at=now() where id=${owner}`;
+    await expect(sql`select resolve_direct_social_identity('google',${linked.google_id},'mixed.auth@example.test','Name',null)`).rejects.toThrow('Account unavailable');
+    await expect(sql`select resolve_direct_social_identity('telegram','599900000002','forged@example.test','Name',null)`).rejects.toThrow('Invalid provider identity');
+    await expect(sql`select resolve_direct_social_identity('google','google-unsafe-avatar','safe.auth@example.test','Name','javascript:alert(1)')`).rejects.toThrow('Invalid provider identity');
+    for(const role of ['anon','authenticated'])for(const routine of ['find_direct_account(text)','resolve_direct_social_identity(text,text,text,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

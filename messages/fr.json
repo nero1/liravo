@@ -35,7 +35,17 @@
     "passwordResetRequired": "Ce compte n’a pas de mot de passe. Utilisez la connexion sociale ou votre e-mail de récupération vérifié.",
     "signInFailed": "Connexion impossible. Vérifiez vos informations et réessayez.",
     "tagline": "Votre réseau social de découverte de livres",
-    "description": "Connectez-vous à Liravo pour découvrir des livres et suivre vos lectures."
+    "description": "Connectez-vous à Liravo pour découvrir des livres et suivre vos lectures.",
+    "captchaTitle": "Vérification humaine",
+    "captchaDescription": "Effectuez la vérification pour poursuivre la connexion.",
+    "captchaUnavailable": "La vérification est indisponible. Réessayez plus tard.",
+    "captchaRequired": "Effectuez la vérification humaine et réessayez.",
+    "captchaRetry": "Réessayer",
+    "captchaClose": "Fermer la vérification",
+    "captchaLoading": "Chargement de la vérification…",
+    "captchaComplete": "Vérification terminée. Revenez dans l’application.",
+    "passwordTooLong": "Choisissez un mot de passe plus court.",
+    "accountLinkRequired": "Connectez-vous avec votre méthode habituelle et vérifiez votre e-mail avant de lier Google."
   },
   "onboarding": {
     "welcome": "Bienvenue sur Liravo",

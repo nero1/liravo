@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { APP_URL } from '@/constants/config';
-import { Inter, Playfair_Display } from 'next/font/google';
+import localFont from 'next/font/local';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
@@ -8,14 +8,16 @@ import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister
 import { getDirection } from '@/lib/rtl';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: '../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
+  weight: '100 900',
   variable: '--font-body',
   display: 'swap',
 });
 
-const playfair = Playfair_Display({
-  subsets: ['latin'],
+const playfair = localFont({
+  src: '../../node_modules/@fontsource-variable/playfair-display/files/playfair-display-latin-wght-normal.woff2',
+  weight: '400 900',
   variable: '--font-display',
   display: 'swap',
 });

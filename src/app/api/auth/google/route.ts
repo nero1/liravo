@@ -10,28 +10,32 @@ import { getClientIp } from '@/lib/utils';
 export const dynamic = 'force-dynamic';
 
 const BodySchema = z.object({
-  idToken: z.string().min(1),
+  idToken: z.string().min(1).max(8192),
 });
 
 interface GoogleTokenInfo {
   sub: string;
   email: string;
-  email_verified: string;
+  email_verified: string | boolean;
+  iss:string;
+  exp:string | number;
   name?: string;
   picture?: string;
 }
 
-async function verifyGoogleIdToken(idToken: string): Promise<GoogleTokenInfo> {
-  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,{signal:AbortSignal.timeout(8000)});
-  if (!res.ok) throw new Error('Invalid Google ID token');
-  const info = await res.json() as GoogleTokenInfo & { aud?: string; error?: string };
-  if (info.error) throw new Error(`Google token error: ${info.error}`);
+class GoogleAuthError extends Error{constructor(message:string,public readonly status:number){super(message);}}
 
-  const clients=[process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,...(process.env.GOOGLE_ALLOWED_CLIENT_IDS??'').split(',')].filter(Boolean);
-  if(!clients.length)throw new Error('Google client ID is not configured');
+async function verifyGoogleIdToken(idToken: string): Promise<GoogleTokenInfo> {
+  const clients=[process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,...(process.env.GOOGLE_ALLOWED_CLIENT_IDS??'').split(',')].filter((value):value is string=>typeof value==='string').map(value=>value.trim()).filter(Boolean);
+  if(!clients.length)throw new GoogleAuthError('Google sign-in unavailable',503);
+  let res:Response;try{res=await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,{cache:'no-store',signal:AbortSignal.timeout(8000)});}catch{throw new GoogleAuthError('Google sign-in unavailable',503);}
+  if(!res.ok)throw new GoogleAuthError(res.status===429||res.status>=500?'Google sign-in unavailable':'Invalid Google ID token',res.status===429||res.status>=500?503:401);
+  const raw=await res.json().catch(()=>null);const parsed=z.object({sub:z.string().min(1).max(255),email:z.string().email().max(254),email_verified:z.union([z.literal('true'),z.literal(true)]),iss:z.enum(['accounts.google.com','https://accounts.google.com']),exp:z.union([z.string().regex(/^\d+$/),z.number().int().positive()]),aud:z.string(),name:z.string().max(1024).optional(),picture:z.string().url().max(2048).optional()}).safeParse(raw);
+  if(!parsed.success)throw new GoogleAuthError('Invalid Google identity',401);const info=parsed.data;
+  if(!Number.isFinite(Number(info.exp))||Number(info.exp)<=Date.now()/1000)throw new GoogleAuthError('Google identity expired',401);
   if (!info.aud||!clients.includes(info.aud)) throw new Error('Token audience mismatch');
   if(!z.string().email().safeParse(info.email).success||!info.sub)throw new Error('Invalid Google identity');
-  if (info.email_verified !== 'true') throw new Error('Google email not verified');
+  if(info.email_verified!=='true'&&info.email_verified!==true)throw new Error('Google email not verified');
 
   return info;
 }
@@ -58,38 +62,12 @@ export async function POST(request: Request) {
   try {
     googleInfo = await verifyGoogleIdToken(parsed.data.idToken);
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 401 });
+    return NextResponse.json({error:err instanceof GoogleAuthError?err.message:'Invalid Google identity'},{status:err instanceof GoogleAuthError?err.status:401});
   }
 
   const supabase = createServiceClient();
 
-  // Find or create user
-  let { data: user,error:lookupError } = await supabase
-    .from('users')
-    .select('*')
-    .eq('google_id', googleInfo.sub)
-    .maybeSingle();
-  if(lookupError)return NextResponse.json({error:'Authentication unavailable'},{status:503});
-  if(!user){const lookup=await supabase.from('users').select('*').eq('email',googleInfo.email).maybeSingle();user=lookup.data;lookupError=lookup.error;}
-  if(lookupError)return NextResponse.json({error:'Authentication unavailable'},{status:503});
-
-  if (!user) {
-    const id = crypto.randomUUID();
-    const prefix=googleInfo.email.split('@')[0].replace(/[^a-z0-9_]/gi,'_').toLowerCase().slice(0,24);
-    const {data:newUser,error}=await supabase.rpc('create_direct_account' as never,{p_id:id,p_email:googleInfo.email,p_username:prefix+'_'+id.slice(0,8),p_display_name:googleInfo.name??prefix,p_google_id:googleInfo.sub,p_avatar_url:googleInfo.picture??null} as never);
-
-    if (error || !newUser) {
-      return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
-    }
-    user=newUser as unknown as typeof user;
-  } else if(user.google_id&&user.google_id!==googleInfo.sub){
-    return NextResponse.json({error:'Google account identity conflict'},{status:403});
-  } else if (!user.google_id) {
-    // Link Google to existing account
-    const {error}=await supabase.from('users').update({google_id:googleInfo.sub}).eq('id',user.id);
-    if(error)return NextResponse.json({error:'Google identity link unavailable'},{status:503});
-  }
-
-  if(!user)return NextResponse.json({error:'Account unavailable'},{status:503});
-  return directLoginResponse(user,clientUser(user),request);
+  const {data:user,error}=await supabase.rpc('resolve_direct_social_identity' as never,{p_provider:'google',p_subject:googleInfo.sub,p_email:googleInfo.email.toLowerCase(),p_display_name:googleInfo.name??googleInfo.email.split('@')[0],p_avatar_url:googleInfo.picture??null} as never);
+  if(error||!user)return NextResponse.json({error:'Authentication unavailable',code:error?.code==='P1001'?'ACCOUNT_LINK_REQUIRED':'AUTH_UNAVAILABLE'},{status:error?.code==='P1003'?403:error?.code==='P1001'?409:503});
+  return directLoginResponse(user as unknown as {id:string;email:string|null},clientUser(user),request);
 }

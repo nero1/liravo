@@ -62,8 +62,8 @@ export function useAuth(initialize=false) {
     if(result.mfaRequired){await setToken(null);setMfaChallenge(result.challengeToken!);setUser(null);return;}
     await setToken(result.token!);setUser(result.user!);setMfaChallenge(null);
   }
-  async function loginWithEmail(email:string,password:string){await acceptLogin(await api.post<LoginResult>('/api/auth/login',{email,password}));}
-  async function signUpWithEmail(email:string,password:string){await acceptLogin(await api.post<LoginResult>('/api/auth/signup',{email,password}));}
+  async function loginWithEmail(email:string,password:string,hcaptchaToken?:string){await acceptLogin(await api.post<LoginResult>('/api/auth/login',{email,password,hcaptchaToken}));}
+  async function signUpWithEmail(email:string,password:string,hcaptchaToken?:string){await acceptLogin(await api.post<LoginResult>('/api/auth/signup',{email,password,hcaptchaToken}));}
   async function loginWithGoogleToken(idToken:string){await acceptLogin(await api.post<LoginResult>('/api/auth/google',{idToken}));}
   async function verifySecondFactor(value:string,recovery:boolean){
     const challengeToken=useAuthStore.getState().mfaChallenge;

@@ -2,7 +2,10 @@ import {
   View, Text, TouchableOpacity, Alert, ActivityIndicator,
   TextInput, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { useState } from 'react';
+import {useEffect,useRef,useState} from 'react';
+import {useQuery} from '@tanstack/react-query';
+import {api,ApiError} from '@/lib/api';
+import {HCaptchaChallenge} from '@/components/auth/HCaptchaChallenge';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -24,6 +27,9 @@ export default function WelcomeScreen() {
   const [password, setPassword] = useState('');
   const {loginWithEmail,signUpWithEmail,loginWithGoogleToken,mfaChallenge,verifySecondFactor,logout}=useAuth();
   const [factorCode,setFactorCode]=useState(''),[useRecovery,setUseRecovery]=useState(false);
+  const authConfig=useQuery({queryKey:['auth-config'],enabled:!isSupabaseMode,queryFn:async()=>{const data=await api.get<{enabled:boolean;siteKey:string|null}>('/api/auth/config');if(typeof data.enabled!=='boolean'||data.siteKey!==null&&typeof data.siteKey!=='string')throw new Error('Authentication configuration unavailable');return data;}});
+  const [captchaRequired,setCaptchaRequired]=useState(false),[captchaOpen,setCaptchaOpen]=useState(false),pendingForm=useRef<{email:string;password:string;tab:'login'|'signup'}|null>(null);
+  useEffect(()=>()=>{pendingForm.current=null;},[]);
 
   // ── Supabase Google OAuth ────────────────────────────────────────────────────
   async function signInWithGoogleSupabase() {
@@ -50,24 +56,27 @@ export default function WelcomeScreen() {
   }
 
   // ── Email / password ─────────────────────────────────────────────────────────
-  async function handleEmailAuth() {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert(t('signIn'),t('signInFailed'));
-      return;
-    }
+  async function submitCredentials(form:{email:string;password:string;tab:'login'|'signup'},captchaToken?:string){
     setLoading(true);
-    try {
-      if (tab === 'login') {
-        await loginWithEmail(email.trim(), password);
-      } else {
-        await signUpWithEmail(email.trim(), password);
-      }
-    } catch {
-      Alert.alert(t('signIn'),t('signInFailed'));
-    } finally {
-      setLoading(false);
-    }
+    try{if(form.tab==='login')await loginWithEmail(form.email,form.password,captchaToken);else await signUpWithEmail(form.email,form.password,captchaToken);}
+    catch(error){
+      if(error instanceof ApiError&&error.requireCaptcha){setCaptchaRequired(true);void authConfig.refetch();}
+      const key=error instanceof ApiError&&error.code==='CAPTCHA_UNAVAILABLE'?'captchaUnavailable':error instanceof ApiError&&['CAPTCHA_REQUIRED','CAPTCHA_INVALID'].includes(error.code??'')?'captchaRequired':error instanceof ApiError&&error.code==='PASSWORD_TOO_LONG'?'passwordTooLong':'signInFailed';
+      Alert.alert(t('signIn'),t(key));
+    }finally{setLoading(false);}
   }
+  async function handleEmailAuth(){
+    if(loading||captchaOpen)return;
+    if(!email.trim()||!password){Alert.alert(t('signIn'),t('signInFailed'));return;}
+    if(!authConfig.data||authConfig.isError){Alert.alert(t('signIn'),t('captchaUnavailable'));return;}
+    const form={email:email.trim(),password,tab};
+    if(authConfig.data.enabled&&(tab==='signup'||captchaRequired)){
+      if(!authConfig.data.siteKey){Alert.alert(t('signIn'),t('captchaUnavailable'));return;}
+      pendingForm.current=form;setCaptchaOpen(true);return;
+    }
+    await submitCredentials(form);
+  }
+
 
 
   if(mfaChallenge)return <SafeAreaView className="flex-1 bg-background px-6 justify-center gap-4">
@@ -111,7 +120,7 @@ export default function WelcomeScreen() {
                     <Text className="font-semibold text-foreground text-base">{t('continueWithGoogle')}</Text>
                   </>
                 )}
-              </TouchableOpacity>:GOOGLE_CLIENT_ID?<DirectGoogleButton onLogin={loginWithGoogleToken} />:null}
+              </TouchableOpacity>:GOOGLE_CLIENT_ID?<DirectGoogleButton onLogin={async token=>{setLoading(true);try{await loginWithGoogleToken(token);}finally{setLoading(false);}}} disabled={loading||captchaOpen}/>:null}
 
               {/* Email / password — only in DO mode */}
               {!isSupabaseMode && (
@@ -129,8 +138,8 @@ export default function WelcomeScreen() {
                         key={value}
                         onPress={() => setTab(value)}
                         accessibilityRole="button"
-                        accessibilityState={{selected:tab===value,disabled:loading}}
-                        disabled={loading}
+                        accessibilityState={{selected:tab===value,disabled:loading||captchaOpen}}
+                        disabled={loading||captchaOpen}
                         className={`flex-1 py-3 items-center ${tab === value ? 'bg-accent' : 'bg-transparent'}`}
                         activeOpacity={0.8}
                       >
@@ -143,6 +152,8 @@ export default function WelcomeScreen() {
 
                   <TextInput
                     className="border border-border rounded-xl px-4 py-3.5 text-foreground bg-muted"
+                    editable={!loading&&!captchaOpen}
+                    maxLength={254}
                     placeholder={t('email')}
                     accessibilityLabel={t('email')}
                     placeholderTextColor="#6b7280"
@@ -154,6 +165,8 @@ export default function WelcomeScreen() {
                   />
                   <TextInput
                     className="border border-border rounded-xl px-4 py-3.5 text-foreground bg-muted"
+                    editable={!loading&&!captchaOpen}
+                    maxLength={72}
                     placeholder={t('password')}
                     accessibilityLabel={t('password')}
                     placeholderTextColor="#6b7280"
@@ -164,8 +177,10 @@ export default function WelcomeScreen() {
                   />
 
                   <TouchableOpacity
-                    onPress={handleEmailAuth}
-                    disabled={loading}
+                    onPress={()=>void handleEmailAuth()}
+                    disabled={loading||captchaOpen||authConfig.isPending||authConfig.isError}
+                    accessibilityRole="button"
+                    accessibilityState={{disabled:loading||captchaOpen||authConfig.isPending||authConfig.isError,busy:loading}}
                     className="bg-accent rounded-xl py-4 items-center"
                     activeOpacity={0.8}
                   >
@@ -180,6 +195,7 @@ export default function WelcomeScreen() {
                 </>
               )}
 
+              {!isSupabaseMode&&authConfig.isError&&<><Text className="text-destructive">{t('captchaUnavailable')}</Text><TouchableOpacity accessibilityRole="button" onPress={()=>void authConfig.refetch()}><Text className="text-accent">{t('captchaRetry')}</Text></TouchableOpacity></>}
               <Text className="text-center text-xs text-muted-foreground px-4">
                 {t('terms')}
               </Text>
@@ -188,11 +204,12 @@ export default function WelcomeScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <HCaptchaChallenge visible={captchaOpen} onClose={()=>{pendingForm.current=null;setCaptchaOpen(false);}} onProof={token=>{const form=pendingForm.current;pendingForm.current=null;setCaptchaOpen(false);if(form)void submitCredentials(form,token);}}/>
     </SafeAreaView>
   );
 }
 
-function DirectGoogleButton({onLogin}:{onLogin:(token:string)=>Promise<void>}){
+function DirectGoogleButton({onLogin,disabled}:{onLogin:(token:string)=>Promise<void>;disabled:boolean}){
   const {t}=useTranslations('auth');
   const [loading,setLoading]=useState(false);
   const [request,,prompt]=Google.useIdTokenAuthRequest({androidClientId:GOOGLE_CLIENT_ID,scopes:['openid','profile','email']});
@@ -204,9 +221,9 @@ function DirectGoogleButton({onLogin}:{onLogin:(token:string)=>Promise<void>}){
       const token=result.params.id_token??result.authentication?.idToken;
       if(!token)throw new Error('No ID token from Google');
       await onLogin(token);
-    }catch{Alert.alert(t('signIn'),t('signInFailed'));}finally{setLoading(false);}
+    }catch(error){Alert.alert(t('signIn'),t(error instanceof ApiError&&error.code==='ACCOUNT_LINK_REQUIRED'?'accountLinkRequired':'signInFailed'));}finally{setLoading(false);}
   }
-  return <TouchableOpacity onPress={()=>void login()} disabled={loading||!request} accessibilityRole="button" className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm">
+  return <TouchableOpacity onPress={()=>void login()} disabled={disabled||loading||!request} accessibilityRole="button" className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm">
     {loading?<ActivityIndicator color="#1a1a1a" />:<Text className="font-semibold text-foreground text-base">{t('continueWithGoogle')}</Text>}
   </TouchableOpacity>;
 }

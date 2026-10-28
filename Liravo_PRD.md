@@ -197,7 +197,7 @@ The database layer is provider-agnostic. All application code talks to a single 
 **Auth abstraction (`src/lib/auth/getCurrentUser.ts`)**
 
 - Supabase mode: delegates to Supabase Auth (supports Google and Telegram OAuth out of the box).
-- Direct PostgreSQL mode: custom session management using Redis + signed httpOnly cookies. Google and Telegram OAuth still works; session is written to Redis rather than Supabase's session store.
+- Direct PostgreSQL mode: Redis sessions with httpOnly web cookies or native Bearer tokens. Web uses email/password; native Google ID tokens and signed Telegram payloads exchange through the server. Provider subjects remain stable across recovery-email changes.
 
 **Storage abstraction (`src/lib/storage/provider.ts`)**
 
@@ -294,7 +294,7 @@ All layouts designed at 375px width first, scaled to desktop. Fixed bottom navig
 - Telegram OAuth
 - Admin can toggle which providers are available via the admin panel (e.g. disable Google login, or disable Telegram login independently).
 
-**No email/password login at sign-up.** Social auth only. Email collection happens post-onboarding as an optional recovery measure (see below).
+**Supabase web sign-in uses social auth.** Direct PostgreSQL web/native also supports email/password. OAuth accounts can add an optional verified recovery email after onboarding (see below).
 
 **Post-sign-in onboarding flow:**
 1. Choose a username (auto-suggested from OAuth display name, editable).
@@ -1151,7 +1151,7 @@ A dedicated system account with username `@liravo_editors` and display name "Lir
 ### 15.6 Bot and Abuse Mitigation
 
 - Honeypot fields on sign-up.
-- hCaptcha (free tier) on sign-up and after 3 failed auth attempts.
+- hCaptcha on direct sign-up and after 3 failed password attempts per account or IP, when configured. Web/native challenges bind the site key and hostname; provider outages fail closed.
 - Anomalous activity detection (bulk shelf additions, review spam) triggers hold and moderator flag.
 - User-agent analysis on API requests.
 

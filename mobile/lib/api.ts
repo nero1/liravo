@@ -14,6 +14,8 @@ class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?:string,
+    public requireCaptcha=false,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -73,11 +75,14 @@ async function request<T>(
 
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
+    let code:string|undefined,requireCaptcha=false;
     try {
       const json = await res.json();
       message = typeof json.error === 'string' ? json.error : message;
+      if(typeof json.code==='string')code=json.code;
+      requireCaptcha=json.requireCaptcha===true;
     } catch {}
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status,message,code,requireCaptcha);
   }
 
   const data = res.status===204?undefined as T:await res.json() as T;

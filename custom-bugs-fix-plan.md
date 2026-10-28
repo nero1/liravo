@@ -68,6 +68,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Make admin theme/store/seasonal configuration atomic and repair partial/repeated content seeds through shared API/CLI routines.
 - ✅ Unify profile/onboarding API validation across providers and commit optional PINs with onboarding.
 - ✅ Validate and stage avatar uploads; commit owned media with profiles and clean abandoned objects.
+- ✅ Verify Telegram signatures, resolve social identities atomically and enforce configured CAPTCHA on web/native authentication.
 - ✅ Make buddy chapter/notes atomic and verify bounded, replay-safe Goodreads imports on web/native.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.

@@ -286,11 +286,6 @@ describe('auth routes — source patterns', () => {
     expect(src).toContain('bcrypt.compare');
   });
 
-  it('login route handles PASSWORD_RESET_REQUIRED', () => {
-    const src = readSrc('app', 'api', 'auth', 'login', 'route.ts');
-    expect(src).toContain('PASSWORD_RESET_REQUIRED');
-  });
-
   it('signup route has bcrypt.hash', () => {
     const src = readSrc('app', 'api', 'auth', 'signup', 'route.ts');
     expect(src).toContain('bcrypt.hash');

@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import {HCaptcha} from './HCaptcha';
 
 interface LoginFormProps {
   googleEnabled: boolean;
@@ -28,6 +29,13 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [challengeToken,setChallengeToken]=useState<string|null>(null);
+  const [captchaConfig,setCaptchaConfig]=useState<{enabled:boolean;siteKey:string|null}|null>(null),[captchaConfigFailed,setCaptchaConfigFailed]=useState(false),[configGeneration,setConfigGeneration]=useState(0),[captchaRequired,setCaptchaRequired]=useState(false),[captchaToken,setCaptchaToken]=useState<string|null>(null),[captchaGeneration,setCaptchaGeneration]=useState(0);
+  const needsCaptcha=!!captchaConfig?.enabled&&(isSignup||captchaRequired);
+  useEffect(()=>{
+    if(!isDirectPostgresMode)return;const controller=new AbortController();
+    fetch('/api/auth/config',{signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error('Configuration unavailable');const data=await response.json();if(typeof data.enabled!=='boolean'||data.siteKey!==null&&typeof data.siteKey!=='string')throw new Error('Configuration unavailable');setCaptchaConfig(data);}).catch(()=>{if(!controller.signal.aborted)setCaptchaConfigFailed(true);});
+    return()=>controller.abort();
+  },[configGeneration]);
   function completeLogin(user?:{onboarding_complete?:boolean}){
     const next=new URLSearchParams(window.location.search).get('next');
     router.push(user?.onboarding_complete===false?'/onboarding':safeReturnPath(next));router.refresh();
@@ -57,12 +65,16 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({email,password,...(captchaToken?{hcaptchaToken:captchaToken}:{})}),
         });
 
         const json = await res.json();
 
         if (!res.ok) {
+          if(json.requireCaptcha){setCaptchaRequired(true);setCaptchaConfig(null);setConfigGeneration(value=>value+1);}
+          if(json.code==='CAPTCHA_UNAVAILABLE'){setError(t('captchaUnavailable'));return;}
+          if(json.code==='CAPTCHA_REQUIRED'||json.code==='CAPTCHA_INVALID'){setError(t('captchaRequired'));return;}
+          if(json.code==='PASSWORD_TOO_LONG'){setError(t('passwordTooLong'));return;}
           if (json.error === 'PASSWORD_RESET_REQUIRED') {
             setError(
               t('passwordResetRequired')
@@ -76,7 +88,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
         if(json.mfaRequired){setChallengeToken(json.challengeToken);return;}
         router.push(isSignup ? '/onboarding' : '/');
         router.refresh();
-      } catch { setError(t('signInFailed')); } finally { setLoading(null); }
+      } catch { setError(t('signInFailed')); } finally {setLoading(null);setCaptchaToken(null);setCaptchaGeneration(value=>value+1);}
     };
 
     return (
@@ -96,6 +108,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
               id="email"
               type="email"
               required
+              disabled={loading!==null}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-accent"
@@ -111,6 +124,8 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
               id="password"
               type="password"
               required
+              disabled={loading!==null}
+              maxLength={72}
               minLength={isSignup ? 8 : 1}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -119,9 +134,11 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
             />
           </div>
 
+          {needsCaptcha&&(captchaConfig?.siteKey?<HCaptcha key={captchaGeneration} siteKey={captchaConfig.siteKey} onToken={setCaptchaToken}/>:<p role="alert">{t('captchaUnavailable')}</p>)}
+          {captchaConfigFailed&&<><p role="alert" className="text-sm text-destructive">{t('signInFailed')}</p><button type="button" onClick={()=>{setCaptchaConfigFailed(false);setConfigGeneration(value=>value+1);}} className="text-sm text-accent">{t('captchaRetry')}</button></>}
           <button
             type="submit"
-            disabled={loading !== null}
+            disabled={loading!==null||!captchaConfig||needsCaptcha&&!captchaToken}
             className="w-full px-4 py-3 bg-accent text-accent-foreground rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
           >
             {loading === 'email'
@@ -134,7 +151,8 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
 
         <button
           type="button"
-          onClick={() => { setIsSignup((v) => !v); setError(null); }}
+          disabled={loading!==null}
+          onClick={() => {setIsSignup(value=>!value);setError(null);setCaptchaToken(null);setCaptchaGeneration(value=>value+1);}}
           className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           {isSignup ? t('alreadyAccount') : t('needAccount')}

@@ -35,7 +35,17 @@
     "passwordResetRequired": "This account has no password. Use social sign-in or your verified recovery email.",
     "signInFailed": "Unable to sign in. Check your details and try again.",
     "tagline": "Your book discovery social network",
-    "description": "Sign in to Liravo to discover and track books."
+    "description": "Sign in to Liravo to discover and track books.",
+    "captchaTitle": "Human verification",
+    "captchaDescription": "Complete the verification to continue signing in.",
+    "captchaUnavailable": "Verification is unavailable. Please try again later.",
+    "captchaRequired": "Complete the human verification and try again.",
+    "captchaRetry": "Try again",
+    "captchaClose": "Close verification",
+    "captchaLoading": "Loading verification…",
+    "captchaComplete": "Verification complete. Return to the app.",
+    "passwordTooLong": "Choose a shorter password.",
+    "accountLinkRequired": "Sign in with your existing method and verify your email before linking Google."
   },
   "onboarding": {
     "welcome": "Welcome to Liravo",
