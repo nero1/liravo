@@ -46,8 +46,9 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 
 🟡 7. SEO, i18n, accessibility, and UX quality (Medium)
 - ✅ Add metadata/canonical/OG coverage to major dynamic pages.
-- 🟡 Complete translation keys and enforce no hardcoded user-visible strings.
-- 🟡 Add accessibility sweep for forms/navigation/ARIA labels.
+- 🟡 Complete English/French/German coverage across web/native screens, system messages and metadata; enforce translated user-visible strings in CI.
+- ✅ Translate and verify all 45 shared web components, named controls, navigation state, native report-dialog focus, failure recovery and notification pagination.
+- 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
 ✅ 8. Pagination and scalability cleanup (Medium)
@@ -77,5 +78,10 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Make buddy chapter/notes atomic and verify bounded, replay-safe Goodreads imports on web/native.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.
+
+🟡 11. Work and edition catalog integrity
+- 🔵 Separate canonical works from editions while preserving existing book links and reading history.
+- 🔵 Resolve edition-specific ISBN/provider identities without combining unrelated editions; expose edition selection on web/native.
+- 🔵 Verify imports, seeds, search, reviews, shelves and purchase links against the edition model.
 
 Footer/Signature: Generated on May 23, 2026 09:39 PM UTC

@@ -1,23 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState,useRef } from 'react';
+import {useTranslations} from 'next-intl';
+import {useRequestIntent} from '@/lib/client/useRequestIntent';
 import { useRouter } from 'next/navigation';
 
 interface ReportActionFormProps {
   reportId: string;
+  userId:string;
   reportedUserId?: string;
 }
 
 type ActionType = 'approve' | 'remove' | 'warn' | 'escalate';
 
-const ACTION_LABELS: Record<ActionType, string> = {
-  approve: 'Approve (no action)',
-  remove: 'Remove content',
-  warn: 'Warn user',
-  escalate: 'Escalate to admin',
-};
+const ACTIONS:ActionType[]=['approve','remove','warn','escalate'];
 
-export function ReportActionForm({ reportId }: ReportActionFormProps) {
+export function ReportActionForm(props:ReportActionFormProps){return <OwnedReportActionForm key={props.userId+':'+props.reportId} {...props}/>;}
+function OwnedReportActionForm({reportId,userId}:ReportActionFormProps){
+  const t=useTranslations('reportAction'),common=useTranslations('common'),intent=useRequestIntent(userId),busy=useRef(false);
   const router = useRouter();
   const [action, setAction] = useState<ActionType>('approve');
   const [reason, setReason] = useState('');
@@ -26,69 +26,68 @@ export function ReportActionForm({ reportId }: ReportActionFormProps) {
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+    e.preventDefault();if(busy.current)return;busy.current=true;
     setLoading(true);
+    const payload={action,reason:reason.trim()||undefined},scope='report-action:'+reportId;
     setError(null);
 
     try {
       const res = await fetch(`/api/moderation/reports/${reportId}/action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, reason: reason.trim() || undefined }),
+        headers:{'Content-Type':'application/json',...await intent.durableHeaders(payload,scope)},body:JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        const json = await res.json() as { error?: string };
-        setError(json.error ?? 'Failed to submit action');
+        setError(t('failed'));
         return;
       }
 
-      setDone(true);
+      await res.json();intent.complete(scope);setDone(true);
       router.refresh();
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('failed'));
     } finally {
-      setLoading(false);
+      busy.current=false;setLoading(false);
     }
   }
 
   if (done) {
     return (
-      <p className="text-sm text-green-600 font-medium">Action submitted.</p>
+      <p role="status" className="text-sm text-green-600 font-medium">{t('submitted')}</p>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2 mt-2">
-      <select
+      <select aria-label={t('action')}
         value={action}
         onChange={(e) => setAction(e.target.value as ActionType)}
         className="text-sm border border-border rounded-md px-2 py-1.5 bg-background"
         disabled={loading}
       >
-        {(Object.keys(ACTION_LABELS) as ActionType[]).map((a) => (
-          <option key={a} value={a}>{ACTION_LABELS[a]}</option>
+        {ACTIONS.map((a) => (
+          <option key={a} value={a}>{t('actions.'+a)}</option>
         ))}
       </select>
 
       <textarea
         value={reason}
         onChange={(e) => setReason(e.target.value)}
-        placeholder="Reason / notes (optional)"
+        placeholder={t('notes')} aria-label={t('notes')}
         rows={2}
         maxLength={1000}
         className="text-sm border border-border rounded-md px-2 py-1.5 bg-background resize-none"
         disabled={loading}
       />
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
 
       <button
         type="submit"
         disabled={loading}
         className="text-sm bg-accent text-accent-foreground rounded-md px-3 py-1.5 font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
       >
-        {loading ? 'Submitting...' : 'Submit Action'}
+        {loading?common('submitting'):t('submit')}
       </button>
     </form>
   );

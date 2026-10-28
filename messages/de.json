@@ -6,7 +6,13 @@
     "write": "Schreiben",
     "shelf": "Regal",
     "profile": "Profil",
-    "notifications": "Benachrichtigungen"
+    "notifications": "Benachrichtigungen",
+    "analytics": "Statistiken",
+    "readerQuestions": "Leserfragen",
+    "readingGoal": "Leseziel",
+    "arcs": "Vorabexemplare",
+    "myArcs": "Meine Vorabexemplare",
+    "moderation": "Moderation"
   },
   "auth": {
     "mfaTitle": "Zwei-Faktor-Verifizierung",
@@ -179,7 +185,22 @@
     "avatarInvalid": "Wähle ein gültiges JPEG-, PNG- oder statisches WebP-Bild.",
     "photoDenied": "Erlaube den Zugriff auf deine Fotomediathek, um ein Profilbild auszuwählen.",
     "displayPlaceholder": "Dein Name",
-    "externalLink": "Externer Link {number}"
+    "externalLink": "Externer Link {number}",
+    "banner": "Profilbanner",
+    "verified": "Verifizierter Autor",
+    "bookCount": "{count, plural, one {# Buch gelesen} other {# Bücher gelesen}}",
+    "badges": "Abzeichen",
+    "levels": {
+      "0": "Seitenwender",
+      "500": "Lesezeichen",
+      "1500": "Kapiteljäger",
+      "4000": "Bücherverschlinger",
+      "8000": "Literarischer Nomade",
+      "15000": "Wortkünstler",
+      "25000": "Bibliophil",
+      "50000": "Legende des Bücherregals"
+    },
+    "xp": "{count, number} XP"
   },
   "discover": {
     "newReleasesFromAuthors": "Neuerscheinungen von Autoren, denen du folgst",
@@ -308,12 +329,21 @@
     "prompt": "Erhalten Sie Benachrichtigungen über neue Follower, Antworten und Leseziele."
   },
   "communityNotes": {
-    "title": "Community-Notizen",
+    "title": "Community-Hinweise",
     "addNote": "Notiz hinzufügen",
-    "placeholder": "Fügen Sie Kontext oder eine Korrektur hinzu (10–500 Zeichen)…",
-    "submitted": "Ihre Notiz wurde zur Überprüfung eingereicht.",
+    "placeholder": "Ergänze Kontext oder eine Korrektur (10–500 Zeichen)…",
+    "submitted": "Dein Hinweis wurde zur Prüfung eingereicht.",
     "eligibility": "Sie benötigen 50+ Rezensionen, um Community-Notizen beizutragen.",
-    "noNotes": "Noch keine Community-Notizen."
+    "noNotes": "Noch keine Community-Notizen.",
+    "show": "Community-Hinweise anzeigen",
+    "loadFailed": "Die Community-Hinweise konnten nicht geladen werden.",
+    "submitFailed": "Dein Hinweis konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "ineligible": "Um Hinweise beizutragen, brauchst du 50 Rezensionen, ein mindestens 30 Tage altes Konto und darfst nicht gesperrt sein.",
+    "empty": "Noch keine Community-Hinweise.",
+    "reviewers": "Von Community-Prüfern hinzugefügt",
+    "add": "Hinweis hinzufügen",
+    "text": "Text des Community-Hinweises",
+    "submit": "Senden"
   },
   "premium": {
     "pageTitle": "Premium werden",
@@ -1094,7 +1124,9 @@
       "one_line": "Fasse deine Meinung in einer Zeile zusammen…",
       "short": "Wie hat dir dieses Buch gefallen?",
       "long": "Teile deine ausführlichen Gedanken zu diesem Buch…"
-    }
+    },
+    "like": "Diese Rezension liken",
+    "unlike": "Like für diese Rezension entfernen"
   },
   "moods": {
     "Dark": "Düster",
@@ -1109,5 +1141,127 @@
     "Disturbing": "Verstörend",
     "Romantic": "Romantisch",
     "Intense": "Intensiv"
+  },
+  "navigation": {
+    "language": "Sprache wechseln",
+    "languageFailed": "Die Sprache konnte nicht geändert werden. Bitte versuche es erneut.",
+    "languageName": {
+      "en": "English",
+      "fr": "Français",
+      "de": "Deutsch"
+    }
+  },
+  "authorPost": {
+    "verified": "Verifizierter Autor",
+    "types": {
+      "announcement": "Ankündigung",
+      "blog": "Blogbeitrag",
+      "arc_invite": "Einladung zum Vorabexemplar",
+      "other": "Autorenbeitrag"
+    }
+  },
+  "accountHardening": {
+    "addMessage": "Füge eine E-Mail-Adresse hinzu, um dein Konto wiederherzustellen.",
+    "verifyMessage": "Bestätige deine E-Mail-Adresse, um die Kontowiederherstellung abzusichern.",
+    "add": "E-Mail hinzufügen",
+    "verify": "Jetzt bestätigen",
+    "dismiss": "Ausblenden"
+  },
+  "readingGoalForm": {
+    "label": "Jährliches Leseziel",
+    "invalid": "Gib eine ganze Zahl zwischen 1 und 10.000 Büchern ein.",
+    "failed": "Dein Leseziel konnte nicht gespeichert werden. Bitte versuche es erneut.",
+    "example": "z. B. 24",
+    "unit": "Bücher",
+    "saved": "Gespeichert!"
+  },
+  "shelfForm": {
+    "nameRequired": "Gib einen Namen für das Regal ein.",
+    "limit": "Kostenlose Konten können bis zu {count} eigene Regale erstellen. Mit Premium sind sie unbegrenzt.",
+    "failed": "Dein Regal konnte nicht erstellt werden. Bitte versuche es erneut.",
+    "name": "Regalname",
+    "example": "z. B. Favoriten, Sommerlektüre…",
+    "description": "Beschreibung (optional)",
+    "public": "Öffentliches Regal",
+    "visible": "In deinem Profil sichtbar",
+    "creating": "Wird erstellt…",
+    "create": "Regal erstellen"
+  },
+  "readingProgress": {
+    "label": "Lesefortschritt",
+    "notStarted": "Noch nicht begonnen",
+    "pageCount": "S. {current}/{total}",
+    "saved": "Gespeichert!",
+    "update": "Aktualisieren",
+    "pages": "Gelesene Seiten",
+    "pageRange": "Seite (0–{count})",
+    "percent": "Fortschritt in Prozent",
+    "percentRange": "% (0–100)",
+    "failed": "Der Fortschritt konnte nicht gespeichert werden. Prüfe den Wert und versuche es erneut."
+  },
+  "reportAction": {
+    "failed": "Diese Maßnahme konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "submitted": "Maßnahme gesendet.",
+    "action": "Moderationsmaßnahme",
+    "notes": "Grund / Notizen (optional)",
+    "submit": "Maßnahme senden",
+    "actions": {
+      "approve": "Genehmigen (keine Maßnahme)",
+      "remove": "Inhalt entfernen",
+      "warn": "Nutzer verwarnen",
+      "escalate": "An Administrator weiterleiten"
+    }
+  },
+  "reportContent": {
+    "title": "Inhalt melden",
+    "failed": "Deine Meldung konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "submitted": "Gemeldet – danke",
+    "reviewMessage": "Unser Team wird diese Meldung prüfen.",
+    "reason": "Grund",
+    "details": "Weitere Angaben (optional)",
+    "placeholder": "Beschreibe das Problem…",
+    "submit": "Meldung senden",
+    "reasons": {
+      "spam": "Spam",
+      "inappropriate": "Unangemessen",
+      "harassment": "Belästigung",
+      "other": "Sonstiges"
+    }
+  },
+  "notificationList": {
+    "unread": "{count, plural, one {# ungelesene Benachrichtigung geladen} other {# ungelesene Benachrichtigungen geladen}}",
+    "marking": "Wird markiert…",
+    "markAll": "Alle als gelesen markieren",
+    "empty": "Noch keine Benachrichtigungen",
+    "emptyDetail": "Wenn dir jemand folgt oder auf deine Rezensionen reagiert, siehst du es hier.",
+    "loadFailed": "Benachrichtigungen konnten nicht geladen werden.",
+    "markFailed": "Benachrichtigungen konnten nicht als gelesen markiert werden.",
+    "more": "Mehr laden"
+  },
+  "roomBoard": {
+    "loadFailed": "Diese Diskussion konnte nicht geladen werden.",
+    "postFailed": "Dein Beitrag konnte nicht veröffentlicht werden. Bitte versuche es erneut.",
+    "milestoneFailed": "Der Meilenstein konnte nicht hinzugefügt werden. Prüfe das Datum und versuche es erneut.",
+    "deleteFailed": "Der Meilenstein konnte nicht gelöscht werden. Bitte versuche es erneut.",
+    "discussion": "Diskussion",
+    "milestones": "Meilensteine",
+    "noMilestones": "Für diesen Leseraum wurden keine Meilensteine festgelegt.",
+    "unlocked": "Seit {date} freigeschaltet",
+    "unlocks": "Freischaltung am {date}",
+    "postCount": "{count, plural, one {# Beitrag} other {# Beiträge}}",
+    "addMilestone": "Meilenstein hinzufügen",
+    "milestoneTitle": "Titel des Meilensteins",
+    "milestonePlaceholder": "Kapitelname oder Seitenbereich…",
+    "unlockDate": "Datum und Uhrzeit der Freischaltung",
+    "adding": "Wird hinzugefügt…",
+    "general": "Allgemein",
+    "startConversation": "Noch keine Nachrichten. Beginne die Unterhaltung!",
+    "noMessages": "Noch keine Nachrichten.",
+    "unknown": "Unbekannt",
+    "message": "Deine Nachricht",
+    "discussMilestone": "Besprich diesen Meilenstein…",
+    "saySomething": "Schreibe etwas…",
+    "post": "Veröffentlichen",
+    "joinToDiscuss": "Tritt diesem Leseraum bei, um an der Diskussion teilzunehmen."
   }
 }

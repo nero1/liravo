@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState,useRef,useEffect } from 'react';
+import {useTranslations} from 'next-intl';
 import { cn } from '@/lib/utils';
 
 interface ReadingGoalFormProps {
@@ -8,21 +9,24 @@ interface ReadingGoalFormProps {
   currentGoal: number | null;
 }
 
-export function ReadingGoalForm({ userId, currentGoal }: ReadingGoalFormProps) {
+export function ReadingGoalForm(props:ReadingGoalFormProps){return <OwnedReadingGoalForm key={props.userId} {...props}/>;}
+function OwnedReadingGoalForm({userId,currentGoal}:ReadingGoalFormProps){
+  const t=useTranslations('readingGoalForm'),common=useTranslations('common'),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>();
+  useEffect(()=>()=>clearTimeout(timer.current),[]);
   const [goal, setGoal] = useState(currentGoal?.toString() ?? '');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    const num = parseInt(goal, 10);
-    if (isNaN(num) || num < 1 || num > 365) {
-      setError('Goal must be between 1 and 365 books.');
+    e.preventDefault();if(busy.current)return;
+    const num=Number(goal);
+    if (!Number.isInteger(num)||num<1||num>10000) {
+      setError(t('invalid'));
       return;
     }
     setError(null);
-    setLoading(true);
+    clearTimeout(timer.current);setSuccess(false);busy.current=true;setLoading(true);
     try {
       const res = await fetch(`/api/users/${userId}/reading-goal`, {
         method: 'PUT',
@@ -30,39 +34,39 @@ export function ReadingGoalForm({ userId, currentGoal }: ReadingGoalFormProps) {
         body: JSON.stringify({ goal: num }),
       });
       if (res.ok) {
+        const result=await res.json();if(result.annual_reading_goal!==num)throw new Error('Invalid goal receipt');
         setSuccess(true);
-        setTimeout(() => setSuccess(false), 2000);
+        timer.current=setTimeout(() => setSuccess(false), 2000);
       } else {
-        const data = await res.json() as { error?: string };
-        setError(data.error ?? 'Failed to save goal.');
+        setError(t('failed'));
       }
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('failed'));
     } finally {
-      setLoading(false);
+      busy.current=false;setLoading(false);
     }
   }
 
   return (
     <form onSubmit={handleSave} className="flex items-center gap-3">
       <div className="flex items-center gap-2">
-        <label htmlFor="reading-goal" className="text-sm font-medium">
-          Annual reading goal
+        <label htmlFor={'reading-goal-'+userId} className="text-sm font-medium">
+          {t('label')}
         </label>
         <input
-          id="reading-goal"
+          id={'reading-goal-'+userId} disabled={loading}
           type="number"
           min={1}
-          max={365}
+          max={10000}
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
-          placeholder="e.g. 24"
+          placeholder={t('example')}
           className={cn(
             'w-20 text-sm px-2 py-1.5 border border-border rounded-lg bg-background',
             'focus:outline-none focus:ring-1 focus:ring-amber-500'
           )}
         />
-        <span className="text-sm text-muted-foreground">books</span>
+        <span className="text-sm text-muted-foreground">{t('unit')}</span>
       </div>
 
       <button
@@ -70,11 +74,11 @@ export function ReadingGoalForm({ userId, currentGoal }: ReadingGoalFormProps) {
         disabled={loading}
         className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50 transition-colors"
       >
-        {loading ? 'Saving...' : 'Save'}
+        {loading?common('saving'):common('save')}
       </button>
 
-      {success && <span className="text-sm text-amber-600 font-medium">Saved!</span>}
-      {error && <span className="text-sm text-red-500">{error}</span>}
+      {success && <span role="status" className="text-sm text-amber-600 font-medium">{t('saved')}</span>}
+      {error && <span role="alert" className="text-sm text-red-500">{error}</span>}
     </form>
   );
 }

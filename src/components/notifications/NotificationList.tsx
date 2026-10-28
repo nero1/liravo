@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState,useEffect,useRef } from 'react';
 import { Bell, UserPlus, Heart, MessageSquare, Award, Target } from 'lucide-react';
+import {useTranslations,useFormatter,useNow} from 'next-intl';
 import { cn } from '@/lib/utils';
 import type { NotificationRow } from '@/types/database';
 
@@ -26,54 +27,46 @@ function NotificationIcon({ type }: { type: string }) {
   }
 }
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-export function NotificationList() {
+export function NotificationList(){
+  const t=useTranslations('notificationList'),common=useTranslations('common'),formatter=useFormatter(),now=useNow({updateInterval:60000}),busy=useRef(false),[nextCursor,setNextCursor]=useState<string|null>(null),[loadingMore,setLoadingMore]=useState(false),[loadError,setLoadError]=useState(false),[markError,setMarkError]=useState(false),[revision,setRevision]=useState(0);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [marking, setMarking] = useState(false);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch('/api/notifications');
-        if (res.ok) {
-          const data = await res.json() as { notifications: NotificationRow[] };
-          setNotifications(data.notifications);
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-    void load();
-  }, []);
+    const controller=new AbortController();setLoading(true);setLoadError(false);
+    void fetch('/api/notifications',{signal:controller.signal}).then(async response=>{
+      const data=await response.json();if(!response.ok||!Array.isArray(data.notifications))throw new Error('Notifications unavailable');
+      if(!controller.signal.aborted){setNotifications(data.notifications);setNextCursor(data.nextCursor??null);}
+    }).catch(()=>{if(!controller.signal.aborted)setLoadError(true);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+    return()=>controller.abort();
+  },[revision]);
 
-  async function markAllRead() {
-    setMarking(true);
-    try {
-      const res = await fetch('/api/notifications', { method: 'PATCH' });
-      if (res.ok) {
-        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      }
-    } finally {
-      setMarking(false);
-    }
+  async function loadMore(){
+    if(!nextCursor||busy.current)return;busy.current=true;setLoadingMore(true);setLoadError(false);
+    try{
+      const res=await fetch('/api/notifications?cursor='+encodeURIComponent(nextCursor)),data=await res.json();
+      if(!res.ok||!Array.isArray(data.notifications))throw new Error('Notifications unavailable');
+      setNotifications(previous=>[...new Map([...previous,...data.notifications].map(item=>[item.id,item])).values()]);setNextCursor(data.nextCursor??null);
+    }catch{setLoadError(true);}
+    finally{busy.current=false;setLoadingMore(false);}
+  }
+
+  async function markAllRead(){
+    if(busy.current)return;busy.current=true;setMarking(true);setMarkError(false);
+    try{
+      const res=await fetch('/api/notifications',{method:'PATCH'}),data=await res.json();
+      if(!res.ok||data.ok!==true)throw new Error('Mark read unavailable');
+      setNotifications(previous=>previous.map(item=>({...item,is_read:true})));
+    }catch{setMarkError(true);}
+    finally{busy.current=false;setMarking(false);}
   }
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div role="status" aria-label={common('loading')} className="flex items-center justify-center py-12">
         <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -81,27 +74,29 @@ export function NotificationList() {
 
   return (
     <div className="space-y-1">
+      {loadError&&<p role="alert" className="text-sm text-destructive px-4">{t('loadFailed')} <button disabled={loadingMore||marking} onClick={()=>notifications.length?void loadMore():setRevision(value=>value+1)}>{common('retry')}</button></p>}
+      {markError&&<p role="alert" className="text-sm text-destructive px-4">{t('markFailed')} <button disabled={loadingMore||marking} onClick={markAllRead}>{common('retry')}</button></p>}
       {unreadCount > 0 && (
         <div className="flex items-center justify-between px-4 py-2 border-b border-border">
           <span className="text-sm text-muted-foreground">
-            {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}
+            {t('unread',{count:unreadCount})}
           </span>
           <button
             onClick={markAllRead}
-            disabled={marking}
+            disabled={marking||loadingMore}
             className="text-sm text-amber-600 hover:text-amber-700 font-medium disabled:opacity-50"
           >
-            {marking ? 'Marking...' : 'Mark all read'}
+            {marking?t('marking'):t('markAll')}
           </button>
         </div>
       )}
 
-      {notifications.length === 0 ? (
+      {notifications.length===0&&!loadError?(
         <div className="flex flex-col items-center justify-center py-16 text-center px-4">
           <Bell className="w-10 h-10 text-muted-foreground/40 mb-3" />
-          <p className="text-muted-foreground font-medium">No notifications yet</p>
+          <p className="text-muted-foreground font-medium">{t('empty')}</p>
           <p className="text-sm text-muted-foreground/60 mt-1">
-            When people follow you or interact with your reviews, you&apos;ll see it here.
+            {t('emptyDetail')}
           </p>
         </div>
       ) : (
@@ -114,7 +109,7 @@ export function NotificationList() {
                 !notification.is_read && 'bg-amber-50/50 dark:bg-amber-950/10'
               )}
             >
-              <div className="mt-0.5 shrink-0">
+              <div aria-hidden="true" className="mt-0.5 shrink-0">
                 <NotificationIcon type={notification.type} />
               </div>
               <div className="flex-1 min-w-0">
@@ -125,7 +120,7 @@ export function NotificationList() {
                   {notification.message}
                 </p>
                 <p className="text-xs text-muted-foreground/60 mt-0.5">
-                  {timeAgo(notification.created_at)}
+                  {formatter.relativeTime(new Date(notification.created_at),now)}
                 </p>
               </div>
               {!notification.is_read && (
@@ -135,6 +130,7 @@ export function NotificationList() {
           ))}
         </ul>
       )}
+      {nextCursor&&<button onClick={loadMore} disabled={loadingMore||marking} className="px-4 py-3 text-sm text-accent disabled:opacity-50">{loadingMore?common('loading'):t('more')}</button>}
     </div>
   );
 }

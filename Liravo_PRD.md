@@ -1234,7 +1234,7 @@ Architecture must be able to scale to 50,000 concurrent users without structural
 
 - `next-intl` for all UI strings from day one.
 - All strings in locale JSON files. No hardcoded English strings in components.
-- Supported interface locales: English (`en`, default), French (`fr`) and German (`de`). Translation coverage remains partial; book metadata retains its source language.
+- Supported interface locales: English (`en`, default), French (`fr`) and German (`de`). All shared web components use these catalogs; remaining web/native screens and stored system messages are still being translated. Book metadata retains its source language.
 - Date/time via `Intl.DateTimeFormat`.
 - Logical CSS properties throughout (`margin-inline-start` not `margin-left`) to support future RTL expansion.
 - Amazon affiliate tag routing per country: `affiliate_tags` table keyed by ISO country code.

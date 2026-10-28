@@ -6,7 +6,13 @@
     "write": "Write",
     "shelf": "Shelf",
     "profile": "Profile",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "analytics": "Analytics",
+    "readerQuestions": "Reader Q&A",
+    "readingGoal": "Reading goal",
+    "arcs": "Advance reader copies",
+    "myArcs": "My advance copies",
+    "moderation": "Moderation"
   },
   "auth": {
     "mfaTitle": "Two-factor verification",
@@ -179,7 +185,22 @@
     "avatarInvalid": "Choose a valid JPEG, PNG or static WebP image.",
     "photoDenied": "Allow access to your photo library to choose a profile photo.",
     "displayPlaceholder": "Your name",
-    "externalLink": "External link {number}"
+    "externalLink": "External link {number}",
+    "banner": "Profile banner",
+    "verified": "Verified author",
+    "bookCount": "{count, plural, one {# book read} other {# books read}}",
+    "badges": "Badges",
+    "levels": {
+      "0": "Page Turner",
+      "500": "Bookmarked",
+      "1500": "Chapter Chaser",
+      "4000": "Spine Cracker",
+      "8000": "Literary Nomad",
+      "15000": "Wordsmith",
+      "25000": "Bibliophile",
+      "50000": "Legend of the Shelf"
+    },
+    "xp": "{count, number} XP"
   },
   "discover": {
     "newReleasesFromAuthors": "New Releases from Authors You Follow",
@@ -310,10 +331,19 @@
   "communityNotes": {
     "title": "Community notes",
     "addNote": "Add a note",
-    "placeholder": "Add context or a correction (10–500 chars)…",
+    "placeholder": "Add context or a correction (10–500 characters)…",
     "submitted": "Your note has been submitted for review.",
     "eligibility": "You need 50+ reviews to contribute community notes.",
-    "noNotes": "No community notes yet."
+    "noNotes": "No community notes yet.",
+    "show": "Show community notes",
+    "loadFailed": "Could not load community notes.",
+    "submitFailed": "Could not submit your note. Please try again.",
+    "ineligible": "Contributors need 50 reviews, an account at least 30 days old and no suspension.",
+    "empty": "No community notes yet.",
+    "reviewers": "Added by community reviewers",
+    "add": "Add a note",
+    "text": "Community note text",
+    "submit": "Submit"
   },
   "premium": {
     "pageTitle": "Go Premium",
@@ -1094,7 +1124,9 @@
       "one_line": "Sum up your thoughts in one line…",
       "short": "What did you think of this book?",
       "long": "Share your detailed thoughts about this book…"
-    }
+    },
+    "like": "Like this review",
+    "unlike": "Unlike this review"
   },
   "moods": {
     "Dark": "Dark",
@@ -1109,5 +1141,127 @@
     "Disturbing": "Disturbing",
     "Romantic": "Romantic",
     "Intense": "Intense"
+  },
+  "navigation": {
+    "language": "Switch language",
+    "languageFailed": "Could not change the language. Please try again.",
+    "languageName": {
+      "en": "English",
+      "fr": "Français",
+      "de": "Deutsch"
+    }
+  },
+  "authorPost": {
+    "verified": "Verified author",
+    "types": {
+      "announcement": "Announcement",
+      "blog": "Blog post",
+      "arc_invite": "Advance copy invitation",
+      "other": "Author post"
+    }
+  },
+  "accountHardening": {
+    "addMessage": "Add an email address for account recovery.",
+    "verifyMessage": "Verify your email address to secure account recovery.",
+    "add": "Add email",
+    "verify": "Verify now",
+    "dismiss": "Dismiss"
+  },
+  "readingGoalForm": {
+    "label": "Annual reading goal",
+    "invalid": "Enter a whole number from 1 to 10,000 books.",
+    "failed": "Could not save your goal. Please try again.",
+    "example": "e.g. 24",
+    "unit": "books",
+    "saved": "Saved!"
+  },
+  "shelfForm": {
+    "nameRequired": "Enter a shelf name.",
+    "limit": "Free accounts can have up to {count} custom shelves. Upgrade to Premium for unlimited shelves.",
+    "failed": "Could not create your shelf. Please try again.",
+    "name": "Shelf name",
+    "example": "e.g. Favourites, Summer reads…",
+    "description": "Description (optional)",
+    "public": "Public shelf",
+    "visible": "Visible on your profile",
+    "creating": "Creating…",
+    "create": "Create shelf"
+  },
+  "readingProgress": {
+    "label": "Reading progress",
+    "notStarted": "Not started",
+    "pageCount": "p. {current}/{total}",
+    "saved": "Saved!",
+    "update": "Update",
+    "pages": "Pages read",
+    "pageRange": "Page (0–{count})",
+    "percent": "Progress percentage",
+    "percentRange": "% (0–100)",
+    "failed": "Could not save progress. Check the value and try again."
+  },
+  "reportAction": {
+    "failed": "Could not submit this action. Please try again.",
+    "submitted": "Action submitted.",
+    "action": "Moderation action",
+    "notes": "Reason / notes (optional)",
+    "submit": "Submit action",
+    "actions": {
+      "approve": "Approve (no action)",
+      "remove": "Remove content",
+      "warn": "Warn user",
+      "escalate": "Escalate to admin"
+    }
+  },
+  "reportContent": {
+    "title": "Report content",
+    "failed": "Could not submit your report. Please try again.",
+    "submitted": "Reported — thank you",
+    "reviewMessage": "Our team will review this report.",
+    "reason": "Reason",
+    "details": "Additional details (optional)",
+    "placeholder": "Describe the issue…",
+    "submit": "Submit report",
+    "reasons": {
+      "spam": "Spam",
+      "inappropriate": "Inappropriate",
+      "harassment": "Harassment",
+      "other": "Other"
+    }
+  },
+  "notificationList": {
+    "unread": "{count, plural, one {# unread notification loaded} other {# unread notifications loaded}}",
+    "marking": "Marking…",
+    "markAll": "Mark all read",
+    "empty": "No notifications yet",
+    "emptyDetail": "When people follow you or interact with your reviews, you’ll see it here.",
+    "loadFailed": "Could not load notifications.",
+    "markFailed": "Could not mark notifications as read.",
+    "more": "Load more"
+  },
+  "roomBoard": {
+    "loadFailed": "Could not load this discussion.",
+    "postFailed": "Could not post your message. Please try again.",
+    "milestoneFailed": "Could not add the milestone. Check the date and try again.",
+    "deleteFailed": "Could not delete the milestone. Please try again.",
+    "discussion": "Discussion",
+    "milestones": "Milestones",
+    "noMilestones": "No milestones set for this room.",
+    "unlocked": "Unlocked {date}",
+    "unlocks": "Unlocks {date}",
+    "postCount": "{count, plural, one {# post} other {# posts}}",
+    "addMilestone": "Add milestone",
+    "milestoneTitle": "Milestone title",
+    "milestonePlaceholder": "Chapter name or page range…",
+    "unlockDate": "Unlock date and time",
+    "adding": "Adding…",
+    "general": "General",
+    "startConversation": "No messages yet. Start the conversation!",
+    "noMessages": "No messages yet.",
+    "unknown": "Unknown",
+    "message": "Your message",
+    "discussMilestone": "Discuss this milestone…",
+    "saySomething": "Say something…",
+    "post": "Post",
+    "joinToDiscuss": "Join this room to participate in the discussion."
   }
 }

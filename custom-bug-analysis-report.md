@@ -107,7 +107,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
 🟡 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
     FILES: messages/en.json, messages/fr.json, messages/de.json, src/app/(app)/admin/**, src/components/**
     FIX: Enforce translation key usage in UI, add missing locale keys, and create CI check for untranslated literals in user-facing components.
-    ✅ Search, quote and review forms: EN/FR/DE, accessible labels/states, recoverable search and owned reload-safe submissions. Wider UI coverage remains 🟡.
+    ✅ Search, quote and review forms: EN/FR/DE, accessible labels/states, recoverable search and owned reload-safe submissions. All 45 shared components now pass locale/field checks; room, notification, goal, progress, language and modal recovery pass Chromium. Wider web/native and stored-message coverage remains 🟡.
 
 ✅ 19: BUG-019: Setup guidance includes endpoint names not present in repository (operational drift).
     FILES: docs/SETUP.md, src/app/api/cron/**/route.ts

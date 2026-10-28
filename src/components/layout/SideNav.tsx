@@ -34,11 +34,11 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
       </Link>
 
       {NAV_ITEMS.map(({ href, icon: Icon, labelKey }) => {
-        const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
+        const isActive = href === '/' ? pathname === '/' : pathname===href||pathname.startsWith(href+'/');
         return (
           <Link
             key={href}
-            href={href}
+            href={href} aria-current={isActive?'page':undefined}
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
               isActive
@@ -46,7 +46,7 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
           >
-            <Icon size={20} strokeWidth={isActive ? 2.5 : 1.75} />
+            <Icon aria-hidden="true" size={20} strokeWidth={isActive ? 2.5 : 1.75} />
             {t(labelKey)}
           </Link>
         );
@@ -55,7 +55,7 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
       {isAuthor && (
         <>
           <Link
-            href="/author/analytics"
+            href="/author/analytics" aria-current={pathname==='/author/analytics'||pathname.startsWith('/author/analytics/')?'page':undefined}
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
               pathname.startsWith('/author/analytics')
@@ -64,10 +64,10 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
             )}
           >
             <BarChart2 size={20} strokeWidth={pathname.startsWith('/author/analytics') ? 2.5 : 1.75} />
-            Analytics
+            {t('analytics')}
           </Link>
           <Link
-            href="/author/qa"
+            href="/author/qa" aria-current={pathname==='/author/qa'||pathname.startsWith('/author/qa/')?'page':undefined}
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
               pathname.startsWith('/author/qa')
@@ -76,14 +76,14 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
             )}
           >
             <MessageCircle size={20} strokeWidth={pathname.startsWith('/author/qa') ? 2.5 : 1.75} />
-            Reader Q&A
+            {t('readerQuestions')}
           </Link>
         </>
       )}
 
       {/* Reader utilities */}
       <Link
-        href="/reading-goals"
+        href="/reading-goals" aria-current={pathname==='/reading-goals'||pathname.startsWith('/reading-goals/')?'page':undefined}
         className={cn(
           'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
           pathname.startsWith('/reading-goals')
@@ -92,10 +92,10 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
         )}
       >
         <Target size={20} strokeWidth={pathname.startsWith('/reading-goals') ? 2.5 : 1.75} />
-        Reading Goal
+        {t('readingGoal')}
       </Link>
       <Link
-        href="/arcs"
+        href="/arcs" aria-current={pathname==='/arcs'||pathname.startsWith('/arcs/')?'page':undefined}
         className={cn(
           'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
           pathname.startsWith('/arcs')
@@ -104,12 +104,12 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
         )}
       >
         <BookMarked size={20} strokeWidth={pathname.startsWith('/arcs') ? 2.5 : 1.75} />
-        ARCs
+        {t('arcs')}
       </Link>
 
       {isAuthor && (
         <Link
-          href="/author/arcs"
+          href="/author/arcs" aria-current={pathname==='/author/arcs'||pathname.startsWith('/author/arcs/')?'page':undefined}
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
             pathname.startsWith('/author/arcs')
@@ -118,13 +118,13 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
           )}
         >
           <BookMarked size={20} strokeWidth={pathname.startsWith('/author/arcs') ? 2.5 : 1.75} />
-          My ARCs
+          {t('myArcs')}
         </Link>
       )}
 
       {isModerator && (
         <Link
-          href="/moderation"
+          href="/moderation" aria-current={pathname==='/moderation'||pathname.startsWith('/moderation/')?'page':undefined}
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
             pathname.startsWith('/moderation')
@@ -133,7 +133,7 @@ export function SideNav({ isModerator = false, isAuthor = false }: SideNavProps)
           )}
         >
           <Shield size={20} strokeWidth={pathname.startsWith('/moderation') ? 2.5 : 1.75} />
-          Moderation
+          {t('moderation')}
         </Link>
       )}
 

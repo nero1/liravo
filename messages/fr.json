@@ -6,7 +6,13 @@
     "write": "Écrire",
     "shelf": "Étagère",
     "profile": "Profil",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "analytics": "Statistiques",
+    "readerQuestions": "Questions des lecteurs",
+    "readingGoal": "Objectif de lecture",
+    "arcs": "Services de presse",
+    "myArcs": "Mes services de presse",
+    "moderation": "Modération"
   },
   "auth": {
     "mfaTitle": "Vérification à deux facteurs",
@@ -179,7 +185,22 @@
     "avatarInvalid": "Choisissez une image JPEG, PNG ou WebP statique valide.",
     "photoDenied": "Autorisez l’accès à votre photothèque pour choisir une photo de profil.",
     "displayPlaceholder": "Votre nom",
-    "externalLink": "Lien externe {number}"
+    "externalLink": "Lien externe {number}",
+    "banner": "Bannière du profil",
+    "verified": "Auteur vérifié",
+    "bookCount": "{count, plural, one {# livre lu} other {# livres lus}}",
+    "badges": "Badges",
+    "levels": {
+      "0": "Tourneur de pages",
+      "500": "Marque-page",
+      "1500": "Chasseur de chapitres",
+      "4000": "Dévoreur de livres",
+      "8000": "Nomade littéraire",
+      "15000": "Artisan des mots",
+      "25000": "Bibliophile",
+      "50000": "Légende des bibliothèques"
+    },
+    "xp": "{count, number} XP"
   },
   "discover": {
     "newReleasesFromAuthors": "Nouvelles sorties des auteurs que vous suivez",
@@ -310,10 +331,19 @@
   "communityNotes": {
     "title": "Notes communautaires",
     "addNote": "Ajouter une note",
-    "placeholder": "Ajoutez du contexte ou une correction (10–500 caractères)…",
-    "submitted": "Votre note a été soumise pour examen.",
+    "placeholder": "Ajoutez du contexte ou une correction (10 à 500 caractères)…",
+    "submitted": "Votre note a été envoyée pour vérification.",
     "eligibility": "Vous avez besoin de 50+ critiques pour contribuer des notes communautaires.",
-    "noNotes": "Pas encore de notes communautaires."
+    "noNotes": "Pas encore de notes communautaires.",
+    "show": "Afficher les notes communautaires",
+    "loadFailed": "Impossible de charger les notes communautaires.",
+    "submitFailed": "Impossible d’envoyer votre note. Veuillez réessayer.",
+    "ineligible": "Pour contribuer, il faut 50 avis, un compte créé depuis au moins 30 jours et aucune suspension.",
+    "empty": "Aucune note communautaire pour le moment.",
+    "reviewers": "Ajoutées par les réviseurs de la communauté",
+    "add": "Ajouter une note",
+    "text": "Texte de la note communautaire",
+    "submit": "Envoyer"
   },
   "premium": {
     "pageTitle": "Passer à Premium",
@@ -1094,7 +1124,9 @@
       "one_line": "Résumez votre avis en une ligne…",
       "short": "Qu’avez-vous pensé de ce livre ?",
       "long": "Partagez votre avis détaillé sur ce livre…"
-    }
+    },
+    "like": "Aimer cet avis",
+    "unlike": "Ne plus aimer cet avis"
   },
   "moods": {
     "Dark": "Sombre",
@@ -1109,5 +1141,127 @@
     "Disturbing": "Troublant",
     "Romantic": "Romantique",
     "Intense": "Intense"
+  },
+  "navigation": {
+    "language": "Changer de langue",
+    "languageFailed": "Impossible de changer de langue. Veuillez réessayer.",
+    "languageName": {
+      "en": "English",
+      "fr": "Français",
+      "de": "Deutsch"
+    }
+  },
+  "authorPost": {
+    "verified": "Auteur vérifié",
+    "types": {
+      "announcement": "Annonce",
+      "blog": "Article de blog",
+      "arc_invite": "Invitation au service de presse",
+      "other": "Publication de l’auteur"
+    }
+  },
+  "accountHardening": {
+    "addMessage": "Ajoutez une adresse e-mail pour récupérer votre compte.",
+    "verifyMessage": "Vérifiez votre adresse e-mail pour sécuriser la récupération du compte.",
+    "add": "Ajouter une adresse e-mail",
+    "verify": "Vérifier maintenant",
+    "dismiss": "Masquer"
+  },
+  "readingGoalForm": {
+    "label": "Objectif annuel de lecture",
+    "invalid": "Saisissez un nombre entier de 1 à 10 000 livres.",
+    "failed": "Impossible d’enregistrer votre objectif. Veuillez réessayer.",
+    "example": "Ex. : 24",
+    "unit": "livres",
+    "saved": "Enregistré !"
+  },
+  "shelfForm": {
+    "nameRequired": "Saisissez un nom d’étagère.",
+    "limit": "Les comptes gratuits peuvent créer jusqu’à {count} étagères personnalisées. Passez à Premium pour en créer sans limite.",
+    "failed": "Impossible de créer votre étagère. Veuillez réessayer.",
+    "name": "Nom de l’étagère",
+    "example": "Ex. : favoris, lectures d’été…",
+    "description": "Description (facultatif)",
+    "public": "Étagère publique",
+    "visible": "Visible sur votre profil",
+    "creating": "Création…",
+    "create": "Créer l’étagère"
+  },
+  "readingProgress": {
+    "label": "Progression de lecture",
+    "notStarted": "Non commencé",
+    "pageCount": "p. {current}/{total}",
+    "saved": "Enregistré !",
+    "update": "Modifier",
+    "pages": "Pages lues",
+    "pageRange": "Page (0–{count})",
+    "percent": "Pourcentage de progression",
+    "percentRange": "% (0–100)",
+    "failed": "Impossible d’enregistrer la progression. Vérifiez la valeur et réessayez."
+  },
+  "reportAction": {
+    "failed": "Impossible d’envoyer cette décision. Veuillez réessayer.",
+    "submitted": "Décision envoyée.",
+    "action": "Décision de modération",
+    "notes": "Motif / notes (facultatif)",
+    "submit": "Envoyer la décision",
+    "actions": {
+      "approve": "Approuver (aucune mesure)",
+      "remove": "Retirer le contenu",
+      "warn": "Avertir l’utilisateur",
+      "escalate": "Transmettre à un administrateur"
+    }
+  },
+  "reportContent": {
+    "title": "Signaler le contenu",
+    "failed": "Impossible d’envoyer votre signalement. Veuillez réessayer.",
+    "submitted": "Signalement envoyé — merci",
+    "reviewMessage": "Notre équipe examinera ce signalement.",
+    "reason": "Motif",
+    "details": "Précisions (facultatif)",
+    "placeholder": "Décrivez le problème…",
+    "submit": "Envoyer le signalement",
+    "reasons": {
+      "spam": "Spam",
+      "inappropriate": "Inapproprié",
+      "harassment": "Harcèlement",
+      "other": "Autre"
+    }
+  },
+  "notificationList": {
+    "unread": "{count, plural, one {# notification non lue chargée} other {# notifications non lues chargées}}",
+    "marking": "Mise à jour…",
+    "markAll": "Tout marquer comme lu",
+    "empty": "Aucune notification pour le moment",
+    "emptyDetail": "Vous verrez ici les nouveaux abonnements et les interactions avec vos avis.",
+    "loadFailed": "Impossible de charger les notifications.",
+    "markFailed": "Impossible de marquer les notifications comme lues.",
+    "more": "Afficher la suite"
+  },
+  "roomBoard": {
+    "loadFailed": "Impossible de charger cette discussion.",
+    "postFailed": "Impossible de publier votre message. Veuillez réessayer.",
+    "milestoneFailed": "Impossible d’ajouter le jalon. Vérifiez la date et réessayez.",
+    "deleteFailed": "Impossible de supprimer le jalon. Veuillez réessayer.",
+    "discussion": "Discussion",
+    "milestones": "Jalons",
+    "noMilestones": "Aucun jalon défini pour ce salon.",
+    "unlocked": "Déverrouillé le {date}",
+    "unlocks": "Déverrouillage le {date}",
+    "postCount": "{count, plural, one {# message} other {# messages}}",
+    "addMilestone": "Ajouter un jalon",
+    "milestoneTitle": "Titre du jalon",
+    "milestonePlaceholder": "Nom du chapitre ou pages…",
+    "unlockDate": "Date et heure de déverrouillage",
+    "adding": "Ajout…",
+    "general": "Général",
+    "startConversation": "Aucun message. Lancez la conversation !",
+    "noMessages": "Aucun message pour le moment.",
+    "unknown": "Inconnu",
+    "message": "Votre message",
+    "discussMilestone": "Discutez de ce jalon…",
+    "saySomething": "Écrivez un message…",
+    "post": "Publier",
+    "joinToDiscuss": "Rejoignez ce salon pour participer à la discussion."
   }
 }

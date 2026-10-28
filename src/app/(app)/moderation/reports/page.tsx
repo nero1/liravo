@@ -103,7 +103,7 @@ export default async function ModerationReportsPage({ searchParams }: Props) {
 
               {status === 'pending' || status === 'escalated' ? (
                 <ReportActionForm
-                  reportId={report.id}
+                  reportId={report.id} userId={user.id}
                   reportedUserId={report.entity_type === 'user' ? report.entity_id : undefined}
                 />
               ) : (
