@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, TouchableOpacity, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +21,7 @@ const MILESTONES = [
 ];
 
 export default function ReadingGoalsScreen() {
+  const {t:ui}=useTranslations('');
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [targetInput, setTargetInput] = useState('52');
@@ -50,7 +52,7 @@ export default function ReadingGoalsScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
         <View>
-          <Text className="text-2xl font-bold text-foreground">Reading Goal {progress.year}</Text>
+          <Text className="text-2xl font-bold text-foreground">{ui('nav.readingGoal')}{progress.year}</Text>
           <Text className="text-muted-foreground text-sm mt-1">Track your annual reading target.</Text>
         </View>
 
@@ -59,7 +61,7 @@ export default function ReadingGoalsScreen() {
             {/* Progress display */}
             <View className="items-center gap-2">
               <Text className="text-5xl font-bold text-accent">{pct}%</Text>
-              <Text className="text-muted-foreground text-sm">{progress.books_read} of {goal.target_books} books read</Text>
+              <Text className="text-muted-foreground text-sm">{progress.books_read} of {goal.target_books}{ui('profile.booksRead')}</Text>
             </View>
 
             {/* Progress bar */}
@@ -96,8 +98,7 @@ export default function ReadingGoalsScreen() {
                   className={`px-3 py-1.5 rounded-full border ${targetInput === String(n) ? 'bg-accent/10 border-accent' : 'border-border bg-muted'}`}
                 >
                   <Text className={`text-sm ${targetInput === String(n) ? 'text-accent font-medium' : 'text-muted-foreground'}`}>
-                    {n} books
-                  </Text>
+                    {n}{ui('admin.books')}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -114,7 +115,7 @@ export default function ReadingGoalsScreen() {
             <View className="flex-row gap-2">
               {goal && (
                 <TouchableOpacity onPress={() => setEditing(false)} className="flex-1 border border-border rounded-xl py-3 items-center">
-                  <Text className="text-sm text-muted-foreground">Cancel</Text>
+                  <Text className="text-sm text-muted-foreground">{ui('profile.cancel')}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity

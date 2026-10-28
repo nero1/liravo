@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +15,7 @@ interface HealthResponse {
 }
 
 export default function CronStatusScreen() {
+  const {t:ui}=useTranslations('');
   const { data, isLoading, refetch } = useQuery({ queryKey: ['health'], queryFn: () => api.get<HealthResponse>(ENDPOINTS.health), refetchInterval: 30000 });
   if (isLoading) return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
   return (
@@ -29,7 +31,7 @@ export default function CronStatusScreen() {
             <View key={name} className="flex-row items-center justify-between"><Text className="text-foreground capitalize">{name}</Text><Badge variant={status === 'ok' ? 'accent' : 'destructive'}>{status}</Badge></View>
           ))}
         </Card>
-        <TouchableOpacity onPress={() => refetch()} className="border border-border rounded-xl py-3 items-center" activeOpacity={0.7}><Text className="text-foreground font-medium">Refresh</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => refetch()} className="border border-border rounded-xl py-3 items-center" activeOpacity={0.7}><Text className="text-foreground font-medium">{ui('earnings.refresh')}</Text></TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );

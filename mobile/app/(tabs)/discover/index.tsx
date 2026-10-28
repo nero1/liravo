@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { useState } from 'react';
 import {
   View, Text, TextInput, FlatList, ScrollView,
@@ -42,7 +43,7 @@ function useShelfOverlapRecs() {
 
 function BookCoverCard({ book, onPress }: { book: SimpleBook; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} className="w-24 mr-3">
+    <Pressable accessibilityRole="link" accessibilityLabel={book.title} onPress={onPress} className="w-24 mr-3">
       <View className="w-24 h-36 rounded-lg overflow-hidden bg-muted mb-1">
         {book.cover_url ? (
           <Image source={{ uri: book.cover_url }} style={{ width: 96, height: 144 }} contentFit="cover" />
@@ -77,11 +78,12 @@ function HorizontalBookSection({ title, books, onBookPress }: {
 }
 
 export default function DiscoverScreen() {
+  const {t}=useTranslations('discover'),{t:booksText}=useTranslations('books'),{t:moods}=useTranslations('moods'),{t:common}=useTranslations('common');
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const { data, isLoading, isFetching } = useBookSearch(query);
-  const { data: newReleasesData } = useNewReleasesFromFollowed();
-  const { data: shelfOverlapData } = useShelfOverlapRecs();
+  const { data, isLoading, isFetching,error,refetch } = useBookSearch(query);
+  const { data: newReleasesData,error:releasesError,refetch:retryReleases } = useNewReleasesFromFollowed();
+  const { data: shelfOverlapData,error:overlapError,refetch:retryOverlap } = useShelfOverlapRecs();
 
   const books = data?.books ?? [];
   const newReleases = (newReleasesData?.books ?? []);
@@ -94,7 +96,7 @@ export default function DiscoverScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <View className="px-4 py-3 gap-3">
-        <Text className="text-2xl font-bold text-foreground">Discover</Text>
+        <Text className="text-2xl font-bold text-foreground">{t('title')}</Text>
 
         {/* Search bar */}
         <View className="flex-row items-center bg-muted border border-border rounded-xl px-3 gap-2">
@@ -102,14 +104,14 @@ export default function DiscoverScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search books, authors..."
+            accessibilityLabel={booksText('searchPlaceholder')} placeholder={booksText('searchPlaceholder')}
             placeholderTextColor="#9ca3af"
             className="flex-1 py-2.5 text-foreground"
             returnKeyType="search"
             autoCapitalize="none"
           />
           {query.length > 0 && (
-            <TouchableOpacity onPress={() => setQuery('')}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('clearSearch')} onPress={() => setQuery('')}>
               <X size={16} color="#6b7280" />
             </TouchableOpacity>
           )}
@@ -130,11 +132,11 @@ export default function DiscoverScreen() {
               <View className="py-4 items-center">
                 <ActivityIndicator color="#d97706" />
               </View>
-            ) : null
+            ) : error?<TouchableOpacity accessibilityRole="button" onPress={()=>void refetch()} className="p-4"><Text className="text-accent">{common('retry')}</Text></TouchableOpacity>:null
           }
           ListEmptyComponent={
             !isLoading && !isFetching ? (
-              <EmptyState title="No books found" description={`No results for "${query}"`} />
+              <EmptyState title={error?common('error'):booksText('noResults')} description={error?undefined:booksText('noBooksFor',{query})} />
             ) : null
           }
           contentContainerStyle={{ paddingBottom: 20 }}
@@ -143,28 +145,30 @@ export default function DiscoverScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
           {/* New releases from followed authors */}
           <HorizontalBookSection
-            title="New Releases from Authors You Follow"
+            title={t('newReleasesFromAuthors')}
             books={newReleases}
             onBookPress={handleBookPress}
           />
 
+          {releasesError&&<SectionError retry={()=>void retryReleases()}/>}
           {/* Readers like you also loved */}
           <HorizontalBookSection
-            title="Readers Like You Also Loved"
+            title={t('readersLikeYou')}
             books={shelfRecs}
             onBookPress={handleBookPress}
           />
 
+          {overlapError&&<SectionError retry={()=>void retryOverlap()}/>}
           {/* Browse by Mood */}
           <View className="px-4 mb-6">
             <View className="flex-row items-center justify-between mb-3">
-              <Text className="font-bold text-lg text-foreground">Browse by Mood</Text>
+              <Text className="font-bold text-lg text-foreground">{t('moodTitle')}</Text>
               <TouchableOpacity
                 onPress={() => router.push('/discover/mood-ai')}
                 className="flex-row items-center gap-1"
               >
                 <Sparkles size={14} color="#d97706" />
-                <Text className="text-accent text-sm font-medium">AI Search</Text>
+                <Text className="text-accent text-sm font-medium">{t('aiSearch')}</Text>
               </TouchableOpacity>
             </View>
             <View className="flex-row flex-wrap gap-2">
@@ -175,7 +179,7 @@ export default function DiscoverScreen() {
                   className="bg-muted border border-border rounded-full px-4 py-2"
                   activeOpacity={0.7}
                 >
-                  <Text className="text-foreground font-medium">{mood}</Text>
+                  <Text className="text-foreground font-medium">{moods(mood)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -184,4 +188,9 @@ export default function DiscoverScreen() {
       )}
     </SafeAreaView>
   );
+}
+
+function SectionError({retry}:{retry:()=>void}){
+  const {t}=useTranslations('common');
+  return <View className="px-4 pb-4 gap-2"><Text accessibilityRole="alert" className="text-destructive">{t('error')}</Text><TouchableOpacity accessibilityRole="button" onPress={retry}><Text className="text-accent">{t('retry')}</Text></TouchableOpacity></View>;
 }

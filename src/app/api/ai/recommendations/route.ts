@@ -142,18 +142,21 @@ export async function GET(request: NextRequest) {
 
   // Determine genres from user profile if userId provided
   let genres: string[] = [];
+  let locale:'en'|'fr'|'de'='en';
   if (userId) {
     const supabase = createClient();
-    const { data: profile } = await supabase
+    const { data: profile,error } = await supabase
       .from('users')
-      .select('genres')
+      .select('genres,preferred_locale')
       .eq('id', userId)
       .single();
-    genres = profile?.genres ?? [];
+    if(error||!profile)return NextResponse.json({error:'Recommendation preferences unavailable'},{status:503});
+    genres=profile.genres??[];
+    if(profile.preferred_locale==='fr'||profile.preferred_locale==='de')locale=profile.preferred_locale;
   }
 
   // Cache key
-  const cacheKey = `ai:recommendations:v3:${userId}:${crypto.createHash('sha256').update(JSON.stringify([AI_MODELS.DEEPSEEK_MODEL, AI_MODELS.GEMINI_MODEL, mood, genres])).digest('hex')}`;
+  const cacheKey = `ai:recommendations:v4:${userId}:${crypto.createHash('sha256').update(JSON.stringify([AI_MODELS.DEEPSEEK_MODEL, AI_MODELS.GEMINI_MODEL, locale, mood, genres])).digest('hex')}`;
   const redis = getRedisClient();
 
   const readCache = async () => {
@@ -169,7 +172,7 @@ export async function GET(request: NextRequest) {
 
   const genresStr = genres.length > 0 ? genres.slice(0, 5).join(', ') : 'general fiction';
   const moodStr = mood ? ` The reader is in a "${mood}" mood.` : '';
-  const prompt = `You are a book recommendation expert. Based on these preferred genres: ${genresStr}.${moodStr} Suggest exactly 5 books. Return ONLY a JSON array with objects having "title", "author", and "reason" (one sentence) fields. No other text.
+  const prompt = `Write reasons in ${{en:'English',fr:'French',de:'German'}[locale]}; keep original book titles and author names. You are a book recommendation expert. Based on these preferred genres: ${genresStr}.${moodStr} Suggest exactly 5 books. Return ONLY a JSON array with objects having "title", "author", and "reason" (one sentence) fields. No other text.
 
 Example format:
 [{"title": "Book Name", "author": "Author Name", "reason": "Why this book fits"}]`;

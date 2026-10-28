@@ -14,7 +14,14 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "org.liravo.app"
+      "bundleIdentifier": "org.liravo.app",
+      "infoPlist": {
+        "CFBundleLocalizations": [
+          "en",
+          "fr",
+          "de"
+        ]
+      }
     },
     "android": {
       "package": "org.liravo.app",
@@ -33,11 +40,23 @@
           "photosPermission": "Allow Liravo to access your photos to set a profile picture."
         }
       ],
-      "react-native-iap"
+      "react-native-iap",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true
     },
-    "scheme": "liravo"
+    "scheme": "liravo",
+    "locales": {
+      "en": {
+        "NSPhotoLibraryUsageDescription": "Allow Liravo to access your photos to set a profile picture."
+      },
+      "fr": {
+        "NSPhotoLibraryUsageDescription": "Autorisez Liravo à accéder à vos photos pour choisir une photo de profil."
+      },
+      "de": {
+        "NSPhotoLibraryUsageDescription": "Erlaube Liravo den Zugriff auf deine Fotos, um ein Profilbild auszuwählen."
+      }
+    }
   }
 }

@@ -48,6 +48,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Add metadata/canonical/OG coverage to major dynamic pages.
 - 🟡 Complete English/French/German coverage across web/native screens, system messages and metadata; enforce translated user-visible strings in CI.
 - ✅ Translate and verify shared web components, named controls, navigation state, native report-dialog focus, failure recovery and notification pagination.
+- ✅ Persist native language selection with device fallback; translate navigation/main tabs, settings and referral screens.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
@@ -77,11 +78,14 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Bind reading-session XP and streaks to recorded dates, including delayed deliveries and reload-safe retries.
 - ✅ Make buddy chapter/notes atomic and verify bounded, replay-safe Goodreads imports on web/native.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
+- ✅ Repair authenticated native account exports and the shared export ISBN/tip queries; reject incomplete exports.
+- ✅ Align native referral statistics, currency totals and commission wording with the verified API/ledger.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.
 
 ✅ 11. Work and edition catalog integrity
 - ✅ Separate canonical works from editions while preserving existing book links and reading history.
 - ✅ Resolve edition-specific ISBN/provider identities without combining unrelated editions; expose edition selection on web/native.
 - ✅ Verify imports, seeds, search, reviews, shelves and purchase links against the edition model.
+- ✅ Share bounded, ranked mood discovery across web/native with canonical edition aliases and visible-review filtering.
 
 Footer/Signature: Generated on May 23, 2026 09:39 PM UTC

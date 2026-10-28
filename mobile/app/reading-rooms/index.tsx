@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -9,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export default function ReadingRoomsScreen() {
+  const {t:ui}=useTranslations('');
   const router = useRouter();
   const { data, isLoading } = useQuery({ queryKey: ['reading-rooms'], queryFn: () => api.get<{ rooms: any[] }>(ENDPOINTS.readingRooms.list) });
   const rooms = data?.rooms ?? [];
@@ -16,7 +18,7 @@ export default function ReadingRoomsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <View className="flex-row items-center justify-between px-4 py-3">
-        <Text className="text-xl font-bold text-foreground">Reading Rooms</Text>
+        <Text className="text-xl font-bold text-foreground">{ui('nativeNavigation.readingRooms')}</Text>
         <TouchableOpacity onPress={() => router.push('/reading-rooms/new')}><Plus size={22} color="#d97706" /></TouchableOpacity>
       </View>
       <FlatList data={rooms} keyExtractor={(r) => r.id} renderItem={({ item }) => (

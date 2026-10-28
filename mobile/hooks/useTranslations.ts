@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import IntlMessageFormat from 'intl-messageformat';
 import { useAuthStore } from '@/stores/auth';
+import {useLocales} from 'expo-localization';
+import {usePreferences,supportedLocale} from '@/stores/preferences';
 import en from '../../messages/en.json';
 import fr from '../../messages/fr.json';
 import de from '../../messages/de.json';
@@ -8,7 +10,9 @@ import de from '../../messages/de.json';
 const catalogs={en,fr,de};
 export function useTranslations(namespace:string){
   const preference=useAuthStore(state=>state.user?.preferred_locale);
-  const locale=preference==='fr'||preference==='de'?preference:'en';
+  const saved=usePreferences(state=>state.locale),devices=useLocales();
+  const device=devices.map(value=>value.languageCode).find(supportedLocale);
+  const locale=supportedLocale(preference)?preference:saved??device??'en';
   return useMemo(()=>{
     const messages=catalogs[locale] as unknown;
     const compiled=new Map<string,IntlMessageFormat>();

@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,6 +15,7 @@ const DEFAULT_ICONS: Record<string, string> = {
 };
 
 export default function ShelfScreen() {
+  const {t}=useTranslations('shelves');
   const router = useRouter();
   const { data, isLoading, refetch,error } = useShelves();
   const shelves = data?.shelves ?? [];
@@ -25,9 +27,9 @@ export default function ShelfScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <View className="flex-row items-center justify-between px-4 py-3">
-        <Text className="text-2xl font-bold text-foreground">My Shelf</Text>
+        <Text className="text-2xl font-bold text-foreground">{t('title')}</Text>
         <TouchableOpacity
-          onPress={() => router.push('/shelf/new')}
+          accessibilityRole="button" accessibilityLabel={t('new')} onPress={() => router.push('/shelf/new')}
           className="p-2"
           activeOpacity={0.7}
         >
@@ -41,8 +43,8 @@ export default function ShelfScreen() {
         renderItem={({ item }) => <ShelfListItem shelf={item} />}
         ListEmptyComponent={
           <EmptyState
-            title="No shelves yet"
-            description="Your reading shelves will appear here."
+            title={t('empty')}
+            description={t('emptyDescription')}
             icon={<BookOpen size={48} color="#6b7280" />}
           />
         }
@@ -56,7 +58,8 @@ export default function ShelfScreen() {
 }
 
 function ShelfListItem({ shelf }: { shelf: ShelfRow }) {
-  const router = useRouter();
+  const router = useRouter(),{t:books}=useTranslations('books');
+  const names={currently_reading:'currentlyReading',want_to_read:'wantToRead',have_read:'haveRead'};
   const icon = shelf.default_type ? DEFAULT_ICONS[shelf.default_type] ?? '📚' : '📚';
 
   return (
@@ -67,7 +70,7 @@ function ShelfListItem({ shelf }: { shelf: ShelfRow }) {
     >
       <Text className="text-2xl">{icon}</Text>
       <View className="flex-1">
-        <Text className="font-semibold text-foreground">{shelf.name}</Text>
+        <Text className="font-semibold text-foreground">{shelf.default_type?books(names[shelf.default_type]):shelf.name}</Text>
         {shelf.description && (
           <Text className="text-sm text-muted-foreground" numberOfLines={1}>{shelf.description}</Text>
         )}

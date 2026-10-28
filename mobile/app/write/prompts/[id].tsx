@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -11,6 +12,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import type { WritingPromptRow } from '@/types';
 
 export default function PromptDetailScreen() {
+  const {t:ui}=useTranslations('');
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const [response, setResponse] = useState('');
@@ -30,7 +32,7 @@ export default function PromptDetailScreen() {
             <Text className="text-foreground font-medium">{prompt.prompt}</Text>
           </View>
           <Input label="Your Response" value={response} onChangeText={setResponse} placeholder="Write your response here..." multiline numberOfLines={8} maxLength={2000} style={{ minHeight: 160, textAlignVertical: 'top' }} />
-          <Button onPress={() => submit.mutate()} loading={submit.isPending} disabled={response.trim().length < 50} size="lg">Submit</Button>
+          <Button onPress={() => submit.mutate()} loading={submit.isPending} disabled={response.trim().length < 50} size="lg">{ui('authorQA.submitQuestion')}</Button>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

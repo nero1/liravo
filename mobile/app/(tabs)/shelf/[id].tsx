@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,8 +9,9 @@ import { EmptyState,QueryError } from '@/components/ui/EmptyState';
 import type { ShelfBookRow } from '@/types';
 
 export default function ShelfDetailScreen() {
+  const {t}=useTranslations('shelves');
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const router = useRouter(),{t:nav}=useTranslations('nav'),{t:booksText}=useTranslations('books');
 
   const {data,isLoading,error,refetch,hasNextPage,fetchNextPage,isFetchingNextPage}=useShelf(id!);
   const shelf=data?.pages[0].shelf;
@@ -19,8 +21,8 @@ export default function ShelfDetailScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <View className="px-4 py-3">
-        <Text className="text-2xl font-bold text-foreground">{shelf?.name ?? 'Shelf'}</Text>
-        <Text className="text-muted-foreground">{books.length} books</Text>
+        <Text className="text-2xl font-bold text-foreground">{shelf?.default_type?booksText({currently_reading:'currentlyReading',want_to_read:'wantToRead',have_read:'haveRead'}[shelf.default_type]):shelf?.name??nav('shelf')}</Text>
+        <Text className="text-muted-foreground">{t('bookCount',{count:books.length})}</Text>
       </View>
 
       {isLoading ? (
@@ -41,7 +43,7 @@ export default function ShelfDetailScreen() {
             />
           )}
           ListEmptyComponent={
-            <EmptyState title="This shelf is empty" description="Add books to start tracking your reading." />
+            <EmptyState title={t('emptyShelf')} description={t('addDescription')} />
           }
           contentContainerStyle={{ paddingBottom: 24 }}
         />
@@ -57,6 +59,7 @@ function ShelfBookItem({
   shelfBook: ShelfBookRow;
   onPress: () => void;
 }) {
+  const {t}=useTranslations('shelves');
   const book = shelfBook.book;
   const progress = shelfBook.progress_percent ?? 0;
 
@@ -73,7 +76,7 @@ function ShelfBookItem({
         className="bg-muted"
       />
       <View className="flex-1 justify-center gap-1.5">
-        <Text className="font-semibold text-foreground" numberOfLines={2}>{book?.title ?? 'Unknown'}</Text>
+        <Text className="font-semibold text-foreground" numberOfLines={2}>{book?.title??t('unknownBook')}</Text>
         <Text className="text-sm text-muted-foreground">{book?.author_name}</Text>
         {progress > 0 && (
           <ReadingProgressBar

@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -10,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import type { BuddyReadRow } from '@/types';
 
 export default function BuddyReadsScreen() {
+  const {t:ui}=useTranslations('');
   const router = useRouter();
   const { data, isLoading } = useQuery({
     queryKey: ['buddy-reads'],
@@ -20,7 +22,7 @@ export default function BuddyReadsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <View className="flex-row items-center justify-between px-4 py-3">
-        <Text className="text-xl font-bold text-foreground">Buddy Reads</Text>
+        <Text className="text-xl font-bold text-foreground">{ui('nativeNavigation.buddyReads')}</Text>
         <TouchableOpacity onPress={() => router.push('/buddy-reads/new')}><Plus size={22} color="#d97706" /></TouchableOpacity>
       </View>
       {isLoading ? <View className="flex-1 items-center justify-center"><ActivityIndicator color="#d97706" /></View> : (

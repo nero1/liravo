@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -9,6 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export default function AdminUsersScreen() {
+  const {t:ui}=useTranslations('');
   const [search, setSearch] = useState('');
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['admin', 'users', search], queryFn: () => api.get<{ users: any[] }>(ENDPOINTS.admin.users, { search: search || undefined }), enabled: true });
@@ -27,7 +29,7 @@ export default function AdminUsersScreen() {
               <View className="flex-row gap-1 mt-0.5 flex-wrap">
                 {item.is_suspended && <Badge variant="destructive">Suspended</Badge>}
                 {item.is_banned && <Badge variant="destructive">Banned</Badge>}
-                {item.is_admin && <Badge variant="accent">Admin</Badge>}
+                {item.is_admin && <Badge variant="accent">{ui('admin.admin')}</Badge>}
               </View>
             </View>
             <TouchableOpacity onPress={() => Alert.alert('Actions', 'Moderate this user', [{ text: 'Suspend', onPress: () => moderate.mutate({ id: item.id, action: 'suspend' }) }, { text: 'Unsuspend', onPress: () => moderate.mutate({ id: item.id, action: 'unsuspend' }) }, { text: 'Cancel', style: 'cancel' }])} className="p-2"><Text className="text-muted-foreground">···</Text></TouchableOpacity>

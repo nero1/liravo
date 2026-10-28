@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/stores/auth';
@@ -14,6 +15,7 @@ const FEATURES = [
 ];
 
 export default function PremiumScreen() {
+  const {t:ui}=useTranslations('');
   const { user } = useAuthStore();
   const { premiumPrice, purchasing, restoring, subscribe, restorePurchases } = useGooglePlayBilling();
 
@@ -27,7 +29,7 @@ export default function PremiumScreen() {
 
         <View className="items-center gap-2">
           <Text className="text-4xl">★</Text>
-          <Text className="text-3xl font-bold text-foreground">Liravo Premium</Text>
+          <Text className="text-3xl font-bold text-foreground">{ui('premium.title')}</Text>
           <Text className="text-muted-foreground text-center">
             Unlock the full reading & writing experience
           </Text>
@@ -36,7 +38,7 @@ export default function PremiumScreen() {
         {isPremium ? (
           <Card className="items-center gap-2 py-6">
             <Text className="text-2xl">★</Text>
-            <Text className="font-bold text-lg text-foreground">You're Premium!</Text>
+            <Text className="font-bold text-lg text-foreground">{ui('premium.activeTitle')}</Text>
             <Text className="text-muted-foreground text-sm text-center">
               Enjoying all premium features, {user?.display_name ?? 'reader'}.
             </Text>

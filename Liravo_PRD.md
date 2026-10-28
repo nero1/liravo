@@ -1183,8 +1183,8 @@ Data isolation in these modes is enforced at the **application layer**: every AP
 
 ### 15.10 Data Privacy
 
-- GDPR-ready data export from account settings.
-- Account deletion: soft-delete flag, 30-day recovery window, then hard delete via cron.
+- Authenticated JSON/CSV export from account settings includes profile, reading history, edition/provider identities and progress, reviews, quotes, prompt responses, goals, XP history and sent tips. Exports fail closed on database errors.
+- Account deletion deactivates and anonymizes the profile; related records, including financial history, are retained. Automatic recovery/purge is not implemented.
 - Affiliate link clicks logged with hashed user IDs.
 - No third-party analytics that collect PII in MVP.
 
@@ -1234,7 +1234,7 @@ Architecture must be able to scale to 50,000 concurrent users without structural
 
 - `next-intl` for all UI strings from day one.
 - All strings in locale JSON files. No hardcoded English strings in components.
-- Supported interface locales: English (`en`, default), French (`fr`) and German (`de`). All shared web components use these catalogs; remaining web/native screens and stored system messages are still being translated. Book metadata retains its source language.
+- Supported interface locales: English (`en`, default), French (`fr`) and German (`de`). All shared web components use these catalogs; remaining web/native screens and stored system messages are still being translated. Book metadata retains its source language. Native provides signed-out language selection and uses the saved account preference with device/persisted fallback.
 - Date/time via `Intl.DateTimeFormat`.
 - Logical CSS properties throughout (`margin-inline-start` not `margin-left`) to support future RTL expansion.
 - Amazon affiliate tag routing per country: `affiliate_tags` table keyed by ISO country code.

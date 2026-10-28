@@ -28,6 +28,7 @@ async function request<T>(
   body?: unknown,
   params?: Record<string, string | number | undefined>,
   extraHeaders?: Record<string, string>,
+  signal?:AbortSignal,
 ): Promise<T> {
   const { token, user } = useAuthStore.getState();
   const mutating = method !== 'GET';
@@ -63,7 +64,10 @@ async function request<T>(
   }
 
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),15000);
+  const abort=()=>controller.abort();
+  if(signal?.aborted)abort();
+  signal?.addEventListener('abort',abort,{once:true});
+  const timeout=setTimeout(abort,25000);
   try{
   const res = await fetch(url, {
     method,
@@ -88,12 +92,12 @@ async function request<T>(
   const data = res.status===204?undefined as T:await res.json() as T;
   if (trackIntent && !suppliedKey) pendingIntents.delete(signature);
   return data;
-  }finally{clearTimeout(timeout);}
+  }finally{clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
 }
 
 export const api = {
-  get: <T>(path: string, params?: Record<string, string | number | undefined>) =>
-    request<T>(path, 'GET', undefined, params),
+  get: <T>(path: string, params?: Record<string, string | number | undefined>,signal?:AbortSignal) =>
+    request<T>(path, 'GET', undefined, params,undefined,signal),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
     request<T>(path, 'POST', body, undefined, headers),
   put: <T>(path: string, body?: unknown,headers?:Record<string,string>) => request<T>(path, 'PUT', body,undefined,headers),

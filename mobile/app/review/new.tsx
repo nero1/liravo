@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { useState } from 'react';
 import { View, Text, ScrollView, Alert, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +12,7 @@ import { StarRating } from '@/components/books/StarRating';
 import { MOOD_TAGS } from '@/types';
 
 export default function NewReviewScreen() {
+  const {t:ui}=useTranslations('');
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const router = useRouter();
   const qc = useQueryClient();
@@ -47,7 +49,7 @@ export default function NewReviewScreen() {
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 20 }}>
           <View className="items-center gap-2">
-            <Text className="font-semibold text-foreground">Your Rating</Text>
+            <Text className="font-semibold text-foreground">{ui('reviewForm.rating')}</Text>
             <StarRating value={rating} onChange={setRating} size={36} />
           </View>
 
@@ -89,7 +91,7 @@ export default function NewReviewScreen() {
             <View className={`w-5 h-5 rounded border-2 items-center justify-center ${hasSpoilers ? 'border-accent bg-accent' : 'border-border'}`}>
               {hasSpoilers && <Text className="text-accent-foreground text-xs">✓</Text>}
             </View>
-            <Text className="text-foreground">Contains spoilers</Text>
+            <Text className="text-foreground">{ui('book.spoilers')}</Text>
           </TouchableOpacity>
 
           <Button

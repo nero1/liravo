@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ interface ProgressData {
 }
 
 export default function WritingProgressScreen() {
+  const {t:ui}=useTranslations('');
   const { data, isLoading,error,refetch } = useQuery({
     queryKey: ['write', 'progress'],
     queryFn: () => api.get<ProgressData>(ENDPOINTS.write.progress),
@@ -44,7 +46,7 @@ export default function WritingProgressScreen() {
             <Card><Text className="font-semibold text-foreground mb-2">Words Written</Text><Text className="text-3xl font-bold text-foreground">{(p.total_words ?? 0).toLocaleString()}</Text></Card>
             <View className="flex-row gap-3">
               <View className="flex-1"><Card><Text className="font-semibold text-foreground mb-1 text-sm">Prompts</Text><Text className="text-2xl font-bold text-foreground">{p.prompts_completed ?? 0}</Text></Card></View>
-              <View className="flex-1"><Card><Text className="font-semibold text-foreground mb-1 text-sm">Challenges</Text><Text className="text-2xl font-bold text-foreground">{p.challenges_completed ?? 0}</Text></Card></View>
+              <View className="flex-1"><Card><Text className="font-semibold text-foreground mb-1 text-sm">{ui('nativeNavigation.challenges')}</Text><Text className="text-2xl font-bold text-foreground">{p.challenges_completed ?? 0}</Text></Card></View>
               <View className="flex-1"><Card><Text className="font-semibold text-foreground mb-1 text-sm">Critiques</Text><Text className="text-2xl font-bold text-foreground">{p.workshop_critiques ?? 0}</Text></Card></View>
             </View>
             <Card><Text className="font-semibold text-foreground mb-2">Total XP</Text><Text className="text-3xl font-bold text-accent">{(p.xp ?? 0).toLocaleString()} XP</Text></Card>

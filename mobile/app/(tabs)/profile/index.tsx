@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -9,7 +10,8 @@ import { Badge } from '@/components/ui/Badge';
 import { getUserLevel } from '@/types';
 
 export default function ProfileScreen() {
-  const router = useRouter();
+  const {t,locale}=useTranslations('profile');
+  const router = useRouter(),{t:nav}=useTranslations('nav'),{t:navigation}=useTranslations('nativeNavigation');
   const { user } = useAuthStore();
   const { fetchProfile } = useAuth();
 
@@ -17,9 +19,9 @@ export default function ProfileScreen() {
   const level = getUserLevel(user.xp);
 
   const stats = [
-    { icon: BookOpen, label: 'Books Read', value: user.books_read_count },
-    { icon: Flame, label: 'Streak', value: `${user.reading_streak}d` },
-    { icon: Zap, label: 'XP', value: user.xp.toLocaleString() },
+    { icon: BookOpen, label: t('booksRead'), value: user.books_read_count.toLocaleString(locale) },
+    { icon: Flame, label: t('streakLabel'), value: t('streakDays',{count:user.reading_streak}) },
+    { icon: Zap, label: 'XP', value: user.xp.toLocaleString(locale) },
   ];
 
   return (
@@ -30,9 +32,9 @@ export default function ProfileScreen() {
       >
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-3">
-          <Text className="text-2xl font-bold text-foreground">Profile</Text>
+          <Text className="text-2xl font-bold text-foreground">{nav('profile')}</Text>
           <View className="flex-row gap-2">
-            <TouchableOpacity onPress={() => router.push('/settings')} className="p-2">
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={navigation('settings')} onPress={() => router.push('/settings')} className="p-2">
               <Settings size={22} color="#6b7280" />
             </TouchableOpacity>
           </View>
@@ -46,9 +48,9 @@ export default function ProfileScreen() {
               <Text className="text-xl font-bold text-foreground">{user.display_name}</Text>
               <Text className="text-muted-foreground">@{user.username}</Text>
               <View className="flex-row gap-2 flex-wrap">
-                <Badge variant="accent">{level.title}</Badge>
-                {user.is_verified_author && <Badge variant="secondary">✓ Author</Badge>}
-                {user.is_creator && <Badge variant="secondary">Creator</Badge>}
+                <Badge variant="accent">{t('levels.'+level.min)}</Badge>
+                {user.is_verified_author && <Badge variant="secondary">✓ {t('verified')}</Badge>}
+                {user.is_creator && <Badge variant="secondary">{t('creator')}</Badge>}
               </View>
             </View>
           </View>
@@ -60,7 +62,7 @@ export default function ProfileScreen() {
             className="border border-border rounded-xl py-2.5 items-center"
             activeOpacity={0.7}
           >
-            <Text className="font-medium text-foreground">Edit Profile</Text>
+            <Text className="font-medium text-foreground">{t('editProfile')}</Text>
           </TouchableOpacity>
 
           {/* Stats row */}
@@ -76,17 +78,17 @@ export default function ProfileScreen() {
           {/* Quick links */}
           <View className="gap-1">
             {[
-              { label: '📊 Reading Stats', path: '/stats' },
-              { label: '🎯 Reading Goal', path: '/reading-goals' },
-              { label: '📚 ARCs', path: '/arcs' },
-              { label: '🏆 Leaderboard', path: '/leaderboard' },
-              { label: '📝 My Lists', path: '/lists' },
-              { label: '💬 My Quotes', path: '/quotes' },
-              { label: '🎁 Referral', path: '/referral' },
-              ...(user.is_verified_author ? [{ label: '📖 My ARCs', path: '/author/arcs' }] : []),
-              ...(user.is_creator ? [{ label: '💰 Earnings', path: '/earnings' }] : []),
-              ...(user.is_moderator ? [{ label: '🛡️ Moderation', path: '/moderation/reports' }] : []),
-              ...(user.is_admin ? [{ label: '⚙️ Admin Panel', path: '/admin' }] : []),
+              { label: '📊 '+navigation('readingStats'), path: '/stats' },
+              { label: '🎯 '+navigation('readingGoal'), path: '/reading-goals' },
+              { label: '📚 '+navigation('aRCs'), path: '/arcs' },
+              { label: '🏆 '+navigation('leaderboard'), path: '/leaderboard' },
+              { label: '📝 '+navigation('readingLists'), path: '/lists' },
+              { label: '💬 '+navigation('myQuotes'), path: '/quotes' },
+              { label: '🎁 '+navigation('referral'), path: '/referral' },
+              ...(user.is_verified_author ? [{ label: '📖 '+navigation('aRCs'), path: '/author/arcs' }] : []),
+              ...(user.is_creator ? [{ label: '💰 '+navigation('earnings'), path: '/earnings' }] : []),
+              ...(user.is_moderator ? [{ label: '🛡️ '+navigation('reports'), path: '/moderation/reports' }] : []),
+              ...(user.is_admin ? [{ label: '⚙️ '+navigation('admin'), path: '/admin' }] : []),
             ].map(({ label, path }) => (
               <TouchableOpacity
                 key={path}

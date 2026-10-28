@@ -1,52 +1,56 @@
 import { View, Text, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
-import * as WebBrowser from 'expo-web-browser';
+import {useState,useRef} from 'react';
+import {shareAccountExport} from '@/lib/account-export';
+import {useTranslations} from '@/hooks/useTranslations';
 import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
 export default function AccountScreen() {
-  const { logout } = useAuth();
+  const {logout}=useAuth(),{t}=useTranslations('accountData'),{t:common}=useTranslations('common'),busy=useRef(false),[exporting,setExporting]=useState(false);
 
   const deleteAccount = useMutation({
-    mutationFn: () => api.delete('/api/users/delete-account'),
+    mutationFn:async()=>{const result=await api.delete<{deleted:boolean}>('/api/users/delete-account');if(result.deleted!==true)throw new Error('Invalid account acknowledgement');return result;},
     onSuccess: logout,
-    onError: (err) => Alert.alert('Error', (err as Error).message),
+    onError:()=>Alert.alert(common('error'),t('deleteFailed')),
   });
 
   function confirmDelete() {
     Alert.alert(
-      'Delete Account',
-      'This will permanently delete all your data. This cannot be undone.',
+      t('delete'),t('deleteDescription'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteAccount.mutate() },
+        { text:common('cancel'), style: 'cancel' },
+        { text:common('delete'), style: 'destructive', onPress: () => deleteAccount.mutate() },
       ],
     );
   }
 
-  async function exportData() {
-    await WebBrowser.openBrowserAsync(`${process.env.EXPO_PUBLIC_API_URL}/api/users/export`);
+  async function exportData(){
+    if(busy.current)return;busy.current=true;setExporting(true);
+    try{if(await shareAccountExport(t('exportTitle'))==='unavailable')Alert.alert(t('exportTitle'),t('exportUnavailable'));}
+    catch{Alert.alert(common('error'),t('exportFailed'));}
+    finally{busy.current=false;setExporting(false);}
   }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <View className="px-4 py-4 gap-4">
         <Card className="gap-3">
-          <Text className="font-semibold text-foreground">Export Your Data</Text>
-          <Text className="text-sm text-muted-foreground">Download a copy of all your Liravo data.</Text>
-          <Button onPress={exportData} variant="secondary">Export Data</Button>
+          <Text className="font-semibold text-foreground">{t('exportTitle')}</Text>
+          <Text className="text-sm text-muted-foreground">{t('exportDescription')}</Text>
+          <Button onPress={exportData} loading={exporting} disabled={deleteAccount.isPending} variant="secondary">{exporting?t('exporting'):t('export')}</Button>
         </Card>
 
         <Card className="gap-3">
-          <Text className="font-semibold text-destructive">Delete Account</Text>
+          <Text className="font-semibold text-destructive">{t('delete')}</Text>
           <Text className="text-sm text-muted-foreground">
-            Permanently deletes your account and all associated data. This action cannot be undone.
+            {t('deleteDescription')}
           </Text>
-          <Button onPress={confirmDelete} variant="destructive" loading={deleteAccount.isPending}>
-            Delete My Account
+          <Button onPress={confirmDelete} variant="destructive" loading={deleteAccount.isPending} disabled={exporting}>
+            {t('confirmDelete')}
           </Button>
         </Card>
       </View>

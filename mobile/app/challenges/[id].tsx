@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import type { ChallengeRow } from '@/types';
 
 export default function ChallengeDetailScreen() {
+  const {t:ui}=useTranslations('');
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const { data, isLoading,error,refetch } = useQuery({
@@ -37,7 +39,7 @@ export default function ChallengeDetailScreen() {
         {challenge.description && <Text className="text-foreground">{challenge.description}</Text>}
         <View className="flex-row gap-4">
           <Text className="text-sm text-muted-foreground">📚 {challenge.goal_books??0} books · {challenge.goal_pages??0} pages</Text>
-          <Text className="text-sm text-muted-foreground">👥 {challenge.participant_count??0} joined</Text>
+          <Text className="text-sm text-muted-foreground">👥 {challenge.participant_count??0}{ui('writingChallenge.joined')}</Text>
           {challenge.end_date && <Text className="text-sm text-muted-foreground">📅 Ends {new Date(challenge.end_date).toLocaleDateString()}</Text>}
         </View>
         <Button onPress={() => join.mutate()} loading={join.isPending} disabled={data?.joined||!challenge.is_active||!!challenge.end_date&&new Date(challenge.end_date)<=new Date()} size="lg">{data?.joined?"Joined":"Join Challenge"}</Button>

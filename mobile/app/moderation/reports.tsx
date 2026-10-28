@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +10,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import type { ContentReportRow } from '@/types';
 
 export default function ModerationReportsScreen() {
+  const {t:ui}=useTranslations('');
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['moderation', 'reports'], queryFn: () => api.get<{ reports: ContentReportRow[] }>(ENDPOINTS.moderation.reports) });
   const action = useMutation({ mutationFn: ({ id, action }: { id: string; action: string }) => api.post(ENDPOINTS.moderation.reports + `/${id}/action`, { action }), onSuccess: () => qc.invalidateQueries({ queryKey: ['moderation', 'reports'] }), onError: (err) => Alert.alert('Error', (err as Error).message) });
@@ -23,7 +25,7 @@ export default function ModerationReportsScreen() {
           {item.status === 'pending' && (
             <View className="flex-row gap-2">
               <TouchableOpacity onPress={() => action.mutate({ id: item.id, action: 'remove' })} className="bg-destructive rounded-lg px-3 py-1.5" activeOpacity={0.7}><Text className="text-destructive-foreground text-sm font-medium">Remove</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => action.mutate({ id: item.id, action:'approve' })} className="bg-muted rounded-lg px-3 py-1.5" activeOpacity={0.7}><Text className="text-foreground text-sm">Dismiss</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => action.mutate({ id: item.id, action:'approve' })} className="bg-muted rounded-lg px-3 py-1.5" activeOpacity={0.7}><Text className="text-foreground text-sm">{ui('accountHardening.dismiss')}</Text></TouchableOpacity>
             </View>
           )}
         </View>

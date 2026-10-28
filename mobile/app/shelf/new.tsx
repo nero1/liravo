@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -7,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
 export default function NewShelfScreen() {
+  const {t:ui}=useTranslations('');
   const router = useRouter();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -28,7 +30,7 @@ export default function NewShelfScreen() {
         <View className="flex-1 px-4 pt-4 gap-4">
           <Input label="Shelf Name" value={name} onChangeText={setName} placeholder="e.g. Beach Reads" maxLength={60} />
           <Input label="Description (optional)" value={description} onChangeText={setDescription} placeholder="What goes on this shelf?" multiline numberOfLines={3} maxLength={200} style={{ textAlignVertical: 'top' }} />
-          <Button onPress={submit} loading={create.isPending} disabled={!name.trim()} size="lg">Create Shelf</Button>
+          <Button onPress={submit} loading={create.isPending} disabled={!name.trim()} size="lg">{ui('shelfForm.create')}</Button>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

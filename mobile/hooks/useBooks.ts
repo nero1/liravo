@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {useState,useEffect} from 'react';
 import {useAuthStore} from '@/stores/auth';
 import {useRequestIntent} from '@/hooks/useRequestIntent';
 import { api } from '@/lib/api';
@@ -6,12 +7,16 @@ import { ENDPOINTS } from '@/constants/api';
 import type { AffiliateLink, BookRow, ReviewRow, QuoteRow,UserRow,WorkCatalog } from '@/types';
 
 export function useBookSearch(query: string) {
-  return useQuery({
-    queryKey: ['books', 'search', query],
-    queryFn: () => api.get<{ books: BookRow[] }>(ENDPOINTS.books.search, { q: query }),
-    enabled: query.length >= 2,
+  const normalized=query.trim(),[debounced,setDebounced]=useState(normalized);
+  useEffect(()=>{const timer=setTimeout(()=>setDebounced(normalized),300);return()=>clearTimeout(timer);},[normalized]);
+  const pending=normalized.length>=2&&debounced!==normalized;
+  const result=useQuery({
+    queryKey: ['books', 'search', normalized],
+    queryFn: ({signal}) => api.get<{ books: BookRow[] }>(ENDPOINTS.books.search, { q: normalized },signal),
+    enabled: normalized.length>=2&&!pending,
     staleTime: 1000 * 30,
   });
+  return {...result,isLoading:pending||result.isLoading,isFetching:pending||result.isFetching};
 }
 
 export function useBook(id: string) {

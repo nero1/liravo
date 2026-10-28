@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
 export default function WritingChallengeDetailScreen() {
+  const {t:ui}=useTranslations('');
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const [title, setTitle] = useState('');
@@ -25,7 +27,7 @@ export default function WritingChallengeDetailScreen() {
           <Text className="text-2xl font-bold text-foreground">{challenge.title}</Text>
           {challenge.description && <Text className="text-foreground">{challenge.description}</Text>}
           <View className="flex-row gap-4 flex-wrap"><Text className="text-sm text-muted-foreground">🏆 {challenge.xp_reward} XP</Text>{challenge.word_limit && <Text className="text-sm text-muted-foreground">📝 {challenge.word_limit} word limit</Text>}{challenge.deadline && <Text className="text-sm text-muted-foreground">📅 Due {new Date(challenge.deadline).toLocaleDateString()}</Text>}</View>
-          <Button onPress={() => join.mutate()} loading={join.isPending} variant="outline">Join Challenge</Button>
+          <Button onPress={() => join.mutate()} loading={join.isPending} variant="outline">{ui('writingChallenge.join')}</Button>
           <Input label="Entry title" value={title} onChangeText={setTitle} maxLength={200} />
           <Input label="Your Submission" value={submission} onChangeText={setSubmission} placeholder="Write here..." multiline numberOfLines={10} maxLength={challenge.word_limit ? challenge.word_limit * 7 : 10000} style={{ minHeight: 200, textAlignVertical: 'top' }} />
           <Button onPress={() => submit.mutate()} loading={submit.isPending} disabled={!title.trim() || submission.trim().length < 10} size="lg">Submit Entry</Button>

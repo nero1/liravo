@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, Switch, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +31,7 @@ const LABELS: Record<keyof NotifPrefs, string> = {
 };
 
 export default function NotificationSettingsScreen() {
+  const {t:ui}=useTranslations('');
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['me'],
@@ -77,7 +79,7 @@ export default function NotificationSettingsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}>
-        <Text className="text-2xl font-bold text-foreground mb-2">Notifications</Text>
+        <Text className="text-2xl font-bold text-foreground mb-2">{ui('nav.notifications')}</Text>
         <Text className="text-muted-foreground text-sm mb-6">Control which notifications you receive.</Text>
 
         <View className="gap-1">

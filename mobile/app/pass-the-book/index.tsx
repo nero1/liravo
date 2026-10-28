@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -36,6 +37,7 @@ interface BookPass {
 }
 
 export default function PassTheBookScreen() {
+  const {t:ui}=useTranslations('');
   const qc = useQueryClient();
   const [tab, setTab] = useState<'chains' | 'passes'>('chains');
   const [nominateChainId, setNominateChainId] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export default function PassTheBookScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <View className="px-4 pt-4 pb-2 flex-row items-center justify-between">
-        <Text className="text-2xl font-bold text-foreground">Pass the Book</Text>
+        <Text className="text-2xl font-bold text-foreground">{ui('passTheBook.title')}</Text>
         {tab === 'chains' && (
           <TouchableOpacity onPress={() => setShowStartForm(!showStartForm)} className="bg-accent rounded-lg px-3 py-2">
             <Text className="text-white text-sm font-medium">+ Start</Text>
@@ -133,7 +135,7 @@ export default function PassTheBookScreen() {
           />
           <View className="flex-row gap-2">
             <TouchableOpacity onPress={() => setShowStartForm(false)} className="flex-1 border border-border rounded-lg py-2 items-center">
-              <Text className="text-sm text-muted-foreground">Cancel</Text>
+              <Text className="text-sm text-muted-foreground">{ui('profile.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => { if (startBookId.trim()) startChainMutation.mutate({ book_id: startBookId.trim(), note: startNote || undefined }); }}
@@ -169,7 +171,7 @@ export default function PassTheBookScreen() {
           />
           <View className="flex-row gap-2">
             <TouchableOpacity onPress={() => setNominateChainId(null)} className="flex-1 border border-border rounded-lg py-2 items-center">
-              <Text className="text-sm text-muted-foreground">Cancel</Text>
+              <Text className="text-sm text-muted-foreground">{ui('profile.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => { if (nomineeId.trim()) nominateMutation.mutate({ chainId: nominateChainId, nomineeId: nomineeId.trim(), note: nomineeNote || undefined }); }}
@@ -203,13 +205,13 @@ export default function PassTheBookScreen() {
                     <View className="flex-1">
                       <Text className="font-semibold text-foreground text-sm" numberOfLines={2}>{chain.books?.title ?? 'Unknown'}</Text>
                       <Text className="text-xs text-muted-foreground">{chain.books?.author_name}</Text>
-                      <Text className="text-xs text-muted-foreground mt-1">{sortedNodes.length} reader{sortedNodes.length !== 1 ? 's' : ''}</Text>
+                      <Text className="text-xs text-muted-foreground mt-1">{sortedNodes.length}{ui('onboarding.userType.reader')}{sortedNodes.length !== 1 ? 's' : ''}</Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => setNominateChainId(chain.id)}
                       className="bg-accent/10 rounded-lg px-2 py-1 self-start"
                     >
-                      <Text className="text-accent text-xs font-medium">Pass →</Text>
+                      <Text className="text-accent text-xs font-medium">{ui('passTheBook.passNext')}</Text>
                     </TouchableOpacity>
                   </View>
 

@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { useState } from 'react';
 import { ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
 export default function NewQuoteScreen() {
+  const {t:ui}=useTranslations('');
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const router = useRouter();
   const qc = useQueryClient();
@@ -56,9 +58,7 @@ export default function NewQuoteScreen() {
             loading={submit.isPending}
             disabled={content.trim().length < 5}
             size="lg"
-          >
-            Save Quote
-          </Button>
+          >{ui('nativeNavigation.saveQuote')}</Button>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

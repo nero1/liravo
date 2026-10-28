@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -34,6 +35,7 @@ const PERIOD_LABELS: Record<LBPeriod, string> = {
 };
 
 export default function LeaderboardScreen() {
+  const {t:ui}=useTranslations('');
   const [type, setType] = useState<LBType>('global');
   const [period, setPeriod] = useState<LBPeriod>('weekly');
 
@@ -47,7 +49,7 @@ export default function LeaderboardScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <View className="px-4 pt-4 pb-2">
-        <Text className="text-2xl font-bold text-foreground mb-3">Leaderboard</Text>
+        <Text className="text-2xl font-bold text-foreground mb-3">{ui('leaderboard.title')}</Text>
 
         {/* Type selector */}
         <View className="flex-row gap-1.5 flex-wrap">
@@ -109,7 +111,7 @@ export default function LeaderboardScreen() {
                 {type === 'reviewers' ? (
                   <>
                     <Text className="font-bold text-accent text-sm">{(entry.helpful_votes ?? 0).toLocaleString()}</Text>
-                    <Text className="text-xs text-muted-foreground">{entry.review_count ?? 0} reviews</Text>
+                    <Text className="text-xs text-muted-foreground">{entry.review_count ?? 0}{ui('books.reviews')}</Text>
                   </>
                 ) : (
                   <>

@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -15,6 +16,7 @@ interface QAItem { id: string; question: string; answer: string | null; answered
 interface AuthorPost { id: string; title: string; body: string; type: string; created_at: string; }
 
 export default function AuthorProfileScreen() {
+  const {t:ui}=useTranslations('');
   const { username } = useLocalSearchParams<{ username: string }>();
   const { user: currentUser } = useAuthStore();
 
@@ -93,7 +95,7 @@ export default function AuthorProfileScreen() {
               onPress={() => setAskOpen(true)}
               className="flex-1 border border-border rounded-xl py-2 items-center justify-center"
             >
-              <Text className="text-foreground text-sm font-medium">Ask</Text>
+              <Text className="text-foreground text-sm font-medium">{ui('authorQA.ask')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -101,11 +103,11 @@ export default function AuthorProfileScreen() {
         {/* Ask form */}
         {askOpen && (
           <Card>
-            <Text className="font-semibold text-foreground mb-2">Ask a question</Text>
+            <Text className="font-semibold text-foreground mb-2">{ui('authorQA.askQuestion')}</Text>
             <TextInput
               value={askQuestion}
               onChangeText={setAskQuestion}
-              placeholder="What inspired you to write…?"
+              placeholder={ui('authorQA.questionPlaceholder')}
               multiline
               numberOfLines={3}
               maxLength={500}
@@ -117,7 +119,7 @@ export default function AuthorProfileScreen() {
                 onPress={() => setAskOpen(false)}
                 className="flex-1 border border-border rounded-lg py-2 items-center"
               >
-                <Text className="text-muted-foreground text-sm">Cancel</Text>
+                <Text className="text-muted-foreground text-sm">{ui('profile.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleAsk}

@@ -13,6 +13,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import { isSupabaseMode, supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import {useTranslations} from '@/hooks/useTranslations';
+import {LocaleSwitcher} from '@/components/ui/LocaleSwitcher';
 import {API_BASE} from '@/constants/api';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -90,6 +91,7 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
+      <LocaleSwitcher/>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 px-6 justify-between py-12">

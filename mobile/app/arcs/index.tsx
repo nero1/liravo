@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -22,6 +23,7 @@ const STATUS_BADGE: Record<string, { label: string; color: string }> = {
 };
 
 export default function ARCsScreen() {
+  const {t:ui}=useTranslations('');
   const qc = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery({
@@ -44,7 +46,7 @@ export default function ARCsScreen() {
         contentContainerStyle={{ padding: 16, gap: 12 }}
       >
         <View>
-          <Text className="text-2xl font-bold text-foreground">ARC Library</Text>
+          <Text className="text-2xl font-bold text-foreground">{ui('nativeNavigation.aRCLibrary')}</Text>
           <Text className="text-muted-foreground text-sm mt-1">Apply to receive advance reading copies.</Text>
         </View>
 

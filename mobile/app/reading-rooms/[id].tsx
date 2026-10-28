@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ interface PostAuthor { id: string; display_name: string; username: string; avata
 interface Post { id: string; content: string; milestone_id: string | null; created_at: string; users: PostAuthor | null; }
 
 export default function ReadingRoomDetailScreen() {
+  const {t:ui}=useTranslations('');
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
   const user=useAuthStore(state=>state.user);
@@ -91,7 +93,7 @@ export default function ReadingRoomDetailScreen() {
         {/* Header */}
         <View className="px-4 pt-4 pb-2 border-b border-border">
           <Text className="text-xl font-bold text-foreground">{room.name}</Text>
-          {!room.is_member&&room.is_active&&<Button onPress={()=>joinMutation.mutate()} loading={joinMutation.isPending}>Join room</Button>}
+          {!room.is_member&&room.is_active&&<Button onPress={()=>joinMutation.mutate()} loading={joinMutation.isPending}>{ui('readingRoom.joinRoom')}</Button>}
           <View className="flex-row gap-2 mt-2">
             {(['discussion', 'milestones'] as const).map((t) => (
               <TouchableOpacity
@@ -140,11 +142,11 @@ export default function ReadingRoomDetailScreen() {
 
             {room.created_by===user?.id&&(showAddMilestone ? (
               <View className="rounded-xl border border-dashed border-border p-4 gap-3">
-                <Text className="font-semibold text-sm text-foreground">Add Milestone</Text>
+                <Text className="font-semibold text-sm text-foreground">{ui('readingRoom.addMilestone')}</Text>
                 <TextInput
                   value={newMilestoneTitle}
                   onChangeText={setNewMilestoneTitle}
-                  placeholder="Chapter name or page range…"
+                  placeholder={ui('readingRoom.milestonePlaceholder')}
                   placeholderTextColor="#9ca3af"
                   className="border border-border rounded-lg px-3 py-2 text-sm text-foreground bg-background"
                 />
@@ -157,7 +159,7 @@ export default function ReadingRoomDetailScreen() {
                 />
                 <View className="flex-row gap-2">
                   <TouchableOpacity onPress={() => setShowAddMilestone(false)} className="flex-1 border border-border rounded-lg py-2 items-center">
-                    <Text className="text-sm text-muted-foreground">Cancel</Text>
+                    <Text className="text-sm text-muted-foreground">{ui('profile.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
@@ -189,7 +191,7 @@ export default function ReadingRoomDetailScreen() {
                   onPress={() => setSelectedMilestone(null)}
                   className={`px-3 py-1 rounded-full ${!selectedMilestone ? 'bg-accent' : 'bg-muted'}`}
                 >
-                  <Text className={`text-xs font-medium ${!selectedMilestone ? 'text-white' : 'text-muted-foreground'}`}>General</Text>
+                  <Text className={`text-xs font-medium ${!selectedMilestone ? 'text-white' : 'text-muted-foreground'}`}>{ui('readingRoom.general')}</Text>
                 </TouchableOpacity>
                 {unlockedMilestones.map((m) => (
                   <TouchableOpacity
@@ -223,7 +225,7 @@ export default function ReadingRoomDetailScreen() {
                 </View>
               )}
               ListEmptyComponent={
-                <Text className="text-center text-muted-foreground text-sm py-8">No messages yet. Start the conversation!</Text>
+                <Text className="text-center text-muted-foreground text-sm py-8">{ui('roomBoard.startConversation')}</Text>
               }
             />
 
@@ -232,7 +234,7 @@ export default function ReadingRoomDetailScreen() {
               <TextInput
                 value={postContent}
                 onChangeText={setPostContent}
-                placeholder="Say something…"
+                placeholder={ui('readingRoom.postPlaceholder')}
                 placeholderTextColor="#9ca3af"
                 multiline
                 maxLength={2000}

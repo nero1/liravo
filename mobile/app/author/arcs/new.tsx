@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
 export default function NewARCScreen() {
+  const {t:ui}=useTranslations('');
   const router = useRouter();
   const qc = useQueryClient();
   const [bookId,setBookId]=useState('');
@@ -27,7 +29,7 @@ export default function NewARCScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 16 }}>
         <View accessibilityRole="radiogroup" className="gap-2">
-          <Text className="font-medium text-foreground">Book</Text>
+          <Text className="font-medium text-foreground">{ui('admin.book')}</Text>
           {isLoading&&<Text className="text-muted-foreground">Loading books…</Text>}
           {isError&&<Text accessibilityRole="alert" className="text-destructive">Unable to load your books.</Text>}
           {!isLoading&&!isError&&books.length===0&&<Text className="text-muted-foreground">Link a book to your author profile before creating an ARC.</Text>}

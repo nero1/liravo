@@ -87,7 +87,7 @@ it('times out an ambiguous mobile request and preserves its mutation key for ret
     runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
     const pending=expect(exports.api!.post('/api/quotes',{content:'Quote'})).rejects.toThrow('timed out');
     const first=transport.mock.calls[0][1].headers['Idempotency-Key'];
-    await vi.advanceTimersByTimeAsync(15000);await pending;
+    await vi.advanceTimersByTimeAsync(25000);await pending;
     transport.mockResolvedValueOnce({ok:true,status:204});
     await expect(exports.api!.post('/api/quotes',{content:'Quote'})).resolves.toBeUndefined();
     expect(transport.mock.calls[1][1].headers['Idempotency-Key']).toBe(first);
@@ -168,4 +168,12 @@ it('preserves structured challenge failures without retaining primary credential
   runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
   await expect(exports.api!.post('/api/auth/login',{email:'fixture@example.test',password:'fixture-password'})).rejects.toMatchObject({status:400,code:'CAPTCHA_REQUIRED',requireCaptcha:true});
   expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Idempotency-Key');expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Authorization');
+});
+
+it('cancels obsolete native search transport without leaving the timeout active',async()=>{
+  const transport=vi.fn((_url,options)=>new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Error('Cancelled'))))),exports:any={};
+  const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>({token:'isolated-token',user:{id:'reader'}})}}});
+  const controller=new AbortController(),pending=expect(exports.api.get('/api/books/search',{q:'obsolete'},controller.signal)).rejects.toThrow('Cancelled');
+  controller.abort();await pending;expect(transport.mock.calls[0][1].signal.aborted).toBe(true);
 });

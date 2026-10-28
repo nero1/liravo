@@ -1963,5 +1963,60 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await sql`select has_function_privilege('service_role','store_catalog_book_065(jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
     expect(fill.id).toBe(first.id);
     }
+    {
+    const actor=crypto.randomUUID(),banned=crypto.randomUUID();
+    for(const [id,name] of [[actor,'mood_reader_067'],[banned,'mood_banned_067']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},'Mood reader')`;
+    const books=await sql`insert into books(title,author_name) select 'Mood fixture 067 '||n,'Author' from generate_series(1,64) n returning id`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,mood_tags) select ${actor},id,4,'Mood fixture 067','short','published',array['Intense'] from books where id=any(${books.map(book=>book.id)})`;
+    const excluded=await sql`insert into books(title,author_name) select 'Excluded mood 067 '||n,'Author' from generate_series(1,3) n returning id`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,mood_tags,is_hidden) values(${actor},${excluded[0].id},4,'Hidden mood','short','published',array['Intense'],true),(${actor},${excluded[1].id},4,'Pending mood','short','pending',array['Intense'],false),(${banned},${excluded[2].id},4,'Banned reader','short','published',array['Intense'],false)`;
+    await sql`update users set is_banned=true where id=${banned}`;
+    const legacy=legacyEditions!,canonical=(await sql`select coalesce(canonical_edition_id,id) as id from books where id=${legacy.ids[1]}`)[0].id;
+    await sql`update reviews set mood_tags=array['Intense'] where id=${legacy.reviewId}`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,mood_tags) values(${legacy.owner},${legacy.ids[0]},4,'Canonical alias mood','short','published',array['Intense'])`;
+    const {getMoodBooks}=await import('@/services/discovery');
+    let page=await getMoodBooks('Intense',null,30),cursor=page.nextCursor;const results=[...page.books];expect(cursor).toBeTruthy();
+    while(cursor){page=await getMoodBooks('Intense',cursor,30);results.push(...page.books);cursor=page.nextCursor;}
+    expect(new Set(results.map(book=>book.id)).size).toBe(results.length);
+    for(const book of books)expect(results.some(result=>result.id===book.id)).toBe(true);
+    for(const book of excluded)expect(results.some(result=>result.id===book.id)).toBe(false);
+    expect(results.find(book=>book.id===canonical)?.mood_count).toBe(1);
+    const first=await getMoodBooks('Intense',null,1);
+    await expect(getMoodBooks('Dark',first.nextCursor)).rejects.toThrow('Invalid mood cursor');
+    for(const role of ['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'discover_mood_books(text,integer,integer,uuid)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    await expect(sql`select discover_mood_books('invalid',30,null,null)`).rejects.toMatchObject({code:'P1004'});
+    const {GET}=await import('@/app/api/discover/mood/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);
+    expect((await GET(new Request('https://app.test/api/discover/mood?mood=intense&limit=20'))).status).toBe(200);
+    expect((await GET(new Request('https://app.test/api/discover/mood?mood=Intense&limit=999'))).status).toBe(400);
+    vi.mocked(getCurrentUser).mockResolvedValue(null);expect((await GET(new Request('https://app.test/api/discover/mood?mood=Intense'))).status).toBe(401);
+    }
+    {
+    const actor=crypto.randomUUID(),child=crypto.randomUUID(),legacyChild=crypto.randomUUID();
+    for(const [id,name] of [[actor,'export_reader_068'],[child,'referral_child_068'],[legacyChild,'legacy_referral_child_068']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},'Export reader')`;
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='currently_reading'`)[0].id;
+    const books=await sql`insert into books(title,author_name,page_count) select 'Export fixture 068 '||n,'Author',400 from generate_series(1,1201) n returning id`;
+    await sql`insert into shelf_books(user_id,shelf_id,book_id,progress_pages,progress_percent) select ${actor},${shelf},id,160,40 from books where id=any(${books.map(book=>book.id)})`;
+    const exported=(await sql`select account_data_export(${actor}) as data`)[0].data;
+    expect(exported.reading_history).toHaveLength(1201);expect(exported.profile.id).toBe(actor);expect(new Set(exported.reading_history.map((entry:any)=>entry.book_id)).size).toBe(1201);
+    expect(exported.reading_history[0].books).toHaveProperty('id');expect(exported.reading_history[0].books).toHaveProperty('identifiers');
+    expect(exported.reading_history.every((entry:any)=>entry.books.page_count===400&&entry.progress_pages===160&&entry.progress_percent===40)).toBe(true);
+    for(const key of ['pin_hash','totp_secret','password_hash','recovery_codes'])expect(exported.profile).not.toHaveProperty(key);
+    expect((await sql`select account_data_export(${child}) as data`)[0].data.reading_history).toHaveLength(0);
+    const legacy=legacyEditions!,legacyData=(await sql`select account_data_export(${legacy.owner}) as data`)[0].data;
+    expect(legacyData.reviews.some((review:any)=>review.id===legacy.reviewId&&review.book_id===legacy.ids[1])).toBe(true);
+    const code=(await sql`select referral_code from users where id=${actor}`)[0].referral_code;
+    await Promise.all(Array.from({length:3},()=>sql`select attribute_referral_atomic(${child},${code})`));
+    await sql`update users set referred_by=${actor} where id=${legacyChild}`;
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='referrals' and aggregate_id=${child} and event_type='check_badges'`)[0].count).toBe(1);
+    for(const [currency,amount] of [['USD',0.1],['NGN',2.5],['EUR',3]] as const)await sql`insert into referral_commissions(referrer_id,referred_user_id,transaction_id,transaction_type,gross_transaction_amount,platform_fee_amount,commission_amount,currency) values(${actor},${child},${'export-068-'+currency},'tip',${amount*100},${amount*10},${amount},${currency})`;
+    const stats=(await sql`select referral_statistics(${actor}) as data`)[0].data;
+    expect(stats).toMatchObject({referralCount:2,xpFromReferrals:200,referralCode:code});expect(stats.earnedByCurrency).toEqual({USD:'0.1000',NGN:'2.5000',EUR:'3.0000'});expect(stats.milestones.map((item:any)=>item.target)).toEqual([10,50,200]);
+    await sql`update referral_commissions set commission_amount=0.04 where referrer_id=${actor} and currency='USD'`;
+    expect((await sql`select referral_statistics(${actor}) as data`)[0].data.earnedByCurrency.USD).toBe('0.0400');
+    await sql`update users set profile_visibility='followers_only' where id=${actor}`;
+    expect((await sql`select referral_statistics(${actor}) as data`)[0].data.topReferrers.some((person:any)=>person.id===actor)).toBe(false);
+    for(const role of ['anon','authenticated'])for(const routine of ['account_data_export(uuid)','referral_statistics(uuid)','attribute_referral_atomic_036(uuid,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    await sql`update users set is_banned=true where id=${child}`;await expect(sql`select account_data_export(${child})`).rejects.toMatchObject({code:'P1003'});
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

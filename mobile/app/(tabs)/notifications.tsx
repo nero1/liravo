@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { FlatList, View, Text, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatDistanceToNow } from 'date-fns';
@@ -8,6 +9,7 @@ import { Bell } from 'lucide-react-native';
 import type { NotificationRow } from '@/types';
 
 export default function NotificationsScreen() {
+  const {t:ui}=useTranslations('');
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage, refetch } = useNotifications();
   const markRead = useMarkNotificationRead();
 
@@ -16,7 +18,7 @@ export default function NotificationsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <View className="px-4 py-3 border-b border-border">
-        <Text className="text-2xl font-bold text-foreground">Notifications</Text>
+        <Text className="text-2xl font-bold text-foreground">{ui('nav.notifications')}</Text>
       </View>
 
       <FlatList

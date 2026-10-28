@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
 export default function NewReadingRoomScreen() {
+  const {t:ui}=useTranslations('');
   const router = useRouter();
   const qc = useQueryClient();
   const [name, setName] = useState('');
@@ -21,7 +23,7 @@ export default function NewReadingRoomScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <View className="px-4 pt-4 gap-4">
         <Input label="Room Name" value={name} onChangeText={setName} placeholder="e.g. Sci-Fi Enthusiasts" />
-        <Button onPress={() => create.mutate()} loading={create.isPending} disabled={!name.trim()} size="lg">Create Room</Button>
+        <Button onPress={() => create.mutate()} loading={create.isPending} disabled={!name.trim()} size="lg">{ui('nativeNavigation.createRoom')}</Button>
       </View>
     </SafeAreaView>
   );

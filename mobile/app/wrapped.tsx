@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -23,6 +24,7 @@ interface WrappedData {
 }
 
 export default function WrappedScreen() {
+  const {t:ui}=useTranslations('');
   const { data, isLoading } = useQuery({
     queryKey: ['wrapped'],
     queryFn: () => api.get<WrappedData>(ENDPOINTS.wrapped),
@@ -59,7 +61,7 @@ export default function WrappedScreen() {
         <View className="gap-4">
           <Card>
             <Text className="text-5xl font-bold text-foreground text-center">{wrapped.booksRead}</Text>
-            <Text className="text-center text-muted-foreground mt-1">Books Read</Text>
+            <Text className="text-center text-muted-foreground mt-1">{ui('profile.booksRead')}</Text>
           </Card>
 
           <Card>
@@ -71,7 +73,7 @@ export default function WrappedScreen() {
 
           {(wrapped.topGenres ?? []).length > 0 && (
             <Card>
-              <Text className="font-semibold text-foreground mb-2">Top Genres</Text>
+              <Text className="font-semibold text-foreground mb-2">{ui('aiProfiles.genres')}</Text>
               <View className="flex-row flex-wrap gap-2">
                 {wrapped.topGenres.map((g) => (
                   <View key={g} className="bg-accent/10 rounded-full px-3 py-1">
@@ -91,21 +93,21 @@ export default function WrappedScreen() {
 
           {wrapped.favouriteAuthor && (
             <Card>
-              <Text className="font-semibold text-foreground mb-1">Favourite Author</Text>
+              <Text className="font-semibold text-foreground mb-1">{ui('wrapped.favouriteAuthor')}</Text>
               <Text className="text-xl font-bold text-foreground">{wrapped.favouriteAuthor}</Text>
             </Card>
           )}
 
           {wrapped.mostActiveMonth && (
             <Card>
-              <Text className="font-semibold text-foreground mb-1">Most Active Month</Text>
+              <Text className="font-semibold text-foreground mb-1">{ui('wrapped.mostActiveMonth')}</Text>
               <Text className="text-xl font-bold text-foreground">{wrapped.mostActiveMonth}</Text>
             </Card>
           )}
 
           {wrapped.longestBook && (
             <Card>
-              <Text className="font-semibold text-foreground mb-1">Longest Book</Text>
+              <Text className="font-semibold text-foreground mb-1">{ui('wrapped.longestBook')}</Text>
               <Text className="text-base font-bold text-foreground" numberOfLines={2}>{wrapped.longestBook.title}</Text>
               <Text className="text-sm text-muted-foreground">{wrapped.longestBook.pageCount.toLocaleString()} pages</Text>
             </Card>
@@ -113,7 +115,7 @@ export default function WrappedScreen() {
 
           {wrapped.shortestBook && (
             <Card>
-              <Text className="font-semibold text-foreground mb-1">Shortest Book</Text>
+              <Text className="font-semibold text-foreground mb-1">{ui('wrapped.shortestBook')}</Text>
               <Text className="text-base font-bold text-foreground" numberOfLines={2}>{wrapped.shortestBook.title}</Text>
               <Text className="text-sm text-muted-foreground">{wrapped.shortestBook.pageCount.toLocaleString()} pages</Text>
             </Card>
