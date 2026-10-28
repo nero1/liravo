@@ -16,7 +16,7 @@ import { ReactionButtons } from '@/components/books/ReactionButtons';
 import { AudibleCTA } from '@/components/books/AudibleCTA';
 import { AffiliateLinkButtons } from '@/components/books/AffiliateLinkButtons';
 import { QuoteForm } from '@/components/books/QuoteForm';
-import { buildAffiliateLinks } from '@/services/books';
+import { buildAffiliateLinks,getAudibleLink } from '@/services/books';
 import type { Metadata } from 'next';
 import { APP_URL } from '@/constants/config';
 
@@ -301,14 +301,14 @@ export default async function BookPage({ params }: BookPageProps) {
       {/* Affiliate buy links */}
       {affiliateLinks.length > 0 && (
         <div className="mb-5">
-          <AffiliateLinkButtons links={affiliateLinks} bookId={params.id} />
+          <AffiliateLinkButtons links={affiliateLinks} bookId={params.id} userId={user.id}/>
         </div>
       )}
 
       {/* Audible CTA */}
       {book.has_audiobook && (
         <div className="mb-5">
-          <AudibleCTA locale={locale} bookTitle={book.title} />
+          <AudibleCTA link={getAudibleLink(book,locale,country)!} bookId={params.id} userId={user.id}/>
         </div>
       )}
 

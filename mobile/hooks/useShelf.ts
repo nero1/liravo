@@ -3,9 +3,10 @@ import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
 import type { ShelfRow, ShelfBookRow } from '@/types';
 
-export function useShelves(bookId?:string) {
+export function useShelves(bookId?:string,enabled=true) {
   return useQuery({
     queryKey: ['shelves',bookId],
+    enabled,
     queryFn: () => api.get<{ shelves: ShelfRow[];addedToShelves:string[] }>(ENDPOINTS.shelves.list,{bookId}),
   });
 }

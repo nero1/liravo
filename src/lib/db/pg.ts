@@ -27,6 +27,11 @@ function getPool(): SqlInstance {
     max_lifetime: 1800,
     connect_timeout: 15,
     ssl: sslEnabled ? { rejectUnauthorized: true } : false,
+    types:{timestamptz:{
+      to:1184,from:[1184],
+      serialize:(value:string|Date)=>value instanceof Date?value.toISOString():value,
+      parse:(value:string)=>value.replace(' ','T').replace(/([+-]\d{2})$/,'$1:00'),
+    }},
   });
 
   return _pool;

@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getRedisClient, REDIS_KEYS, REDIS_TTL } from '@/lib/redis';
 import type { BookRow } from '@/types/database';
@@ -157,55 +158,30 @@ const LOCALE_TO_COUNTRY: Record<string, string> = {
   en: 'US',
 };
 
-export async function buildAffiliateLinks(book: BookRow, country: string = 'US', locale?: string) {
-  // If a locale is provided, use it to derive the country (locale takes precedence)
-  if (locale && LOCALE_TO_COUNTRY[locale]) {
-    country = LOCALE_TO_COUNTRY[locale];
+export interface AffiliateLink {linkId:string;name:string;url:string;isAffiliate:boolean;isPrimary:boolean;storeId:string|null;storeVersion:string|null;country:string;}
+function identifiedLink(link:Omit<AffiliateLink,'linkId'>,identity:string):AffiliateLink{
+  const hash=createHash('sha256').update(JSON.stringify([link.country,link.storeVersion,link.name,link.url,link.isAffiliate,link.isPrimary])).digest('hex');
+  return {...link,linkId:identity+':'+hash};
+}
+export async function buildAffiliateLinks(book:BookRow,country?:string,locale?:string):Promise<AffiliateLink[]>{
+  const region=country&&/^[A-Za-z]{2}$/.test(country)?country.toUpperCase():LOCALE_TO_COUNTRY[locale??'']??'US';
+  const {data:stores,error}=await createServiceClient().from('affiliate_stores').select('*').eq('is_active',true).order('priority',{ascending:true});
+  if(error)throw new Error('Book stores unavailable');
+  const links:AffiliateLink[]=[];
+  for(const store of stores??[]){
+    if(store.countries.length&&!store.countries.includes(region))continue;
+    const raw=store.url_template.replaceAll('{isbn}',encodeURIComponent(book.isbn_13??book.isbn_10??'')).replaceAll('{tag}',encodeURIComponent(store.affiliate_tag??'')).replaceAll('{title}',encodeURIComponent(book.title));
+    let url:URL;try{url=new URL(raw);if(url.protocol!=='https:'||url.username||url.password||/[{}]/.test(url.hostname))throw new Error('Invalid store URL');}catch{throw new Error('Book store configuration unavailable');}
+    const version=typeof store.updated_at==='string'?store.updated_at:new Date(store.updated_at).toISOString();
+    links.push(identifiedLink({name:store.name,url:url.toString(),isAffiliate:!store.is_non_affiliate,isPrimary:store.priority===1,storeId:store.id,storeVersion:version,country:region},store.id));
   }
-  const supabase = createServiceClient();
-  const redis = getRedisClient();
-  const cacheKey = REDIS_KEYS.affiliateLink(book.id, country);
-
-  const cached = await redis.get(cacheKey);
-  if (cached) return JSON.parse(cached);
-
-  const { data: stores } = await supabase
-    .from('affiliate_stores')
-    .select('*')
-    .eq('is_active', true)
-    .order('priority', { ascending: true });
-
-  const links: { name: string; url: string; isAffiliate: boolean; isPrimary: boolean }[] = [];
-
-  for (const store of stores ?? []) {
-    const countriesMatch =
-      store.countries.length === 0 || store.countries.includes(country);
-
-    if (!countriesMatch) continue;
-
-    const isbn = book.isbn_13 ?? book.isbn_10 ?? '';
-    const url = store.url_template
-      .replace('{isbn}', isbn)
-      .replace('{tag}', store.affiliate_tag ?? '')
-      .replace('{title}', encodeURIComponent(book.title));
-
-    links.push({
-      name: store.name,
-      url,
-      isAffiliate: !store.is_non_affiliate,
-      isPrimary: store.priority === 1,
-    });
-  }
-
-  if (links.length === 0) {
-    links.push({
-      name: 'WorldCat',
-      url: `https://www.worldcat.org/search?q=${encodeURIComponent(book.isbn_13 ?? book.title)}`,
-      isAffiliate: false,
-      isPrimary: false,
-    });
-  }
-
-  await redis.set(cacheKey, JSON.stringify(links), { ex: REDIS_TTL.AFFILIATE_LINK });
+  if(!links.length)links.push(identifiedLink({name:'WorldCat',url:'https://www.worldcat.org/search?q='+encodeURIComponent(book.isbn_13??book.title),isAffiliate:false,isPrimary:false,storeId:null,storeVersion:null,country:region},'worldcat'));
   return links;
+}
+export function getAudibleLink(book:Pick<BookRow,'id'|'title'|'has_audiobook'>,locale='en',country='US'):AffiliateLink|null{
+  if(!book.has_audiobook)return null;
+  const market=locale==='fr'?'FR':locale==='de'?'DE':'US',host=market==='FR'?'www.audible.fr':market==='DE'?'www.audible.de':'www.audible.com';
+  const tag=process.env['AUDIBLE_AFFILIATE_'+market]??process.env['NEXT_PUBLIC_AUDIBLE_AFFILIATE_'+market]??'',url=new URL('/search','https://'+host);
+  url.searchParams.set('keywords',book.title);if(tag)url.searchParams.set('tag',tag);
+  return identifiedLink({name:'Audible',url:url.toString(),isAffiliate:!!tag,isPrimary:false,storeId:null,storeVersion:null,country},'audible-'+market.toLowerCase());
 }

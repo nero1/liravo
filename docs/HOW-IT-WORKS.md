@@ -179,7 +179,7 @@ Admin can toggle flags in the admin panel without a code deployment. Cache inval
 | Book metadata | `book:{id}` | 24 hours |
 | User feed | `feed:{user_id}:cursor:{cursor}` | 5 minutes |
 | Leaderboards | `leaderboard:{type}` | 1 hour |
-| Affiliate links | `affiliate_link:{book_id}:{country}` | 24 hours |
+| Book purchase links | Current active store configuration | Uncached; versioned click identities |
 | Feature flags | `feature_flag:{name}` | 60 seconds |
 | Auth rate limit | `ratelimit:auth:{ip}` | 15 minutes |
 

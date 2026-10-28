@@ -70,6 +70,8 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Validate and stage avatar uploads; commit owned media with profiles and clean abandoned objects.
 - ✅ Verify Telegram signatures, resolve social identities atomically and enforce configured CAPTCHA on web/native authentication.
 - ✅ Attribute review-driven want-to-reads once, award influence badges and share accurate creator statistics across web/native.
+- ✅ Enforce feed privacy before stable pagination and share authenticated web/native feed contracts.
+- ✅ Validate book-link identities and record clicks atomically with replay-safe receipts.
 - ✅ Make buddy chapter/notes atomic and verify bounded, replay-safe Goodreads imports on web/native.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.

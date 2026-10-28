@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import type { BookRow } from '@/types/database';
+import {AffiliateLinkButtons} from '@/components/books/AffiliateLinkButtons';
+import type {AffiliateLink} from '@/services/books';
 import { buildAffiliateLinks } from '@/services/books';
 
 export const dynamic = 'force-dynamic';
@@ -101,7 +103,7 @@ interface BookWithLinks {
   description: string;
   section: string;
   dbBook: BookRow | null;
-  affiliateLinks: { name: string; url: string; isAffiliate: boolean; isPrimary: boolean }[];
+  affiliateLinks:AffiliateLink[];
 }
 
 export default async function ResourceLibraryPage() {
@@ -110,6 +112,8 @@ export default async function ResourceLibraryPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
+  const {data:profile,error:profileError}=await supabase.from('users').select('country,preferred_locale').eq('id',user.id).single();
+  if(profileError||!profile)throw new Error('Profile unavailable');
 
   // Look up books in DB by ISBN
   const isbns = WRITING_BOOKS.map((b) => b.isbn);
@@ -129,7 +133,7 @@ export default async function ResourceLibraryPage() {
       let affiliateLinks: BookWithLinks['affiliateLinks'] = [];
       if (dbBook) {
         try {
-          affiliateLinks = await buildAffiliateLinks(dbBook, 'US');
+          affiliateLinks = await buildAffiliateLinks(dbBook,profile.country??'US',profile.preferred_locale);
         } catch {
           affiliateLinks = [];
         }
@@ -192,28 +196,8 @@ export default async function ResourceLibraryPage() {
                       <p className="text-sm mt-1 leading-relaxed">{book.description}</p>
 
                       <div className="flex items-center gap-3 mt-3">
-                        {buyLink ? (
-                          <a
-                            href={buyLink.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={async () => {
-                              if (book.dbBook) {
-                                await fetch('/api/books/click', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    book_id: book.dbBook.id,
-                                    store_name: buyLink.name,
-                                    link_type: 'resource_library',
-                                  }),
-                                });
-                              }
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-3 py-1.5 transition-colors"
-                          >
-                            Get on Amazon
-                          </a>
+                        {buyLink&&book.dbBook ? (
+                          <AffiliateLinkButtons links={[buyLink]} bookId={book.dbBook.id} userId={user.id}/>
                         ) : (
                           <Link
                             href={`/discover?q=${encodeURIComponent(book.title)}`}

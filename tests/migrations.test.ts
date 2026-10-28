@@ -1677,5 +1677,60 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       for(const routine of ['read_creator_analytics(uuid)','read_creator_leaderboard()'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
     }
+    {
+    const reader=crypto.randomUUID(),publisher=crypto.randomUUID(),outsider=crypto.randomUUID();
+    for(const [index,id] of [reader,publisher,outsider].entries())await sql`select create_direct_account(${id},${'feed'+index+'@example.test'},${'feed_fixture_'+index},'Feed fixture')`;
+    await sql`insert into follows(follower_id,following_id) values(${reader},${publisher})`;
+    const books=await sql`insert into books(title,author_name) select 'Feed fixture '||i,'Fixture' from generate_series(1,24) i returning id`;
+    const shelf=(await sql`select id from shelves where user_id=${publisher} and default_type='want_to_read'`)[0].id;
+    for(const [index,book] of books.entries()){
+      await sql`insert into shelf_books(shelf_id,book_id,user_id,added_at) values(${shelf},${book.id},${publisher},'2026-10-28T00:00:00.123000Z'::timestamptz+${index+1}*interval '1 microsecond')`;
+      await sql`insert into reviews(user_id,book_id,rating,content,created_at) values(${publisher},${book.id},4,'Visible feed review','2026-10-28T00:00:00.123012Z')`;
+    }
+    await sql`insert into reviews(user_id,book_id,rating,content,is_hidden) values(${publisher},${books[0].id},4,'Hidden feed review',true),(${outsider},${books[0].id},4,'Unfollowed review',false)`;
+    const privateShelf=(await sql`insert into shelves(user_id,name,slug,is_public) values(${publisher},'Private fixture','private-fixture',false) returning id`)[0].id;
+    await sql`insert into shelf_books(shelf_id,book_id,user_id) values(${privateShelf},${books[0].id},${publisher})`;
+    const ownShelf=(await sql`select id from shelves where user_id=${reader} and default_type='want_to_read'`)[0].id;
+    await sql`select set_shelf_membership(${reader},${ownShelf},${books[0].id},true)`;
+    const {getSocialFeed}=await import('@/lib/social-feed');let cursor:string|null=null;const ids:string[]=[];
+    do{
+      const page=await getSocialFeed(reader,cursor);expect(page.items.length).toBeLessThanOrEqual(20);
+      for(const item of page.items){expect(item.userId).toBe(publisher);expect(item.user.id).toBe(publisher);expect(item.wantToRead).toBe(item.book.id===books[0].id);if(item.type==='shelf_book')expect(item.shelf.name).not.toBe('Private fixture');else expect(item.excerpt).toBe('Visible feed review');ids.push(item.id);}
+      if(page.nextCursor)expect(JSON.parse(Buffer.from(page.nextCursor,'base64url').toString()).at).toContain('.123');
+      cursor=page.nextCursor;
+    }while(cursor);
+    expect(ids).toHaveLength(48);expect(new Set(ids).size).toBe(48);
+    const raw=async()=>((await sql`select read_social_feed(${reader},null,null,null,50) as items`)[0].items as {type:string}[]);
+    await sql`update users set shelf_visibility='private' where id=${publisher}`;
+    expect((await raw()).every(item=>item.type==='review')).toBe(true);expect(await raw()).toHaveLength(24);
+    await sql`update users set is_banned=true where id=${publisher}`;expect(await raw()).toEqual([]);
+    await sql`update users set is_banned=false,deleted_at=now() where id=${publisher}`;expect(await raw()).toEqual([]);
+    await sql`update users set deleted_at=null where id=${publisher}`;await sql`delete from follows where follower_id=${reader} and following_id=${publisher}`;expect(await raw()).toEqual([]);
+    await expect(sql`select read_social_feed(${reader},now(),${books[0].id},null,20)`).rejects.toThrow('Invalid feed cursor');
+    for(const role of ['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'read_social_feed(uuid,timestamptz,uuid,text,integer)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'click@example.test','click_fixture','Click fixture')`;
+    const book=(await sql`insert into books(title,author_name) values('Click fixture','Fixture') returning id`)[0].id;
+    const store=(await sql`insert into affiliate_stores(name,countries,url_template,priority,is_non_affiliate) values('Click fixture',array['NG'],'https://store.example.test/?isbn={isbn}',1,false) returning id,to_jsonb(affiliate_stores)->>'updated_at' as version`)[0];
+    const linkId=store.id+':'+'a'.repeat(64),link={linkId,name:'Click fixture',storeId:store.id,storeVersion:store.version,country:'NG',isAffiliate:true,isPrimary:true};
+    const click=()=>sql`select record_book_link_click(${actor},${book},${linkId},'fixture-click-intent',${sql.json(link)}) as receipt`;
+    const receipts=await Promise.all(Array.from({length:4},click));expect(new Set(receipts.map(rows=>rows[0].receipt.clickId)).size).toBe(1);
+    const rows=await sql`select user_id_hash,link_type,is_affiliate,store_name,country,store_id from affiliate_link_clicks where book_id=${book}`;
+    expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({link_type:'primary',is_affiliate:true,store_name:'Click fixture',country:'NG',store_id:store.id});expect(rows[0].user_id_hash).toMatch(/^[a-f0-9]{64}$/);expect(rows[0].user_id_hash).not.toBe(actor);
+    await expect(sql`select record_book_link_click(${actor},${book},${linkId},'fixture-forged-flag',${sql.json({...link,isAffiliate:false})})`).rejects.toThrow('Book link changed');
+    await expect(sql`select record_book_link_click(${actor},${book},${linkId},'fixture-foreign-region',${sql.json({...link,country:'US'})})`).rejects.toThrow('Book link unavailable');
+    await sql`update affiliate_stores set name='Changed click store' where id=${store.id}`;
+    await expect(sql`select record_book_link_click(${actor},${book},${linkId},'fixture-stale-click',${sql.json(link)})`).rejects.toThrow('Book link changed');
+    await sql`update affiliate_stores set is_active=false where id=${store.id}`;
+    expect((await sql`select record_book_link_click(${actor},${book},${linkId},'fixture-click-intent',null) as receipt`)[0].receipt).toEqual(receipts[0][0].receipt);
+    await expect(sql`select record_book_link_click(${actor},${book},${linkId},'fixture-disabled-click',${sql.json(link)})`).rejects.toThrow('Book link unavailable');
+    await expect(sql`select record_book_link_click(${actor},${book},${'worldcat:'+ 'b'.repeat(64)},'fixture-click-intent',null)`).rejects.toThrow('Conflicting click intent');
+    expect((await sql`select count(*)::int as count from affiliate_link_clicks where book_id=${book}`)[0].count).toBe(1);
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'affiliate_link_clicks','INSERT') as allowed`)[0].allowed).toBe(false);
+      expect((await sql`select has_function_privilege(${role},'record_book_link_click(uuid,uuid,text,text,jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

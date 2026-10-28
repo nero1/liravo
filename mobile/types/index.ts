@@ -148,15 +148,7 @@ export interface NotificationRow {
   actor?: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url'>;
 }
 
-export interface FeedItem {
-  id: string;
-  type: 'review' | 'shelf_add' | 'challenge_join' | 'quote' | 'follow';
-  actor: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url'>;
-  book?: Pick<BookRow, 'id' | 'title' | 'cover_url' | 'author_name'>;
-  review?: ReviewRow;
-  quote?: QuoteRow;
-  created_at: string;
-}
+export type {SocialFeedItem as FeedItem} from '../../src/lib/social-feed-contracts';
 
 export interface BuddyReadRow {
   id: string;
@@ -304,6 +296,7 @@ export interface ContentReportRow {
 }
 
 export interface AffiliateLink {
+  linkId:string;
   name:string;
   url:string;
   isAffiliate:boolean;

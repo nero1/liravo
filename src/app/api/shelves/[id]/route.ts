@@ -33,6 +33,6 @@ export async function GET(request:Request,{params}:{params:{id:string}}){
   const {data:books,error:booksError}=await query;
   if(booksError)return NextResponse.json({error:'Shelf books unavailable'},{status:503});
   const page=(books??[]).slice(0,limit),last=page[page.length-1];
-  const nextCursor=books&&books.length>limit&&last?encodeCursor({at:new Date(last.added_at).toISOString(),id:last.id}):null;
+  const nextCursor=books&&books.length>limit&&last?encodeCursor({at:last.added_at,id:last.id}):null;
   return NextResponse.json({shelf,books:page.map(entry=>({...entry,progress_percent:entry.progress_percent===null?null:Number(entry.progress_percent)})),nextCursor});
 }

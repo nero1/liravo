@@ -129,7 +129,10 @@
     "writtenBy": "by {author}",
     "addWantToRead": "Add to want to read",
     "removeWantToRead": "Remove from want to read",
-    "reviewWantToRead": "Want to read after this review"
+    "reviewWantToRead": "Want to read after this review",
+    "getBook": "Get this book",
+    "affiliateDisclosure": "Liravo may earn a commission from qualifying purchases.",
+    "openLinkFailed": "This link could not be opened. Please try again."
   },
   "profile": {
     "countryPlaceholder": "GB",
@@ -1023,5 +1026,23 @@
     "weeklyConversions": "Want-to-Reads This Week",
     "verifiedAuthor": "Verified Author",
     "unavailable": "Creator statistics are unavailable. Please try again."
+  },
+  "feed": {
+    "title": "Feed",
+    "empty": "Nothing here yet",
+    "emptyDescription": "Follow other readers to see their activity.",
+    "discover": "Discover readers and books",
+    "reviewed": "reviewed",
+    "finished": "finished reading",
+    "started": "started reading",
+    "wants": "wants to read",
+    "shelved": "added to {shelf}",
+    "rating": "{rating} out of 5 stars",
+    "spoilers": "Show review spoilers",
+    "more": "More activity",
+    "retry": "Reload feed",
+    "invalidCursor": "This feed link is invalid. Return to the latest activity.",
+    "unavailable": "The feed is unavailable. Please try again.",
+    "notifications": "Notifications"
   }
 }

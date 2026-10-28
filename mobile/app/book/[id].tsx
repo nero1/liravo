@@ -134,7 +134,7 @@ export default function BookDetailScreen() {
           )}
 
           {/* Affiliate links */}
-          <AffiliateLinkButtons book={book} links={bookData?.affiliateLinks??[]} />
+          <AffiliateLinkButtons book={book} links={[...(bookData?.affiliateLinks??[]),...(bookData?.audibleLink?[bookData.audibleLink]:[])]} />
 
           {/* Reviews */}
           {reviews.length > 0 && (

@@ -1,4 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {useAuthStore} from '@/stores/auth';
+import {useRequestIntent} from '@/hooks/useRequestIntent';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
 import type { AffiliateLink, BookRow, ReviewRow, QuoteRow } from '@/types';
@@ -15,7 +17,7 @@ export function useBookSearch(query: string) {
 export function useBook(id: string) {
   return useQuery({
     queryKey: ['book', id],
-    queryFn: () => api.get<{ book: BookRow;affiliateLinks:AffiliateLink[] }>(ENDPOINTS.books.byId(id)),
+    queryFn: () => api.get<{ book: BookRow;affiliateLinks:AffiliateLink[];audibleLink:AffiliateLink|null }>(ENDPOINTS.books.byId(id)),
   });
 }
 
@@ -48,9 +50,10 @@ export function useToggleShelf() {
   });
 }
 
-export function useTrackAffiliateClick() {
-  return useMutation({
-    mutationFn: (body: { bookId: string; linkType: string; storeName: string; isAffiliate:boolean }) =>
-      api.post(ENDPOINTS.books.click, body),
-  });
+export function useTrackAffiliateClick(){
+  const owner=useAuthStore(state=>state.user?.id),intent=useRequestIntent(owner);
+  return useMutation({mutationFn:async(body:{bookId:string;linkId:string})=>{
+    const scope='book.link.'+body.bookId+'.'+body.linkId,result=await api.post<{ok:boolean;clickId:string}>(ENDPOINTS.books.click,body,await intent.durableHeaders(body,scope));
+    if(result.ok!==true||typeof result.clickId!=='string')throw new Error('Invalid click receipt');await intent.complete(scope);return result;
+  }});
 }

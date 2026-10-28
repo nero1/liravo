@@ -129,7 +129,10 @@
     "writtenBy": "von {author}",
     "addWantToRead": "Zur Leseliste hinzufügen",
     "removeWantToRead": "Von der Leseliste entfernen",
-    "reviewWantToRead": "Nach dieser Rezension lesen möchten"
+    "reviewWantToRead": "Nach dieser Rezension lesen möchten",
+    "getBook": "Dieses Buch erhalten",
+    "affiliateDisclosure": "Liravo kann bei qualifizierten Käufen eine Provision erhalten.",
+    "openLinkFailed": "Dieser Link konnte nicht geöffnet werden. Bitte versuche es erneut."
   },
   "profile": {
     "countryPlaceholder": "DE",
@@ -1023,5 +1026,23 @@
     "weeklyConversions": "Lesewünsche diese Woche",
     "verifiedAuthor": "Verifizierter Autor",
     "unavailable": "Creator-Statistiken sind nicht verfügbar. Bitte versuche es erneut."
+  },
+  "feed": {
+    "title": "Feed",
+    "empty": "Noch keine Aktivitäten",
+    "emptyDescription": "Folge anderen Lesern, um ihre Aktivitäten zu sehen.",
+    "discover": "Leser und Bücher entdecken",
+    "reviewed": "hat eine Rezension veröffentlicht",
+    "finished": "hat zu Ende gelesen",
+    "started": "hat angefangen zu lesen",
+    "wants": "möchte lesen",
+    "shelved": "hat zu {shelf} hinzugefügt",
+    "rating": "{rating} von 5 Sternen",
+    "spoilers": "Spoiler der Rezension anzeigen",
+    "more": "Weitere Aktivitäten",
+    "retry": "Feed neu laden",
+    "invalidCursor": "Dieser Feed-Link ist ungültig. Öffne die neuesten Aktivitäten.",
+    "unavailable": "Der Feed ist nicht verfügbar. Bitte versuche es erneut.",
+    "notifications": "Benachrichtigungen"
   }
 }

@@ -129,7 +129,10 @@
     "writtenBy": "par {author}",
     "addWantToRead": "Ajouter aux envies de lire",
     "removeWantToRead": "Retirer des envies de lire",
-    "reviewWantToRead": "Envie de lire après cet avis"
+    "reviewWantToRead": "Envie de lire après cet avis",
+    "getBook": "Obtenir ce livre",
+    "affiliateDisclosure": "Liravo peut percevoir une commission sur les achats éligibles.",
+    "openLinkFailed": "Impossible d’ouvrir ce lien. Réessayez."
   },
   "profile": {
     "countryPlaceholder": "FR",
@@ -1023,5 +1026,23 @@
     "weeklyConversions": "Envies de lire cette semaine",
     "verifiedAuthor": "Auteur vérifié",
     "unavailable": "Les statistiques des créateurs sont indisponibles. Réessayez."
+  },
+  "feed": {
+    "title": "Fil d’actualité",
+    "empty": "Aucune activité pour le moment",
+    "emptyDescription": "Suivez d’autres lecteurs pour voir leur activité.",
+    "discover": "Découvrir des lecteurs et des livres",
+    "reviewed": "a publié un avis",
+    "finished": "a terminé sa lecture",
+    "started": "a commencé à lire",
+    "wants": "souhaite lire",
+    "shelved": "a ajouté à {shelf}",
+    "rating": "{rating} étoiles sur 5",
+    "spoilers": "Afficher les révélations de l’avis",
+    "more": "Plus d’activité",
+    "retry": "Recharger le fil",
+    "invalidCursor": "Ce lien est invalide. Revenez aux dernières activités.",
+    "unavailable": "Le fil est indisponible. Réessayez.",
+    "notifications": "Notifications"
   }
 }

@@ -1193,7 +1193,7 @@ Data isolation in these modes is enforced at the **application layer**: every AP
 
 ### 16.1 Caching Strategy
 
-- Redis namespaced keys: `book:{id}`, `feed:{user_id}:cursor:{cursor}`, `leaderboard:weekly`, `affiliate_link:{book_id}:{country}`.
+- Redis namespaced keys: `book:{id}`, `feed:{user_id}:cursor:{cursor}`, `leaderboard:weekly`. Purchase links read current store configuration and carry versioned identities; click metadata is derived by the server.
 - Feed cache: 5-minute TTL.
 - Book metadata: 24-hour TTL.
 - Leaderboards: 1-hour TTL.
