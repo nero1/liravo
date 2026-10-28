@@ -11,10 +11,13 @@ import { AffiliateLinkButtons } from '@/components/books/AffiliateLinkButtons';
 import { AddToShelfModal } from '@/components/shelf/AddToShelfModal';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import {ReviewWantToReadButton} from '@/components/books/ReviewWantToReadButton';
+import {useAuthStore} from '@/stores/auth';
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const owner=useAuthStore(state=>state.user?.id);
   const [shelfModalOpen, setShelfModalOpen] = useState(false);
   const { data: bookData, isLoading,error,refetch } = useBook(id!);
   const { data: reviewData } = useBookReviews(id!);
@@ -146,6 +149,7 @@ export default function BookDetailScreen() {
                   {review.content && (
                     <Text className="text-sm text-foreground" numberOfLines={4}>{review.content}</Text>
                   )}
+                  {review.user_id!==owner&&<ReviewWantToReadButton key={owner} bookId={id!} reviewId={review.id}/>}
                 </View>
               ))}
             </View>

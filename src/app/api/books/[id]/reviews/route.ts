@@ -32,9 +32,9 @@ export async function GET(
   const { data: reviews, error } = await supabase
     .from('reviews')
     .select(`
-      id, rating, content, review_type, mood_tags, has_spoilers,
+      id, user_id, book_id, rating, content, review_type, mood_tags, has_spoilers,
       likes_count, created_at, moderation_status,
-      users:user_id (display_name, avatar_url, username)
+      user:user_id (display_name, avatar_url, username)
     `)
     .eq('book_id', params.id)
     .eq('moderation_status', 'published')

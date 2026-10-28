@@ -614,7 +614,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 - All calculations use Decimal.js.
 
 **Creator leaderboard:**
-- Top creators by want-to-reads triggered this week.
+- Top creators by unique review-driven want-to-reads since Monday 00:00 UTC. A reader/book pair earns attribution once; generic shelf additions and imports cannot later claim a review. Self-attribution and unavailable reviews are rejected.
 - Top creators by follower growth this week.
 - Featured on the Discover page.
 

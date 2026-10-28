@@ -35,6 +35,14 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
     for (const file of migrations) {
+      if(file.startsWith('060_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-conversion@example.test','legacy_conversion_owner','Legacy conversion')`;
+        const books=await sql`insert into books(title,author_name) values('Legacy shelved conversion','Fixture'),('Legacy removed conversion','Fixture') returning id`;
+        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='want_to_read'`)[0].id;
+        await sql`select set_shelf_membership(${owner},${shelf},${books[0].id},true)`;
+        await sql`select apply_book_interaction(${owner},${books[1].id},'reaction','legacy-conversion-add')`;
+        await sql`select apply_book_interaction(${owner},${books[1].id},'reaction','legacy-conversion-remove')`;
+      }
       if(file.startsWith('058_'))await sql.unsafe(`
         create schema storage;
         create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null);
@@ -331,6 +339,12 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await sql`update users set user_types=array['reader','author'],email='sender.contact@example.test' where id=${sender}`;
       const authorFilter=await factory.from<Array<{id:string}>>('users').select('id').contains('user_types',['author']).not('email','is',null).ilike('username','AUDIT_SENDER');
       expect(authorFilter.error).toBeNull(); expect(authorFilter.data).toEqual([{id:sender}]);
+      const overlap=await factory.from<Array<{id:string}>>('users').select('id').eq('id',sender).overlaps('user_types',['author','creator']);
+      expect(overlap.error).toBeNull();expect(overlap.data).toEqual([{id:sender}]);
+      for(const values of [[],["author'});drop table books;--"]]){
+        const result=await factory.from<Array<{id:string}>>('users').select('id').eq('id',sender).overlaps('user_types',values);
+        expect(result.error).toBeNull();expect(result.data).toEqual([]);
+      }
       const injection=await factory.from<Array<{id:string}>>('users').select('id').ilike('username',"%' OR true --");
       expect(injection.error).toBeNull(); expect(injection.data).toEqual([]);
       const { PgQueryBuilder } = await import('@/lib/db/query-builder');
@@ -1611,6 +1625,57 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     await expect(sql`select resolve_direct_social_identity('telegram','599900000002','forged@example.test','Name',null)`).rejects.toThrow('Invalid provider identity');
     await expect(sql`select resolve_direct_social_identity('google','google-unsafe-avatar','safe.auth@example.test','Name','javascript:alert(1)')`).rejects.toThrow('Invalid provider identity');
     for(const role of ['anon','authenticated'])for(const routine of ['find_direct_account(text)','resolve_direct_social_identity(text,text,text,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const actor=crypto.randomUUID(),reviewer=crypto.randomUUID(),other=crypto.randomUUID(),generic=crypto.randomUUID();
+    const legacy=await sql`select c.reviewer_id from review_conversions c join users u on u.id=c.actor_id where u.username='legacy_conversion_owner'`;
+    expect(legacy).toHaveLength(2);expect(legacy.every(row=>row.reviewer_id===null)).toBe(true);
+    for(const [index,id] of [actor,reviewer,other,generic].entries())await sql`select create_direct_account(${id},${'conversion'+index+'@example.test'},${'conversion_fixture_'+index},'Conversion fixture')`;
+    await sql`update users set is_creator=true where id in (${reviewer},${other})`;
+    const books=await sql`insert into books(title,author_name) values('Conversion book','Fixture'),('Generic conversion','Fixture'),('Rollback conversion','Fixture') returning id`;
+    const book=books[0].id,plain=books[1].id,rollback=books[2].id;
+    const reviews=await sql`insert into reviews(user_id,book_id,rating,content) values(${reviewer},${book},4,'First review'),(${other},${book},5,'Second review'),(${reviewer},${plain},4,'Generic review'),(${reviewer},${rollback},4,'Rollback review') returning id`;
+    const add=()=>sql`select apply_book_interaction(${actor},${book},'reaction','conversion-race',${reviews[0].id},true) as result`;
+    expect((await Promise.all(Array.from({length:4},add))).every(rows=>rows[0].result.reacted)).toBe(true);
+    expect((await sql`select count(*)::int as count from review_conversions where actor_id=${actor} and book_id=${book} and reviewer_id=${reviewer}`)[0].count).toBe(1);
+    expect((await sql`select want_to_read_count from reviews where id=${reviews[0].id}`)[0].want_to_read_count).toBe(1);
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='review_conversions' and aggregate_id=${actor+':'+book}`)[0].count).toBe(1);
+    expect((await sql`select amount from xp_ledger where user_id=${actor} and event_key=${'want-to-read:'+book}`)[0].amount).toBe(5);
+    await expect(sql`select apply_book_interaction(${actor},${book},'reaction','conversion-race',${reviews[1].id},true)`).rejects.toThrow('Conflicting');
+    await sql`select apply_book_interaction(${actor},${book},'reaction','conversion-remove',null,false)`;
+    await sql`select apply_book_interaction(${actor},${book},'reaction','conversion-other-review',${reviews[1].id},true)`;
+    expect((await sql`select reviewer_id from review_conversions where actor_id=${actor} and book_id=${book}`)[0].reviewer_id).toBe(reviewer);
+    expect((await sql`select want_to_read_count from reviews where id=${reviews[1].id}`)[0].want_to_read_count).toBe(0);
+    const shelf=(await sql`select id from shelves where user_id=${generic} and default_type='want_to_read'`)[0].id;
+    await sql`select set_shelf_membership(${generic},${shelf},${plain},true)`;await sql`select set_shelf_membership(${generic},${shelf},${plain},false)`;
+    await sql`select apply_book_interaction(${generic},${plain},'reaction','conversion-generic',${reviews[2].id},true)`;
+    expect((await sql`select reviewer_id from review_conversions where actor_id=${generic} and book_id=${plain}`)[0].reviewer_id).toBeNull();
+    await expect(sql`select apply_book_interaction(${generic},${plain},'reaction','conversion-wrong-book',${reviews[0].id},true)`).rejects.toThrow('Review unavailable');
+    await expect(sql`select apply_book_interaction(${reviewer},${book},'reaction','conversion-self',${reviews[0].id},true)`).rejects.toThrow('Review unavailable');
+    await sql`update reviews set is_hidden=true where id=${reviews[1].id}`;
+    await expect(sql`select apply_book_interaction(${generic},${book},'reaction','conversion-hidden',${reviews[1].id},true)`).rejects.toThrow('Review unavailable');
+    await sql`insert into xp_ledger(user_id,event_key,amount,reason) values(${generic},${'want-to-read:'+rollback},7,'conflicting-fixture')`;
+    await expect(sql`select apply_book_interaction(${generic},${rollback},'reaction','conversion-rollback',${reviews[3].id},true)`).rejects.toThrow('Conflicting reward');
+    expect((await sql`select count(*)::int as count from review_conversions where actor_id=${generic} and book_id=${rollback}`)[0].count).toBe(0);
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${generic} and book_id=${rollback}`)[0].count).toBe(0);
+    const {checkAndAwardBadges}=await import('@/services/badges');
+    expect(await checkAndAwardBadges(reviewer,'want_to_read_triggered')).toEqual(['spark']);
+    expect(await checkAndAwardBadges(reviewer,'want_to_read_triggered')).toEqual([]);
+    await sql`insert into tips(user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status,refunded_recipient_amount) values(${actor},${reviewer},3,0.5,2.5,'USD','completed',0.5),(${generic},${reviewer},4,0.75,3.25,'USD','completed',0),(${generic},${reviewer},1000,100,900,'NGN','completed',0)`;
+    const stats=(await sql`select read_creator_analytics(${reviewer}) as stats`)[0].stats;
+    expect(stats).toMatchObject({want_to_read_triggered:1,tips_received:5.25,tips_received_by_currency:{USD:5.25,NGN:900,EUR:0}});
+    let board=(await sql`select read_creator_leaderboard() as board`)[0].board;
+    expect(board.leaderboard.find((entry:{user_id:string})=>entry.user_id===reviewer)).toMatchObject({want_to_read_score:1,total_score:1});
+    expect(new Date(board.week_start).getUTCDay()).toBe(1);
+    await sql`update review_conversions set created_at=now()-interval '8 days' where reviewer_id=${reviewer}`;
+    board=(await sql`select read_creator_leaderboard() as board`)[0].board;expect(board.leaderboard.some((entry:{user_id:string})=>entry.user_id===reviewer)).toBe(false);
+    expect((await sql`select read_creator_analytics(${reviewer}) as stats`)[0].stats.want_to_read_triggered).toBe(1);
+    await sql`update review_conversions set created_at=now() where reviewer_id=${reviewer}`;await sql`update users set profile_visibility='followers_only' where id=${reviewer}`;
+    board=(await sql`select read_creator_leaderboard() as board`)[0].board;expect(board.leaderboard.some((entry:{user_id:string})=>entry.user_id===reviewer)).toBe(false);
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'review_conversions','INSERT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['read_creator_analytics(uuid)','read_creator_leaderboard()'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

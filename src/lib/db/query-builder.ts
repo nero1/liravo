@@ -101,6 +101,11 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
     return this;
   }
 
+  overlaps(column:string,value:unknown[]|string){
+    this._filters.push({col:column,op:'&&',val:value});
+    return this;
+  }
+
   ilike(column: string, pattern: string) {
     this._filters.push({ col: column, op: 'ILIKE', val: pattern });
     return this;
@@ -196,6 +201,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         case '<=':  parts.push(sql`${sql(f.col)} <= ${f.val as SerializableParameter<never>}`); break;
         case 'IN':  parts.push(sql`${sql(f.col)} = ANY(${f.val as SerializableParameter<never>[]})`); break;
         case '@>': parts.push(sql`${sql(f.col)} @> ${f.val as SerializableParameter<never>}`); break;
+        case '&&': parts.push(sql`${sql(f.col)} && ${f.val as SerializableParameter<never>}`); break;
         case 'ILIKE': parts.push(sql`${sql(f.col)} ILIKE ${f.val as string}`); break;
         case 'IS NOT':
           if (f.val === null) parts.push(sql`${sql(f.col)} IS NOT NULL`);

@@ -1,3 +1,6 @@
+import {getCreatorAnalytics} from '@/lib/creator-analytics';
+import {getCurrentUser} from '@/lib/auth/getCurrentUser';
+import {getTranslations,getFormatter} from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -5,90 +8,62 @@ import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Creator Dashboard' };
+export async function generateMetadata():Promise<Metadata>{return {title:(await getTranslations('creator'))('dashboard'),robots:{index:false}};}
 
 export default async function CreatorDashboardPage() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const t=await getTranslations('creator'),formatter=await getFormatter(),supabase = createClient();
+  const user=await getCurrentUser();if(!user)redirect('/login');
 
-  if (!user) redirect('/auth/login');
-
-  const { data: profile } = await supabase
+  const { data: profile,error:profileError } = await supabase
     .from('users')
     .select('display_name, username, avatar_url, is_creator, user_types')
     .eq('id', user.id)
     .single();
 
+  if(profileError||!profile)return <p role="alert">{t('unavailable')}</p>;
   const isCreator =
     profile?.is_creator || (profile?.user_types ?? []).includes('creator');
 
   if (!isCreator) {
     return (
       <div className="max-w-xl mx-auto px-4 py-10 text-center">
-        <h1 className="font-display text-2xl font-bold mb-4">Creator Access Required</h1>
+        <h1 className="font-display text-2xl font-bold mb-4">{t('accessRequired')}</h1>
         <p className="text-neutral-600 dark:text-neutral-400 mb-6">
-          Set your user type to &quot;Book Content Creator&quot; in your settings to access the creator
-          dashboard.
+          {t('accessDescription')}
         </p>
         <Link
-          href="/settings"
+          href="/profile/edit"
           className="px-4 py-2 rounded-lg bg-accent text-white font-medium hover:opacity-90"
         >
-          Go to Settings
+          {t('settings')}
         </Link>
       </div>
     );
   }
 
-  // Fetch analytics from API
-  let analytics = {
-    follower_count: 0,
-    review_count: 0,
-    want_to_read_triggered: 0,
-    tips_received: 0,
-  };
-
-  try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/creator/analytics`,
-      {
-        headers: { Cookie: '' },
-        cache: 'no-store',
-      }
-    );
-    if (res.ok) {
-      analytics = await res.json();
-    }
-  } catch {
-    // Use defaults
-  }
-
-  // Recent reviews
-  const { data: recentReviews } = await supabase
-    .from('reviews')
-    .select('id, book_id, rating, content, created_at')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(5);
+  let analytics,recentReviews;
+  try{
+    analytics=await getCreatorAnalytics(user.id);
+    const {data,error}=await supabase.from('reviews').select('id, book_id, rating, content, created_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(5);
+    if(error)throw error;recentReviews=data??[];
+  }catch{return <p role="alert">{t('unavailable')}</p>;}
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
       <div>
-        <h1 className="font-display text-2xl font-bold">Creator Dashboard</h1>
+        <h1 className="font-display text-2xl font-bold">{t('dashboard')}</h1>
         <p className="text-neutral-500 dark:text-neutral-400 text-sm mt-1">
-          Track your impact on the Liravo community.
+          {t('description')}
         </p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Followers', value: analytics.follower_count },
-          { label: 'Reviews Written', value: analytics.review_count },
-          { label: 'Want to Read Triggered', value: analytics.want_to_read_triggered },
-          { label: 'Tips Received ($)', value: `$${analytics.tips_received.toFixed(2)}` },
+          { label:t('followers'),value:formatter.number(analytics.follower_count) },
+          { label:t('reviews'),value:formatter.number(analytics.review_count) },
+          { label:t('conversions'),value:formatter.number(analytics.want_to_read_triggered) },
+          ...Object.entries(analytics.tips_received_by_currency).map(([currency,amount])=>({label:t('tips',{currency}),value:formatter.number(amount,{style:'currency',currency})})),
         ].map((stat) => (
           <div
             key={stat.label}
@@ -106,20 +81,20 @@ export default async function CreatorDashboardPage() {
           href="/creator/leaderboard"
           className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 text-sm font-medium hover:bg-accent hover:text-white hover:border-accent transition-colors"
         >
-          Creator Leaderboard
+          {t('leaderboard')}
         </Link>
         <Link
           href="/write"
           className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 text-sm font-medium hover:bg-accent hover:text-white hover:border-accent transition-colors"
         >
-          Write a Review
+          {t('writeReview')}
         </Link>
       </div>
 
       {/* Recent Activity */}
       {(recentReviews ?? []).length > 0 && (
         <section>
-          <h2 className="font-display text-lg font-bold mb-3">Recent Reviews</h2>
+          <h2 className="font-display text-lg font-bold mb-3">{t('recentReviews')}</h2>
           <div className="space-y-3">
             {(recentReviews ?? []).map((review) => (
               <div
@@ -138,7 +113,7 @@ export default async function CreatorDashboardPage() {
                     ))}
                   </div>
                   <span className="text-xs text-neutral-500">
-                    {new Date(review.created_at).toLocaleDateString()}
+                    {formatter.dateTime(new Date(review.created_at),{dateStyle:'medium'})}
                   </span>
                 </div>
                 {review.content && (
@@ -150,7 +125,7 @@ export default async function CreatorDashboardPage() {
                   href={`/book/${review.book_id}`}
                   className="text-xs text-accent hover:underline mt-1 block"
                 >
-                  View Book
+                  {t('viewBook')}
                 </Link>
               </div>
             ))}

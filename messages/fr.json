@@ -126,7 +126,10 @@
     "ratings": "{count, plural, one {# évaluation} other {# évaluations}}",
     "reviews": "Critiques",
     "quotes": "Citations",
-    "writtenBy": "par {author}"
+    "writtenBy": "par {author}",
+    "addWantToRead": "Ajouter aux envies de lire",
+    "removeWantToRead": "Retirer des envies de lire",
+    "reviewWantToRead": "Envie de lire après cet avis"
   },
   "profile": {
     "countryPlaceholder": "FR",
@@ -998,5 +1001,27 @@
     "confirmationFailed": "La confirmation est indisponible. Demandez un nouveau lien si la demande précédente a abouti.",
     "back": "Retour à la connexion",
     "settings": "Paramètres e-mail"
+  },
+  "creator": {
+    "dashboard": "Tableau de bord créateur",
+    "accessRequired": "Accès créateur requis",
+    "accessDescription": "Choisissez Créateur de contenu littéraire dans votre profil pour accéder au tableau de bord.",
+    "settings": "Modifier le profil",
+    "description": "Suivez votre influence dans la communauté Liravo.",
+    "followers": "Abonnés",
+    "reviews": "Avis publiés",
+    "conversions": "Envies de lire suscitées",
+    "tips": "Pourboires reçus ({currency})",
+    "leaderboard": "Classement des créateurs",
+    "writeReview": "Rédiger un avis",
+    "recentReviews": "Avis récents",
+    "viewBook": "Voir le livre",
+    "weeklyDescription": "Lecteurs uniques influencés depuis le {date} (lundi, UTC).",
+    "empty": "Aucune envie de lire attribuée cette semaine.",
+    "rank": "Rang",
+    "creator": "Créateur",
+    "weeklyConversions": "Envies de lire cette semaine",
+    "verifiedAuthor": "Auteur vérifié",
+    "unavailable": "Les statistiques des créateurs sont indisponibles. Réessayez."
   }
 }

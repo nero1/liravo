@@ -226,14 +226,14 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Influencer: 100 want-to-reads triggered ──
       case 'influencer': {
-        const { count, error:countError} = await supabase.from('shelf_books').select('*', { count: 'exact', head: true }).eq('added_by_reviewer_id', userId);
+        const { count, error:countError} = await supabase.from('review_conversions' as never).select('*', { count: 'exact', head: true }).eq('reviewer_id', userId);
         if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 100; break;
       }
 
       // ── Spark: first want-to-read triggered ──
       case 'spark': {
-        const { count, error:countError} = await supabase.from('shelf_books').select('*', { count: 'exact', head: true }).eq('added_by_reviewer_id', userId);
+        const { count, error:countError} = await supabase.from('review_conversions' as never).select('*', { count: 'exact', head: true }).eq('reviewer_id', userId);
         if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 1; break;
       }

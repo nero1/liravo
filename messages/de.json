@@ -126,7 +126,10 @@
     "ratings": "{count, plural, one {# Bewertung} other {# Bewertungen}}",
     "reviews": "Rezensionen",
     "quotes": "Zitate",
-    "writtenBy": "von {author}"
+    "writtenBy": "von {author}",
+    "addWantToRead": "Zur Leseliste hinzufügen",
+    "removeWantToRead": "Von der Leseliste entfernen",
+    "reviewWantToRead": "Nach dieser Rezension lesen möchten"
   },
   "profile": {
     "countryPlaceholder": "DE",
@@ -998,5 +1001,27 @@
     "confirmationFailed": "Die Bestätigung ist nicht verfügbar. Fordere einen neuen Link an, falls die vorige Anfrage abgeschlossen wurde.",
     "back": "Zurück zur Anmeldung",
     "settings": "E-Mail-Einstellungen"
+  },
+  "creator": {
+    "dashboard": "Creator-Dashboard",
+    "accessRequired": "Creator-Zugang erforderlich",
+    "accessDescription": "Wähle Buch-Content-Creator in deinem Profil, um das Dashboard zu öffnen.",
+    "settings": "Profil bearbeiten",
+    "description": "Verfolge deinen Einfluss in der Liravo-Community.",
+    "followers": "Follower",
+    "reviews": "Veröffentlichte Rezensionen",
+    "conversions": "Ausgelöste Lesewünsche",
+    "tips": "Erhaltene Trinkgelder ({currency})",
+    "leaderboard": "Creator-Rangliste",
+    "writeReview": "Rezension schreiben",
+    "recentReviews": "Neueste Rezensionen",
+    "viewBook": "Buch ansehen",
+    "weeklyDescription": "Einzigartige beeinflusste Leser seit {date} (Montag, UTC).",
+    "empty": "Diese Woche wurden noch keine Lesewünsche zugeordnet.",
+    "rank": "Platz",
+    "creator": "Creator",
+    "weeklyConversions": "Lesewünsche diese Woche",
+    "verifiedAuthor": "Verifizierter Autor",
+    "unavailable": "Creator-Statistiken sind nicht verfügbar. Bitte versuche es erneut."
   }
 }

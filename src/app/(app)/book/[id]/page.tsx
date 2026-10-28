@@ -110,7 +110,7 @@ export default async function BookPage({ params }: BookPageProps) {
   // Fetch reviews with helpfulness counts
   const { data: reviews } = await supabase
     .from('reviews')
-    .select('id, rating, content, review_type, mood_tags, has_spoilers, likes_count, helpful_votes, unhelpful_votes, created_at, users:user_id(display_name, avatar_url, username)')
+    .select('id, user_id, rating, content, review_type, mood_tags, has_spoilers, likes_count, helpful_votes, unhelpful_votes, created_at, users:user_id(display_name, avatar_url, username)')
     .eq('book_id', params.id)
     .eq('moderation_status', 'published')
     .eq('is_hidden', false)
@@ -462,7 +462,8 @@ export default async function BookPage({ params }: BookPageProps) {
                   )}
 
                   {/* Helpfulness + replies */}
-                  <div className="flex items-center gap-4 pt-2 border-t border-border/50">
+                  <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-border/50">
+                    {review.user_id!==user.id&&<ReactionButtons bookId={params.id} userId={user.id} reviewId={review.id} initialWantToRead={initialWantToRead}/>}
                     <HelpfulnessButtons bookId={params.id} reviewId={review.id} initialVote={votesByReview.get(review.id) ?? null} helpful={review.helpful_votes ?? 0} unhelpful={review.unhelpful_votes ?? 0} />
                     {replyCount > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground ml-auto">

@@ -126,7 +126,10 @@
     "ratings": "{count, plural, one {# rating} other {# ratings}}",
     "reviews": "Reviews",
     "quotes": "Quotes",
-    "writtenBy": "by {author}"
+    "writtenBy": "by {author}",
+    "addWantToRead": "Add to want to read",
+    "removeWantToRead": "Remove from want to read",
+    "reviewWantToRead": "Want to read after this review"
   },
   "profile": {
     "countryPlaceholder": "GB",
@@ -998,5 +1001,27 @@
     "confirmationFailed": "Confirmation is unavailable. Request a new link if the previous request completed.",
     "back": "Back to sign in",
     "settings": "Email settings"
+  },
+  "creator": {
+    "dashboard": "Creator Dashboard",
+    "accessRequired": "Creator Access Required",
+    "accessDescription": "Choose Book Content Creator in your profile to access the creator dashboard.",
+    "settings": "Edit Profile",
+    "description": "Track your impact on the Liravo community.",
+    "followers": "Followers",
+    "reviews": "Reviews Written",
+    "conversions": "Want-to-Reads Triggered",
+    "tips": "Tips Received ({currency})",
+    "leaderboard": "Creator Leaderboard",
+    "writeReview": "Write a Review",
+    "recentReviews": "Recent Reviews",
+    "viewBook": "View Book",
+    "weeklyDescription": "Unique readers influenced since {date} (Monday, UTC).",
+    "empty": "No attributed want-to-reads this week.",
+    "rank": "Rank",
+    "creator": "Creator",
+    "weeklyConversions": "Want-to-Reads This Week",
+    "verifiedAuthor": "Verified Author",
+    "unavailable": "Creator statistics are unavailable. Please try again."
   }
 }
