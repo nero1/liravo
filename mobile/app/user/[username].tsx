@@ -1,3 +1,4 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ interface ProfileResponse {
 }
 
 export default function UserProfileScreen() {
+  const {t,locale}=useTranslations('profile'),{t:nav}=useTranslations('nativeNavigation');
   const { username } = useLocalSearchParams<{ username: string }>();
   const { user: currentUser } = useAuthStore();
 
@@ -50,8 +52,8 @@ export default function UserProfileScreen() {
               <Text className="text-xl font-bold text-foreground">{profile.display_name}</Text>
               <Text className="text-muted-foreground">@{profile.username}</Text>
               <View className="flex-row gap-2 flex-wrap">
-                <Badge variant="accent">{level.title}</Badge>
-                {profile.is_verified_author && <Badge variant="secondary">✓ Author</Badge>}
+                <Badge variant="accent">{t('levels.'+level.min)}</Badge>
+                {profile.is_verified_author && <Badge variant="secondary">✓ {t('verified')}</Badge>}
               </View>
             </View>
           </View>
@@ -64,15 +66,15 @@ export default function UserProfileScreen() {
 
           <View className="flex-row bg-muted rounded-xl overflow-hidden">
             {[
-              { label: 'Books', value: profile.books_read_count },
-              { label: 'Followers', value: profile.followers_count ?? 0 },
-              { label: 'Following', value: profile.following_count ?? 0 },
+              { label: nav('books'), value: profile.books_read_count },
+              { label: t('followers'), value: profile.followers_count ?? 0 },
+              { label: t('following'), value: profile.following_count ?? 0 },
             ].map(({ label, value }, i) => (
               <View
                 key={label}
                 className={`flex-1 py-3 items-center ${i < 2 ? 'border-r border-border' : ''}`}
               >
-                <Text className="font-bold text-foreground text-lg">{value.toLocaleString()}</Text>
+                <Text className="font-bold text-foreground text-lg">{value.toLocaleString(locale)}</Text>
                 <Text className="text-xs text-muted-foreground">{label}</Text>
               </View>
             ))}

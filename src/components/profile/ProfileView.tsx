@@ -17,7 +17,7 @@ const USER_TYPE_ICONS: Record<string, string> = {
 };
 
 export function ProfileView({ profile, isOwner }: ProfileViewProps) {
-  const t=useTranslations('profile'),types=useTranslations('onboarding.userType');
+  const badgeText=useTranslations('badgeNames'),t=useTranslations('profile'),types=useTranslations('onboarding.userType');
   const levelInfo = getLevelInfo(profile.xp);
 
   return (
@@ -120,12 +120,12 @@ export function ProfileView({ profile, isOwner }: ProfileViewProps) {
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-muted-foreground mb-2">{t('badges')}</h2>
             <div className="flex flex-wrap gap-2">
-              {(profile.badges as Array<{ icon: string; name: string }>).map((badge) => (
+              {(profile.badges as Array<{id?:string;icon:string;name:string}>).map((badge) => (
                 <span
-                  key={badge.name}
-                  title={badge.name}
+                  key={badge.id??badge.name}
+                  title={badge.id&&badgeText.has(badge.id)?badgeText(badge.id):badge.name}
                   className="text-lg"
-                  aria-label={badge.name}
+                  aria-label={badge.id&&badgeText.has(badge.id)?badgeText(badge.id):badge.name}
                 >
                   {badge.icon}
                 </span>

@@ -34,9 +34,17 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
+    let legacyNotification:{owner:string;badge:string;goal:string}|undefined;
     let legacyEditions:{owner:string;ids:string[];reviewId:string}|undefined;
     let legacyImport:{owner:string;rows:unknown[];response:unknown}|undefined;
     for (const file of migrations) {
+      if(file.startsWith('069_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'notifications-069@example.test','notifications_069','Notification reader')`;
+        await sql`select award_badge_atomic(${owner},'first_book',50,'First Book','📖')`;
+        const badge=(await sql`select id from notifications where user_id=${owner} and type='badge_earned'`)[0].id;
+        const goal=(await sql`insert into notifications(user_id,type,message) values(${owner},'reading_goal_milestone','You have read 2 of 8 books and reached 25% of your 2026 reading goal.') returning id`)[0].id;
+        legacyNotification={owner,badge,goal};
+      }
       if(file.startsWith('066_')){
         const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-import-066@example.test','legacy_import_066','Legacy import')`;
         const {parseGoodreadsImport}=await import('@/lib/goodreads-import');
@@ -235,7 +243,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     for(let i=0;i<2;i++) await sql.unsafe('select * from process_payment_event(p_provider => $1,p_event_id => $2,p_payload => $3,p_correlation_id => $4)', ['paystack','rehearsal-event',payload,'rehearsal']);
     const claims=await sql`select * from claim_outbox_events(10)`;
     for(const event of claims) await Promise.all([sql`select process_outbox_event_atomic(${event.id})`,sql`select process_outbox_event_atomic(${event.id})`]);
-    const [notifications]=await sql`select count(*) as count from notifications`;
+    const [notifications]=await sql`select count(*) as count from notifications where user_id=${recipient} and type='tip'`;
     const [reward]=await sql`select xp from users where id=${sender}`;
     expect(Number(notifications.count)).toBe(1); expect(reward.xp).toBe(5);
     await sql`insert into user_payout_methods(user_id,provider,display_name,account_number,bank_code,currency) values(${recipient},'manual','Audit account','1234567890','AUDIT','USD')`;
@@ -2017,6 +2025,44 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await sql`select referral_statistics(${actor}) as data`)[0].data.topReferrers.some((person:any)=>person.id===actor)).toBe(false);
     for(const role of ['anon','authenticated'])for(const routine of ['account_data_export(uuid)','referral_statistics(uuid)','attribute_referral_atomic_036(uuid,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     await sql`update users set is_banned=true where id=${child}`;await expect(sql`select account_data_export(${child})`).rejects.toMatchObject({code:'P1003'});
+    }
+    {
+    const actor=legacyNotification!.owner,other=crypto.randomUUID();
+    await sql`select create_direct_account(${other},'notifications-other-069@example.test','notifications_other_069','Other reader')`;
+    const badge=(await sql`select message_key,message_values from notifications where id=${legacyNotification!.badge}`)[0];
+    expect(badge).toMatchObject({message_key:'badge',message_values:{badgeId:'first_book',badgeName:'First Book'}});
+    expect((await sql`select message_key,message_values from notifications where id=${legacyNotification!.goal}`)[0]).toMatchObject({message_key:'readingGoal',message_values:{count:2,target:8,percent:25,year:'2026'}});
+    const {NOTIFICATION_KEYS,notificationPreference}=await import('@/lib/notification-preferences');
+    for(const key of NOTIFICATION_KEYS)await sql`update users set ${sql(key)}=false where id=${actor}`;
+    for(const [type,entity] of [['follow',null],['like',null],['review_like',null],['reply',null],['review_comment',null],['mention',null],['author_announcement',null],['new_release',null],['challenge_complete',null],['arc_granted',null],['buddy_read_invite','arc']] as const){
+      expect(notificationPreference(type,entity)).toBeTruthy();
+      expect(await sql`insert into notifications(user_id,type,entity_type,message) values(${actor},${type},${entity},'Opted out') returning id`).toHaveLength(0);
+    }
+    expect(await sql`insert into notifications(user_id,type,message) values(${actor},'tip_refunded','Financial history') returning id`).toHaveLength(1);
+    expect(await sql`insert into notifications(user_id,type,message) values(${actor},'buddy_read_invite','Reading group') returning id`).toHaveLength(1);
+    for(const key of NOTIFICATION_KEYS)await sql`update users set ${sql(key)}=true where id=${actor}`;
+    const notice=(await sql`insert into notifications(user_id,type,actor_id,message) values(${actor},'follow',${other},'English legacy text') returning *`)[0];
+    expect(notice).toMatchObject({message_key:'follow',message_values:{name:'Other reader'}});
+    await sql`select award_badge_atomic(${actor},'custom_notice',10,'Prix personnalisé','★')`;
+    expect((await sql`select message_key,message_values from notifications where user_id=${actor} and message_values->>'badgeId'='custom_notice'`)[0]).toMatchObject({message_key:'badge',message_values:{badgeName:'Prix personnalisé'}});
+    const tipId=crypto.randomUUID(),payload={userId:actor,actorId:other,tipId,amount:'12.3456',currency:'NGN'};
+    const event=(await sql`insert into outbox_events(aggregate_type,aggregate_id,event_type,payload,status) values('tip',${tipId},'notify_recipient',${sql.json(payload)},'processing') returning id`)[0].id;
+    expect((await sql`select process_outbox_event_atomic(${event}) as ok`)[0].ok).toBe(true);
+    expect((await sql`select process_outbox_event_atomic(${event}) as ok`)[0].ok).toBe(false);
+    expect((await sql`select message_key,message_values from notifications where entity_id=${tipId}`)[0]).toMatchObject({message_key:'tipAmount',message_values:{amount:'12.3456',currency:'NGN'}});
+    expect((await sql`select coalesce(current_setting('liravo.notification_context',true),'') as value`)[0].value).toBe('');
+    for(const role of ['anon','authenticated'])for(const column of ['message','type','user_id','message_key','message_values'])expect((await sql`select has_column_privilege(${role},'notifications',${column},'UPDATE') as allowed`)[0].allowed).toBe(false);
+    expect((await sql`select has_column_privilege('authenticated','notifications','is_read','UPDATE') as allowed`)[0].allowed).toBe(true);
+    expect((await sql`select has_table_privilege('authenticated','notifications','INSERT') as allowed`)[0].allowed).toBe(false);
+    await sql.begin(async tx=>{await tx`set local role authenticated`;await tx`select set_config('request.jwt.claim.sub',${actor},true)`;expect(await tx`update notifications set is_read=true where id=${notice.id} returning id`).toHaveLength(1);});
+    const foreign=(await sql`insert into notifications(user_id,type,message) values(${other},'follow','Other') returning id`)[0].id;
+    const {PATCH,GET}=await import('@/app/api/notifications/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);
+    const request=(body:unknown,owner=actor)=>new Request('https://app.test/api/notifications',{method:'PATCH',headers:{'X-Liravo-Actor':owner},body:JSON.stringify(body)});
+    expect((await PATCH(request({notification_id:foreign}))).status).toBe(404);
+    expect((await PATCH(request({notification_id:notice.id}))).status).toBe(200);
+    expect((await PATCH(request({notification_id:notice.id},other))).status).toBe(409);
+    expect((await PATCH(request({message:'Forged'}))).status).toBe(400);
+    const page=await(await GET(new Request('https://app.test/api/notifications'))).json();expect(page.actorId).toBe(actor);expect(page.notifications.every((n:any)=>n.user_id===actor&&n.message_key)).toBe(true);
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

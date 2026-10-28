@@ -30,6 +30,15 @@ export interface UserRow {
   referred_by: string | null;
   email: string | null;
   email_verified: boolean;
+  email_digest_enabled:boolean;
+  notify_follows:boolean;
+  notify_likes:boolean;
+  notify_replies:boolean;
+  notify_mentions:boolean;
+  notify_author_announcements:boolean;
+  notify_new_releases:boolean;
+  notify_challenge_completions:boolean;
+  notify_arc_grants:boolean;
   pin_hash: string | null;
   totp_secret: string | null;
   totp_enabled: boolean;
@@ -44,7 +53,7 @@ export interface UserRow {
   created_at: string;
   updated_at: string;
   // Virtual: populated by pages that join user_badges
-  badges?: Array<{ icon: string; name: string }>;
+  badges?: Array<{id?:string;icon:string;name:string}>;
 }
 
 export interface BookWorkRow {
@@ -168,6 +177,8 @@ export interface NotificationRow {
   entity_type: string | null;
   entity_id: string | null;
   message: string;
+  message_key:string|null;
+  message_values:Record<string,string|number|null>;
   is_read: boolean;
   created_at: string;
 }

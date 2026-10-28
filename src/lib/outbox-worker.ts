@@ -7,6 +7,7 @@ const MAX_ATTEMPTS = 10;
 
 type OutboxEventRow = {
   id: string;
+  aggregate_type?:string;
   event_type: string;
   payload: Record<string, unknown>;
   attempts: number;
@@ -25,10 +26,12 @@ async function processEvent(event: OutboxEventRow) {
   if (error) throw new Error(`Outbox processing failed: ${error.message}`);
   if (data && ['push_notification', 'notify_recipient'].includes(event.event_type)) {
     const payload = event.payload;
+    const type=event.event_type==='notify_recipient'?'tip':typeof payload.notificationType==='string'?payload.notificationType:event.aggregate_type==='follow'||payload.title==='New Follower'?'follow':undefined;
     sendPushToUser(String(payload.userId), {
       title: String(payload.title ?? 'New tip'),
       body: String(payload.body ?? `You received a ${payload.currency ?? 'USD'} ${payload.amount} tip!`),
-      url: String(payload.url ?? '/notifications'), tag: `outbox:${event.id}`,
+      url: String(payload.url ?? '/notifications'), tag: `outbox:${event.id}`,notificationType:type,
+      messageKey:type==='tip'?'tipAmount':type==='follow'?'follow':undefined,messageValues:type==='tip'?{amount:payload.amount,currency:payload.currency??'USD'}:{},
     }).catch(() => recordMetric('push_delivery_error', { eventId: event.id }, 'warn'));
   }
 }

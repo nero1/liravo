@@ -49,6 +49,8 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - 🟡 Complete English/French/German coverage across web/native screens, system messages and metadata; enforce translated user-visible strings in CI.
 - ✅ Translate and verify shared web components, named controls, navigation state, native report-dialog focus, failure recovery and notification pagination.
 - ✅ Persist native language selection with device fallback; translate navigation/main tabs, settings and referral screens.
+- ✅ Persist and enforce notification preferences; translate stored messages and push delivery.
+- 🟡 Preserve the selected language when creating email/social accounts.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

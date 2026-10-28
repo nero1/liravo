@@ -92,7 +92,7 @@ export default async function PublicProfilePage({ params }: ProfilePageProps) {
   const { BADGE_DEFINITIONS } = await import('@/services/badges');
   const earnedBadges = (userBadges ?? []).map((ub: { badge_id: string }) => {
     const def = BADGE_DEFINITIONS.find((b) => b.id === ub.badge_id);
-    return def ? { icon: def.icon, name: def.name } : null;
+    return def ? {id:def.id,icon:def.icon,name:def.name} : null;
   }).filter((badge): badge is NonNullable<typeof badge> => badge !== null);
 
   const profileWithBadges = { ...profile, badges: earnedBadges };

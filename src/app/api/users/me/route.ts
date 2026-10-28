@@ -18,5 +18,5 @@ export async function GET() {
 
   if (error || !user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-  return NextResponse.json({ user: clientUser(user) });
+  return NextResponse.json({user:clientUser(user)},{headers:{'Cache-Control':'private, no-store'}});
 }

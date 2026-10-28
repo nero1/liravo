@@ -1,8 +1,10 @@
 'use client';
 
+import {notificationText} from '@/lib/notification-message';
+
 import { useState,useEffect,useRef } from 'react';
 import { Bell, UserPlus, Heart, MessageSquare, Award, Target } from 'lucide-react';
-import {useTranslations,useFormatter,useNow} from 'next-intl';
+import {useTranslations,useFormatter,useNow,useLocale} from 'next-intl';
 import { cn } from '@/lib/utils';
 import type { NotificationRow } from '@/types/database';
 
@@ -28,7 +30,7 @@ function NotificationIcon({ type }: { type: string }) {
 }
 
 export function NotificationList(){
-  const t=useTranslations('notificationList'),common=useTranslations('common'),formatter=useFormatter(),now=useNow({updateInterval:60000}),busy=useRef(false),[nextCursor,setNextCursor]=useState<string|null>(null),[loadingMore,setLoadingMore]=useState(false),[loadError,setLoadError]=useState(false),[markError,setMarkError]=useState(false),[revision,setRevision]=useState(0);
+  const messages=useTranslations(''),locale=useLocale(),actor=useRef<string|null>(null),t=useTranslations('notificationList'),common=useTranslations('common'),formatter=useFormatter(),now=useNow({updateInterval:60000}),busy=useRef(false),[nextCursor,setNextCursor]=useState<string|null>(null),[loadingMore,setLoadingMore]=useState(false),[loadError,setLoadError]=useState(false),[markError,setMarkError]=useState(false),[revision,setRevision]=useState(0);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [marking, setMarking] = useState(false);
@@ -36,8 +38,8 @@ export function NotificationList(){
   useEffect(() => {
     const controller=new AbortController();setLoading(true);setLoadError(false);
     void fetch('/api/notifications',{signal:controller.signal}).then(async response=>{
-      const data=await response.json();if(!response.ok||!Array.isArray(data.notifications))throw new Error('Notifications unavailable');
-      if(!controller.signal.aborted){setNotifications(data.notifications);setNextCursor(data.nextCursor??null);}
+      const data=await response.json();if(!response.ok||typeof data.actorId!=='string'||!Array.isArray(data.notifications))throw new Error('Notifications unavailable');
+      if(!controller.signal.aborted){actor.current=data.actorId;setNotifications(data.notifications);setNextCursor(data.nextCursor??null);}
     }).catch(()=>{if(!controller.signal.aborted)setLoadError(true);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return()=>controller.abort();
   },[revision]);
@@ -47,6 +49,7 @@ export function NotificationList(){
     try{
       const res=await fetch('/api/notifications?cursor='+encodeURIComponent(nextCursor)),data=await res.json();
       if(!res.ok||!Array.isArray(data.notifications))throw new Error('Notifications unavailable');
+      if(data.actorId!==actor.current){actor.current=null;setNotifications([]);setNextCursor(null);setRevision(value=>value+1);return;}
       setNotifications(previous=>[...new Map([...previous,...data.notifications].map(item=>[item.id,item])).values()]);setNextCursor(data.nextCursor??null);
     }catch{setLoadError(true);}
     finally{busy.current=false;setLoadingMore(false);}
@@ -55,7 +58,8 @@ export function NotificationList(){
   async function markAllRead(){
     if(busy.current)return;busy.current=true;setMarking(true);setMarkError(false);
     try{
-      const res=await fetch('/api/notifications',{method:'PATCH'}),data=await res.json();
+      const res=await fetch('/api/notifications',{method:'PATCH',headers:{'X-Liravo-Actor':actor.current??''}}),data=await res.json();
+      if(res.status===409){actor.current=null;setNotifications([]);setNextCursor(null);setRevision(value=>value+1);return;}
       if(!res.ok||data.ok!==true)throw new Error('Mark read unavailable');
       setNotifications(previous=>previous.map(item=>({...item,is_read:true})));
     }catch{setMarkError(true);}
@@ -117,7 +121,7 @@ export function NotificationList(){
                   'text-sm',
                   !notification.is_read ? 'font-medium text-foreground' : 'text-muted-foreground'
                 )}>
-                  {notification.message}
+                  {notificationText(notification,messages,key=>messages.has(key),locale)}
                 </p>
                 <p className="text-xs text-muted-foreground/60 mt-0.5">
                   {formatter.relativeTime(new Date(notification.created_at),now)}

@@ -31,6 +31,15 @@ export interface UserRow {
   referred_by: string | null;
   email: string | null;
   email_verified: boolean;
+  email_digest_enabled:boolean;
+  notify_follows:boolean;
+  notify_likes:boolean;
+  notify_replies:boolean;
+  notify_mentions:boolean;
+  notify_author_announcements:boolean;
+  notify_new_releases:boolean;
+  notify_challenge_completions:boolean;
+  notify_arc_grants:boolean;
   totp_enabled: boolean;
   external_links: string[];
   profile_visibility: 'public' | 'followers_only';
@@ -41,7 +50,7 @@ export interface UserRow {
   email_prompt_dismissed_at: string | null;
   created_at: string;
   updated_at: string;
-  badges?: { icon: string; name: string }[];
+  badges?: {id?:string;icon:string;name:string}[];
 }
 
 export interface BookWorkRow {
@@ -163,6 +172,8 @@ export interface NotificationRow {
   entity_type: string | null;
   entity_id: string | null;
   message: string;
+  message_key:string|null;
+  message_values:Record<string,string|number|null>;
   is_read: boolean;
   created_at: string;
   actor?: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url'>;

@@ -582,7 +582,8 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 **Notifications (in-app):**
 - Follows, likes, want-to-reads, replies, mentions, challenge completions, ARC grants, buddy read invites, author Q&A answers.
-- Notification preferences configurable per type.
+- Notification preferences configurable per type on web/native; saved opt-outs suppress matching in-app and push notifications. Weekly digest and new-release email preferences are independent.
+- Stored notification facts render in the current English/French/German locale, preserving authored content; financial/security notices remain available. Push uses the recipient’s saved locale and remains best effort.
 
 **Email notifications (paid tiers only):**
 - Free tier: no email notifications. Account-critical transactional emails only (e.g. email verification link, recovery link if email added, 2FA recovery code delivery).

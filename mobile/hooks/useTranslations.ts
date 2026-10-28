@@ -16,8 +16,9 @@ export function useTranslations(namespace:string){
   return useMemo(()=>{
     const messages=catalogs[locale] as unknown;
     const compiled=new Map<string,IntlMessageFormat>();
-    return {locale,t:(key:string,values?:Record<string,string|number>)=>{
-      const message=[namespace,key].filter(Boolean).join('.').split('.').reduce<unknown>((value,part)=>value&&typeof value==='object'?(value as Record<string,unknown>)[part]:undefined,messages);if(typeof message!=='string')return `${namespace}.${key}`;
+    const lookup=(key:string)=>[namespace,key].filter(Boolean).join('.').split('.').reduce<unknown>((value,part)=>value&&typeof value==='object'?(value as Record<string,unknown>)[part]:undefined,messages);
+    return {locale,has:(key:string)=>typeof lookup(key)==='string',t:(key:string,values?:Record<string,string|number>)=>{
+      const message=lookup(key);if(typeof message!=='string')return `${namespace}.${key}`;
       let formatter=compiled.get(key);
       if(!formatter){formatter=new IntlMessageFormat(message,locale);compiled.set(key,formatter);}
       return String(formatter.format(values));
