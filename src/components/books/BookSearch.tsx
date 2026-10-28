@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState,useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import {useTranslations} from 'next-intl';
 import { Search } from 'lucide-react';
 
 interface BookResult {
@@ -19,26 +20,18 @@ export function BookSearch() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<BookResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  const search = useCallback(async (q: string) => {
-    if (q.length < 2) { setResults([]); return; }
+  const t=useTranslations('books'),common=useTranslations('common'),[error,setError]=useState(false),[generation,setGeneration]=useState(0);
+  useEffect(()=>{
+    const controller=new AbortController(),term=query.trim();setResults([]);setError(false);
+    if(term.length<2){setLoading(false);return()=>controller.abort();}
     setLoading(true);
-    try {
-      const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      setResults(data.books ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setQuery(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(val), 400);
-  };
+    const timer=setTimeout(()=>{
+      void fetch('/api/books/search?q='+encodeURIComponent(term),{signal:controller.signal}).then(async response=>{
+        if(!response.ok)throw new Error('Search unavailable');const data=await response.json();if(!Array.isArray(data.books))throw new Error('Invalid search results');if(!controller.signal.aborted)setResults(data.books);
+      }).catch(()=>{if(!controller.signal.aborted)setError(true);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+    },400);
+    return()=>{clearTimeout(timer);controller.abort();};
+  },[query,generation]);
 
   return (
     <div className="space-y-4">
@@ -47,14 +40,14 @@ export function BookSearch() {
         <input
           type="search"
           value={query}
-          onChange={handleChange}
-          placeholder="Search books, authors, ISBNs..."
+          onChange={event=>setQuery(event.target.value)}
+          placeholder={t('searchPlaceholder')} aria-label={t('search')} maxLength={200}
           className="w-full pl-10 pr-4 py-3 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-accent/50 text-sm"
         />
       </div>
 
       {loading && (
-        <div className="text-center py-8 text-muted-foreground text-sm">Searching...</div>
+        <div role="status" className="text-center py-8 text-muted-foreground text-sm">{t('searching')}</div>
       )}
 
       {!loading && results.length > 0 && (
@@ -62,7 +55,7 @@ export function BookSearch() {
           {results.map((book, i) => {
             const href = book.id
               ? `/book/${book.id}`
-              : `/book/lookup?gid=${book.google_books_id}`;
+              : `/book/lookup?gid=${encodeURIComponent(book.google_books_id??'')}`;
 
             return (
               <Link
@@ -98,8 +91,9 @@ export function BookSearch() {
         </div>
       )}
 
-      {!loading && query.length >= 2 && results.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground text-sm">No books found for &quot;{query}&quot;</div>
+      {error&&<div role="alert" className="text-sm text-destructive"><p>{t('searchUnavailable')}</p><button type="button" onClick={()=>setGeneration(value=>value+1)} className="underline">{common('retry')}</button></div>}
+      {!loading&&!error&&query.trim().length>=2&&results.length===0 && (
+        <div className="text-center py-8 text-muted-foreground text-sm">{t('noBooksFor',{query})}</div>
       )}
     </div>
   );

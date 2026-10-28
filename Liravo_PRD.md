@@ -390,7 +390,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 
 ### 7.4 Book Pages and the Book Catalogue
 
-Every book has a canonical page on Liravo.
+Every saved book has an internal UUID and a canonical page on Liravo. The catalog stores metadata, reviews, quotes and shelf relationships, not full book text. The seed dataset contains 101 English books. ISBN-10/13 checksums are validated; ISBNs identify editions, while provider IDs also support books without an ISBN. The current schema does not separate works from editions, so provider identity matches can combine editions.
 
 **Book data sources (in priority order):**
 1. Liravo internal database (manually added or previously cached)
@@ -1234,7 +1234,7 @@ Architecture must be able to scale to 50,000 concurrent users without structural
 
 - `next-intl` for all UI strings from day one.
 - All strings in locale JSON files. No hardcoded English strings in components.
-- Default locale: `en-US`.
+- Supported interface locales: English (`en`, default), French (`fr`) and German (`de`). Translation coverage remains partial; book metadata retains its source language.
 - Date/time via `Intl.DateTimeFormat`.
 - Logical CSS properties throughout (`margin-inline-start` not `margin-left`) to support future RTL expansion.
 - Amazon affiliate tag routing per country: `affiliate_tags` table keyed by ISO country code.

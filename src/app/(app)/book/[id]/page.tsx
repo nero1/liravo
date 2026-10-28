@@ -483,7 +483,7 @@ export default async function BookPage({ params }: BookPageProps) {
       {/* Save a quote */}
       <section className="mb-8">
         <h2 className="font-display font-bold text-lg mb-4">Save a Quote</h2>
-        <QuoteForm bookId={params.id} />
+        <QuoteForm bookId={params.id} userId={user.id}/>
       </section>
 
       {/* Write a review */}

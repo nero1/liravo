@@ -140,7 +140,18 @@
     "sessionLogged": "Session logged!",
     "sessionFailed": "Unable to log the session. Please try again.",
     "pagesRead": "Pages read",
-    "log": "Log"
+    "log": "Log",
+    "searchPlaceholder": "Search by title, author or ISBN…",
+    "searching": "Searching…",
+    "noBooksFor": "No books found for “{query}”.",
+    "searchUnavailable": "Book search is unavailable. Please try again.",
+    "quoteFailed": "Could not save your quote. Please try again.",
+    "quoteSaved": "Quote saved!",
+    "saveQuote": "Save a quote",
+    "quoteText": "Quote text",
+    "quotePlaceholder": "Write a quote from this book…",
+    "quotePage": "Page (optional)",
+    "quoteInvalidPage": "Enter a whole page number greater than zero."
   },
   "profile": {
     "countryPlaceholder": "GB",
@@ -286,7 +297,9 @@
     "report": "Report",
     "offline": "You're offline. Some features may not work.",
     "darkMode": "Dark mode",
-    "lightMode": "Light mode"
+    "lightMode": "Light mode",
+    "saving": "Saving…",
+    "submitting": "Submitting…"
   },
   "pushNotifications": {
     "enable": "Enable notifications",
@@ -1052,5 +1065,49 @@
     "invalidCursor": "This feed link is invalid. Return to the latest activity.",
     "unavailable": "The feed is unavailable. Please try again.",
     "notifications": "Notifications"
+  },
+  "reviewForm": {
+    "selectRating": "Please select a star rating.",
+    "writeReview": "Please write your review.",
+    "failed": "Could not submit your review. Please try again.",
+    "submitted": "Review submitted!",
+    "thanks": "Thank you for sharing your thoughts.",
+    "rating": "Your rating",
+    "type": "Review type",
+    "body": "Your review",
+    "checkingTone": "Checking tone…",
+    "harshTone": "Your review may sound harsh. Consider revising it.",
+    "harmfulTone": "This review may contain harmful language. Please revise it.",
+    "moods": "Mood tags (optional)",
+    "readDate": "Date read (optional)",
+    "edition": "Edition (optional)",
+    "editionExample": "e.g. Paperback, Kindle",
+    "spoilers": "This review contains spoilers",
+    "submit": "Submit review",
+    "ratingValue": "{count, plural, one {# star} other {# stars}}",
+    "types": {
+      "one_line": "One line",
+      "short": "Short review",
+      "long": "Long review"
+    },
+    "placeholders": {
+      "one_line": "Sum up your thoughts in one line…",
+      "short": "What did you think of this book?",
+      "long": "Share your detailed thoughts about this book…"
+    }
+  },
+  "moods": {
+    "Dark": "Dark",
+    "Cozy": "Cozy",
+    "Mind-bending": "Mind-bending",
+    "Funny": "Funny",
+    "Emotional": "Emotional",
+    "Slow-burn": "Slow-burn",
+    "Fast-paced": "Fast-paced",
+    "Educational": "Educational",
+    "Inspiring": "Inspiring",
+    "Disturbing": "Disturbing",
+    "Romantic": "Romantic",
+    "Intense": "Intense"
   }
 }

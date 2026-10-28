@@ -140,7 +140,18 @@
     "sessionLogged": "Lesesitzung gespeichert!",
     "sessionFailed": "Die Lesesitzung konnte nicht gespeichert werden. Bitte versuche es erneut.",
     "pagesRead": "Gelesene Seiten",
-    "log": "Erfassen"
+    "log": "Erfassen",
+    "searchPlaceholder": "Nach Titel, Autor oder ISBN suchen…",
+    "searching": "Suche läuft…",
+    "noBooksFor": "Keine Bücher für „{query}“ gefunden.",
+    "searchUnavailable": "Die Buchsuche ist nicht verfügbar. Bitte versuche es erneut.",
+    "quoteFailed": "Dein Zitat konnte nicht gespeichert werden. Bitte versuche es erneut.",
+    "quoteSaved": "Zitat gespeichert!",
+    "saveQuote": "Zitat speichern",
+    "quoteText": "Zitattext",
+    "quotePlaceholder": "Schreibe ein Zitat aus diesem Buch…",
+    "quotePage": "Seite (optional)",
+    "quoteInvalidPage": "Gib eine ganze Seitenzahl größer als null ein."
   },
   "profile": {
     "countryPlaceholder": "DE",
@@ -286,7 +297,9 @@
     "report": "Melden",
     "offline": "Sie sind offline. Einige Funktionen sind möglicherweise nicht verfügbar.",
     "darkMode": "Dunkelmodus",
-    "lightMode": "Hellmodus"
+    "lightMode": "Hellmodus",
+    "saving": "Wird gespeichert…",
+    "submitting": "Wird gesendet…"
   },
   "pushNotifications": {
     "enable": "Benachrichtigungen aktivieren",
@@ -1052,5 +1065,49 @@
     "invalidCursor": "Dieser Feed-Link ist ungültig. Öffne die neuesten Aktivitäten.",
     "unavailable": "Der Feed ist nicht verfügbar. Bitte versuche es erneut.",
     "notifications": "Benachrichtigungen"
+  },
+  "reviewForm": {
+    "selectRating": "Bitte wähle eine Sternebewertung.",
+    "writeReview": "Bitte schreibe deine Rezension.",
+    "failed": "Deine Rezension konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "submitted": "Rezension gesendet!",
+    "thanks": "Danke, dass du deine Gedanken geteilt hast.",
+    "rating": "Deine Bewertung",
+    "type": "Art der Rezension",
+    "body": "Deine Rezension",
+    "checkingTone": "Ton wird geprüft…",
+    "harshTone": "Deine Rezension klingt möglicherweise schroff. Überdenke deine Formulierungen.",
+    "harmfulTone": "Diese Rezension enthält möglicherweise verletzende Sprache. Bitte überarbeite sie.",
+    "moods": "Stimmungen (optional)",
+    "readDate": "Lesedatum (optional)",
+    "edition": "Ausgabe (optional)",
+    "editionExample": "z. B. Taschenbuch, Kindle",
+    "spoilers": "Diese Rezension enthält Spoiler",
+    "submit": "Rezension senden",
+    "ratingValue": "{count, plural, one {# Stern} other {# Sterne}}",
+    "types": {
+      "one_line": "Eine Zeile",
+      "short": "Kurze Rezension",
+      "long": "Ausführliche Rezension"
+    },
+    "placeholders": {
+      "one_line": "Fasse deine Meinung in einer Zeile zusammen…",
+      "short": "Wie hat dir dieses Buch gefallen?",
+      "long": "Teile deine ausführlichen Gedanken zu diesem Buch…"
+    }
+  },
+  "moods": {
+    "Dark": "Düster",
+    "Cozy": "Gemütlich",
+    "Mind-bending": "Verblüffend",
+    "Funny": "Lustig",
+    "Emotional": "Emotional",
+    "Slow-burn": "Langsamer Aufbau",
+    "Fast-paced": "Rasant",
+    "Educational": "Lehrreich",
+    "Inspiring": "Inspirierend",
+    "Disturbing": "Verstörend",
+    "Romantic": "Romantisch",
+    "Intense": "Intensiv"
   }
 }

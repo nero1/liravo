@@ -140,7 +140,18 @@
     "sessionLogged": "Séance enregistrée !",
     "sessionFailed": "Impossible d’enregistrer la séance. Réessayez.",
     "pagesRead": "Pages lues",
-    "log": "Enregistrer"
+    "log": "Enregistrer",
+    "searchPlaceholder": "Rechercher par titre, auteur ou ISBN…",
+    "searching": "Recherche…",
+    "noBooksFor": "Aucun livre trouvé pour « {query} ».",
+    "searchUnavailable": "La recherche de livres est indisponible. Veuillez réessayer.",
+    "quoteFailed": "Impossible d’enregistrer votre citation. Veuillez réessayer.",
+    "quoteSaved": "Citation enregistrée !",
+    "saveQuote": "Enregistrer une citation",
+    "quoteText": "Texte de la citation",
+    "quotePlaceholder": "Écrivez une citation de ce livre…",
+    "quotePage": "Page (facultatif)",
+    "quoteInvalidPage": "Saisissez un numéro de page entier supérieur à zéro."
   },
   "profile": {
     "countryPlaceholder": "FR",
@@ -286,7 +297,9 @@
     "report": "Signaler",
     "offline": "Vous êtes hors ligne. Certaines fonctionnalités peuvent ne pas fonctionner.",
     "darkMode": "Mode sombre",
-    "lightMode": "Mode clair"
+    "lightMode": "Mode clair",
+    "saving": "Enregistrement…",
+    "submitting": "Envoi…"
   },
   "pushNotifications": {
     "enable": "Activer les notifications",
@@ -1052,5 +1065,49 @@
     "invalidCursor": "Ce lien est invalide. Revenez aux dernières activités.",
     "unavailable": "Le fil est indisponible. Réessayez.",
     "notifications": "Notifications"
+  },
+  "reviewForm": {
+    "selectRating": "Veuillez choisir une note.",
+    "writeReview": "Veuillez rédiger votre avis.",
+    "failed": "Impossible d’envoyer votre avis. Veuillez réessayer.",
+    "submitted": "Avis envoyé !",
+    "thanks": "Merci d’avoir partagé votre avis.",
+    "rating": "Votre note",
+    "type": "Type d’avis",
+    "body": "Votre avis",
+    "checkingTone": "Analyse du ton…",
+    "harshTone": "Le ton de votre avis semble dur. Envisagez de le reformuler.",
+    "harmfulTone": "Cet avis contient peut-être des propos blessants. Veuillez le reformuler.",
+    "moods": "Ambiances (facultatif)",
+    "readDate": "Date de lecture (facultatif)",
+    "edition": "Édition (facultatif)",
+    "editionExample": "Ex. : broché, Kindle",
+    "spoilers": "Cet avis contient des révélations",
+    "submit": "Envoyer l’avis",
+    "ratingValue": "{count, plural, one {# étoile} other {# étoiles}}",
+    "types": {
+      "one_line": "Une ligne",
+      "short": "Avis court",
+      "long": "Avis détaillé"
+    },
+    "placeholders": {
+      "one_line": "Résumez votre avis en une ligne…",
+      "short": "Qu’avez-vous pensé de ce livre ?",
+      "long": "Partagez votre avis détaillé sur ce livre…"
+    }
+  },
+  "moods": {
+    "Dark": "Sombre",
+    "Cozy": "Réconfortant",
+    "Mind-bending": "Déroutant",
+    "Funny": "Drôle",
+    "Emotional": "Émouvant",
+    "Slow-burn": "Progressif",
+    "Fast-paced": "Rythmé",
+    "Educational": "Instructif",
+    "Inspiring": "Inspirant",
+    "Disturbing": "Troublant",
+    "Romantic": "Romantique",
+    "Intense": "Intense"
   }
 }
