@@ -12,6 +12,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Star, BookOpen, Share2, BookMarked, MessageSquare } from 'lucide-react';
 import { ReviewForm } from '@/components/books/ReviewForm';
+import {AddToShelfButton} from '@/components/shelf/AddToShelfButton';
 import { ReactionButtons } from '@/components/books/ReactionButtons';
 import { AudibleCTA } from '@/components/books/AudibleCTA';
 import { AffiliateLinkButtons } from '@/components/books/AffiliateLinkButtons';
@@ -293,6 +294,7 @@ export default async function BookPage({ params }: BookPageProps) {
       {/* Action buttons */}
       <div className="flex items-center gap-3 mb-5">
         <ReactionButtons bookId={params.id} userId={user.id} initialWantToRead={initialWantToRead} />
+        <AddToShelfButton bookId={params.id} userId={user.id}/>
         <Link href={`/share/book/${params.id}`} target="_blank" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600 transition-colors">
           <Share2 size={14} /> Share
         </Link>

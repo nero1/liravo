@@ -756,14 +756,15 @@ Verified tip, event and referral entries form each user’s currency balance; pe
 
 | Action | XP Earned |
 |---|---|
-| Finish a book (logged) | 50 XP |
+| Finish a book through a live shelf action (once per reader/book; imports excluded) | 50 XP |
 | Write a short review | 20 XP |
 | Write a long-form review | 40 XP |
 | Post a quote | 10 XP |
 | Complete a reading challenge | 100 XP |
 | Complete a writing challenge (free) | 80 XP |
 | Complete a writing challenge (AI-guided, paid) | 120 XP |
-| Get a "want to read" on your review | 5 XP per reaction |
+| Add a book to Want to Read (once per reader/book) | 5 XP |
+| Get a review-driven want-to-read (once per reader/book) | 5 XP |
 | Refer a confirmed new sign-up | 200 XP |
 | Refer milestone: 10 referrals | 500 XP bonus |
 | Refer milestone: 50 referrals | 2,000 XP bonus |

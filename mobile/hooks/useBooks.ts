@@ -3,7 +3,7 @@ import {useAuthStore} from '@/stores/auth';
 import {useRequestIntent} from '@/hooks/useRequestIntent';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
-import type { AffiliateLink, BookRow, ReviewRow, QuoteRow } from '@/types';
+import type { AffiliateLink, BookRow, ReviewRow, QuoteRow,UserRow } from '@/types';
 
 export function useBookSearch(query: string) {
   return useQuery({
@@ -36,11 +36,17 @@ export function useBookQuotes(bookId: string) {
 }
 
 export function useToggleShelf() {
-  const qc = useQueryClient();
+  const qc = useQueryClient(),owner=useAuthStore(state=>state.user?.id),intent=useRequestIntent(owner);
   return useMutation({
-    mutationFn: (body: { bookId: string; shelfId: string; action:'add'|'remove' }) =>
-      api.post(ENDPOINTS.shelfBooks.toggle, body),
+    mutationFn:async(body:{bookId:string;shelfId:string;action:'add'|'remove'})=>{
+      const scope='shelf.'+body.shelfId+'.'+body.bookId,result=await api.post<{ok:boolean;new_total:number;xp_awarded:number}>(ENDPOINTS.shelfBooks.toggle,body,await intent.durableHeaders(body,scope));
+      if(result.ok!==true||!Number.isInteger(result.new_total))throw new Error('Invalid shelf receipt');await intent.complete(scope);
+      return result;
+    },
     onSuccess: (_data,body) => {
+      if(useAuthStore.getState().user?.id!==owner)return;
+      void api.get<{user:UserRow}>(ENDPOINTS.users.me).then(({user})=>{if(user.id===owner&&useAuthStore.getState().user?.id===owner)useAuthStore.getState().setUser(user);}).catch(()=>{});
+      qc.invalidateQueries({queryKey:['stats','reading']});
       qc.invalidateQueries({queryKey:['book',body.bookId]});
       qc.invalidateQueries({ queryKey: ['shelves'] });
       qc.invalidateQueries({ queryKey: ['feed'] });

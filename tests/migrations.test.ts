@@ -35,6 +35,11 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
     for (const file of migrations) {
+      if(file.startsWith('063_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-completion@example.test','legacy_completion_owner','Legacy completion')`;
+        const book=(await sql`insert into books(title,author_name) values('Legacy completion','Fixture') returning id`)[0].id;
+        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='have_read'`)[0].id;await sql`select set_shelf_membership(${owner},${shelf},${book},true)`;
+      }
       if(file.startsWith('060_')){
         const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-conversion@example.test','legacy_conversion_owner','Legacy conversion')`;
         const books=await sql`insert into books(title,author_name) values('Legacy shelved conversion','Fixture'),('Legacy removed conversion','Fixture') returning id`;
@@ -1639,7 +1644,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await Promise.all(Array.from({length:4},add))).every(rows=>rows[0].result.reacted)).toBe(true);
     expect((await sql`select count(*)::int as count from review_conversions where actor_id=${actor} and book_id=${book} and reviewer_id=${reviewer}`)[0].count).toBe(1);
     expect((await sql`select want_to_read_count from reviews where id=${reviews[0].id}`)[0].want_to_read_count).toBe(1);
-    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='review_conversions' and aggregate_id=${actor+':'+book}`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='review_conversions' and event_type='check_badges' and aggregate_id=${actor+':'+book}`)[0].count).toBe(1);
     expect((await sql`select amount from xp_ledger where user_id=${actor} and event_key=${'want-to-read:'+book}`)[0].amount).toBe(5);
     await expect(sql`select apply_book_interaction(${actor},${book},'reaction','conversion-race',${reviews[1].id},true)`).rejects.toThrow('Conflicting');
     await sql`select apply_book_interaction(${actor},${book},'reaction','conversion-remove',null,false)`;
@@ -1731,6 +1736,43 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       expect((await sql`select has_table_privilege(${role},'affiliate_link_clicks','INSERT') as allowed`)[0].allowed).toBe(false);
       expect((await sql`select has_function_privilege(${role},'record_book_link_click(uuid,uuid,text,text,jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
+    }
+    {
+    const actor=crypto.randomUUID(),reviewer=crypto.randomUUID();
+    for(const [index,id] of [actor,reviewer].entries())await sql`select create_direct_account(${id},${'reward'+index+'@example.test'},${'reward_fixture_'+index},'Reward fixture')`;
+    const books=await sql`insert into books(title,author_name) values('Live completion','Fixture'),('Imported completion','Fixture'),('Reward conversion','Fixture') returning id`;
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+    const finish=()=>sql`select apply_shelf_membership_intent(${actor},${shelf},${books[0].id},true,'reward-completion-race') as receipt`;
+    const completed=await Promise.all(Array.from({length:4},finish));expect(completed.every(rows=>rows[0].receipt.xp_awarded===50)).toBe(true);
+    expect((await sql`select xp from users where id=${actor}`)[0].xp).toBe(50);
+    expect((await sql`select count(*)::int as count from xp_ledger where user_id=${actor} and event_key=${'finish_book:'+books[0].id}`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='reading_completions' and aggregate_id=${actor+':'+books[0].id}`)[0].count).toBe(2);
+    await expect(sql`select apply_shelf_membership_intent(${actor},${shelf},${books[1].id},true,'reward-completion-race')`).rejects.toThrow('Conflicting shelf intent');
+    await sql`select apply_shelf_membership_intent(${actor},${shelf},${books[0].id},false,'reward-completion-remove')`;
+    expect((await sql`select apply_shelf_membership_intent(${actor},${shelf},${books[0].id},true,'reward-completion-readd') as receipt`)[0].receipt.xp_awarded).toBe(0);
+    expect((await sql`select claim_reading_reward(${actor},'finish_book',${books[0].id}) as reward`)[0].reward.awarded).toBe(0);
+    await sql`insert into shelf_books(user_id,shelf_id,book_id,finished_at) values(${actor},${shelf},${books[1].id},current_date)`;
+    expect((await sql`select claim_reading_reward(${actor},'finish_book',${books[1].id}) as reward`)[0].reward.awarded).toBe(0);
+    await sql`select set_shelf_membership(${actor},${shelf},${books[1].id},false)`;
+    expect((await sql`select set_shelf_membership(${actor},${shelf},${books[1].id},true) as receipt`)[0].receipt.xp_awarded).toBe(0);
+    await sql`update shelf_books set finished_at=null where user_id=${actor} and shelf_id=${shelf} and book_id=${books[1].id}`;
+    expect((await sql`select set_shelf_membership(${actor},${shelf},${books[1].id},true) as receipt`)[0].receipt.xp_awarded).toBe(0);
+    expect((await sql`select books_read_count from users where id=${actor}`)[0].books_read_count).toBe(2);
+    const legacy=(await sql`select u.id,sb.book_id,sb.shelf_id from users u join shelf_books sb on sb.user_id=u.id where u.username='legacy_completion_owner'`)[0];
+    expect((await sql`select set_shelf_membership(${legacy.id},${legacy.shelf_id},${legacy.book_id},true) as receipt`)[0].receipt.xp_awarded).toBe(0);
+    const daily=await Promise.all(Array.from({length:3},()=>sql`select claim_reading_reward(${actor},'daily_login',null) as reward`));expect(daily.reduce((sum,rows)=>sum+rows[0].reward.awarded,0)).toBe(3);
+    await expect(sql`select claim_reading_reward(${actor},'add_book',${books[0].id})`).rejects.toThrow('Invalid reading reward');
+    const review=(await sql`insert into reviews(user_id,book_id,rating,content) values(${reviewer},${books[2].id},4,'Reward review') returning id`)[0].id;
+    await sql`select apply_book_interaction(${actor},${books[2].id},'reaction','reward-conversion',${review},true)`;
+    const events=await sql`select id from outbox_events where aggregate_type='review_conversions' and event_type='award_xp' and aggregate_id=${actor+':'+books[2].id}`;expect(events).toHaveLength(1);
+    await sql`update outbox_events set status='processing' where id=${events[0].id}`;
+    await Promise.all(Array.from({length:4},()=>sql`select process_outbox_event_atomic(${events[0].id})`));
+    expect((await sql`select xp from users where id=${reviewer}`)[0].xp).toBe(5);
+    expect((await sql`select count(*)::int as count from xp_ledger where user_id=${reviewer} and reason='want_to_read_received'`)[0].count).toBe(1);
+    await sql`select apply_book_interaction(${actor},${books[2].id},'reaction','reward-conversion-remove',null,false)`;await sql`select apply_book_interaction(${actor},${books[2].id},'reaction','reward-conversion-readd',${review},true)`;
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='review_conversions' and event_type='award_xp' and aggregate_id=${actor+':'+books[2].id}`)[0].count).toBe(1);
+    for(const role of ['anon','authenticated'])for(const routine of ['claim_reading_reward(uuid,text,uuid)','set_shelf_membership_045(uuid,uuid,uuid,boolean)','apply_shelf_membership_intent(uuid,uuid,uuid,boolean,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    expect((await sql`select has_function_privilege('service_role','set_shelf_membership_045(uuid,uuid,uuid,boolean)','EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

@@ -132,7 +132,10 @@
     "reviewWantToRead": "Nach dieser Rezension lesen möchten",
     "getBook": "Dieses Buch erhalten",
     "affiliateDisclosure": "Liravo kann bei qualifizierten Käufen eine Provision erhalten.",
-    "openLinkFailed": "Dieser Link konnte nicht geöffnet werden. Bitte versuche es erneut."
+    "openLinkFailed": "Dieser Link konnte nicht geöffnet werden. Bitte versuche es erneut.",
+    "onShelf": "Im Regal",
+    "noShelves": "Keine Regale verfügbar.",
+    "shelfUpdateFailed": "Das Regal konnte nicht aktualisiert werden. Bitte versuche es erneut."
   },
   "profile": {
     "countryPlaceholder": "DE",
