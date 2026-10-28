@@ -2064,5 +2064,24 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await PATCH(request({message:'Forged'}))).status).toBe(400);
     const page=await(await GET(new Request('https://app.test/api/notifications'))).json();expect(page.actorId).toBe(actor);expect(page.notifications.every((n:any)=>n.user_id===actor&&n.message_key)).toBe(true);
     }
+    {
+    const actor=crypto.randomUUID(),rolledBack=crypto.randomUUID();
+    const created=(await sql`select create_localized_direct_account(${actor},'locale070@example.test','locale_070','French reader','fr') as profile`)[0].profile;
+    expect(created).toMatchObject({preferred_locale:'fr',locale_initialized:true});
+    expect((await sql`select initialize_account_locale(${actor},'de') as locale`)[0].locale).toBe('fr');
+    await sql`select initialize_account_locale(${actor},'de',true)`;expect((await sql`select initialize_account_locale(${actor},'fr') as locale`)[0].locale).toBe('de');
+    await expect(sql`select create_localized_direct_account(${rolledBack},'rollback070@example.test','rollback_070','Rollback reader','xx')`).rejects.toMatchObject({code:'P1004'});expect(await sql`select id from users where id=${rolledBack}`).toHaveLength(0);
+    const accounts=await Promise.all(Array.from({length:4},()=>sql`select resolve_localized_social_identity('google','locale-social070','locale-social070@example.test','Social reader',null,'fr') as profile`));
+    const social=accounts[0][0].profile.id;expect(new Set(accounts.map(rows=>rows[0].profile.id)).size).toBe(1);expect(accounts.every(rows=>rows[0].profile.preferred_locale==='fr')).toBe(true);
+    expect((await sql`select resolve_localized_social_identity('google','locale-social070','locale-social070@example.test','Social reader',null,'de') as profile`)[0].profile.preferred_locale).toBe('fr');
+    const legacy=legacyNotification!.owner;expect((await sql`select locale_initialized from users where id=${legacy}`)[0].locale_initialized).toBe(true);await sql`update users set preferred_locale='de' where id=${legacy}`;expect((await sql`select initialize_account_locale(${legacy},'fr') as locale`)[0].locale).toBe('de');
+    const managed=crypto.randomUUID();await sql`insert into auth.users(id,email,raw_user_meta_data) values(${managed},'managed070@example.test','{"username":"managed_070"}')`;
+    expect((await sql`select locale_initialized from users where id=${managed}`)[0].locale_initialized).toBe(false);await sql`select initialize_account_locale(${managed},'fr')`;expect((await sql`select preferred_locale,locale_initialized from users where id=${managed}`)[0]).toEqual({preferred_locale:'fr',locale_initialized:true});
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_column_privilege(${role},'users','locale_initialized','SELECT') as allowed`)[0].allowed).toBe(false);
+      expect((await sql`select has_column_privilege(${role},'users','locale_initialized','UPDATE') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['initialize_account_locale(uuid,text,boolean)','create_localized_direct_account(uuid,text,text,text,text,text)','resolve_localized_social_identity(text,text,text,text,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

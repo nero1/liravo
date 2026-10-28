@@ -97,7 +97,7 @@ it('requires configured PIN proof before revealing enrollment recovery codes and
 });
 it('keeps Google identity stable after a recovery email change and fails closed on lookup failures',async()=>{
   vi.stubEnv('NEXT_PUBLIC_GOOGLE_CLIENT_ID','fixture-client');vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({sub:'google-fixture',email:'google@example.test',email_verified:'true',aud:'fixture-client',iss:'https://accounts.google.com',exp:Math.floor(Date.now()/1000)+600})}));
-  rpc.mockResolvedValueOnce({data:{...profile,google_id:'google-fixture'},error:null});expect((await googleLogin(request({idToken:'fixture-token'}))).status).toBe(202);expect(rpc).toHaveBeenCalledWith('resolve_direct_social_identity',expect.objectContaining({p_provider:'google',p_subject:'google-fixture',p_email:'google@example.test'}));
+  rpc.mockResolvedValueOnce({data:{...profile,google_id:'google-fixture'},error:null});expect((await googleLogin(request({idToken:'fixture-token'}))).status).toBe(202);expect(rpc).toHaveBeenCalledWith('resolve_localized_social_identity',expect.objectContaining({p_provider:'google',p_subject:'google-fixture',p_email:'google@example.test'}));
   rpc.mockResolvedValueOnce({data:null,error:{code:'08006'}});expect((await googleLogin(request({idToken:'fixture-token'}))).status).toBe(503);
 });
 it('escapes profile names and URLs in transactional email HTML',()=>{

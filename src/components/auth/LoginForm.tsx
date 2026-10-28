@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { safeReturnPath } from '@/lib/utils';
 import { SecondFactorForm } from '@/components/auth/SecondFactorForm';
 import { createClient } from '@/lib/supabase/client';
-import { useTranslations } from 'next-intl';
+import { useTranslations,useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {HCaptcha} from './HCaptcha';
@@ -17,6 +17,7 @@ interface LoginFormProps {
 const isDirectPostgresMode = (process.env.NEXT_PUBLIC_DATABASE_PROVIDER ?? 'supabase') !== 'supabase';
 
 export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
+  const locale=useLocale();
   const t = useTranslations('auth');
   const common = useTranslations('common');
   const emailSecurity=useTranslations('emailSecurity');
@@ -64,7 +65,7 @@ export function LoginForm({ googleEnabled, telegramEnabled }: LoginFormProps) {
         const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
         const res = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json','X-Liravo-Preferred-Locale':locale },
           body: JSON.stringify({email,password,...(captchaToken?{hcaptchaToken:captchaToken}:{})}),
         });
 

@@ -1,3 +1,4 @@
+import {accountLocale} from '@/lib/auth/locale';
 import { directLoginResponse } from '@/lib/auth/second-factor';
 import { clientUser } from '@/lib/user-profile';
 import { NextResponse } from 'next/server';
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
   const telegramId = String(telegramData.id);
 
   const displayName=[telegramData.first_name,telegramData.last_name].filter(Boolean).join(' ')||telegramData.username||'tg_'+telegramId;
-  const {data:user,error}=await supabase.rpc('resolve_direct_social_identity' as never,{p_provider:'telegram',p_subject:telegramId,p_email:null,p_display_name:displayName,p_avatar_url:telegramData.photo_url??null} as never);
+  const {data:user,error}=await supabase.rpc('resolve_localized_social_identity' as never,{p_locale:accountLocale(request),p_provider:'telegram',p_subject:telegramId,p_email:null,p_display_name:displayName,p_avatar_url:telegramData.photo_url??null} as never);
   if(error||!user)return NextResponse.json({error:'Authentication unavailable'},{status:error?.code==='P1003'?403:error?.code==='P1001'?409:503});
   return directLoginResponse(user as unknown as {id:string;email:string|null},clientUser(user),request);
 }

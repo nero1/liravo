@@ -33,9 +33,9 @@ beforeEach(()=>{
   vi.mocked(createServiceClient).mockReturnValue({from:()=>builder,rpc} as never);vi.mocked(createDoSession).mockResolvedValue('isolated-session-token');
   vi.mocked(directLoginResponse).mockResolvedValue(NextResponse.json({ok:true,user:profile}));
   rpc.mockImplementation(async(name,args)=>{
-    if(name==='resolve_direct_social_identity')return {data:profile,error:queryError};
+    if(name==='resolve_localized_social_identity')return {data:profile,error:queryError};
     if(name==='find_direct_account')return {data:lookup,error:queryError};
-    if(name==='create_direct_account'){lookup={id:args.p_id,email:args.p_email,username:args.p_username,password_hash:args.p_password_hash};return {data:lookup,error:queryError};}
+    if(name==='create_localized_direct_account'){lookup={id:args.p_id,email:args.p_email,username:args.p_username,password_hash:args.p_password_hash};return {data:lookup,error:queryError};}
     return {data:null,error:null};
   });
   redisGet.mockImplementation(async key=>String(counts.get(key)??initialFailures));redisDel.mockResolvedValue(1);
@@ -44,7 +44,7 @@ beforeEach(()=>{
 afterEach(()=>{vi.useRealTimers();vi.unstubAllEnvs();vi.unstubAllGlobals();});
 it('accepts the independently OpenSSL-signed Telegram Login Widget vector through the normal MFA gate',async()=>{
   const response=await telegramLogin(request(payload));expect(response.status).toBe(200);expect(directLoginResponse).toHaveBeenCalledWith(profile,profile,expect.any(Request));
-  expect(rpc).toHaveBeenCalledWith('resolve_direct_social_identity',expect.objectContaining({p_provider:'telegram',p_subject:'42',p_email:null}));
+  expect(rpc).toHaveBeenCalledWith('resolve_localized_social_identity',expect.objectContaining({p_provider:'telegram',p_subject:'42',p_email:null}));
 });
 it('rejects tampering, malformed identities, stale widget proofs and the Web App signature algorithm',async()=>{
   expect((await telegramLogin(request({...payload,id:43}))).status).toBe(401);
@@ -101,7 +101,7 @@ it('enforces configured signup proof and bounds UTF-8 password length without tr
 });
 it('creates a bounded canonical signup profile and never returns password hashes or native cookies',async()=>{
   lookup=null;const email='A'.repeat(64)+'@example.test';const response=await signup(request({email,password:'fixture-password'},'signup',{'X-Liravo-Client':'native'}));expect(response.status).toBe(200);
-  const args=rpc.mock.calls.find(([name])=>name==='create_direct_account')![1];expect(args.p_username).toMatch(/^[a-z0-9_]{3,30}$/);expect(args.p_display_name.length).toBeLessThanOrEqual(50);expect(await bcrypt.compare('fixture-password',args.p_password_hash)).toBe(true);
+  const args=rpc.mock.calls.find(([name])=>name==='create_localized_direct_account')![1];expect(args.p_username).toMatch(/^[a-z0-9_]{3,30}$/);expect(args.p_display_name.length).toBeLessThanOrEqual(50);expect(await bcrypt.compare('fixture-password',args.p_password_hash)).toBe(true);
   const result=await response.json();expect(result.user).not.toHaveProperty('password_hash');expect(result.token).toBe('isolated-session-token');expect(response.headers.has('set-cookie')).toBe(false);
 },15_000);
 it('fails closed for database, session storage and quota failures',async()=>{
@@ -109,3 +109,12 @@ it('fails closed for database, session storage and quota failures',async()=>{
   queryError=null;lookup=null;vi.mocked(createDoSession).mockRejectedValueOnce(new Error('isolated Redis failure'));expect((await signup(request({email:'new@example.test',password:'fixture-password'},'signup'))).status).toBe(503);
   vi.mocked(checkCriticalRateLimit).mockResolvedValueOnce({allowed:false,remaining:0,resetAt:0});expect((await passwordLogin(request({email:'fixture@example.test',password:'fixture-password'},'login'))).status).toBe(429);
 },15_000);
+
+it('carries the selected signup language and rejects unsupported language hints',async()=>{
+  lookup=null;expect((await signup(request({email:'locale@example.test',password:'fixture-password'},'signup',{'X-Liravo-Preferred-Locale':'fr'}))).status).toBe(200);
+  expect(rpc).toHaveBeenCalledWith('create_localized_direct_account',expect.objectContaining({p_locale:'fr'}));
+  const {accountLocale}=await import('@/lib/auth/locale');expect(accountLocale(request({},'signup',{'X-Liravo-Preferred-Locale':'xx','X-Liravo-Locale':'de'}))).toBe('de');expect(accountLocale(request({}))).toBe('en');
+});
+it('carries the selected Telegram language outside the signed payload',async()=>{
+  expect((await telegramLogin(request(payload,'telegram',{'X-Liravo-Preferred-Locale':'de'}))).status).toBe(200);expect(rpc).toHaveBeenCalledWith('resolve_localized_social_identity',expect.objectContaining({p_locale:'de',p_subject:'42'}));
+});

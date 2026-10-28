@@ -1,10 +1,12 @@
-import { useEffect } from 'react';
+import {useTranslations} from '@/hooks/useTranslations';
+import { useEffect,useRef } from 'react';
 import { isSupabaseMode, supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api';
 import type { UserRow } from '@/types';
 
 export function useAuth(initialize=false) {
+  const {locale}=useTranslations('auth'),localeRef=useRef(locale);localeRef.current=locale;
   const { user, token, isLoading, setUser, setToken, setLoading, signOut, loadStoredToken, mfaChallenge, setMfaChallenge } = useAuthStore();
 
   useEffect(()=>{
@@ -16,7 +18,7 @@ export function useAuth(initialize=false) {
       await setToken(accessToken);
       if(!current(accessToken))return;
       try{
-        const result=await api.post<{mfaRequired?:boolean;challengeToken?:string;user?:UserRow}>('/api/auth/session',{});
+        const result=await api.post<{mfaRequired?:boolean;challengeToken?:string;user?:UserRow}>('/api/auth/session',{}, {'X-Liravo-Preferred-Locale':localeRef.current});
         if(!current(accessToken))return;
         if(result.mfaRequired){setUser(null);setMfaChallenge(result.challengeToken!);}else{setMfaChallenge(null);setUser(result.user??null);}
       }catch{if(current(accessToken))await signOut();}finally{if(current(accessToken))setLoading(false);}
@@ -63,8 +65,8 @@ export function useAuth(initialize=false) {
     await setToken(result.token!);setUser(result.user!);setMfaChallenge(null);
   }
   async function loginWithEmail(email:string,password:string,hcaptchaToken?:string){await acceptLogin(await api.post<LoginResult>('/api/auth/login',{email,password,hcaptchaToken}));}
-  async function signUpWithEmail(email:string,password:string,hcaptchaToken?:string){await acceptLogin(await api.post<LoginResult>('/api/auth/signup',{email,password,hcaptchaToken}));}
-  async function loginWithGoogleToken(idToken:string){await acceptLogin(await api.post<LoginResult>('/api/auth/google',{idToken}));}
+  async function signUpWithEmail(email:string,password:string,hcaptchaToken?:string){await acceptLogin(await api.post<LoginResult>('/api/auth/signup',{email,password,hcaptchaToken},{'X-Liravo-Preferred-Locale':locale}));}
+  async function loginWithGoogleToken(idToken:string){await acceptLogin(await api.post<LoginResult>('/api/auth/google',{idToken},{'X-Liravo-Preferred-Locale':locale}));}
   async function verifySecondFactor(value:string,recovery:boolean){
     const challengeToken=useAuthStore.getState().mfaChallenge;
     const result=await api.post<LoginResult>('/api/auth/2fa/verify',{challengeToken,...(recovery?{recoveryCode:value}:{code:value})});

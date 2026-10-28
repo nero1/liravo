@@ -1604,7 +1604,7 @@ Financial webhooks and payout reservations now commit state and audit records at
 
 XP is now awarded from verified activity and a durable per-user event ledger; client-supplied activity names alone cannot mint rewards. Subscription intents and cancellation update state/audit atomically; gateway adapters still require sandbox verification.
 
-Billing returns users to an entitlement-checked pending-confirmation page; browser redirects never activate Premium. Locale preferences now persist in the profile and browser, and Premium checkout has English/French/German catalogs and locale-aware prices. Full UI translation remains tracked separately.
+Billing returns users to an entitlement-checked pending-confirmation page; browser redirects never activate Premium. Locale preferences now persist in the profile and browser, and Premium checkout has English/French/German catalogs and locale-aware prices. New email/social accounts inherit the selected language once; existing accounts retain their saved preference across later logins. Full UI translation remains tracked separately.
 
 Development audit: migrations 029–031 restrict private profile data and RPC access, add weekly digest receipts, and expose service-only financial reconciliation counts through outbox drain. Public metadata honors profile privacy and supported language URLs. The audit retains unresolved work explicitly; provider sandbox validation is required before enabling live billing.
 
