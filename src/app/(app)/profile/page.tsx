@@ -2,11 +2,12 @@ import { PUBLIC_USER_COLUMNS } from '@/lib/user-profile';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { ProfileView } from '@/components/profile/ProfileView';
-import type { Metadata } from 'next';
+import {getTranslations} from 'next-intl/server';
+import {getEarnedBadges} from '@/services/badges';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'My Profile' };
+export async function generateMetadata(){return {title:(await getTranslations('profile'))('myTitle'),robots:{index:false}};}
 
 export default async function ProfilePage() {
   const supabase = createClient();
@@ -21,5 +22,5 @@ export default async function ProfilePage() {
 
   if (!profile) redirect('/login');
 
-  return <ProfileView profile={profile} isOwner />;
+  return <ProfileView profile={{...profile,badges:await getEarnedBadges(user.id)}} isOwner />;
 }

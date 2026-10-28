@@ -1,9 +1,10 @@
+import {getBookReviews,ReviewCursorError} from '@/services/book-reviews';
 import {EditionSelector} from '@/components/books/EditionSelector';
 import { getTranslations,getFormatter } from 'next-intl/server';
 import { getActivePromotions } from '@/services/promotions';
 import { PromotedBookLink } from '@/components/books/PromotedBookLink';
 import { HelpfulnessButtons } from '@/components/books/HelpfulnessButtons';
-import { languageAlternates } from '@/lib/metadata';
+import { languageAlternates,jsonForHtml } from '@/lib/metadata';
 import { singleRelation } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -25,6 +26,7 @@ export const dynamic = 'force-dynamic';
 
 interface BookPageProps {
   params: { id: string };
+  searchParams?:{reviewCursor?:string};
 }
 
 export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
@@ -56,7 +58,7 @@ function StarDisplay({ rating }: { rating: number }) {
   );
 }
 
-function RatingBar({ star, count, total }: { star: number; count: number; total: number }) {
+function RatingBar({ star, count, total,label }: { star: number; count: number; total: number;label:string }) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
   return (
     <div className="flex items-center gap-2 text-xs">
@@ -65,12 +67,12 @@ function RatingBar({ star, count, total }: { star: number; count: number; total:
       <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
         <div className="h-full bg-amber-400 rounded-full" style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-6 text-right text-muted-foreground">{count}</span>
+      <span className="w-6 text-right text-muted-foreground">{label}</span>
     </div>
   );
 }
 
-export default async function BookPage({ params }: BookPageProps) {
+export default async function BookPage({ params,searchParams }: BookPageProps) {
   const [t,books,common,reviewText,moods,communityText,format]=await Promise.all([getTranslations('book'),getTranslations('books'),getTranslations('common'),getTranslations('reviewForm'),getTranslations('moods'),getTranslations('communityNotes'),getFormatter()]);
   const supabase = createClient();
   const serviceSupabase = createServiceClient();
@@ -103,25 +105,15 @@ export default async function BookPage({ params }: BookPageProps) {
     initialWantToRead = !!wantEntry;
   }
 
-  // Fetch reviews with helpfulness counts
-  const { data: reviews } = await supabase
-    .from('reviews')
-    .select('id,book_id,user_id,rating,content, review_type, mood_tags, has_spoilers, likes_count, helpful_votes, unhelpful_votes, created_at, users:user_id(display_name, avatar_url, username)')
-    .in('book_id',editionIds)
-    .eq('moderation_status', 'published')
-    .eq('is_hidden', false)
-    .order('helpful_votes', { ascending: false })
-    .limit(20);
-
+  let reviewPage;
+  try{reviewPage=await getBookReviews(book.id,searchParams?.reviewCursor??null,20);}catch(error){if(error instanceof ReviewCursorError)notFound();throw error;}
+  if(!reviewPage)notFound();
+  const reviews=reviewPage.reviews;
   const { data: helpfulnessVotes } = reviews?.length ? await supabase.from('review_helpfulness_votes')
     .select('review_id,is_helpful').eq('user_id', user.id).in('review_id', reviews.map(review => review.id)) : { data: [] };
   const votesByReview = new Map((helpfulnessVotes ?? []).map(vote => [vote.review_id, vote.is_helpful]));
 
-  // Rating distribution
-  const dist: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  for (const r of reviews ?? []) dist[r.rating] = (dist[r.rating] ?? 0) + 1;
-  const totalRatings = Object.values(dist).reduce((a, b) => a + b, 0);
-
+  const dist=reviewPage.statistics.distribution,totalRatings=reviewPage.statistics.ratings_count;
   // Quotes
   const { data: quotes } = await supabase
     .from('quotes')
@@ -218,10 +210,11 @@ export default async function BookPage({ params }: BookPageProps) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForHtml({
         '@context': 'https://schema.org', '@type': 'Book', name: book.title,
         author: { '@type': 'Person', name: book.author_name }, isbn: book.isbn_13 ?? undefined,
-      }).replace(/</g, '\\u003c') }} />
+        ...(totalRatings&&reviewPage.statistics.average_rating!==null?{aggregateRating:{'@type':'AggregateRating',ratingValue:reviewPage.statistics.average_rating,ratingCount:totalRatings,bestRating:5,worstRating:1}}:{}),
+      }) }} />
       {/* Book header */}
       <div className="flex gap-5 mb-6">
         <div className="shrink-0">
@@ -241,10 +234,11 @@ export default async function BookPage({ params }: BookPageProps) {
             {(book.author_names as string[]).join(', ') || book.author_name}
           </p>
 
+          {reviewPage.statistics.average_rating!==null&&<p className="text-sm text-muted-foreground">{t('communityRatings',{count:totalRatings})} · {format.number(reviewPage.statistics.average_rating,{maximumFractionDigits:2})}/5</p>}
           {book.average_rating!==null && (
             <div className="flex items-center gap-2 mt-2">
               <StarDisplay rating={Math.round(book.average_rating)} />
-              <span className="text-sm text-muted-foreground">{format.number(book.average_rating,{minimumFractionDigits:1,maximumFractionDigits:1})} · {books('ratings',{count:book.ratings_count})}</span>
+              <span className="text-sm text-muted-foreground">{format.number(book.average_rating,{minimumFractionDigits:1,maximumFractionDigits:1})} · {books('ratings',{count:book.ratings_count})} · {t('catalogRating')}</span>
             </div>
           )}
 
@@ -335,8 +329,8 @@ export default async function BookPage({ params }: BookPageProps) {
         <div className="mb-6 p-4 border border-border rounded-xl">
           <h2 className="font-semibold mb-3 text-sm">{t('ratingDistribution')}</h2>
           <div className="space-y-1.5">
-            {[5, 4, 3, 2, 1].map((s) => (
-              <RatingBar key={s} star={s} count={dist[s] ?? 0} total={totalRatings} />
+            {([5, 4, 3, 2, 1] as const).map((s) => (
+              <RatingBar key={s} star={s} count={dist[s] ?? 0} total={totalRatings} label={format.number(dist[s]??0)}/>
             ))}
           </div>
         </div>
@@ -405,18 +399,18 @@ export default async function BookPage({ params }: BookPageProps) {
       )}
 
       {/* Reviews */}
-      <section className="mb-8">
+      <section id="reviews" className="mb-8">
         <h2 className="font-display font-bold text-lg mb-4">
           {books('reviews')}
-          {(reviews?.length ?? 0) > 0 && <span className="text-muted-foreground font-normal text-base ml-2">({reviews?.length})</span>}
+          {totalRatings > 0 && <span className="text-muted-foreground font-normal text-base ml-2">({format.number(totalRatings)})</span>}
         </h2>
 
         {(reviews?.length ?? 0) === 0 ? (
-          <p className="text-muted-foreground text-sm">{t('noReviews')}</p>
+          <p className="text-muted-foreground text-sm">{t(totalRatings?'noMoreReviews':'noReviews')}</p>
         ) : (
           <div className="space-y-4">
             {reviews?.map((review) => {
-              const reviewer = review.users as unknown as { display_name: string; avatar_url: string | null; username: string } | null;
+              const reviewer = review.user as unknown as { display_name: string; avatar_url: string | null; username: string } | null;
               const replyCount = replyCounts[review.id] ?? 0;
               return (
                 <div key={review.id} className="border border-border rounded-xl p-4">
@@ -474,6 +468,11 @@ export default async function BookPage({ params }: BookPageProps) {
           </div>
         )}
       </section>
+
+      {(reviewPage.nextCursor||searchParams?.reviewCursor)&&<nav aria-label={t('reviewPages')} className="flex gap-4 mb-8">
+        {searchParams?.reviewCursor&&<Link href={`/book/${book.id}#reviews`} className="text-sm text-accent">{t('firstReviews')}</Link>}
+        {reviewPage.nextCursor&&<Link href={`/book/${book.id}?reviewCursor=${encodeURIComponent(reviewPage.nextCursor)}#reviews`} className="text-sm text-accent">{common('loadMore')}</Link>}
+      </nav>}
 
       {workCatalog&&<div className="mb-8"><EditionSelector catalog={workCatalog} book={book}/></div>}
 

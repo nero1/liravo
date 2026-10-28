@@ -1,10 +1,10 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery,useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {useState,useEffect} from 'react';
 import {useAuthStore} from '@/stores/auth';
 import {useRequestIntent} from '@/hooks/useRequestIntent';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
-import type { AffiliateLink, BookRow, ReviewRow, QuoteRow,UserRow,WorkCatalog } from '@/types';
+import type { AffiliateLink, BookRow,BookReviewPage, QuoteRow,UserRow,WorkCatalog } from '@/types';
 
 export function useBookSearch(query: string) {
   const normalized=query.trim(),[debounced,setDebounced]=useState(normalized);
@@ -26,11 +26,10 @@ export function useBook(id: string) {
   });
 }
 
-export function useBookReviews(bookId: string) {
-  return useQuery({
-    queryKey: ['book', bookId, 'reviews'],
-    queryFn: () => api.get<{ reviews: ReviewRow[] }>(ENDPOINTS.books.reviews(bookId)),
-  });
+export function useBookReviews(bookId:string){
+  return useInfiniteQuery({queryKey:['book',bookId,'reviews'],enabled:!!bookId,
+    queryFn:({pageParam,signal})=>api.get<BookReviewPage>(ENDPOINTS.books.reviews(bookId),{cursor:pageParam,limit:20},signal),
+    initialPageParam:undefined as string|undefined,getNextPageParam:page=>page.nextCursor??undefined});
 }
 
 export function useBookQuotes(bookId: string) {

@@ -51,6 +51,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Persist native language selection with device fallback; translate navigation/main tabs, settings and referral screens.
 - ✅ Persist and enforce notification preferences; translate stored messages and push delivery.
 - ✅ Preserve the selected language when creating email/social accounts.
+- ✅ Show earned badges consistently on owned and public profiles.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
@@ -68,6 +69,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - 🟡 Add concurrency/load tests for payout/webhook/cron paths.
 - ✅ Add security tests (CSRF, replay, IDOR, abuse throttling).
 - ✅ Keep browser inference out of server functions and enforce the uncompressed bundle budget during builds.
+- ✅ Escape authored text in structured metadata and retain valid JSON values.
 - ✅ Verify remaining content tables, durable creates, group capacity, private discussions, badge rewards and paged author notifications.
 - ✅ Make admin theme/store/seasonal configuration atomic and repair partial/repeated content seeds through shared API/CLI routines.
 - ✅ Unify profile/onboarding API validation across providers and commit optional PINs with onboarding.
@@ -88,6 +90,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Separate canonical works from editions while preserving existing book links and reading history.
 - ✅ Resolve edition-specific ISBN/provider identities without combining unrelated editions; expose edition selection on web/native.
 - ✅ Verify imports, seeds, search, reviews, shelves and purchase links against the edition model.
+- ✅ Aggregate complete visible review statistics, page reviews and preserve catalog rating sources.
 - ✅ Share bounded, ranked mood discovery across web/native with canonical edition aliases and visible-review filtering.
 
 Footer/Signature: Generated on May 23, 2026 09:39 PM UTC

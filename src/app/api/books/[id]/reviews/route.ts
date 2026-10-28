@@ -1,9 +1,7 @@
-import {getEditionIds} from '@/services/books';
+import {getBookReviews,ReviewCursorError} from '@/services/book-reviews';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
-import { createServiceClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import { classifyTone } from '@/lib/tone-classifier';
@@ -24,31 +22,13 @@ const reviewSchema = z.object({
   edition_read: z.string().max(100).optional(),
 });
 
-export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase=createClient();
-  let editionIds:string[];try{editionIds=await getEditionIds(params.id);}catch{return NextResponse.json({error:'Edition identities unavailable'},{status:503});}
-
-  const { data: reviews, error } = await supabase
-    .from('reviews')
-    .select(`
-      id, user_id, book_id, rating, content, review_type, mood_tags, has_spoilers,
-      likes_count, created_at, moderation_status,
-      user:user_id (display_name, avatar_url, username)
-    `)
-    .in('book_id',editionIds)
-    .eq('moderation_status', 'published')
-    .eq('is_hidden', false)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ reviews: reviews ?? [] });
+export async function GET(request:Request,{params}:{params:{id:string}}){
+  if(!await getCurrentUser())return NextResponse.json({error:'Unauthorized'},{status:401});
+  const query=new URL(request.url).searchParams;
+  try{
+    const page=await getBookReviews(params.id,query.get('cursor'),Number(query.get('limit')??50));
+    return page?NextResponse.json(page,{headers:{'Cache-Control':'private, no-store'}}):NextResponse.json({error:'Book not found'},{status:404});
+  }catch(error){return NextResponse.json({error:error instanceof ReviewCursorError?'Invalid review page':'Reviews unavailable'},{status:error instanceof ReviewCursorError?400:503});}
 }
 
 export async function POST(
@@ -83,7 +63,6 @@ export async function POST(
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Review unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
-  const serviceSupabase = createServiceClient();
 
   // Award XP for writing a review
   await awardXP(user.id, XP_CONFIG.SHORT_REVIEW, 'write_review', `review:${params.id}`);
@@ -94,28 +73,6 @@ export async function POST(
     await redis.del(`taste_profile:${user.id}`);
   } catch {
     // Non-critical
-  }
-
-  // Upsert book_community_stats if table exists — best effort
-  try {
-    const { data: existing } = await serviceSupabase
-      .from('reviews')
-      .select('rating')
-      .eq('book_id', params.id)
-      .eq('moderation_status', 'published');
-
-    if (existing && existing.length > 0) {
-      const avg = existing.reduce((sum, r) => sum + r.rating, 0) / existing.length;
-      await serviceSupabase
-        .from('books')
-        .update({
-          average_rating: Math.round(avg * 10) / 10,
-          ratings_count: existing.length,
-        })
-        .eq('id', params.id);
-    }
-  } catch {
-    // Non-critical — ignore errors
   }
 
   return NextResponse.json({ review }, { status: 201 });

@@ -160,6 +160,12 @@
     "quoteInvalidPage": "Saisissez un numéro de page entier supérieur à zéro."
   },
   "profile": {
+    "myTitle": "Mon profil",
+    "title": "Profil",
+    "metadataDescription": "Le profil de lecture de {name} sur Liravo",
+    "metadataTitle": "{name} sur Liravo",
+    "privateTitle": "Ce profil est privé",
+    "privateDescription": "Seuls les abonnés peuvent consulter ce profil.",
     "countryPlaceholder": "FR",
     "avatarTooLarge": "La photo ne doit pas dépasser 3 Mo.",
     "displayRequired": "Le nom affiché est obligatoire.",
@@ -234,6 +240,11 @@
     "readerTitle": "Votre titre de lecteur"
   },
   "book": {
+    "catalogRating": "Note du catalogue",
+    "communityRatings": "{count, plural, one {# avis de la communauté} other {# avis de la communauté}}",
+    "noMoreReviews": "Aucun autre avis sur cette page.",
+    "reviewPages": "Pages des avis",
+    "firstReviews": "Premiers avis",
     "affiliateLinks": "Obtenir ce livre",
     "ratingDistribution": "Répartition des notes",
     "readingLists": "Listes de lecture incluant ce livre",

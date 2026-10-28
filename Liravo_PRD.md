@@ -438,6 +438,7 @@ The affiliate store system must be designed so new stores can be added by admin 
 - Spoiler toggle
 - Read date (optional)
 - Edition read (optional)
+- Community averages, totals and rating distribution include all published, visible reviews from active accounts for the selected edition and its legacy aliases. Review lists use bounded pages; catalog/provider ratings are labeled separately.
 
 **Reactions:**
 - Like
@@ -791,6 +792,8 @@ Verified tip, event and referral entries form each user’s currency balance; pe
 | 50,000+ | Legend of the Shelf |
 
 ### 9.3 Badges
+
+Earned badge IDs and localized names are shared across owned/public web and native profiles.
 
 **Reading milestones:** First Book, 10 Books, 50 Books, 100 Books, 365-Day Streak.
 

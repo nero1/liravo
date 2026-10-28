@@ -160,6 +160,12 @@
     "quoteInvalidPage": "Gib eine ganze Seitenzahl größer als null ein."
   },
   "profile": {
+    "myTitle": "Mein Profil",
+    "title": "Profil",
+    "metadataDescription": "Das Leseprofil von {name} auf Liravo",
+    "metadataTitle": "{name} auf Liravo",
+    "privateTitle": "Dieses Profil ist privat",
+    "privateDescription": "Nur Follower können dieses Profil ansehen.",
     "countryPlaceholder": "DE",
     "avatarTooLarge": "Das Profilbild darf höchstens 3 MB groß sein.",
     "displayRequired": "Ein Anzeigename ist erforderlich.",
@@ -234,6 +240,11 @@
     "readerTitle": "Dein Lesertitel"
   },
   "book": {
+    "catalogRating": "Katalogbewertung",
+    "communityRatings": "{count, plural, one {# Community-Bewertung} other {# Community-Bewertungen}}",
+    "noMoreReviews": "Keine weiteren Rezensionen auf dieser Seite.",
+    "reviewPages": "Rezensionsseiten",
+    "firstReviews": "Erste Rezensionen",
     "affiliateLinks": "Dieses Buch kaufen",
     "ratingDistribution": "Bewertungsübersicht",
     "readingLists": "Leselisten mit diesem Buch",

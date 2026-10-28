@@ -321,3 +321,11 @@ export interface Database {
     CompositeTypes: Record<string, never>;
   };
 }
+
+export interface ReviewStatistics {ratings_count:number;average_rating:number|null;distribution:Record<1|2|3|4|5,number>;}
+export interface BookReviewPage {
+  bookId:string;
+  reviews:(Pick<ReviewRow,'id'|'book_id'|'user_id'|'rating'|'content'|'review_type'|'mood_tags'|'has_spoilers'|'likes_count'|'helpful_votes'|'unhelpful_votes'|'created_at'>&{user:Pick<UserRow,'id'|'display_name'|'avatar_url'|'username'>})[];
+  statistics:ReviewStatistics;
+  nextCursor:string|null;
+}

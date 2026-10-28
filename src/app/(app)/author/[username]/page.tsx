@@ -1,3 +1,4 @@
+import {jsonForHtml} from '@/lib/metadata';
 import { languageAlternates } from '@/lib/metadata';
 import { singleRelation } from '@/lib/utils';
 import { CsrfInput } from '@/components/layout/CsrfInput';
@@ -200,7 +201,7 @@ export default async function AuthorProfilePage({
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForHtml(jsonLd) }} />
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
       <div className="space-y-4">

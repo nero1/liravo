@@ -34,10 +34,15 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
+    let legacyRating:string|undefined;
     let legacyNotification:{owner:string;badge:string;goal:string}|undefined;
     let legacyEditions:{owner:string;ids:string[];reviewId:string}|undefined;
     let legacyImport:{owner:string;rows:unknown[];response:unknown}|undefined;
     for (const file of migrations) {
+      if(file.startsWith('071_')){
+        const owner=legacyNotification!.owner;legacyRating=(await sql`insert into books(title,author_name,average_rating,ratings_count) values('Legacy mixed ratings 071','Author',4.6,100) returning id`)[0].id;
+        await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status) values(${owner},${legacyRating!},5,'Legacy cached review','short','published')`;
+      }
       if(file.startsWith('069_')){
         const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'notifications-069@example.test','notifications_069','Notification reader')`;
         await sql`select award_badge_atomic(${owner},'first_book',50,'First Book','📖')`;
@@ -2082,6 +2087,39 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       expect((await sql`select has_column_privilege(${role},'users','locale_initialized','UPDATE') as allowed`)[0].allowed).toBe(false);
       for(const routine of ['initialize_account_locale(uuid,text,boolean)','create_localized_direct_account(uuid,text,text,text,text,text)','resolve_localized_social_identity(text,text,text,text,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
+    }
+    {
+    expect((await sql`select average_rating,ratings_count from books where id=${legacyRating!}`)[0]).toEqual({average_rating:null,ratings_count:0});
+    expect((await sql`select previous_data,resolution from book_catalog_audit where book_id=${legacyRating!} and reason='legacy_review_rating_cache'`)[0]).toEqual({previous_data:{average_rating:4.6,ratings_count:100},resolution:{average_rating:null,ratings_count:0}});
+    const actor=crypto.randomUUID(),banned=crypto.randomUUID(),deleted=crypto.randomUUID();
+    for(const [id,name] of [[actor,'review_reader_071'],[banned,'review_banned_071'],[deleted,'review_deleted_071']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},'Review reader')`;
+    const book=(await sql`insert into books(title,author_name,average_rating,ratings_count) values('Review snapshot fixture 071','Author',4.6,100) returning id,work_id`)[0];
+    const rows=await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,created_at) select ${actor},${book.id},case when n<=20 then 5 else 1 end,'Review snapshot 071 '||n,'short','published','2026-10-28T10:00:00.123456Z'::timestamptz from generate_series(1,55) n returning id`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,is_hidden) values(${actor},${book.id},1,'Hidden fixture','short','published',true),(${actor},${book.id},1,'Pending fixture','short','pending',false),(${banned},${book.id},1,'Banned fixture','short','published',false),(${deleted},${book.id},1,'Deleted fixture','short','published',false)`;
+    await sql`update users set is_banned=true where id=${banned}`;await sql`update users set deleted_at=now() where id=${deleted}`;
+    const {getBookReviews,ReviewCursorError}=await import('@/services/book-reviews');
+    let page=(await getBookReviews(book.id,null,20))!,cursor=page.nextCursor;const found=[...page.reviews];
+    expect(page.statistics).toEqual({ratings_count:55,average_rating:2.45,distribution:{1:35,2:0,3:0,4:0,5:20}});expect(page.reviews).toHaveLength(20);expect(cursor).toBeTruthy();
+    while(cursor){page=(await getBookReviews(book.id,cursor,20))!;found.push(...page.reviews);cursor=page.nextCursor;expect(page.statistics.ratings_count).toBe(55);}
+    expect(new Set(found.map(review=>review.id)).size).toBe(55);expect(found.every(review=>review.user.id===actor)).toBe(true);expect(found[0]).not.toHaveProperty('request_hash');
+    const first=(await getBookReviews(book.id,null,1))!;await expect(getBookReviews(crypto.randomUUID(),first.nextCursor)).rejects.toBeInstanceOf(ReviewCursorError);
+    await expect(getBookReviews(book.id,'invalid')).rejects.toBeInstanceOf(ReviewCursorError);expect(await getBookReviews(crypto.randomUUID())).toBeNull();
+    await sql`update reviews set is_hidden=true where id=${rows[0].id}`;expect((await getBookReviews(book.id))!.statistics.ratings_count).toBe(54);
+    await sql`delete from reviews where id=${rows[1].id}`;expect((await getBookReviews(book.id))!.statistics.ratings_count).toBe(53);
+    expect((await sql`select average_rating,ratings_count from books where id=${book.id}`)[0]).toEqual({average_rating:'4.60',ratings_count:100});
+    const work=(await sql`select book_work_snapshot(${book.work_id}) as data`)[0].data;expect(work.statistics).toMatchObject({ratings_count:53});
+    const legacy=legacyEditions!,legacyPage=(await getBookReviews(legacy.ids[1]))!,canonical=(await getBookReviews(legacy.ids[0]))!;expect(legacyPage.bookId).toBe(canonical.bookId);expect(legacyPage.statistics).toEqual(canonical.statistics);expect(legacyPage.reviews.some(review=>review.id===legacy.reviewId)).toBe(true);
+    const {GET}=await import('@/app/api/books/[id]/reviews/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);
+    const result=await GET(new Request('https://app.test/api/books/'+book.id+'/reviews?limit=20'),{params:{id:book.id}});expect(result.status).toBe(200);expect((await result.json()).statistics.ratings_count).toBe(53);
+    expect((await GET(new Request('https://app.test/api/books/'+book.id+'/reviews?limit=999'),{params:{id:book.id}})).status).toBe(400);
+    vi.mocked(getCurrentUser).mockResolvedValue(null);expect((await GET(new Request('https://app.test/api/books/'+book.id+'/reviews'),{params:{id:book.id}})).status).toBe(401);
+    await Promise.all(Array.from({length:10},(_,n)=>sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status) values(${actor},${book.id},3,${'Concurrent review 071 '+n},'short','published')`));
+    expect((await getBookReviews(book.id))!.statistics.ratings_count).toBe(63);
+    const provider=(await sql`select store_catalog_book(${sql.json({google_books_id:'review-provider071',title:'Provider score 071',author_name:'Author',average_rating:4.2,ratings_count:321})}) as data`)[0].data;
+    const refreshed=(await sql`select store_catalog_book(${sql.json({google_books_id:'review-provider071',title:'Provider score 071',author_name:'Author',average_rating:4.4,ratings_count:350})}) as data`)[0].data;expect(refreshed).toMatchObject({id:provider.id,average_rating:4.4,ratings_count:350,metadata_provenance:{average_rating:'google'}});
+    await sql`select award_badge_atomic(${actor},'first_book',50,'First Book','📖')`;const {getEarnedBadges}=await import('@/services/badges');expect(await getEarnedBadges(actor)).toContainEqual({id:'first_book',name:'First Book',icon:'📖'});
+    const {GET:profile}=await import('@/app/api/users/[id]/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);const profileData=await(await profile(new Request('https://app.test/api/users/review_reader_071'),{params:{id:'review_reader_071'}})).json();expect(profileData.user.badges).toContainEqual({id:'first_book',name:'First Book',icon:'📖'});
+    for(const role of ['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'book_review_snapshot(uuid,integer,integer,timestamptz,uuid)','EXECUTE') as allowed`)[0].allowed).toBe(false);expect((await sql`select has_function_privilege('service_role','store_catalog_book_066(jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

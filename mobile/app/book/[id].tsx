@@ -18,14 +18,14 @@ import {useAuthStore} from '@/stores/auth';
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router=useRouter(),{t,locale}=useTranslations('book'),{t:books}=useTranslations('books');
+  const router=useRouter(),{t,locale}=useTranslations('book'),{t:books}=useTranslations('books'),{t:common}=useTranslations('common');
   const owner=useAuthStore(state=>state.user?.id);
   const [shelfModalOpen, setShelfModalOpen] = useState(false);
   const { data: bookData, isLoading,error,refetch } = useBook(id!);
-  const { data: reviewData } = useBookReviews(bookData?.book.id??id!);
+  const reviewQuery=useBookReviews(bookData?.book.id??id!);
 
   const book = bookData?.book;
-  const reviews=reviewData?.reviews??[];
+  const reviews=reviewQuery.data?.pages.flatMap(page=>page.reviews)??[],statistics=reviewQuery.data?.pages[0]?.statistics;
   useEffect(()=>{if(book&&book.id!==id)router.replace('/book/'+book.id);},[book,id,router]);
 
   if(error)return <QueryError error={error} retry={()=>void refetch()} />;
@@ -59,7 +59,7 @@ export default function BookDetailScreen() {
               <View className="flex-row items-center gap-2">
                 <StarRating value={Math.round(book.average_rating)} size={18} readonly />
                 <Text className="text-muted-foreground text-sm">
-                  {book.average_rating.toLocaleString(locale,{maximumFractionDigits:1})} ({book.ratings_count.toLocaleString(locale)})
+                  {book.average_rating.toLocaleString(locale,{maximumFractionDigits:1})} ({book.ratings_count.toLocaleString(locale)}) · {t('catalogRating')}
                 </Text>
               </View>
             )}
@@ -142,10 +142,13 @@ export default function BookDetailScreen() {
           <AffiliateLinkButtons book={book} links={[...(bookData?.affiliateLinks??[]),...(bookData?.audibleLink?[bookData.audibleLink]:[])]} />
 
           {/* Reviews */}
+          {statistics&&statistics.ratings_count>0&&<Text className="text-foreground">{t('communityRatings',{count:statistics.ratings_count})} · {statistics.average_rating?.toLocaleString(locale,{maximumFractionDigits:2})}/5</Text>}
+          {reviewQuery.isLoading&&<ActivityIndicator accessibilityLabel={common('loading')} color="#d97706"/>}
+          {reviewQuery.error&&!reviewQuery.isFetchNextPageError&&<QueryError error={reviewQuery.error} retry={()=>void reviewQuery.refetch()}/>}
           {reviews.length > 0 && (
             <View className="gap-3">
-              <Text className="font-semibold text-foreground">{t('reviewCount',{count:reviews.length})}</Text>
-              {reviews.slice(0, 3).map((review) => (
+              <Text className="font-semibold text-foreground">{t('reviewCount',{count:statistics?.ratings_count??reviews.length})}</Text>
+              {reviews.map((review) => (
                 <View key={review.id} className="bg-card border border-border rounded-xl p-3 gap-2">
                   <View className="flex-row items-center gap-2">
                     <Text className="font-medium text-foreground text-sm">{review.user?.display_name??t('reader')}</Text>
@@ -159,6 +162,7 @@ export default function BookDetailScreen() {
               ))}
             </View>
           )}
+          {reviewQuery.hasNextPage&&<Button variant="outline" loading={reviewQuery.isFetchingNextPage} onPress={()=>void reviewQuery.fetchNextPage()}>{common(reviewQuery.isFetchNextPageError?'retry':'loadMore')}</Button>}
         </View>
       </ScrollView>
 

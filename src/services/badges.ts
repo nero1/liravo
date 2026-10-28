@@ -385,3 +385,9 @@ export async function bulkAwardSeasonalBadge(badgeId: string, userIds: string[])
   }
   return { awarded };
 }
+
+export async function getEarnedBadges(userId:string){
+  const {data,error}=await createServiceClient().from('user_badges').select('badge_id,awarded_at').eq('user_id',userId).order('awarded_at',{ascending:false});
+  if(error)throw new Error('Badges unavailable');
+  return (data??[]).flatMap((row:{badge_id:string})=>{const badge=BADGE_DEFINITIONS.find(badge=>badge.id===row.badge_id);return badge?[{id:badge.id,icon:badge.icon,name:badge.name}]:[];});
+}

@@ -32,3 +32,9 @@ it('canonicalizes edition language tags and leaves unknown languages undetermine
   for(const value of [null,undefined,'','English','garbage-lang','en-@'])expect(bookLanguage(value)).toBe('und');
   expect(catalogBookData({title:'Unknown language',author_name:'Author',goodreads_id:'96602'}).language).toBe('und');
 });
+
+it('escapes structured metadata for HTML while preserving the original multilingual data',async()=>{
+  const {jsonForHtml}=await import('@/lib/metadata');
+  const data={name:'</script><script>window.x=1</script>',description:'Français < Deutsch \u2028 \u2029',aggregateRating:{ratingValue:4.2,ratingCount:55}};
+  const serialized=jsonForHtml(data);expect(serialized).not.toContain('<');expect(serialized).not.toContain('\u2028');expect(serialized).not.toContain('\u2029');expect(JSON.parse(serialized)).toEqual(data);
+});

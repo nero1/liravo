@@ -1,3 +1,4 @@
+import {getEarnedBadges} from '@/services/badges';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -19,5 +20,6 @@ export async function GET(_request:Request,{params}:{params:{id:string}}){
     db.from('follows').select('following_id',{count:'exact',head:true}).eq('follower_id',profile.id),
   ]);
   if(followers.error||follows.error)return NextResponse.json({error:'Profile unavailable'},{status:503});
-  return NextResponse.json({user:{...profile,is_following:!!following,followers_count:followers.count??0,following_count:follows.count??0}});
+  let badges;try{badges=await getEarnedBadges(profile.id);}catch{return NextResponse.json({error:'Badges unavailable'},{status:503});}
+  return NextResponse.json({user:{...profile,badges,is_following:!!following,followers_count:followers.count??0,following_count:follows.count??0}},{headers:{'Cache-Control':'private, no-store'}});
 }

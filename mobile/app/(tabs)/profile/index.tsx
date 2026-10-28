@@ -1,3 +1,8 @@
+import {useQuery} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import type {UserRow} from '@/types';
+import {ActivityIndicator} from 'react-native';
+import {Button} from '@/components/ui/Button';
 import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,10 +15,12 @@ import { Badge } from '@/components/ui/Badge';
 import { getUserLevel } from '@/types';
 
 export default function ProfileScreen() {
-  const {t,locale}=useTranslations('profile');
+  const {t,locale}=useTranslations('profile'),{t:badgeText,has:hasBadge}=useTranslations('badgeNames'),{t:common}=useTranslations('common');
   const router = useRouter(),{t:nav}=useTranslations('nav'),{t:navigation}=useTranslations('nativeNavigation');
   const { user } = useAuthStore();
   const { fetchProfile } = useAuth();
+
+  const badgeQuery=useQuery({queryKey:['user',user?.username],enabled:!!user,queryFn:async({signal})=>{const data=await api.get<{user:UserRow}>('/api/users/'+user!.username,undefined,signal);if(data.user.id!==user!.id)throw new Error('Account changed');return data;}});
 
   if (!user) return null;
   const level = getUserLevel(user.xp);
@@ -28,7 +35,7 @@ export default function ProfileScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={fetchProfile} tintColor="#d97706" />}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={()=>{void fetchProfile();void badgeQuery.refetch();}} tintColor="#d97706" />}
       >
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-3">
@@ -74,6 +81,8 @@ export default function ProfileScreen() {
               </View>
             ))}
           </View>
+
+          {badgeQuery.isLoading?<ActivityIndicator accessibilityLabel={common('loading')} color="#d97706"/>:badgeQuery.error?<View className="gap-2"><Text className="text-muted-foreground">{common('error')}</Text><Button variant="outline" onPress={()=>void badgeQuery.refetch()}>{common('retry')}</Button></View>:!!badgeQuery.data?.user.badges?.length&&<View className="gap-2"><Text className="font-semibold text-foreground">{t('badges')}</Text><View className="flex-row flex-wrap gap-2">{badgeQuery.data.user.badges.map(badge=><Badge key={badge.id??badge.name} variant="secondary">{badge.icon} {badge.id&&hasBadge(badge.id)?badgeText(badge.id):badge.name}</Badge>)}</View></View>}
 
           {/* Quick links */}
           <View className="gap-1">

@@ -160,6 +160,12 @@
     "quoteInvalidPage": "Enter a whole page number greater than zero."
   },
   "profile": {
+    "myTitle": "My Profile",
+    "title": "Profile",
+    "metadataDescription": "{name}’s reading profile on Liravo",
+    "metadataTitle": "{name} on Liravo",
+    "privateTitle": "This profile is private",
+    "privateDescription": "Only followers can view this profile.",
     "countryPlaceholder": "GB",
     "avatarTooLarge": "Avatar must be 3 MB or smaller.",
     "displayRequired": "Display name is required.",
@@ -234,6 +240,11 @@
     "readerTitle": "Your Reader Title"
   },
   "book": {
+    "catalogRating": "Catalog rating",
+    "communityRatings": "{count, plural, one {# community rating} other {# community ratings}}",
+    "noMoreReviews": "No more reviews on this page.",
+    "reviewPages": "Review pages",
+    "firstReviews": "First reviews",
     "affiliateLinks": "Get This Book",
     "ratingDistribution": "Rating Breakdown",
     "readingLists": "Reading Lists Featuring This Book",

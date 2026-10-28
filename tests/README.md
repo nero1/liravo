@@ -72,3 +72,5 @@ Refund tests cover native identities, missing-capture recovery, immutable servic
 Paid-ticket tests cover fixed product pricing, owned checkout/session persistence, reservation races, late/duplicate/underpaid captures, refund-before-payment order and currency-specific earnings. Refund return tests retain ambiguous acknowledgements, verify provider identities and exercise audited admin recovery. The real integrity snapshot must match the admin alert registry.
 
 Notification suites cover owned boolean preferences, localized stored facts/badge names, independent release-email opt-in and Expo error receipts. PostgreSQL rehearses legacy backfill, category opt-outs, restricted browser writes, individual read ownership and outbox replay/context cleanup. Push transports are mocked; physical-device delivery remains unverified.
+
+Review rehearsals cover complete distribution/averages, cursor ties and edition aliases, hidden/inactive authors, concurrent inserts and catalog-score preservation. Legacy rating repair retains an audit snapshot; structured metadata tests verify safe HTML embedding and multilingual JSON round trips.

@@ -17,7 +17,7 @@ interface ProfileResponse {
 }
 
 export default function UserProfileScreen() {
-  const {t,locale}=useTranslations('profile'),{t:nav}=useTranslations('nativeNavigation');
+  const {t,locale}=useTranslations('profile'),{t:nav}=useTranslations('nativeNavigation'),{t:badgeText,has:hasBadge}=useTranslations('badgeNames');
   const { username } = useLocalSearchParams<{ username: string }>();
   const { user: currentUser } = useAuthStore();
 
@@ -64,6 +64,7 @@ export default function UserProfileScreen() {
 
           {profile.bio && <Text className="text-foreground">{profile.bio}</Text>}
 
+          {!!profile.badges?.length&&<View className="gap-2"><Text className="font-semibold text-foreground">{t('badges')}</Text><View className="flex-row flex-wrap gap-2">{profile.badges.map(badge=><Badge key={badge.id??badge.name} variant="secondary">{badge.icon} {badge.id&&hasBadge(badge.id)?badgeText(badge.id):badge.name}</Badge>)}</View></View>}
           <View className="flex-row bg-muted rounded-xl overflow-hidden">
             {[
               { label: nav('books'), value: profile.books_read_count },
