@@ -103,7 +103,7 @@ export const api = {
   put: <T>(path: string, body?: unknown,headers?:Record<string,string>) => request<T>(path, 'PUT', body,undefined,headers),
   upload:<T>(path:string,body:FormData,headers?:Record<string,string>)=>request<T>(path,'POST',body,undefined,headers),
   patch: <T>(path: string, body?: unknown,headers?:Record<string,string>) => request<T>(path, 'PATCH', body,undefined,headers),
-  delete: <T>(path: string) => request<T>(path, 'DELETE'),
+  delete: <T>(path: string,headers?:Record<string,string>) => request<T>(path, 'DELETE',undefined,undefined,headers),
 };
 
 export { ApiError };

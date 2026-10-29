@@ -576,6 +576,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 - Expandable to group reads (up to 20).
 
 **Reading Together Rooms:**
+- Web/native catalogs include joined private/ended rooms, complete counts and cursor pages. Creation supports optional edition search; chapter controls, UTC scheduling, server locks and read-only history use EN/FR/DE. Invitation management remains planned.
 - Group read a single book, divided into chapter milestones.
 - Room creator sets the reading schedule.
 - Discussion thread per milestone, locked until that milestone's date.

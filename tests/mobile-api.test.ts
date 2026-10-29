@@ -181,3 +181,9 @@ it('cancels obsolete native search transport without leaving the timeout active'
   const controller=new AbortController(),pending=expect(exports.api.get('/api/books/search',{q:'obsolete'},controller.signal)).rejects.toThrow('Cancelled');
   controller.abort();await pending;expect(transport.mock.calls[0][1].signal.aborted).toBe(true);
 });
+
+it('sends explicit actor metadata on native deletions',async()=>{
+  const transport=vi.fn().mockResolvedValue({ok:true,json:async()=>({deleted:true})}),exports:{api?:{delete(path:string,headers:Record<string,string>):Promise<unknown>}}={},code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>{if(name==='@/constants/api')return {API_BASE:'https://app.test'};if(name==='@/stores/auth')return {useAuthStore:{getState:()=>({user:{id:'reader'},token:'token'})}};throw Error(name);}});
+  await exports.api!.delete('/api/reading-rooms/room/milestones?milestone_id=chapter',{'X-Liravo-Actor':'reader'});expect(transport.mock.calls[0][1]).toMatchObject({method:'DELETE',headers:{'X-Liravo-Actor':'reader',Authorization:'Bearer token'}});
+});

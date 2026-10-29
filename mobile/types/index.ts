@@ -375,3 +375,16 @@ export interface ArcOffer {
 }
 export interface ArcApplication {id:string;arc_id:string;reader_id:string;status:ArcApplicationStatus;applied_at:string;reviewed_at:string|null;reader:{id:string;display_name:string;username:string;avatar_url:string|null;xp:number;active:boolean};}
 export interface ArcApplications {arc:ArcOffer;applications:ArcApplication[];statistics:{total:number;pending:number;approved:number;rejected:number};nextCursor:string|null;actorId:string;}
+
+export interface ReadingRoom {
+  id:string;name:string;book_id:string|null;created_by:string;created_at:string;is_active:boolean;is_public:boolean;
+  member_count:number;is_member:boolean;can_join:boolean;can_post:boolean;can_manage:boolean;
+  book:Pick<BookRow,'id'|'title'|'author_name'|'cover_url'|'isbn_13'|'language'|'format'>|null;
+}
+export interface RoomParticipant extends Pick<UserRow,'id'|'username'|'display_name'|'avatar_url'> {joined_at:string;}
+export interface RoomMilestone {id:string;room_id:string;created_by:string|null;title:string;unlock_date:string;created_at:string;is_unlocked:boolean;post_count:number;}
+export interface RoomPost {id:string;user_id:string;room_id:string;content:string;milestone_id:string|null;created_at:string;users:Pick<UserRow,'id'|'username'|'display_name'|'avatar_url'>;}
+export interface ReadingRoomPage {actorId:string;rooms:ReadingRoom[];nextCursor:string|null;}
+export interface ReadingRoomDetail {actorId:string;room:ReadingRoom;participants:RoomParticipant[];participantsNextCursor:string|null;}
+export interface RoomMilestonePage {actorId:string;roomId:string;milestones:RoomMilestone[];nextCursor:string|null;serverNow:string;total:number;}
+export interface RoomPostPage {actorId:string;roomId:string;posts:RoomPost[];nextCursor:string|null;}

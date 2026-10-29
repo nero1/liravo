@@ -1,257 +1,31 @@
+import {useState} from 'react';
+import {View,Text,FlatList,Alert,TouchableOpacity} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useLocalSearchParams,useRouter} from 'expo-router';
+import {useInfiniteQuery,useMutation,useQueryClient} from '@tanstack/react-query';
+import {useAuthStore} from '@/stores/auth';
 import {useTranslations} from '@/hooks/useTranslations';
-import { QueryError } from '@/components/ui/EmptyState';
-import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, ScrollView, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { Avatar } from '@/components/ui/Avatar';
-import { useAuthStore } from '@/stores/auth';
-import { Button } from '@/components/ui/Button';
-
-interface Milestone { id: string; title: string; unlock_date: string; }
-interface PostAuthor { id: string; display_name: string; username: string; avatar_url: string | null; }
-interface Post { id: string; content: string; milestone_id: string | null; created_at: string; users: PostAuthor | null; }
-
-export default function ReadingRoomDetailScreen() {
-  const {t:ui}=useTranslations('');
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const qc = useQueryClient();
-  const user=useAuthStore(state=>state.user);
-
-  const [tab, setTab] = useState<'discussion' | 'milestones'>('discussion');
-  const [postContent, setPostContent] = useState('');
-  const [selectedMilestone, setSelectedMilestone] = useState<string | null>(null);
-  const [newMilestoneTitle, setNewMilestoneTitle] = useState('');
-  const [milestoneDate, setMilestoneDate] = useState('');
-  const [showAddMilestone, setShowAddMilestone] = useState(false);
-
-  const { data: roomData, isLoading,error,refetch } = useQuery({
-    queryKey: ['reading-room', id],
-    queryFn: () => api.get<{ room: { id: string; name: string; created_by: string; is_active: boolean;is_member:boolean } }>(ENDPOINTS.readingRooms.byId(id!)),
-    enabled: !!id,
-  });
-
-  const { data: milestonesData } = useQuery({
-    queryKey: ['room-milestones', id],
-    queryFn: () => api.get<{ milestones: Milestone[] }>(`/api/reading-rooms/${id}/milestones`),
-    enabled: !!id,
-  });
-
-  const { data: postsData, refetch: refetchPosts } = useQuery({
-    queryKey: ['room-posts', id],
-    queryFn: () => api.get<{ posts: Post[] }>(`/api/reading-rooms/${id}/posts`),
-    enabled: !!id,
-  });
-
-  const joinMutation = useMutation({
-    mutationFn: () => api.post(ENDPOINTS.readingRooms.join(id!)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reading-room', id] }); Alert.alert('Joined!'); },
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  const postMutation = useMutation({
-    mutationFn: (data: { content: string; milestone_id: string | null }) =>
-      api.post(`/api/reading-rooms/${id}/posts`, data),
-    onSuccess: () => { setPostContent(''); refetchPosts(); },
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  const addMilestoneMutation = useMutation({
-    mutationFn: (data: { title: string; unlock_date: string }) =>
-      api.post(`/api/reading-rooms/${id}/milestones`, data),
-    onSuccess: () => {
-      setNewMilestoneTitle('');
-      setMilestoneDate('');
-      setShowAddMilestone(false);
-      qc.invalidateQueries({ queryKey: ['room-milestones', id] });
-    },
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  const room = roomData?.room;
-  const milestones = milestonesData?.milestones ?? [];
-  const posts = postsData?.posts ?? [];
-
-  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
-
-  if (isLoading || !room) {
-    return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
-  }
-
-  const filteredPosts = selectedMilestone
-    ? posts.filter((p) => p.milestone_id === selectedMilestone)
-    : posts.filter((p) => !p.milestone_id);
-
-  const unlockedMilestones = milestones.filter((m) => new Date(m.unlock_date) <= new Date());
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <View className="flex-1">
-        {/* Header */}
-        <View className="px-4 pt-4 pb-2 border-b border-border">
-          <Text className="text-xl font-bold text-foreground">{room.name}</Text>
-          {!room.is_member&&room.is_active&&<Button onPress={()=>joinMutation.mutate()} loading={joinMutation.isPending}>{ui('readingRoom.joinRoom')}</Button>}
-          <View className="flex-row gap-2 mt-2">
-            {(['discussion', 'milestones'] as const).map((t) => (
-              <TouchableOpacity
-                key={t}
-                onPress={() => setTab(t)}
-                className={`px-3 py-1.5 rounded-full ${tab === t ? 'bg-accent' : 'bg-muted'}`}
-              >
-                <Text className={`text-xs font-medium capitalize ${tab === t ? 'text-white' : 'text-muted-foreground'}`}>
-                  {t}{t === 'milestones' && milestones.length > 0 ? ` (${milestones.length})` : ''}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {tab === 'milestones' && (
-          <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingVertical: 16, gap: 12 }}>
-            {milestones.length === 0 && (
-              <Text className="text-muted-foreground text-sm text-center py-8">No milestones yet.</Text>
-            )}
-            {milestones.map((m) => {
-              const unlocked = new Date(m.unlock_date) <= new Date();
-              return (
-                <View
-                  key={m.id}
-                  className={`rounded-xl border p-4 ${unlocked ? 'border-accent/40 bg-accent/5' : 'border-border bg-muted/30'}`}
-                >
-                  <View className="flex-row items-center gap-2">
-                    <Text className="text-xl">{unlocked ? '🔓' : '🔒'}</Text>
-                    <View className="flex-1">
-                      <Text className="font-semibold text-foreground text-sm">{m.title}</Text>
-                      <Text className="text-xs text-muted-foreground">
-                        {unlocked ? 'Unlocked ' : 'Unlocks '}
-                        {new Date(m.unlock_date).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    {unlocked && (
-                      <TouchableOpacity onPress={() => { setSelectedMilestone(m.id); setTab('discussion'); }}>
-                        <Text className="text-xs text-accent">View posts →</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
-
-            {room.created_by===user?.id&&(showAddMilestone ? (
-              <View className="rounded-xl border border-dashed border-border p-4 gap-3">
-                <Text className="font-semibold text-sm text-foreground">{ui('readingRoom.addMilestone')}</Text>
-                <TextInput
-                  value={newMilestoneTitle}
-                  onChangeText={setNewMilestoneTitle}
-                  placeholder={ui('readingRoom.milestonePlaceholder')}
-                  placeholderTextColor="#9ca3af"
-                  className="border border-border rounded-lg px-3 py-2 text-sm text-foreground bg-background"
-                />
-                <TextInput
-                  value={milestoneDate}
-                  onChangeText={setMilestoneDate}
-                  placeholder="Unlock date (YYYY-MM-DDTHH:MM)"
-                  placeholderTextColor="#9ca3af"
-                  className="border border-border rounded-lg px-3 py-2 text-sm text-foreground bg-background"
-                />
-                <View className="flex-row gap-2">
-                  <TouchableOpacity onPress={() => setShowAddMilestone(false)} className="flex-1 border border-border rounded-lg py-2 items-center">
-                    <Text className="text-sm text-muted-foreground">{ui('profile.cancel')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (newMilestoneTitle && Number.isFinite(new Date(milestoneDate).getTime())) {
-                        addMilestoneMutation.mutate({ title: newMilestoneTitle, unlock_date: new Date(milestoneDate).toISOString() });
-                      }
-                    }}
-                    disabled={addMilestoneMutation.isPending}
-                    className="flex-1 bg-accent rounded-lg py-2 items-center"
-                  >
-                    <Text className="text-sm text-white font-medium">{addMilestoneMutation.isPending ? 'Adding…' : 'Add'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <TouchableOpacity onPress={() => setShowAddMilestone(true)} className="border border-dashed border-border rounded-xl py-3 items-center">
-                <Text className="text-sm text-accent font-medium">+ Add Milestone</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
-        {tab === 'discussion' && (
-          <>
-            {/* Milestone filter pills */}
-            {unlockedMilestones.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="border-b border-border" contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}>
-                <TouchableOpacity
-                  onPress={() => setSelectedMilestone(null)}
-                  className={`px-3 py-1 rounded-full ${!selectedMilestone ? 'bg-accent' : 'bg-muted'}`}
-                >
-                  <Text className={`text-xs font-medium ${!selectedMilestone ? 'text-white' : 'text-muted-foreground'}`}>{ui('readingRoom.general')}</Text>
-                </TouchableOpacity>
-                {unlockedMilestones.map((m) => (
-                  <TouchableOpacity
-                    key={m.id}
-                    onPress={() => setSelectedMilestone(m.id)}
-                    className={`px-3 py-1 rounded-full ${selectedMilestone === m.id ? 'bg-accent' : 'bg-muted'}`}
-                  >
-                    <Text className={`text-xs font-medium ${selectedMilestone === m.id ? 'text-white' : 'text-muted-foreground'}`}>{m.title}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            <FlatList
-              data={filteredPosts}
-              keyExtractor={(p) => p.id}
-              className="flex-1 px-4"
-              contentContainerStyle={{ paddingVertical: 12, gap: 12 }}
-              renderItem={({ item }) => (
-                <View className="flex-row gap-2">
-                  <Avatar uri={item.users?.avatar_url ?? null} name={item.users?.display_name ?? '?'} size={32} />
-                  <View className="flex-1">
-                    <Text className="text-xs text-muted-foreground mb-0.5">{item.users?.display_name ?? 'Unknown'}</Text>
-                    <View className="bg-muted rounded-2xl rounded-tl-sm px-3 py-2">
-                      <Text className="text-sm text-foreground">{item.content}</Text>
-                    </View>
-                    <Text className="text-[10px] text-muted-foreground mt-0.5">
-                      {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              ListEmptyComponent={
-                <Text className="text-center text-muted-foreground text-sm py-8">{ui('roomBoard.startConversation')}</Text>
-              }
-            />
-
-            {/* Post composer */}
-            {room.is_member&&room.is_active&&<View className="px-4 pb-4 pt-2 border-t border-border flex-row gap-2 items-end">
-              <TextInput
-                value={postContent}
-                onChangeText={setPostContent}
-                placeholder={ui('readingRoom.postPlaceholder')}
-                placeholderTextColor="#9ca3af"
-                multiline
-                maxLength={2000}
-                className="flex-1 border border-border rounded-xl px-3 py-2 text-sm text-foreground bg-background"
-                style={{ maxHeight: 80 }}
-              />
-              <TouchableOpacity
-                onPress={() => { if (postContent.trim()) postMutation.mutate({ content: postContent.trim(), milestone_id: selectedMilestone }); }}
-                disabled={postMutation.isPending || !postContent.trim()}
-                className="bg-accent rounded-xl px-4 py-2 items-center justify-center"
-              >
-                <Text className="text-white text-sm font-medium">{postMutation.isPending ? '…' : 'Post'}</Text>
-              </TouchableOpacity>
-            </View>}
-          </>
-        )}
-      </View>
-    </SafeAreaView>
-  );
+import {useRequestIntent} from '@/hooks/useRequestIntent';
+import {api} from '@/lib/api';
+import {Button} from '@/components/ui/Button';
+import {Input} from '@/components/ui/Input';
+import {QueryError} from '@/components/ui/EmptyState';
+import {LoadingSpinner} from '@/components/ui/LoadingSpinner';
+import {readingRoomUnlockDate} from '../../../src/lib/reading-room-date';
+import type {ReadingRoomDetail,RoomMilestonePage,RoomPostPage,RoomPost,RoomMilestone} from '@/types';
+export default function ReadingRoomDetailScreen(){const {id}=useLocalSearchParams<{id:string}>(),owner=useAuthStore(state=>state.user?.id);return <ReadingRoomScreen key={owner+':'+id} id={id!} owner={owner}/>;}
+export function ReadingRoomScreen({id,owner}:{id:string;owner:string|undefined}){
+  const {t,locale}=useTranslations('readingRooms'),{t:board}=useTranslations('roomBoard'),{t:common}=useTranslations('common'),router=useRouter(),qc=useQueryClient(),intent=useRequestIntent(owner),[tab,setTab]=useState<'posts'|'milestones'>('posts'),[selected,setSelected]=useState<string|null>(null),[postContent,setPostContent]=useState(''),[title,setTitle]=useState(''),[date,setDate]=useState('');
+  const detail=useInfiniteQuery({queryKey:['reading-room',id,owner],enabled:!!id&&!!owner,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<ReadingRoomDetail>('/api/reading-rooms/'+id,pageParam?{participantsCursor:pageParam}:undefined,signal);if(data.actorId!==owner||data.room?.id!==id||!Array.isArray(data.participants))throw Error('Invalid room detail');return data;},getNextPageParam:page=>page.participantsNextCursor}),room=detail.data?.pages[0]?.room;
+  const milestones=useInfiniteQuery({queryKey:['room-milestones',id,owner],enabled:!!room,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<RoomMilestonePage>('/api/reading-rooms/'+id+'/milestones',pageParam?{cursor:pageParam}:undefined,signal);if(data.actorId!==owner||data.roomId!==id||!Array.isArray(data.milestones))throw Error('Invalid milestones');return data;},getNextPageParam:page=>page.nextCursor}),chapters=milestones.data?.pages.flatMap(page=>page.milestones)??[],canDiscuss=selected===null||!!chapters.find(chapter=>chapter.id===selected)?.is_unlocked;
+  const posts=useInfiniteQuery({queryKey:['room-posts',id,owner,selected],enabled:!!room&&canDiscuss,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<RoomPostPage>('/api/reading-rooms/'+id+'/posts',{milestone:selected??'general',...(pageParam?{cursor:pageParam}:{})},signal);if(data.actorId!==owner||data.roomId!==id||!Array.isArray(data.posts))throw Error('Invalid discussion');return data;},getNextPageParam:page=>page.nextCursor});
+  const changed=()=>{void qc.invalidateQueries({queryKey:['reading-room',id,owner]});void qc.invalidateQueries({queryKey:['reading-rooms']});},failed=()=>Alert.alert(common('error'),t('saveFailed'));
+  const join=useMutation({mutationFn:async()=>{const data=await api.post<{actorId:string;roomId:string;joined:boolean}>('/api/reading-rooms/'+id+'/join',{}, {'X-Liravo-Actor':owner!});if(data.actorId!==owner||data.roomId!==id||!data.joined)throw Error('Invalid join receipt');},onSuccess:()=>{if(useAuthStore.getState().user?.id===owner)changed();},onError:failed});
+  const post=useMutation({mutationFn:async()=>{const body={content:postContent.trim(),milestone_id:selected},scope='room-post:'+id,data=await api.post<{actorId:string;roomId:string;post:RoomPost}>('/api/reading-rooms/'+id+'/posts',body,await intent.durableHeaders(body,scope));if(data.actorId!==owner||data.roomId!==id||!data.post?.id||data.post.user_id!==owner||data.post.room_id!==id||data.post.milestone_id!==selected)throw Error('Invalid post receipt');await intent.complete(scope);return data.post;},onSuccess:()=>{if(useAuthStore.getState().user?.id!==owner)return;setPostContent('');void qc.invalidateQueries({queryKey:['room-posts',id,owner]});void qc.invalidateQueries({queryKey:['room-milestones',id,owner]});},onError:failed});
+  const add=useMutation({mutationFn:async()=>{const unlock=readingRoomUnlockDate(date);if(!unlock)throw Error('Invalid UTC date');const body={title:title.trim(),unlock_date:unlock},scope='room-milestone:'+id,data=await api.post<{actorId:string;roomId:string;milestone:RoomMilestone}>('/api/reading-rooms/'+id+'/milestones',body,await intent.durableHeaders(body,scope));if(data.actorId!==owner||data.roomId!==id||!data.milestone?.id||data.milestone.created_by!==owner)throw Error('Invalid milestone receipt');await intent.complete(scope);},onSuccess:()=>{if(useAuthStore.getState().user?.id!==owner)return;setTitle('');setDate('');void qc.invalidateQueries({queryKey:['room-milestones',id,owner]});},onError:failed});
+  const remove=useMutation({mutationFn:async(milestoneId:string)=>{const data=await api.delete<{actorId:string;roomId:string;milestoneId:string;deleted:boolean}>('/api/reading-rooms/'+id+'/milestones?milestone_id='+milestoneId,{'X-Liravo-Actor':owner!});if(!data.deleted||data.actorId!==owner||data.roomId!==id||data.milestoneId!==milestoneId)throw Error('Invalid deletion receipt');return milestoneId;},onSuccess:milestoneId=>{if(useAuthStore.getState().user?.id!==owner)return;if(selected===milestoneId)setSelected(null);void qc.invalidateQueries({queryKey:['room-milestones',id,owner]});void qc.invalidateQueries({queryKey:['room-posts',id,owner]});},onError:failed});
+  if(detail.error)return <QueryError error={detail.error} retry={()=>void detail.refetch()}/>;
+  if(!room)return <LoadingSpinner/>;
+  const saving=join.isPending||post.isPending||add.isPending||remove.isPending,dateValue=readingRoomUnlockDate(date),header=<View className="gap-3 mb-4"><Text accessibilityRole="header" className="text-2xl font-bold text-foreground">{room.name}</Text><Text className="text-sm text-muted-foreground">{t('members',{count:room.member_count})} · {t(room.is_active?'active':'ended')}{!room.is_public?' · '+t('private'):''}</Text>{room.book&&<Button variant="ghost" onPress={()=>router.push('/book/'+room.book!.id)}>{room.book.title}</Button>}<Text className="font-semibold text-foreground">{t('participants')}</Text><View className="flex-row flex-wrap gap-2">{detail.data?.pages.flatMap(page=>page.participants).map(person=><TouchableOpacity key={person.id} accessibilityRole="link" onPress={()=>router.push('/user/'+person.username)} className="rounded-lg border border-border px-3 py-1.5"><Text className="text-sm text-foreground">{person.display_name}</Text></TouchableOpacity>)}</View>{detail.hasNextPage&&<Button loading={detail.isFetchingNextPage} onPress={()=>void detail.fetchNextPage()}>{t('moreReaders')}</Button>}{room.can_join&&<Button loading={join.isPending} disabled={saving} onPress={()=>join.mutate()}>{t('join')}</Button>}<View className="flex-row gap-2">{(['posts','milestones'] as const).map(value=><Button key={value} disabled={saving} variant={tab===value?'primary':'outline'} accessibilityState={{selected:tab===value}} onPress={()=>setTab(value)}>{t(value)}</Button>)}</View>{tab==='posts'&&<View className="flex-row flex-wrap gap-2"><Button disabled={saving} size="sm" variant={selected===null?'primary':'outline'} accessibilityState={{selected:selected===null}} onPress={()=>setSelected(null)}>{t('general')}</Button>{chapters.filter(chapter=>chapter.is_unlocked).map(chapter=><Button key={chapter.id} size="sm" disabled={saving} variant={selected===chapter.id?'primary':'outline'} accessibilityState={{selected:selected===chapter.id}} onPress={()=>setSelected(chapter.id)}>{chapter.title}</Button>)}{milestones.hasNextPage&&<Button loading={milestones.isFetchingNextPage} onPress={()=>void milestones.fetchNextPage()}>{t('moreMilestones')}</Button>}</View>}<Button variant="outline" disabled={saving} loading={detail.isRefetching} onPress={()=>{void detail.refetch();void milestones.refetch();if(canDiscuss)void posts.refetch();}}>{t('refresh')}</Button></View>;
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>{tab==='posts'?<FlatList<RoomPost> data={canDiscuss?posts.data?.pages.flatMap(page=>page.posts)??[]:[]} keyExtractor={item=>item.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:12}} keyboardShouldPersistTaps="handled" ListHeaderComponent={header} renderItem={({item})=><View className="rounded-xl border border-border p-3 gap-2"><Text className="font-medium text-foreground">{item.users?.display_name??t('unknownReader')}</Text><Text className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString(locale,{timeZone:'UTC'})}</Text><Text className="text-foreground">{item.content}</Text></View>} ListEmptyComponent={!canDiscuss?<Text className="text-muted-foreground">{t('locked')}</Text>:posts.isLoading?<Text className="text-muted-foreground">{common('loading')}</Text>:posts.error?null:<Text className="text-muted-foreground">{board('noMessages')}</Text>} ListFooterComponent={<View className="gap-3 mt-4">{posts.error&&<QueryError error={posts.error} retry={()=>void posts.refetch()}/>} {milestones.error&&<QueryError error={milestones.error} retry={()=>void milestones.refetch()}/>} {posts.hasNextPage&&<Button loading={posts.isFetchingNextPage} onPress={()=>void posts.fetchNextPage()}>{t('olderPosts')}</Button>}{room.can_post&&canDiscuss?<><Input label={board('message')} value={postContent} onChangeText={setPostContent} editable={!saving} multiline maxLength={2000}/><Button disabled={saving||!postContent.trim()} loading={post.isPending} onPress={()=>post.mutate()}>{board('post')}</Button></>:(!room.is_active||!room.is_member)&&<Text className="text-muted-foreground">{t(!room.is_active?'readOnly':'memberRequired')}</Text>}</View>}/>:<FlatList<RoomMilestone> data={chapters} keyExtractor={item=>item.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:12}} keyboardShouldPersistTaps="handled" ListHeaderComponent={header} renderItem={({item})=><View className="rounded-xl border border-border p-3 gap-2"><Text className="font-semibold text-foreground">{item.title}</Text><Text className="text-sm text-muted-foreground">{board(item.is_unlocked?'unlocked':'unlocks',{date:new Date(item.unlock_date).toLocaleString(locale,{timeZone:'UTC'})})}</Text>{item.is_unlocked&&<Button disabled={saving} variant="ghost" onPress={()=>{setSelected(item.id);setTab('posts');}}>{t('postCount',{count:item.post_count})}</Button>}{room.can_manage&&<Button variant="destructive" disabled={saving} loading={remove.isPending&&remove.variables===item.id} onPress={()=>remove.mutate(item.id)}>{common('delete')}</Button>}</View>} ListEmptyComponent={milestones.isLoading?<Text className="text-muted-foreground">{common('loading')}</Text>:milestones.error?null:<Text className="text-muted-foreground">{board('noMilestones')}</Text>} ListFooterComponent={<View className="gap-3 mt-4">{milestones.error&&<QueryError error={milestones.error} retry={()=>void milestones.refetch()}/>} {milestones.hasNextPage&&<Button loading={milestones.isFetchingNextPage} onPress={()=>void milestones.fetchNextPage()}>{t('moreMilestones')}</Button>}{room.can_manage&&<><Input label={board('milestoneTitle')} value={title} onChangeText={setTitle} maxLength={200} editable={!saving}/><Input label={t('dateLabel')} value={date} onChangeText={setDate} placeholder={t('datePlaceholder')} maxLength={16} editable={!saving}/>{date&&!dateValue&&<Text accessibilityRole="alert" className="text-destructive">{t('invalidDate')}</Text>}<Button disabled={saving||!title.trim()||!dateValue} loading={add.isPending} onPress={()=>add.mutate()}>{board('addMilestone')}</Button></>}</View>}/>}</SafeAreaView>;
 }

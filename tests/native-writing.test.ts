@@ -4,24 +4,26 @@ import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
 import {createTranslator} from 'next-intl';
 import fr from '../messages/fr.json';
+import {readingRoomUnlockDate} from '../src/lib/reading-room-date';
 
 class ApiError extends Error{constructor(public status:number){super('Isolated failure');}}
 function mount(file:string,query:any,infinite:any={data:undefined},exportName='default'){
-  const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn(),patch=vi.fn(),push=vi.fn();let cursor=0;
+  const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn(),patch=vi.fn(),del=vi.fn(),push=vi.fn();let cursor=0;
   const owner={id:'reader',username:'reader'},store=Object.assign((selector?:any)=>selector?selector({user:owner}):{user:owner},{getState:()=>({user:owner})}),translate=createTranslator({locale:'fr',messages:fr,onError:error=>{throw error;}});
   const exports:any={},code=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   runInNewContext(code,{exports,Intl,Map,Error,require:(name:string)=>{
     if(name==='react')return {useEffect:()=>{},useState:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]=value;return [slots[index],(next:unknown)=>{slots[index]=next;}];}};
     if(name==='react/jsx-runtime')return {jsx:(type:unknown,props:unknown)=>({type,props}),jsxs:(type:unknown,props:unknown)=>({type,props}),Fragment:'Fragment'};
-    if(name==='react-native')return {View:'View',Text:'Text',TextInput:'TextInput',ScrollView:'ScrollView',FlatList:'FlatList',TouchableOpacity:'TouchableOpacity',Alert:{alert:vi.fn()},KeyboardAvoidingView:'KeyboardAvoidingView',Platform:{OS:'android'},ActivityIndicator:'ActivityIndicator'};
+    if(name==='react-native')return {View:'View',Text:'Text',TextInput:'TextInput',ScrollView:'ScrollView',FlatList:'FlatList',TouchableOpacity:'TouchableOpacity',Alert:{alert:vi.fn()},KeyboardAvoidingView:'KeyboardAvoidingView',Switch:'Switch',Platform:{OS:'android'},ActivityIndicator:'ActivityIndicator'};
     if(name==='react-native-safe-area-context')return {SafeAreaView:'SafeAreaView'};
     if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push,replace:push,back:vi.fn()})};
-    if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:unknown)=>{queries.push(options);return infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&(key.includes('question')||key.includes('arc')||key.includes('arcs'))?infinite:query;target.data=update(target.data);}})};
+    if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:any)=>{queries.push(options);return infinite.byKey?.[options.queryKey[0]]??infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&(key.includes('question')||key.includes('arc')||key.includes('arcs'))?infinite:query;target.data=update(target.data);}})};
+    if(name.endsWith('reading-room-date'))return {readingRoomUnlockDate};
     if(name==='@/hooks/useBooks')return {useBookSearch:()=>query};
     if(name==='@/hooks/useTranslations')return {useTranslations:(namespace='')=>({locale:'fr',has:(key:string)=>translate.has([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate.has>[0]),t:(key:string,values?:Record<string,string|number>)=>translate([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate>[0],values)})};
     if(name==='@/stores/auth')return {useAuthStore:store};
     if(name==='@/hooks/useRequestIntent')return {useRequestIntent:()=>({durableHeaders:async()=>({'Idempotency-Key':'durable-writing-key','X-Liravo-Actor':'reader'}),complete:completions})};
-    if(name==='@/lib/api')return {api:{get,post,patch},ApiError};
+    if(name==='@/lib/api')return {api:{get,post,patch,delete:del},ApiError};
     if(name==='@/constants/api')return {ENDPOINTS:{author:{arcs:'/author/arcs',byUsername:(name:string)=>'/author/'+name,createPost:'/author/posts'},write:{questions:'/questions',workshops:'/workshops',workshopById:(id:string)=>'/workshops/'+id,workshopSubmissions:(id:string)=>'/workshops/'+id+'/submissions',workshopFeedback:(id:string,draft:string)=>'/workshops/'+id+'/submissions/'+draft+'/feedback',joinWorkshop:(id:string)=>'/workshops/'+id+'/join',promptById:()=>'/prompt',submitPrompt:()=>'/prompt/submit'}}};
     if(name==='@/components/books/BookPicker')return {BookPicker:'BookPicker'};
     if(name==='@/components/social/FollowButton')return {FollowButton:'FollowButton'};
@@ -30,7 +32,7 @@ function mount(file:string,query:any,infinite:any={data:undefined},exportName='d
   }});
   function render(props:unknown={}){cursor=0;mutations.length=0;queries.length=0;return exports[exportName](props);}
   const find=(tree:any,type:string):any=>{if(!tree)return undefined;if(Array.isArray(tree))return tree.map(node=>find(node,type)).find(Boolean);if(tree.type===type)return tree;return find(tree.props?.children,type);};
-  return {render,find,mutations,queries,post,patch,get,completions,push};
+  return {render,find,mutations,queries,post,patch,del,get,completions,push};
 }
 it('renders the actual workshop catalog contract and exposes query failures instead of an empty list',()=>{
   const data={pages:[{rooms:[{id:'room',name:'Atelier',topic:'Écriture',member_count:1}],nextCursor:null}]},view=mount('mobile/app/write/workshops/index.tsx',{}, {data});
@@ -144,4 +146,18 @@ it('renders native Wrapped with translated genres, moods, reader level and month
 it('rejects fractional or excessive native goals and requires an owned goal acknowledgement',async()=>{
   const view=mount('mobile/app/reading-goals.tsx',{data:{actorId:'reader',goal:null,progress:{books_read:0,year:2026,percentage:null}}}),first=view.render(),input=view.find(first,'TextInput');input.props.onChangeText('1.5');let tree=view.render();const findSave=(node:any):any=>{if(!node)return null;if(Array.isArray(node))return node.map(findSave).find(Boolean);if(node.type==='TouchableOpacity'&&node.props.accessibilityState?.busy===false)return node;return findSave(node.props?.children);};expect(findSave(tree).props.disabled).toBe(true);input.props.onChangeText('10001');expect(findSave(view.render()).props.disabled).toBe(true);
   view.post.mockResolvedValueOnce({actorId:'other',goal:{user_id:'reader',target_books:52}});await expect(view.mutations[0].mutationFn(52)).rejects.toThrow('Invalid goal receipt');view.post.mockResolvedValueOnce({actorId:'reader',goal:{user_id:'reader',target_books:52}});await expect(view.mutations[0].mutationFn(52)).resolves.toBeTruthy();
+});
+
+it('renders every native reading-room catalog page with complete member counts',()=>{
+  const room=(id:string)=>({id,name:'Room '+id,member_count:43,is_active:true,is_public:true}),view=mount('mobile/app/reading-rooms/index.tsx',{}, {data:{pages:[{rooms:[room('one')]},{rooms:[room('two')]}]}}),list=view.find(view.render(),'FlatList');expect(list.props.data).toHaveLength(2);expect(JSON.stringify(list.props.renderItem({item:room('two')}))).toContain('43 lecteurs');list.props.renderItem({item:room('two')}).props.onPress();expect(view.push).toHaveBeenCalledWith('/reading-rooms/two');
+});
+it('preserves optional bookless native room creation and owned receipts',async()=>{
+  const view=mount('mobile/app/reading-rooms/new.tsx',{});view.find(view.render(),'Input').props.onChangeText('A reading room');view.render();view.post.mockResolvedValueOnce({actorId:'other',room:{id:'room',created_by:'reader'}});await expect(view.mutations[0].mutationFn()).rejects.toThrow('Invalid room receipt');expect(view.completions).not.toHaveBeenCalled();view.post.mockResolvedValueOnce({actorId:'reader',room:{id:'room',created_by:'reader'}});await view.mutations[0].mutationFn();expect(view.post.mock.calls[1][1]).toEqual({name:'A reading room',is_public:true});expect(view.completions).toHaveBeenCalledExactlyOnceWith('reading-room.create');
+});
+it('renders native room discussions from scoped pages and preserves post/milestone ownership',async()=>{
+  const room={id:'room',name:'A reading room',member_count:23,is_active:true,is_public:true,is_member:true,can_post:true,can_manage:true},data={byKey:{'reading-room':{data:{pages:[{room,participants:[]}] }},'room-milestones':{data:{pages:[{milestones:[{id:'open',title:'Open chapter',is_unlocked:true,unlock_date:'2026-01-01T00:00:00Z',post_count:105}]}]}},'room-posts':{data:{pages:[{posts:[{id:'one',content:'First page post',created_at:'2026-01-01T00:00:00Z'}]},{posts:[{id:'two',content:'Second page post',created_at:'2026-01-01T00:00:00Z'}]}]}}}},view=mount('mobile/app/reading-rooms/[id].tsx',{},data,'ReadingRoomScreen'),props={id:'room',owner:'reader'},list=view.find(view.render(props),'FlatList');expect(list.props.data).toHaveLength(2);
+  view.get.mockResolvedValueOnce({actorId:'reader',roomId:'room',posts:[],nextCursor:null});await view.queries[2].queryFn({pageParam:null});expect(view.get.mock.calls[0][1]).toEqual({milestone:'general'});
+  view.post.mockResolvedValueOnce({actorId:'reader',roomId:'room',post:{id:'saved',user_id:'other',room_id:'room'}});await expect(view.mutations[1].mutationFn()).rejects.toThrow('Invalid post receipt');expect(view.completions).not.toHaveBeenCalled();view.post.mockResolvedValueOnce({actorId:'reader',roomId:'room',post:{id:'saved',user_id:'reader',room_id:'room',milestone_id:null}});await view.mutations[1].mutationFn();expect(view.completions).toHaveBeenCalledWith('room-post:room');
+  view.del.mockResolvedValueOnce({actorId:'other',roomId:'room',milestoneId:'open',deleted:true});await expect(view.mutations[3].mutationFn('open')).rejects.toThrow('Invalid deletion receipt');
+  Object.assign(room,{is_active:false,can_post:false,can_manage:false});const closed=view.find(view.render(props),'FlatList');expect(JSON.stringify(closed.props.ListFooterComponent)).toContain(fr.readingRooms.readOnly);expect(view.find(closed.props.ListFooterComponent,'Input')).toBeUndefined();
 });

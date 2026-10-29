@@ -2,6 +2,7 @@ import {beforeEach,expect,it,vi} from 'vitest';
 import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 import {createServiceClient} from '@/lib/supabase/server';
 import {POST} from '@/app/api/import/goodreads/route';
+import {readingRoomUnlockDate} from '@/lib/reading-room-date';
 import {PATCH} from '@/app/api/buddy-reads/[id]/update/route';
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
 vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
@@ -38,4 +39,9 @@ it('rejects invalid buddy updates and submits chapter/note together under the au
 
 it('rejects buddy progress from a changed account before performing database work',async()=>{
   const response=await PATCH(new Request('https://app.test/api/buddy-reads/'+room+'/update',{method:'PATCH',headers:{'Content-Type':'application/json','Idempotency-Key':'buddy-owned-intent','X-Liravo-Actor':room},body:JSON.stringify({current_chapter:2})}),{params:{id:room}});expect(response.status).toBe(409);expect(rpc).not.toHaveBeenCalled();
+});
+
+it('parses milestone dates as UTC minutes and rejects calendar rollovers',()=>{
+  expect(readingRoomUnlockDate('2024-02-29T12:30')).toBe('2024-02-29T12:30:00.000Z');
+  for(const value of ['2026-02-29T12:30','2026-04-31T12:30','2026-10-29T24:00','0000-01-01T00:00','2026-10-29','2026-10-29T12:30:01'])expect(readingRoomUnlockDate(value)).toBeNull();
 });
