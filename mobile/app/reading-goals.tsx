@@ -1,13 +1,14 @@
+import {useAuthStore} from '@/stores/auth';
 import {useTranslations} from '@/hooks/useTranslations';
 import { QueryError } from '@/components/ui/EmptyState';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 
 interface GoalData {
-  goal: { id: string; year: number; target_books: number } | null;
+  actorId:string;goal: { id: string; user_id:string; year: number; target_books: number } | null;
   progress: { books_read: number; year: number; percentage: number | null };
 }
 
@@ -21,22 +22,24 @@ const MILESTONES = [
 ];
 
 export default function ReadingGoalsScreen() {
-  const {t:ui}=useTranslations('');
+  const {t}=useTranslations('readingStatistics'),{t:goalText}=useTranslations('readingGoalForm'),{t:common}=useTranslations('common'),owner=useAuthStore(state=>state.user?.id);
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [targetInput, setTargetInput] = useState('52');
 
   const { data, isLoading,error,refetch } = useQuery({
-    queryKey: ['reading-goals'],
-    queryFn: () => api.get<GoalData>('/api/reading-goals'),
+    queryKey: ['reading-goals',owner],enabled:!!owner,
+    queryFn: async()=>{const data=await api.get<GoalData>('/api/reading-goals');if(data.actorId!==owner||!data.progress)throw Error('Invalid goal snapshot');return data;},
   });
 
   const setGoalMutation = useMutation({
-    mutationFn: (target: number) => api.post('/api/reading-goals', { target_books: target }),
+    mutationFn: async(target:number)=>{const data=await api.post<{actorId:string;goal:NonNullable<GoalData['goal']>}>('/api/reading-goals',{target_books:target},{'X-Liravo-Actor':owner!});if(data.actorId!==owner||data.goal?.user_id!==owner||data.goal.target_books!==target)throw Error('Invalid goal receipt');return data;},
     onSuccess: () => {
+      if(useAuthStore.getState().user?.id!==owner)return;
       qc.invalidateQueries({ queryKey: ['reading-goals'] });
       setEditing(false);
     },
+    onError:()=>Alert.alert(common('error'),goalText('failed')),
   });
 
   if(error)return <QueryError error={error} retry={()=>void refetch()} />;
@@ -45,15 +48,15 @@ export default function ReadingGoalsScreen() {
     return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
   }
 
-  const { goal, progress } = data ?? { goal: null, progress: { books_read: 0, year: new Date().getFullYear(), percentage: null } };
-  const pct = progress.percentage ?? 0;
+  const { goal, progress } = data ?? { goal: null, progress: { books_read: 0, year: new Date().getUTCFullYear(), percentage: null } };
+  const pct = progress.percentage ?? 0,target=Number(targetInput),valid=Number.isInteger(target)&&target>=1&&target<=10000;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
         <View>
-          <Text className="text-2xl font-bold text-foreground">{ui('nav.readingGoal')}{progress.year}</Text>
-          <Text className="text-muted-foreground text-sm mt-1">Track your annual reading target.</Text>
+          <Text className="text-2xl font-bold text-foreground">{t('goalTitle',{year:progress.year})}</Text>
+          <Text className="text-muted-foreground text-sm mt-1">{t('goalDescription')}</Text>
         </View>
 
         {goal && !editing ? (
@@ -61,7 +64,7 @@ export default function ReadingGoalsScreen() {
             {/* Progress display */}
             <View className="items-center gap-2">
               <Text className="text-5xl font-bold text-accent">{pct}%</Text>
-              <Text className="text-muted-foreground text-sm">{progress.books_read} of {goal.target_books}{ui('profile.booksRead')}</Text>
+              <Text className="text-muted-foreground text-sm">{t('goalProgress',{count:progress.books_read,target:goal.target_books})}</Text>
             </View>
 
             {/* Progress bar */}
@@ -82,23 +85,23 @@ export default function ReadingGoalsScreen() {
               })}
             </View>
 
-            <TouchableOpacity onPress={()=>{setTargetInput(String(goal.target_books));setEditing(true);}} className="border border-border rounded-xl py-3 items-center">
-              <Text className="text-sm text-foreground font-medium">Change Goal</Text>
+            <TouchableOpacity accessibilityRole="button" onPress={()=>{setTargetInput(String(goal.target_books));setEditing(true);}} className="border border-border rounded-xl py-3 items-center">
+              <Text className="text-sm text-foreground font-medium">{t('changeGoal')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View className="rounded-xl border border-border bg-card p-5 gap-4">
-            <Text className="font-semibold text-foreground">{goal ? 'Update Your Goal' : 'Set a Reading Goal'}</Text>
+            <Text className="font-semibold text-foreground">{t(goal?'updateGoal':'setGoal')}</Text>
 
             <View className="flex-row flex-wrap gap-2">
               {PRESETS.map((n) => (
                 <TouchableOpacity
                   key={n}
-                  onPress={() => setTargetInput(String(n))}
+                  disabled={setGoalMutation.isPending} accessibilityRole="button" accessibilityState={{selected:targetInput===String(n),disabled:setGoalMutation.isPending}} onPress={() => setTargetInput(String(n))}
                   className={`px-3 py-1.5 rounded-full border ${targetInput === String(n) ? 'bg-accent/10 border-accent' : 'border-border bg-muted'}`}
                 >
                   <Text className={`text-sm ${targetInput === String(n) ? 'text-accent font-medium' : 'text-muted-foreground'}`}>
-                    {n}{ui('admin.books')}</Text>
+                    {t('goalPreset',{count:n})}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -107,24 +110,24 @@ export default function ReadingGoalsScreen() {
               value={targetInput}
               onChangeText={setTargetInput}
               keyboardType="numeric"
-              placeholder="Custom number…"
+              accessibilityLabel={t('customGoal')} placeholder={t('customGoal')} maxLength={5} editable={!setGoalMutation.isPending}
               placeholderTextColor="#9ca3af"
               className="border border-border rounded-xl px-4 py-3 text-sm text-foreground bg-background"
             />
 
             <View className="flex-row gap-2">
               {goal && (
-                <TouchableOpacity onPress={() => setEditing(false)} className="flex-1 border border-border rounded-xl py-3 items-center">
-                  <Text className="text-sm text-muted-foreground">{ui('profile.cancel')}</Text>
+                <TouchableOpacity accessibilityRole="button" disabled={setGoalMutation.isPending} onPress={() => setEditing(false)} className="flex-1 border border-border rounded-xl py-3 items-center">
+                  <Text className="text-sm text-muted-foreground">{common('cancel')}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
-                onPress={() => { const t = parseInt(targetInput, 10); if (t > 0) setGoalMutation.mutate(t); }}
-                disabled={setGoalMutation.isPending || !targetInput || parseInt(targetInput) < 1}
+                onPress={() => { if(valid)setGoalMutation.mutate(target); }}
+                disabled={setGoalMutation.isPending||!valid} accessibilityRole="button" accessibilityState={{disabled:setGoalMutation.isPending||!valid,busy:setGoalMutation.isPending}}
                 className="flex-1 bg-accent rounded-xl py-3 items-center disabled:opacity-50"
               >
                 <Text className="text-white text-sm font-semibold">
-                  {setGoalMutation.isPending ? 'Saving…' : goal ? 'Update Goal' : 'Set Goal'}
+                  {setGoalMutation.isPending?common('saving'):t(goal?'updateGoal':'setGoal')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -135,11 +138,7 @@ export default function ReadingGoalsScreen() {
         {goal && (
           <View className="rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 p-4">
             <Text className="text-sm text-amber-800 dark:text-amber-200">
-              {pct >= 100 ? '🎉 You\'ve hit your goal! You\'re a reading champion!'
-                : pct >= 75 ? '📚 Almost there! Keep up the great reading!'
-                : pct >= 50 ? '🌿 Halfway there! Keep the momentum going!'
-                : pct >= 25 ? '🌱 Great start! You\'re building momentum.'
-                : `📖 You need ${goal.target_books - progress.books_read} more books. You can do it!`}
+              {pct>=100?t('goalComplete'):pct>=75?t('goalAlmost'):pct>=50?t('goalHalf'):pct>=25?t('goalStart'):t('goalRemaining',{count:Math.max(0,goal.target_books-progress.books_read)})}
             </Text>
           </View>
         )}

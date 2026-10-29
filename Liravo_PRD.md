@@ -861,11 +861,13 @@ All cards include the Liravo wordmark and a URL back to the relevant page on lir
 
 ### 10.2 Reading Wrapped
 
-Generated in December and on annual reading goal completion.
+Available year-round; December and annual goal completion are promotion opportunities.
 
 **Data points:** Total books read, estimated total pages, favourite genre, favourite author, longest book, shortest book, peak streak, most active month, personalised reader title.
 
-Available in 16:9 (standard share) and 9:16 (Instagram Stories) formats.
+Annual totals count each completed canonical work once within the UTC year and use the completed edition’s page count, falling back to recorded progress. Public cards include only public completed shelves; private summaries retain private reading. Annual net XP and lifetime XP are shown separately.
+
+Available as 1200×630 standard cards and 1080×1920 Instagram Stories in EN/FR/DE.
 
 ### 10.3 Challenges and Trends
 

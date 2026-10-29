@@ -249,15 +249,16 @@ export interface WritingChallengeRow {
 }
 
 export interface ReadingStatsRow {
-  books_read: number;
-  pages_read: number;
-  reviews_written: number;
-  quotes_saved: number;
-  current_streak: number;
-  longest_streak: number;
-  favorite_genres: string[];
-  annual_goal: number | null;
-  annual_progress: number;
+  year:number;booksReadThisYear:number;pagesReadThisYear:number;averageRating:number;readingPace:number;
+  favouriteGenre:string|null;longestBook:{title:string;page_count:number}|null;
+  readingStreakMax:number;currentReadingStreak:number;reviewsWrittenThisYear:number;quotesSavedThisYear:number;
+  goal:{goal:{target_books:number}|null;progress:{books_read:number;year:number;percentage:number|null}};
+}
+export interface PublicReadingYear {userId:string;displayName:string;year:number;booksRead:number;pagesRead:number;topGenres:string[];}
+export interface WrappedData extends PublicReadingYear {
+  topMood:string|null;streakMax:number;badgesEarned:number;totalXp:number;yearXp:number;
+  favouriteAuthor:string|null;longestBook:{title:string;pageCount:number}|null;shortestBook:{title:string;pageCount:number}|null;
+  mostActiveMonthNumber:number|null;mostActiveMonth:string|null;readerTitle:string;readerLevel:number;publicSummary:PublicReadingYear;
 }
 
 export interface LeaderboardEntry {

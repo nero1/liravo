@@ -13,12 +13,12 @@ function mount(file:string,query:any,infinite:any={data:undefined},exportName='d
   runInNewContext(code,{exports,Intl,Map,Error,require:(name:string)=>{
     if(name==='react')return {useEffect:()=>{},useState:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]=value;return [slots[index],(next:unknown)=>{slots[index]=next;}];}};
     if(name==='react/jsx-runtime')return {jsx:(type:unknown,props:unknown)=>({type,props}),jsxs:(type:unknown,props:unknown)=>({type,props}),Fragment:'Fragment'};
-    if(name==='react-native')return {View:'View',Text:'Text',ScrollView:'ScrollView',FlatList:'FlatList',TouchableOpacity:'TouchableOpacity',Alert:{alert:vi.fn()},KeyboardAvoidingView:'KeyboardAvoidingView',Platform:{OS:'android'},ActivityIndicator:'ActivityIndicator'};
+    if(name==='react-native')return {View:'View',Text:'Text',TextInput:'TextInput',ScrollView:'ScrollView',FlatList:'FlatList',TouchableOpacity:'TouchableOpacity',Alert:{alert:vi.fn()},KeyboardAvoidingView:'KeyboardAvoidingView',Platform:{OS:'android'},ActivityIndicator:'ActivityIndicator'};
     if(name==='react-native-safe-area-context')return {SafeAreaView:'SafeAreaView'};
     if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push,replace:push,back:vi.fn()})};
     if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:unknown)=>{queries.push(options);return infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&(key.includes('question')||key.includes('arc')||key.includes('arcs'))?infinite:query;target.data=update(target.data);}})};
     if(name==='@/hooks/useBooks')return {useBookSearch:()=>query};
-    if(name==='@/hooks/useTranslations')return {useTranslations:(namespace='')=>({locale:'fr',t:(key:string,values?:Record<string,string|number>)=>translate([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate>[0],values)})};
+    if(name==='@/hooks/useTranslations')return {useTranslations:(namespace='')=>({locale:'fr',has:(key:string)=>translate.has([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate.has>[0]),t:(key:string,values?:Record<string,string|number>)=>translate([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate>[0],values)})};
     if(name==='@/stores/auth')return {useAuthStore:store};
     if(name==='@/hooks/useRequestIntent')return {useRequestIntent:()=>({durableHeaders:async()=>({'Idempotency-Key':'durable-writing-key','X-Liravo-Actor':'reader'}),complete:completions})};
     if(name==='@/lib/api')return {api:{get,post,patch},ApiError};
@@ -131,4 +131,17 @@ it('requires native edition selection before creating a buddy read and validates
 
 it('renders selected native editions without inventing a format for missing metadata',()=>{
   const view=mount('mobile/components/books/BookPicker.tsx',{},undefined,'BookPicker'),tree=view.render({value:{id:'book',title:'Selected edition',author_name:'Writer',language:'fr',format:null,isbn_13:null,isbn_10:null},onChange:vi.fn()});expect(JSON.stringify(tree)).toContain('Selected edition');expect(JSON.stringify(tree)).toContain(fr.buddyReads.changeBook);expect(JSON.stringify(tree)).not.toContain('formats.null');
+});
+
+it('renders flat native annual statistics and reports premium/query errors',()=>{
+  const stats={actorId:'reader',year:2026,booksReadThisYear:3,pagesReadThisYear:450,averageRating:4,readingPace:0.3,favouriteGenre:'Fantasy',longestBook:null,currentReadingStreak:0,readingStreakMax:31,reviewsWrittenThisYear:1,quotesSavedThisYear:2,goal:{goal:null,progress:{books_read:3}}},view=mount('mobile/app/stats.tsx',{data:stats}),tree=JSON.stringify(view.render());expect(tree).toContain(fr.readingStatistics.title);expect(tree).toContain('31 jours');expect(tree).toContain(fr.aiProfiles.genreLabels.Fantasy);
+  const premium=mount('mobile/app/stats.tsx',{error:new ApiError(403)});expect(premium.find(premium.render(),'Button').props.children).toBe(fr.readingStatistics.premiumLink);const failure=mount('mobile/app/stats.tsx',{error:Error('Unavailable')});expect(failure.find(failure.render(),'QueryError')).toBeTruthy();
+});
+it('renders native Wrapped with translated genres, moods, reader level and month',()=>{
+  const data={userId:'reader',year:2026,displayName:'Reader',booksRead:3,pagesRead:450,streakMax:31,badgesEarned:1,yearXp:35,totalXp:777,topGenres:['Fantasy'],topMood:'Cozy',mostActiveMonthNumber:12,readerLevel:500,longestBook:null,shortestBook:null},view=mount('mobile/app/wrapped.tsx',{data}),tree=JSON.stringify(view.render());expect(tree).toContain('décembre');expect(tree).toContain(fr.moods.Cozy);expect(tree).toContain(fr.profile.levels['500']);expect(tree).toContain(fr.wrapped.yearXp);
+  const failure=mount('mobile/app/wrapped.tsx',{error:Error('Unavailable')});expect(failure.find(failure.render(),'QueryError')).toBeTruthy();
+});
+it('rejects fractional or excessive native goals and requires an owned goal acknowledgement',async()=>{
+  const view=mount('mobile/app/reading-goals.tsx',{data:{actorId:'reader',goal:null,progress:{books_read:0,year:2026,percentage:null}}}),first=view.render(),input=view.find(first,'TextInput');input.props.onChangeText('1.5');let tree=view.render();const findSave=(node:any):any=>{if(!node)return null;if(Array.isArray(node))return node.map(findSave).find(Boolean);if(node.type==='TouchableOpacity'&&node.props.accessibilityState?.busy===false)return node;return findSave(node.props?.children);};expect(findSave(tree).props.disabled).toBe(true);input.props.onChangeText('10001');expect(findSave(view.render()).props.disabled).toBe(true);
+  view.post.mockResolvedValueOnce({actorId:'other',goal:{user_id:'reader',target_books:52}});await expect(view.mutations[0].mutationFn(52)).rejects.toThrow('Invalid goal receipt');view.post.mockResolvedValueOnce({actorId:'reader',goal:{user_id:'reader',target_books:52}});await expect(view.mutations[0].mutationFn(52)).resolves.toBeTruthy();
 });

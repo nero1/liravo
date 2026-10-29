@@ -2370,5 +2370,28 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await sql`update buddy_reads set is_active=false where id=${roomId}`;expect((await getBuddyDetail(owner,roomId))!.buddyRead).toMatchObject({is_member:true,can_update:false,can_join:false});expect((await getBuddyReads(owner,'mine')).buddy_reads.some(row=>row.id===roomId)||second.buddy_reads.some(row=>row.id===roomId)).toBe(true);
       for(const role of ['anon','authenticated'])for(const routine of ['buddy_read_document(uuid,uuid)','buddy_catalog_snapshot(uuid,text,timestamptz,uuid,integer)','buddy_detail_snapshot(uuid,uuid)','buddy_notes_snapshot(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
+    {
+      const actor=crypto.randomUUID(),year=2026;await sql`select create_direct_account(${actor},'reading078@example.test','reading078','Annual reader')`;
+      const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+      const books=await sql`insert into books(title,author_name,page_count,genres) select 'Reading 078 '||n,'Annual author',10,array['Fantasy'] from generate_series(1,1005) n returning id,work_id`;
+      await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at) select ${shelf},${actor},id,'2026-12-31T23:59:59.500Z'::timestamptz from books where id in ${sql(books.map(book=>book.id))}`;
+      const [edition]=await sql`insert into books(title,author_name,page_count,work_id) values('Another edition','Annual author',200,${books[0].work_id}) returning id`;
+      const [alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id) values('Retained alias','Annual author',${books[1].work_id},${books[1].id}) returning id`;
+      await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at) values(${shelf},${actor},${edition.id},'2026-06-01'),(${shelf},${actor},${alias.id},'2026-06-01')`;
+      const extra=await sql`insert into books(title,author_name,page_count) values('Unknown length','Other author',null),('Custom shelf only','Other author',600),('Previous year','Other author',900),('Next year','Other author',900) returning id`;
+      await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at,progress_pages) values(${shelf},${actor},${extra[0].id},'2026-12-31T23:59:59.999Z',80),(${shelf},${actor},${extra[2].id},'2025-12-31T23:59:59.999Z',900),(${shelf},${actor},${extra[3].id},'2027-01-01',900)`;
+      const [custom]=await sql`insert into shelves(user_id,name,slug,is_public) values(${actor},'Other shelf','reading078_custom',true) returning id`;await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at) values(${custom.id},${actor},${extra[1].id},'2026-06-01')`;
+      await sql`insert into reviews(user_id,book_id,rating,content,review_type,mood_tags,moderation_status,created_at) values(${actor},${books[0].id},4,'Published annual review','short',array['Cozy'],'published','2026-12-31T23:59:59.999Z'),(${actor},${books[1].id},1,'Hidden annual review','short',array['Dark'],'removed','2026-06-01'),(${actor},${books[2].id},5,'Previous review','short',array['Dark'],'published','2025-12-31')`;
+      await sql`insert into quotes(user_id,book_id,content,is_hidden,created_at) values(${actor},${books[0].id},'Annual quote',false,'2026-12-31T23:59:59.999Z'),(${actor},${books[0].id},'Hidden quote',true,'2026-06-01')`;
+      await sql`insert into user_badges(user_id,badge_id,awarded_at) values(${actor},'first_review','2026-12-31T23:59:59.999Z')`;
+      await sql`insert into xp_ledger(user_id,event_key,amount,reason,created_at) values(${actor},'reading078-award',40,'fixture','2026-12-31T23:59:59.999Z'),(${actor},'reading078-reversal',-5,'fixture','2026-06-01'),(${actor},'reading078-past',999,'fixture','2025-12-31')`;
+      await sql`update users set xp=777,genres=array['Romance'],reading_streak=2,max_reading_streak=31,last_streak_date=(now() at time zone 'UTC')::date-8 where id=${actor}`;await sql`select set_reading_goal(${actor},${year},2000)`;
+      const {getReadingYear,getPublicReadingYear}=await import('@/lib/reading-statistics'),snapshot=await getReadingYear(actor,year);
+      expect(snapshot!.stats).toMatchObject({booksReadThisYear:1006,pagesReadThisYear:10130,averageRating:4,reviewsWrittenThisYear:1,quotesSavedThisYear:1,currentReadingStreak:0,readingStreakMax:31,favouriteGenre:'Fantasy',longestBook:{page_count:10},goal:{progress:{books_read:1006}}});
+      expect(snapshot!.wrapped).toMatchObject({booksRead:1006,pagesRead:10130,topGenres:['Fantasy'],topMood:'Cozy',streakMax:31,yearXp:35,totalXp:777,badgesEarned:1,mostActiveMonthNumber:12,favouriteAuthor:'Annual author',readerLevel:500});
+      await sql`update shelves set is_public=false where id=${shelf}`;expect(await getPublicReadingYear(actor,year)).toMatchObject({booksRead:0,pagesRead:0,topGenres:[]});expect((await getReadingYear(actor,year))!.wrapped.booksRead).toBe(1006);
+      await sql`update users set is_banned=true where id=${actor}`;expect(await getPublicReadingYear(actor,year)).toBeNull();expect(await getReadingYear(actor,year)).toBeNull();
+      for(const role of ['anon','authenticated'])for(const routine of ['reading_year_books(uuid,integer,boolean)','public_reading_year_snapshot(uuid,integer)','reading_year_snapshot(uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

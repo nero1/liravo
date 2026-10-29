@@ -57,6 +57,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Complete translated web/native writer question threads and answer selection.
 - ✅ Repair ARC catalog/review pagination, complete private counts, inactive-reader decisions and web/native translations.
 - ✅ Repair buddy-read catalogs/detail contracts, edition selection, discussion pagination, native chapter/notes/replies and web/native translations.
+- ✅ Align stats/Wrapped with canonical annual reading, authoritative Premium access, private/public summaries and translated native goals.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

@@ -362,3 +362,16 @@ export interface BuddyNote {
 }
 export interface BuddyReadPage {actorId:string;buddy_reads:BuddyReadRow[];nextCursor:string|null;}
 export interface BuddyNotePage {actorId:string;roomId:string;notes:BuddyNote[];nextCursor:string|null;}
+
+export interface ReadingStatsRow {
+  year:number;booksReadThisYear:number;pagesReadThisYear:number;averageRating:number;readingPace:number;
+  favouriteGenre:string|null;longestBook:{title:string;page_count:number}|null;
+  readingStreakMax:number;currentReadingStreak:number;reviewsWrittenThisYear:number;quotesSavedThisYear:number;
+  goal:{goal:{target_books:number}|null;progress:{books_read:number;year:number;percentage:number|null}};
+}
+export interface PublicReadingYear {userId:string;displayName:string;year:number;booksRead:number;pagesRead:number;topGenres:string[];}
+export interface WrappedData extends PublicReadingYear {
+  topMood:string|null;streakMax:number;badgesEarned:number;totalXp:number;yearXp:number;
+  favouriteAuthor:string|null;longestBook:{title:string;pageCount:number}|null;shortestBook:{title:string;pageCount:number}|null;
+  mostActiveMonthNumber:number|null;mostActiveMonth:string|null;readerTitle:string;readerLevel:number;publicSummary:PublicReadingYear;
+}
