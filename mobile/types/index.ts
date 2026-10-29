@@ -385,3 +385,8 @@ export interface ReadingRoomPage {actorId:string;rooms:ReadingRoom[];nextCursor:
 export interface ReadingRoomDetail {actorId:string;room:ReadingRoom;participants:RoomParticipant[];participantsNextCursor:string|null;}
 export interface RoomMilestonePage {actorId:string;roomId:string;milestones:RoomMilestone[];nextCursor:string|null;serverNow:string;total:number;}
 export interface RoomPostPage {actorId:string;roomId:string;posts:RoomPost[];nextCursor:string|null;}
+
+export interface AppealAction {id:string;content_type:'review'|'quote'|'profile';status:'removed'|'warned'|'approved';created_at:string;label:string|null;moderator_note:string|null;content:string|null;pending_appeal_id:string|null;}
+export interface AppealRow {id:string;user_id:string;report_id:string|null;reason:string;content_type:string|null;status:'pending'|'approved'|'rejected';created_at:string;reviewer_note:string|null;reviewed_at:string|null;user:{username:string;display_name:string};action:AppealAction|null;can_review:boolean;}
+export interface AppealPage {appeals:AppealRow[];nextCursor:string|null;actorId:string;}
+export interface AppealActionPage {actions:AppealAction[];nextCursor:string|null;actorId:string;}

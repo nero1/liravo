@@ -61,6 +61,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Complete reading-room catalogs, rosters, scoped discussions, milestone controls, owned retries and web/native translations.
 - ✅ Repair native review/quote/shelf and author-verification forms, selected-edition context, owned recovery and EN/FR/DE labels.
 - ✅ Repair web/native list creation, catalogs, detail paging, edition management and follow/fork controls against verified API contracts.
+- ✅ Expose owned moderation actions/history and general appeals, translate web/native appeal queues and recover owned submission/decision receipts.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

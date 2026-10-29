@@ -1,54 +1,25 @@
-import { View, Text, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { useAuthStore } from '@/stores/auth';
-import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
+import {useEffect,useRef,useState} from 'react';
+import {View,Text,FlatList,Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useInfiniteQuery,useMutation,useQueryClient} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useRequestIntent} from '@/hooks/useRequestIntent';
+import {useTranslations} from '@/hooks/useTranslations';
+import {Input} from '@/components/ui/Input';
+import {Button} from '@/components/ui/Button';
+import {QueryError,EmptyState} from '@/components/ui/EmptyState';
+import type {AppealPage,AppealActionPage,AppealRow} from '@/types';
+export default function AppealScreen(){const owner=useAuthStore(state=>state.user?.id);return <NativeAppealContents key={owner} owner={owner}/>;}
+export function NativeAppealContents({owner}:{owner:string|undefined}){
+  const {t,locale}=useTranslations('appealWorkflow'),{t:common}=useTranslations('common'),intent=useRequestIntent(owner),qc=useQueryClient(),[selected,setSelected]=useState<string|null>(null),[reason,setReason]=useState(''),[submitted,setSubmitted]=useState(false);
+  const history=useInfiniteQuery({queryKey:['appeals',owner,'mine'],enabled:!!owner,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<AppealPage>('/api/moderation/appeals',{scope:'mine',...(pageParam?{cursor:pageParam}:{})},signal);if(data.actorId!==owner||!Array.isArray(data.appeals))throw Error('Invalid appeal history');return data;},getNextPageParam:page=>page.nextCursor});
+  const actions=useInfiniteQuery({queryKey:['appeal-actions',owner],enabled:!!owner,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<AppealActionPage>('/api/moderation/appeals',{scope:'actions',...(pageParam?{cursor:pageParam}:{})},signal);if(data.actorId!==owner||!Array.isArray(data.actions))throw Error('Invalid moderation actions');return data;},getNextPageParam:page=>page.nextCursor}),cases=actions.data?.pages.flatMap(page=>page.actions)??[],current=cases.find(action=>action.id===selected);
+  const recovery=useRef(intent);recovery.current=intent;const recoveryCases=[...new Set([...cases.map(row=>row.id),...(history.data?.pages.flatMap(page=>page.appeals.flatMap(row=>row.report_id?[row.report_id]:[]))??[])])].sort().join(',');
+  useEffect(()=>{let cancelled=false;for(const reportId of [null,...recoveryCases.split(',').filter(Boolean)])void(async()=>{const scope='appeal.create.'+(reportId??'general'),headers=await recovery.current.pending(scope);if(!headers||cancelled)return;const data=await api.get<{actorId:string;appeal:AppealRow}>('/api/moderation/appeals',{scope:'receipt',key:headers['Idempotency-Key']});if(!cancelled&&data.actorId===owner&&data.appeal?.user_id===owner&&data.appeal.report_id===reportId&&data.appeal.id){await recovery.current.complete(scope,headers['Idempotency-Key']);if(!cancelled)setSubmitted(true);}})().catch(()=>{});return()=>{cancelled=true;};},[owner,recoveryCases]);
 
-export default function AppealScreen() {
-  const { user } = useAuthStore();
-  const [reason, setReason] = useState('');
-
-  const submit = useMutation({
-    mutationFn: () => api.post('/api/moderation/appeals', { reason }),
-    onSuccess: () => Alert.alert('Appeal Submitted', 'Your appeal will be reviewed by a moderator.'),
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  if (!user?.is_suspended) {
-    return (
-      <SafeAreaView className="flex-1 bg-background items-center justify-center" edges={['bottom']}>
-        <Text className="text-muted-foreground">Your account is in good standing.</Text>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <View className="px-4 py-4 gap-4">
-        <Card className="gap-3">
-          <Text className="font-semibold text-foreground">Account Suspended</Text>
-          {user.suspension_reason && (
-            <Text className="text-sm text-muted-foreground">Reason: {user.suspension_reason}</Text>
-          )}
-          <Text className="text-sm text-muted-foreground">If you believe this is a mistake, submit an appeal.</Text>
-          <Input
-            label="Appeal Reason"
-            value={reason}
-            onChangeText={setReason}
-            placeholder="Explain why your account should be reinstated..."
-            multiline
-            numberOfLines={5}
-            style={{ minHeight: 100, textAlignVertical: 'top' }}
-          />
-          <Button onPress={() => submit.mutate()} loading={submit.isPending} disabled={!reason.trim()}>
-            Submit Appeal
-          </Button>
-        </Card>
-      </View>
-    </SafeAreaView>
-  );
+  const submit=useMutation({mutationFn:async()=>{const body={reason:reason.trim(),...(selected?{report_id:selected}:{})},scope='appeal.create.'+(selected??'general'),data=await api.post<{actorId:string;appeal:AppealRow}>('/api/moderation/appeals',body,await intent.durableHeaders(body,scope));if(data.actorId!==owner||!data.appeal?.id||data.appeal.user_id!==owner||data.appeal.report_id!==(selected??null))throw Error('Invalid appeal receipt');await intent.complete(scope);return data;},onSuccess:()=>{if(useAuthStore.getState().user?.id!==owner)return;setReason('');setSubmitted(true);void qc.invalidateQueries({queryKey:['appeals']});void qc.invalidateQueries({queryKey:['appeal-actions']});},onError:()=>Alert.alert(common('error'),t('saveFailed'))});
+  const date=(value:string)=>new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeZone:'UTC'}).format(new Date(value));
+  function choose(id:string|null){setSelected(id);setSubmitted(false);setReason('');}
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={history.data?.pages.flatMap(page=>page.appeals)??[]} keyExtractor={appeal=>appeal.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:16}} ListHeaderComponent={<View className="gap-4"><Text accessibilityRole="header" className="text-xl font-bold text-foreground">{t('title')}</Text><Text className="text-muted-foreground">{t('description')}</Text><Text accessibilityRole="header" className="font-semibold text-foreground">{t('actions')}</Text>{actions.isError?<QueryError error={actions.error} retry={()=>void actions.refetch()}/>:actions.isLoading?<Text>{common('loading')}</Text>:!cases.length&&<Text className="text-muted-foreground">{t('noActions')}</Text>}<Button variant={selected===null?'primary':'outline'} accessibilityState={{selected:selected===null}} disabled={submit.isPending} onPress={()=>choose(null)}>{t('general')}</Button>{cases.map(action=><View key={action.id} className="border border-border rounded-xl p-3 gap-2"><Text className="text-foreground">{t(action.content_type+'Type')} · {action.label??t('unknown')} · {t(action.status)}</Text>{!!action.content&&<Text className="text-sm text-foreground">{action.content}</Text>}{!!action.moderator_note&&<Text className="text-muted-foreground">{action.moderator_note}</Text>}<Button variant={selected===action.id?'primary':'outline'} accessibilityState={{selected:selected===action.id}} disabled={submit.isPending} onPress={()=>choose(action.id)}>{action.label??t('unknown')}</Button></View>)}{actions.hasNextPage&&<Button loading={actions.isFetchingNextPage} onPress={()=>void actions.fetchNextPage()}>{common('loadMore')}</Button>}<Text className="text-sm text-muted-foreground">{t('generalHelp')}</Text>{submitted&&<Text accessibilityRole="alert" className="text-accent">{t('submitted')}</Text>}{current?.pending_appeal_id?<Text className="text-muted-foreground">{t('pendingCase')}</Text>:<><Input label={t('reason')} value={reason} onChangeText={setReason} placeholder={t('placeholder')} multiline numberOfLines={5} maxLength={500} editable={!submit.isPending}/><Button onPress={()=>submit.mutate()} loading={submit.isPending} disabled={!owner||reason.trim().length<10||!!selected&&!current}>{t('submit')}</Button></>}<Text accessibilityRole="header" className="font-semibold text-foreground">{t('history')}</Text></View>} renderItem={({item:appeal})=><View className="border border-border rounded-xl p-3 gap-2"><Text className="font-semibold text-foreground">{appeal.action?.label??t(appeal.report_id?'unknown':'general')} · {t(appeal.status)}</Text><Text className="text-foreground">{appeal.reason}</Text><Text className="text-sm text-muted-foreground">{t('created',{date:date(appeal.created_at)})}</Text>{!!appeal.reviewer_note&&<Text className="text-muted-foreground">{appeal.reviewer_note}</Text>}</View>} ListEmptyComponent={history.isLoading?<Text>{common('loading')}</Text>:history.isError?null:<EmptyState title={t('empty')}/>} ListFooterComponent={<View className="gap-3">{history.isError&&<QueryError error={history.error} retry={()=>void history.refetch()}/>} {history.hasNextPage&&<Button loading={history.isFetchingNextPage} onPress={()=>void history.fetchNextPage()}>{common('loadMore')}</Button>}<Button variant="outline" loading={history.isRefetching||actions.isRefetching} onPress={()=>{void history.refetch();void actions.refetch();}}>{t('refresh')}</Button></View>}/></SafeAreaView>;
 }

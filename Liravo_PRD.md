@@ -966,7 +966,7 @@ The goal is a self-moderating community with minimal admin involvement in day-to
 
 ### 12.4 Appeals
 
-- Users can appeal a content removal or account warning via a form in their account settings.
+- Users can appeal a content removal or account warning via a form in their account settings. EN/FR/DE web/native screens list owned actions and appeal history, support general appeals without suspension, and recover committed submissions after reload. Reporter details remain private; staff queues show independent-review permissions and retain final decisions.
 - Appeal goes to a moderator (not the one who took the original action, if attributable).
 - Admin reviews escalated appeals.
 

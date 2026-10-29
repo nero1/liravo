@@ -398,3 +398,8 @@ export interface ReadingListBook {
 }
 export interface ReadingListPage {lists:ReadingList[];nextCursor:string|null;actorId:string;}
 export interface ReadingListDetail {list:ReadingList;books:ReadingListBook[];nextCursor:string|null;actorId:string|null;bulkSearchUrl:string|null;}
+
+export interface AppealAction {id:string;content_type:'review'|'quote'|'profile';status:'removed'|'warned'|'approved';created_at:string;label:string|null;moderator_note:string|null;content:string|null;pending_appeal_id:string|null;}
+export interface AppealRow {id:string;user_id:string;report_id:string|null;reason:string;content_type:string|null;status:'pending'|'approved'|'rejected';created_at:string;reviewer_note:string|null;reviewed_at:string|null;user:{username:string;display_name:string};action:AppealAction|null;can_review:boolean;}
+export interface AppealPage {appeals:AppealRow[];nextCursor:string|null;actorId:string;}
+export interface AppealActionPage {actions:AppealAction[];nextCursor:string|null;actorId:string;}

@@ -22,9 +22,14 @@ export function useRequestIntent(ownerId:string|undefined){
       if(current.current.get(scope)?.key!==entry.key)throw new Error('Intent changed');
       return {'Idempotency-Key':entry.key,'X-Liravo-Actor':ownerId};
     },
-    async complete(scope='default'){
-      try{const saved=JSON.parse(await SecureStore.getItemAsync(storageKey(scope))??'null');if(saved?.key===current.current.get(scope)?.key)await SecureStore.deleteItemAsync(storageKey(scope));}catch{}
-      current.current.delete(scope);
+    async pending(scope='default'){
+      if(!ownerId)return null;
+      try{const saved=JSON.parse(await SecureStore.getItemAsync(storageKey(scope))??'null');if(actor.current!==ownerId)return null;const entry=current.current.get(scope);if(!entry&&(typeof saved?.key!=='string'||saved.key.length<8||saved.key.length>200))return null;const key=entry?.key??saved.key;if(!entry)current.current.set(scope,{payload:'',key});return {'Idempotency-Key':key,'X-Liravo-Actor':ownerId};}catch{return null;}
+    },
+    async complete(scope='default',acknowledgedKey?:string){
+      if(acknowledgedKey&&current.current.get(scope)?.key!==acknowledgedKey)return;
+      try{const saved=JSON.parse(await SecureStore.getItemAsync(storageKey(scope))??'null');if(saved?.key===current.current.get(scope)?.key&&(!acknowledgedKey||saved.key===acknowledgedKey))await SecureStore.deleteItemAsync(storageKey(scope));}catch{}
+      if(!acknowledgedKey||current.current.get(scope)?.key===acknowledgedKey)current.current.delete(scope);
     },
   };
 }

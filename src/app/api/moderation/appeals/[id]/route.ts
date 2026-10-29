@@ -10,9 +10,10 @@ const schema=z.object({status:z.enum(['approved','rejected']),note:z.string().ma
 
 export async function PATCH(request:Request,{params}:{params:{id:string}}) {
   const auth=await requireModerator();if(auth instanceof NextResponse)return auth;
+  if(request.headers.has('x-liravo-actor')&&request.headers.get('x-liravo-actor')!==auth.userId)return NextResponse.json({error:'ACCOUNT_CHANGED'},{status:409});
   let body;try{body=await request.json();}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
   const parsed=schema.safeParse(body);if(!parsed.success)return NextResponse.json({error:'Invalid input'},{status:400});
-  try{return NextResponse.json(await applyCommunityIntent(request,auth.userId,'appeal_review',params.id,{status:parsed.data.status,note:parsed.data.note??null}));
+  try{return NextResponse.json({...await applyCommunityIntent(request,auth.userId,'appeal_review',params.id,{status:parsed.data.status,note:parsed.data.note??null}),actorId:auth.userId,appealId:params.id});
   }catch(error){
     return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
