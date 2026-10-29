@@ -5,6 +5,8 @@ import ts from 'typescript';
 import {createTranslator} from 'next-intl';
 import fr from '../messages/fr.json';
 import {readingRoomUnlockDate} from '../src/lib/reading-room-date';
+import {quotePageNumber,validReadDate,validProofUrl} from '../src/lib/content-form-values';
+import {MOOD_TAGS} from '../mobile/types';
 
 class ApiError extends Error{constructor(public status:number){super('Isolated failure');}}
 function mount(file:string,query:any,infinite:any={data:undefined},exportName='default'){
@@ -12,19 +14,25 @@ function mount(file:string,query:any,infinite:any={data:undefined},exportName='d
   const owner={id:'reader',username:'reader'},store=Object.assign((selector?:any)=>selector?selector({user:owner}):{user:owner},{getState:()=>({user:owner})}),translate=createTranslator({locale:'fr',messages:fr,onError:error=>{throw error;}});
   const exports:any={},code=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   runInNewContext(code,{exports,Intl,Map,Error,require:(name:string)=>{
-    if(name==='react')return {useEffect:()=>{},useState:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]=value;return [slots[index],(next:unknown)=>{slots[index]=next;}];}};
+    if(name==='react')return {useEffect:()=>{},useState:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]=value;return [slots[index],(next:unknown)=>{slots[index]=typeof next==='function'?(next as (value:unknown)=>unknown)(slots[index]):next;}];}};
     if(name==='react/jsx-runtime')return {jsx:(type:unknown,props:unknown)=>({type,props}),jsxs:(type:unknown,props:unknown)=>({type,props}),Fragment:'Fragment'};
     if(name==='react-native')return {View:'View',Text:'Text',TextInput:'TextInput',ScrollView:'ScrollView',FlatList:'FlatList',TouchableOpacity:'TouchableOpacity',Alert:{alert:vi.fn()},KeyboardAvoidingView:'KeyboardAvoidingView',Switch:'Switch',Platform:{OS:'android'},ActivityIndicator:'ActivityIndicator'};
     if(name==='react-native-safe-area-context')return {SafeAreaView:'SafeAreaView'};
     if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push,replace:push,back:vi.fn()})};
     if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:any)=>{queries.push(options);return infinite.byKey?.[options.queryKey[0]]??infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&(key.includes('question')||key.includes('arc')||key.includes('arcs'))?infinite:query;target.data=update(target.data);}})};
     if(name.endsWith('reading-room-date'))return {readingRoomUnlockDate};
-    if(name==='@/hooks/useBooks')return {useBookSearch:()=>query};
+    if(name==='@/hooks/useBooks')return {useBookSearch:()=>query,useBook:()=>query};
+    if(name==='@/hooks/useShelf')return {useCreateShelf:()=>query};
+    if(name==='@/types')return {MOOD_TAGS};
+    if(name==='lucide-react-native')return {Star:'Star'};
+    if(name.endsWith('content-form-values'))return {quotePageNumber,validReadDate,validProofUrl};
+    if(name==='@/components/books/SelectedEdition')return {SelectedEdition:'SelectedEdition'};
+    if(name==='@/components/books/StarRating')return {StarRating:'StarRating'};
     if(name==='@/hooks/useTranslations')return {useTranslations:(namespace='')=>({locale:'fr',has:(key:string)=>translate.has([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate.has>[0]),t:(key:string,values?:Record<string,string|number>)=>translate([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate>[0],values)})};
     if(name==='@/stores/auth')return {useAuthStore:store};
     if(name==='@/hooks/useRequestIntent')return {useRequestIntent:()=>({durableHeaders:async()=>({'Idempotency-Key':'durable-writing-key','X-Liravo-Actor':'reader'}),complete:completions})};
     if(name==='@/lib/api')return {api:{get,post,patch,delete:del},ApiError};
-    if(name==='@/constants/api')return {ENDPOINTS:{author:{arcs:'/author/arcs',byUsername:(name:string)=>'/author/'+name,createPost:'/author/posts'},write:{questions:'/questions',workshops:'/workshops',workshopById:(id:string)=>'/workshops/'+id,workshopSubmissions:(id:string)=>'/workshops/'+id+'/submissions',workshopFeedback:(id:string,draft:string)=>'/workshops/'+id+'/submissions/'+draft+'/feedback',joinWorkshop:(id:string)=>'/workshops/'+id+'/join',promptById:()=>'/prompt',submitPrompt:()=>'/prompt/submit'}}};
+    if(name==='@/constants/api')return {ENDPOINTS:{shelves:{create:'/api/shelves'},author:{arcs:'/author/arcs',byUsername:(name:string)=>'/author/'+name,createPost:'/author/posts'},write:{questions:'/questions',workshops:'/workshops',workshopById:(id:string)=>'/workshops/'+id,workshopSubmissions:(id:string)=>'/workshops/'+id+'/submissions',workshopFeedback:(id:string,draft:string)=>'/workshops/'+id+'/submissions/'+draft+'/feedback',joinWorkshop:(id:string)=>'/workshops/'+id+'/join',promptById:()=>'/prompt',submitPrompt:()=>'/prompt/submit'}}};
     if(name==='@/components/books/BookPicker')return {BookPicker:'BookPicker'};
     if(name==='@/components/social/FollowButton')return {FollowButton:'FollowButton'};
     if(name==='@/components/ui/EmptyState')return {QueryError:'QueryError',EmptyState:'EmptyState'};
@@ -32,7 +40,8 @@ function mount(file:string,query:any,infinite:any={data:undefined},exportName='d
   }});
   function render(props:unknown={}){cursor=0;mutations.length=0;queries.length=0;return exports[exportName](props);}
   const find=(tree:any,type:string):any=>{if(!tree)return undefined;if(Array.isArray(tree))return tree.map(node=>find(node,type)).find(Boolean);if(tree.type===type)return tree;return find(tree.props?.children,type);};
-  return {render,find,mutations,queries,post,patch,del,get,completions,push};
+  const all=(tree:any,type:string):any[]=>!tree?[]:Array.isArray(tree)?tree.flatMap(node=>all(node,type)):[...(tree.type===type?[tree]:[]),...all(tree.props?.children,type)];
+  return {render,find,all,mutations,queries,post,patch,del,get,completions,push};
 }
 it('renders the actual workshop catalog contract and exposes query failures instead of an empty list',()=>{
   const data={pages:[{rooms:[{id:'room',name:'Atelier',topic:'Écriture',member_count:1}],nextCursor:null}]},view=mount('mobile/app/write/workshops/index.tsx',{}, {data});
@@ -160,4 +169,22 @@ it('renders native room discussions from scoped pages and preserves post/milesto
   view.post.mockResolvedValueOnce({actorId:'reader',roomId:'room',post:{id:'saved',user_id:'other',room_id:'room'}});await expect(view.mutations[1].mutationFn()).rejects.toThrow('Invalid post receipt');expect(view.completions).not.toHaveBeenCalled();view.post.mockResolvedValueOnce({actorId:'reader',roomId:'room',post:{id:'saved',user_id:'reader',room_id:'room',milestone_id:null}});await view.mutations[1].mutationFn();expect(view.completions).toHaveBeenCalledWith('room-post:room');
   view.del.mockResolvedValueOnce({actorId:'other',roomId:'room',milestoneId:'open',deleted:true});await expect(view.mutations[3].mutationFn('open')).rejects.toThrow('Invalid deletion receipt');
   Object.assign(room,{is_active:false,can_post:false,can_manage:false});const closed=view.find(view.render(props),'FlatList');expect(JSON.stringify(closed.props.ListFooterComponent)).toContain(fr.readingRooms.readOnly);expect(view.find(closed.props.ListFooterComponent,'Input')).toBeUndefined();
+});
+
+it('keeps native review receipts owned and normalizes mood order independently of tap order',async()=>{
+  const book={id:'book',title:'Selected edition'},view=mount('mobile/app/review/new.tsx',{data:{book}},undefined,'NativeReviewForm'),props={bookId:'alias',owner:'reader'};let tree=view.render(props);view.find(tree,'StarRating').props.onChange(4);view.find(tree,'Input').props.onChangeText('A thoughtful review');
+  for(const mood of ['Cozy','Dark']){tree=view.render(props);view.all(tree,'TouchableOpacity').find(node=>node.props.children?.props?.children===fr.moods[mood as keyof typeof fr.moods]).props.onPress();}
+  view.render(props);view.post.mockResolvedValueOnce({review:{id:'saved',user_id:'other',book_id:'book'}});await expect(view.mutations[0].mutationFn()).rejects.toThrow('Invalid review receipt');expect(view.completions).not.toHaveBeenCalled();view.post.mockResolvedValueOnce({review:{id:'saved',user_id:'reader',book_id:'book'}});await view.mutations[0].mutationFn();expect(view.post.mock.calls[1][0]).toBe('/api/books/book/reviews');expect(view.post.mock.calls[1][1]).toMatchObject({star_rating:4,body:'A thoughtful review',mood_tags:['Dark','Cozy']});expect(view.completions).toHaveBeenCalledExactlyOnceWith('review.book');
+});
+it('rejects fractional native quote pages and retains the key until the selected edition acknowledges',async()=>{
+  const view=mount('mobile/app/quote/new.tsx',{data:{book:{id:'book',title:'Selected edition'}}},undefined,'NativeQuoteForm'),props={bookId:'alias',owner:'reader'};let tree=view.render(props),inputs=view.all(tree,'Input');inputs[0].props.onChangeText('A quoted passage');inputs[1].props.onChangeText('1.5');tree=view.render(props);expect(view.find(tree,'Button').props.disabled).toBe(true);await expect(view.mutations[0].mutationFn()).rejects.toThrow('Invalid quote');expect(view.post).not.toHaveBeenCalled();inputs[1].props.onChangeText('42');view.render(props);view.post.mockResolvedValueOnce({quote:{id:'saved',user_id:'reader',book_id:'another-edition'}});await expect(view.mutations[0].mutationFn()).rejects.toThrow('Invalid quote receipt');expect(view.completions).not.toHaveBeenCalled();view.post.mockResolvedValueOnce({quote:{id:'saved',user_id:'reader',book_id:'book'}});await view.mutations[0].mutationFn();expect(view.post.mock.calls[1][1]).toEqual({book_id:'book',content:'A quoted passage',page_number:42});expect(view.completions).toHaveBeenCalledExactlyOnceWith('quote.book');
+});
+it('persists canonical native shelf creation and validates the acknowledged owner',async()=>{
+  const view=mount('mobile/hooks/useShelf.ts',{},undefined,'useCreateShelf');view.render();view.post.mockResolvedValueOnce({shelf:{id:'shelf',user_id:'other'}});await expect(view.mutations[0].mutationFn({name:' Shelf ',description:' ',is_public:false})).rejects.toThrow('Invalid shelf receipt');expect(view.completions).not.toHaveBeenCalled();view.post.mockResolvedValueOnce({shelf:{id:'shelf',user_id:'reader'}});await view.mutations[0].mutationFn({name:' Shelf ',description:' ',is_public:false});expect(view.post.mock.calls[1][1]).toEqual({name:'Shelf',is_public:false});expect(view.completions).toHaveBeenCalledExactlyOnceWith('shelf.create');
+});
+it('submits the actual native verification schema with owned acknowledgement and no automatic catalog claim',async()=>{
+  const view=mount('mobile/app/settings/verify-author.tsx',{},undefined,'NativeVerificationForm'),props={owner:'reader'},inputs=view.all(view.render(props),'Input');inputs[0].props.onChangeText('Pen name');inputs[2].props.onChangeText('Published work and ISBN');inputs[3].props.onChangeText('https://example.test/author');view.render(props);view.post.mockResolvedValueOnce({actorId:'other',request:{id:'saved',user_id:'reader'}});await expect(view.mutations[0].mutationFn()).rejects.toThrow('Invalid verification receipt');expect(view.completions).not.toHaveBeenCalled();view.post.mockResolvedValueOnce({actorId:'reader',request:{id:'saved',user_id:'reader'}});await view.mutations[0].mutationFn();expect(view.post.mock.calls[1][1]).toEqual({pen_name:'Pen name',publisher:'',book_titles:'Published work and ISBN',website_url:'https://example.test/author',social_proof_url:''});expect(view.completions).toHaveBeenCalledExactlyOnceWith('author.verification');view.mutations[0].onSuccess();expect(JSON.stringify(view.render(props))).toContain(fr.authorVerification.submitted);expect(view.find(view.render(props),'Input')).toBeUndefined();
+});
+it('gives native star ratings translated radio labels and a single read-only description',()=>{
+  const view=mount('mobile/components/books/StarRating.tsx',{},undefined,'StarRating'),change=vi.fn(),editable=view.render({value:3,onChange:change,disabled:false}),radios=view.all(editable,'TouchableOpacity');expect(radios).toHaveLength(5);expect(radios.filter(node=>node.props.accessibilityState.checked)).toHaveLength(1);expect(radios[4].props.accessibilityLabel).toBe('5 étoiles');radios[4].props.onPress();expect(change).toHaveBeenCalledWith(5);const readonly=view.render({value:3,readonly:true});expect(readonly.props.accessibilityLabel).toBe('3 étoiles');expect(view.all(readonly,'TouchableOpacity')).toHaveLength(0);
 });

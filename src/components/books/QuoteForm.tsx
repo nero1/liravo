@@ -5,6 +5,7 @@ import { useRequestIntent } from '@/lib/client/useRequestIntent';
 import {useTranslations} from 'next-intl';
 import { useState,useRef,useEffect } from 'react';
 import { Quote } from 'lucide-react';
+import {MAX_QUOTE_PAGE} from '@/lib/content-form-values';
 import { cn } from '@/lib/utils';
 
 interface QuoteFormProps {
@@ -27,7 +28,7 @@ function OwnedQuoteForm({bookId,userId,onSuccess}:QuoteFormProps){
 
   const handleSave = async () => {
     if(!content.trim()||busy.current)return;setInvalidPage(false);
-    if(pageNumber&&(!Number.isSafeInteger(Number(pageNumber))||Number(pageNumber)<1)){setInvalidPage(true);return;}
+    if(pageNumber&&(!Number.isSafeInteger(Number(pageNumber))||Number(pageNumber)<1||Number(pageNumber)>MAX_QUOTE_PAGE)){setInvalidPage(true);return;}
     busy.current=true;setSaving(true);
     const body={book_id:bookId,content:content.trim(),...(pageNumber?{page_number:Number(pageNumber)}:{})},scope='quote:'+bookId;
 
@@ -39,7 +40,7 @@ function OwnedQuoteForm({bookId,userId,onSuccess}:QuoteFormProps){
       });
 
       if (!response.ok) { setError(true); return; }
-      const result=await response.json();if(typeof result.quote?.id!=='string')throw new Error('Invalid quote receipt');
+      const result=await response.json();if(typeof result.quote?.id!=='string'||result.quote.user_id!==userId||result.quote.book_id!==bookId)throw new Error('Invalid quote receipt');
       intent.complete(scope);
       setDone(true);
       setContent('');

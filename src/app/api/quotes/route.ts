@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
-import { sanitizeText } from '@/lib/sanitize';
+import {MAX_QUOTE_PAGE} from '@/lib/content-form-values';
+import { sanitizeText,hasVisibleText } from '@/lib/sanitize';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -12,14 +13,14 @@ export const dynamic = 'force-dynamic';
 const createQuoteSchema = z.object({
   book_id: z.string().uuid(),
   content: z.string().min(1).max(1000),
-  page_number: z.number().int().positive().optional(),
+  page_number: z.number().int().positive().max(MAX_QUOTE_PAGE).optional(),
 });
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const raw = await request.json();
+  const raw = await request.json().catch(()=>null);
   const parsed = createQuoteSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json(
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
 
   const { book_id, page_number } = parsed.data;
   const content = sanitizeText(parsed.data.content);
+  if(!hasVisibleText(content))return NextResponse.json({error:'Quote text is required'},{status:400});
 
   let quote;
   try {

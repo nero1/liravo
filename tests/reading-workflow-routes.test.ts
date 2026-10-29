@@ -2,6 +2,11 @@ import {beforeEach,expect,it,vi} from 'vitest';
 import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 import {createServiceClient} from '@/lib/supabase/server';
 import {POST} from '@/app/api/import/goodreads/route';
+import {POST as writeQuote} from '@/app/api/quotes/route';
+import {POST as writeReview} from '@/app/api/books/[id]/reviews/route';
+import {POST as requestVerification} from '@/app/api/author/verification-request/route';
+import {quotePageNumber,validReadDate,validProofUrl,MAX_QUOTE_PAGE} from '@/lib/content-form-values';
+import {hasVisibleText} from '@/lib/sanitize';
 import {readingRoomUnlockDate} from '@/lib/reading-room-date';
 import {PATCH} from '@/app/api/buddy-reads/[id]/update/route';
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
@@ -44,4 +49,17 @@ it('rejects buddy progress from a changed account before performing database wor
 it('parses milestone dates as UTC minutes and rejects calendar rollovers',()=>{
   expect(readingRoomUnlockDate('2024-02-29T12:30')).toBe('2024-02-29T12:30:00.000Z');
   for(const value of ['2026-02-29T12:30','2026-04-31T12:30','2026-10-29T24:00','0000-01-01T00:00','2026-10-29','2026-10-29T12:30:01'])expect(readingRoomUnlockDate(value)).toBeNull();
+});
+
+it('validates quote pages without truncation and checks calendar/proof URL input',()=>{
+  expect(quotePageNumber(' ')).toBeUndefined();expect(quotePageNumber('42')).toBe(42);for(const page of ['1.5','0','-1','Infinity',String(MAX_QUOTE_PAGE+1)])expect(quotePageNumber(page)).toBeNull();expect(validReadDate('2024-02-29')).toBe(true);expect(validReadDate('2026-02-29')).toBe(false);expect(validProofUrl('https://example.test')).toBe(true);expect(validProofUrl('javascript:alert(1)')).toBe(false);
+});
+it('rejects invisible sanitized content, overflow pages and malformed JSON before writing',async()=>{
+  for(const text of ['<b></b>','<p><br></p>','&nbsp;','&#x200b;'])expect(hasVisibleText(text)).toBe(false);expect(hasVisibleText('<strong>A visible review</strong>')).toBe(true);
+  for(const payload of [{book_id:room,content:'<b></b>'},{book_id:room,content:'&nbsp;'},{book_id:room,content:'A quote',page_number:MAX_QUOTE_PAGE+1}])expect((await writeQuote(new Request('https://app.test/quotes',{method:'POST',body:JSON.stringify(payload)}) as never)).status).toBe(400);
+  expect((await writeReview(new Request('https://app.test/reviews',{method:'POST',body:JSON.stringify({star_rating:4,body:'<p><br></p>',review_type:'long'})}),{params:{id:room}})).status).toBe(400);
+  expect((await writeQuote(new Request('https://app.test/quotes',{method:'POST',body:'{'}) as never)).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
+});
+it('rejects unsafe author proof links before creating a verification request',async()=>{
+  const response=await requestVerification(new Request('https://app.test/verification',{method:'POST',body:JSON.stringify({pen_name:'Writer',book_titles:'Published book',website_url:'javascript:alert(1)'})}));expect(response.status).toBe(400);expect(rpc).not.toHaveBeenCalled();
 });

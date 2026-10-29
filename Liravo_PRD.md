@@ -1316,7 +1316,7 @@ Distinctive display font for headings. System-friendly variable font for body (s
 - Follow a user and verify feed update.
 - Complete a reading challenge.
 - Generate and share a book finished card.
-- Author verification request and moderator approval.
+- Author verification request and moderator approval. Web/native requests collect pen name, published titles and optional publisher/HTTP(S) proof links, retain owned retries and use EN/FR/DE. Submission grants neither verified status nor work ownership.
 - Newbie Writer submits a writing challenge response.
 - Referral link generation and referral sign-up attribution.
 - Tip a creator and verify commission split.

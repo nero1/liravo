@@ -6,7 +6,7 @@ import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import { classifyTone } from '@/lib/tone-classifier';
 import { checkSpam } from '@/lib/spam-detection';
-import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
+import { sanitizeText, sanitizeRichText,hasVisibleText } from '@/lib/sanitize';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { getRedisClient } from '@/lib/redis';
 
@@ -38,7 +38,8 @@ export async function POST(
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const raw = await request.json();
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid book'},{status:400});
+  const raw = await request.json().catch(()=>null);
   const parsed = reviewSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
@@ -47,6 +48,7 @@ export async function POST(
   const { star_rating, review_type, mood_tags, spoiler_warning } = parsed.data;
   // Sanitize before any further processing or storage
   const body = review_type === 'long' ? sanitizeRichText(parsed.data.body) : sanitizeText(parsed.data.body);
+  if(!hasVisibleText(body))return NextResponse.json({error:'Review text is required'},{status:400});
 
   let review;
   try {

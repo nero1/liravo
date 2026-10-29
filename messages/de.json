@@ -1975,5 +1975,33 @@
     "milestonesFailed": "Kapitelabschnitte konnten nicht geladen werden. Versuche es erneut.",
     "join": "Raum beitreten",
     "readOnly": "Dieser Raum ist beendet. Die Diskussion kann nur noch gelesen werden."
+  },
+  "nativeContent": {
+    "bookRequired": "Wähle vor dem Veröffentlichen ein Buch aus.",
+    "discover": "Buch finden",
+    "edition": "Ausgewählte Ausgabe",
+    "invalidDate": "Gib ein gültiges Datum im Format JJJJ-MM-TT ein.",
+    "pageExample": "z. B. 42",
+    "shelfDescription": "Was gehört in dieses Regal?",
+    "savedShelf": "Regal erstellt.",
+    "shelfFailed": "Regal konnte nicht erstellt werden. Versuche es mit denselben Angaben erneut."
+  },
+  "authorVerification": {
+    "title": "Autorenverifizierung beantragen",
+    "description": "Reiche Veröffentlichungsnachweise zur Identitätsprüfung ein. Werke im Katalog benötigen eine separate Freigabe.",
+    "penName": "Autorenname",
+    "penNamePlaceholder": "Auf deinen Büchern gedruckter Name",
+    "publisher": "Verlag (optional)",
+    "bookTitles": "Veröffentlichte Werke und ISBNs",
+    "bookTitlesPlaceholder": "Buchtitel, Ausgaben und ISBNs",
+    "website": "Website (optional)",
+    "socialProof": "Öffentlicher Nachweislink (optional)",
+    "urlPlaceholder": "https://beispiel.de",
+    "invalidLink": "Gib einen HTTP- oder HTTPS-Link ein.",
+    "submit": "Antrag einreichen",
+    "submittedTitle": "Antrag eingereicht",
+    "submitted": "Dein Antrag auf Autorenverifizierung wurde zur Prüfung eingereicht.",
+    "failed": "Dein Antrag konnte nicht eingereicht werden. Versuche es mit denselben Angaben erneut.",
+    "back": "Zurück zu den Einstellungen"
   }
 }

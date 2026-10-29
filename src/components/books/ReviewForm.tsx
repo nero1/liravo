@@ -84,7 +84,7 @@ function OwnedReviewForm({bookId,userId,onSubmit}:ReviewFormProps){
         headers:{'Content-Type':'application/json',...await intent.durableHeaders(payload,scope)},body:JSON.stringify(payload),
       });
       if (res.ok) {
-        const result=await res.json();if(typeof result.review?.id!=='string')throw new Error('Invalid review receipt');intent.complete(scope);
+        const result=await res.json();if(typeof result.review?.id!=='string'||result.review.user_id!==userId||result.review.book_id!==bookId)throw new Error('Invalid review receipt');intent.complete(scope);
         setSuccess(true);
         onSubmit?.();
       } else {

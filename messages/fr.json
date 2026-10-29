@@ -1975,5 +1975,33 @@
     "milestonesFailed": "Impossible de charger les étapes. Réessayez.",
     "join": "Rejoindre le salon",
     "readOnly": "Ce salon est terminé. La discussion est en lecture seule."
+  },
+  "nativeContent": {
+    "bookRequired": "Choisissez un livre avant de publier.",
+    "discover": "Trouver un livre",
+    "edition": "Édition sélectionnée",
+    "invalidDate": "Saisissez une date valide au format AAAA-MM-JJ.",
+    "pageExample": "ex. 42",
+    "shelfDescription": "Que contient cette étagère ?",
+    "savedShelf": "Étagère créée.",
+    "shelfFailed": "Impossible de créer l’étagère. Réessayez avec les mêmes informations."
+  },
+  "authorVerification": {
+    "title": "Demander la vérification d’auteur",
+    "description": "Fournissez des preuves de publication pour vérifier votre identité. Les œuvres du catalogue nécessitent une approbation distincte.",
+    "penName": "Nom de plume",
+    "penNamePlaceholder": "Nom imprimé sur vos livres",
+    "publisher": "Maison d’édition (facultatif)",
+    "bookTitles": "Œuvres publiées et ISBN",
+    "bookTitlesPlaceholder": "Titres, éditions et ISBN",
+    "website": "Site web (facultatif)",
+    "socialProof": "Lien de preuve public (facultatif)",
+    "urlPlaceholder": "https://exemple.fr",
+    "invalidLink": "Saisissez un lien HTTP ou HTTPS.",
+    "submit": "Envoyer la demande",
+    "submittedTitle": "Demande envoyée",
+    "submitted": "Votre demande de vérification d’auteur a été envoyée pour examen.",
+    "failed": "Impossible d’envoyer votre demande. Réessayez avec les mêmes informations.",
+    "back": "Retour aux paramètres"
   }
 }

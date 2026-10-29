@@ -1975,5 +1975,33 @@
     "milestonesFailed": "Could not load chapter milestones. Try again.",
     "join": "Join room",
     "readOnly": "This room has ended. Its discussion is read-only."
+  },
+  "nativeContent": {
+    "bookRequired": "Choose a book before posting.",
+    "discover": "Find a book",
+    "edition": "Selected edition",
+    "invalidDate": "Enter a valid date as YYYY-MM-DD.",
+    "pageExample": "e.g. 42",
+    "shelfDescription": "What goes on this shelf?",
+    "savedShelf": "Shelf created.",
+    "shelfFailed": "Could not create your shelf. Retry with the same details."
+  },
+  "authorVerification": {
+    "title": "Request author verification",
+    "description": "Submit published-work evidence for identity verification. Catalog works require separate staff approval.",
+    "penName": "Pen name",
+    "penNamePlaceholder": "Name printed on your books",
+    "publisher": "Publisher (optional)",
+    "bookTitles": "Published works and ISBNs",
+    "bookTitlesPlaceholder": "Book titles, editions and ISBNs",
+    "website": "Website (optional)",
+    "socialProof": "Public proof link (optional)",
+    "urlPlaceholder": "https://example.com",
+    "invalidLink": "Enter an HTTP or HTTPS link.",
+    "submit": "Submit request",
+    "submittedTitle": "Request submitted",
+    "submitted": "Your author verification request was submitted for staff review.",
+    "failed": "Could not submit your request. Retry with the same details.",
+    "back": "Back to settings"
   }
 }
