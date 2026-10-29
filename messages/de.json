@@ -1845,5 +1845,31 @@
     "inactiveReader": "Dieses Leserkonto ist inaktiv.",
     "viewOffers": "Vorabexemplare ansehen",
     "readerXp": "{count, number} XP"
+  },
+  "buddyReads": {
+    "title": "Gemeinsam lesen",
+    "description": "Lest eine ausgewählte Ausgabe mit 2–5 Personen, dich eingeschlossen.",
+    "mine": "Meine Leserunden",
+    "open": "Offene Leserunden",
+    "create": "Leserunde starten",
+    "name": "Gruppenname",
+    "capacity": "Maximale Leserzahl (2–5)",
+    "startingChapter": "Startkapitel",
+    "empty": "Hier gibt es noch keine Leserunden.",
+    "loadFailed": "Leserunden konnten nicht geladen werden. Versuche es erneut.",
+    "saveFailed": "Speichern fehlgeschlagen. Versuche es mit denselben Angaben erneut.",
+    "refresh": "Aktualisieren",
+    "view": "Gruppe ansehen",
+    "book": "Ausgabe auswählen",
+    "selected": "Ausgewählte Ausgabe",
+    "changeBook": "Ausgabe ändern",
+    "search": "Nach Titel, Autor oder ISBN suchen",
+    "noBooks": "Keine passenden Ausgaben.",
+    "searchFailed": "Suche fehlgeschlagen. Versuche es erneut.",
+    "full": "Diese Gruppe ist voll.",
+    "membersOnly": "Tritt der Gruppe bei, um Diskussionsbeiträge zu lesen und zu schreiben.",
+    "notesFailed": "Diskussion konnte nicht geladen werden. Versuche es erneut.",
+    "replying": "Antwort an {name}",
+    "cancelReply": "Antwort abbrechen"
   }
 }

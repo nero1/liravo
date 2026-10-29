@@ -1,37 +1,39 @@
-import { View, Text, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { Button } from '@/components/ui/Button';
-import type { BuddyReadRow } from '@/types';
-
-export default function BuddyReadDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ['buddy-read', id],
-    queryFn: () => api.get<{ buddy_read: BuddyReadRow }>(ENDPOINTS.buddyReads.byId(id!)),
-    enabled: !!id,
-  });
-  const join = useMutation({
-    mutationFn: () => api.post(ENDPOINTS.buddyReads.join(id!)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['buddy-read', id] }); Alert.alert('Joined!'); },
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  const read = data?.buddy_read;
-  if (isLoading || !read) return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 16 }}>
-        <Text className="text-2xl font-bold text-foreground">{read.title}</Text>
-        <Text className="text-muted-foreground">{read.participant_count} participants</Text>
-        {read.start_date && <Text className="text-sm text-muted-foreground">Started: {new Date(read.start_date).toLocaleDateString()}</Text>}
-        <Button onPress={() => join.mutate()} loading={join.isPending} size="lg">Join</Button>
-      </ScrollView>
-    </SafeAreaView>
-  );
+import {useEffect,useState} from 'react';
+import {View,Text,ScrollView,Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useLocalSearchParams,useRouter} from 'expo-router';
+import {useQuery,useInfiniteQuery,useMutation,useQueryClient} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useRequestIntent} from '@/hooks/useRequestIntent';
+import {useTranslations} from '@/hooks/useTranslations';
+import {Button} from '@/components/ui/Button';
+import {Input} from '@/components/ui/Input';
+import {QueryError} from '@/components/ui/EmptyState';
+import type {BuddyReadDetail,BuddyNotePage,BuddyNote} from '@/types';
+export default function BuddyReadDetailScreen(){const {id}=useLocalSearchParams<{id:string}>(),owner=useAuthStore(state=>state.user?.id);return <BuddyRoom key={owner+':'+id} id={id!} owner={owner}/>;}
+export function BuddyRoom({id,owner}:{id:string;owner:string|undefined}){
+  const {t,locale}=useTranslations('buddyReadRoom'),{t:catalog}=useTranslations('buddyReads'),{t:common}=useTranslations('common'),router=useRouter(),qc=useQueryClient(),intent=useRequestIntent(owner),key=['buddy-read',id,owner],notesKey=['buddy-read-notes',id,owner],[chapter,setChapter]=useState(''),[note,setNote]=useState(''),[reply,setReply]=useState<BuddyNote|null>(null);
+  const query=useQuery({queryKey:key,enabled:!!id&&!!owner,queryFn:async({signal})=>{const data=await api.get<BuddyReadDetail>('/api/buddy-reads/'+id,undefined,signal);if(data.actorId!==owner||data.buddyRead?.id!==id)throw Error('Invalid buddy read');return data;}}),read=query.data?.buddyRead;
+  useEffect(()=>{if(read)setChapter(previous=>previous||String(read.current_chapter));},[read]);
+  const notes=useInfiniteQuery({queryKey:notesKey,enabled:!!read?.is_member,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<BuddyNotePage>('/api/buddy-reads/'+id+'/notes',pageParam?{cursor:pageParam}:undefined,signal);if(data.actorId!==owner||data.roomId!==id||!Array.isArray(data.notes))throw Error('Invalid notes');return data;},getNextPageParam:page=>page.nextCursor});
+  const join=useMutation({mutationFn:async()=>{const data=await api.post<{joined:boolean;actorId:string;roomId:string}>('/api/buddy-reads/'+id+'/join',{}, {'X-Liravo-Actor':owner!});if(data.actorId!==owner||data.roomId!==id||!data.joined)throw Error('Invalid join receipt');},onSuccess:()=>{if(useAuthStore.getState().user?.id!==owner)return;void qc.invalidateQueries({queryKey:key});void qc.invalidateQueries({queryKey:['buddy-reads']});},onError:()=>Alert.alert(common('error'),catalog('saveFailed'))});
+  const save=useMutation({mutationFn:async(kind:'progress'|'note')=>{
+    const scope='buddy.'+id+'.'+(kind==='progress'?'progress':'note'),body=kind==='progress'?{current_chapter:Number(chapter),...(note.trim()&&!reply?{note:note.trim()}:{})}:{content:note.trim(),reply_to_id:reply?.id??null},headers=await intent.durableHeaders(body,scope);
+    if(kind==='progress'){
+      const data=await api.patch<{updated:boolean;actorId:string;roomId:string;current_chapter:number;note:BuddyNote|null}>('/api/buddy-reads/'+id+'/update',body,headers);
+      if(!data.updated||data.actorId!==owner||data.roomId!==id||data.current_chapter!==Number(chapter)||(data.note&&data.note.user_id!==owner))throw Error('Invalid progress receipt');
+    }else{const data=await api.post<{actorId:string;roomId:string;note:BuddyNote}>('/api/buddy-reads/'+id+'/notes',body,headers);if(data.actorId!==owner||data.roomId!==id||!data.note?.id||data.note.user_id!==owner)throw Error('Invalid note receipt');}
+    await intent.complete(scope);return kind;
+  },onSuccess:kind=>{if(useAuthStore.getState().user?.id!==owner)return;if(kind==='note'||!reply){setNote('');setReply(null);}void qc.invalidateQueries({queryKey:key});void qc.invalidateQueries({queryKey:notesKey});void qc.invalidateQueries({queryKey:['buddy-reads']});},onError:()=>Alert.alert(common('error'),catalog('saveFailed'))});
+  if(query.isError&&!read)return <QueryError error={query.error} retry={()=>void query.refetch()}/>;
+  if(!read)return <View className="p-4"><Text className="text-muted-foreground">{common('loading')}</Text></View>;
+  const saving=save.isPending||join.isPending,validChapter=Number.isInteger(Number(chapter))&&Number(chapter)>=1&&Number(chapter)<=100000;
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><ScrollView className="px-4" keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingTop:16,paddingBottom:32,gap:16}}><Text accessibilityRole="header" className="text-2xl font-bold text-foreground">{read.title??read.book.title}</Text><Button variant="ghost" onPress={()=>router.push('/book/'+read.book.id)}>{read.book.title}</Button><Text className="text-muted-foreground">{read.book.author_name}</Text><Text className="text-muted-foreground">{t('capacity',{count:read.participant_count,maximum:read.max_participants})} · {t('chapter',{chapter:read.current_chapter})} · {t(read.is_active?'active':'ended')}</Text>
+    <Text className="font-semibold text-foreground">{t('readers')}</Text>{query.data?.participants.map(participant=><Button key={participant.id} variant="ghost" onPress={()=>router.push('/user/'+participant.username)}>{participant.display_name+(participant.id===owner?' '+t('you'):'')}</Button>)}
+    {read.can_join&&<Button loading={join.isPending} disabled={saving} onPress={()=>join.mutate()}>{t('join')}</Button>}{!read.is_member&&<Text className="text-muted-foreground">{catalog(read.participant_count>=read.max_participants?'full':'membersOnly')}</Text>}
+    {read.can_update&&<View className="gap-3"><Input label={t('chapterLabel')} value={chapter} onChangeText={setChapter} editable={!saving} keyboardType="number-pad" maxLength={6}/><Button disabled={saving||!validChapter} loading={save.isPending&&save.variables==='progress'} onPress={()=>save.mutate('progress')}>{t('save')}</Button><Input label={reply?catalog('replying',{name:reply.user?.display_name??t('unknown')}):t('thought')} value={note} onChangeText={setNote} editable={!saving} multiline maxLength={2000}/>{reply&&<Button variant="ghost" disabled={saving} onPress={()=>setReply(null)}>{catalog('cancelReply')}</Button>}<Button disabled={saving||!note.trim()} loading={save.isPending&&save.variables==='note'} onPress={()=>save.mutate('note')}>{t(reply?'reply':'post')}</Button></View>}
+    {read.is_member&&<View className="gap-3"><Text className="font-semibold text-foreground">{t('discussion')}</Text>{notes.isError&&<QueryError error={notes.error} retry={()=>void notes.refetch()}/>} {notes.isLoading&&<Text className="text-muted-foreground">{common('loading')}</Text>}{!notes.isLoading&&!notes.isError&&!notes.data?.pages.some(page=>page.notes.length)&&<Text className="text-muted-foreground">{t('empty')}</Text>}{notes.data?.pages.flatMap(page=>page.notes).map(item=><View key={item.id} className="rounded-lg border border-border p-3 gap-2"><Text className="font-medium text-foreground">{item.user?.display_name??t('unknown')}</Text><Text className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleDateString(locale)}</Text>{item.reply_to_id&&<Text className="text-xs text-muted-foreground">{t('replyTo',{name:notes.data?.pages.flatMap(page=>page.notes).find(parent=>parent.id===item.reply_to_id)?.user?.display_name??t('unknown')})}</Text>}<Text className="text-foreground">{item.content}</Text>{read.can_update&&<Button variant="ghost" disabled={saving} onPress={()=>setReply(item)}>{t('reply')}</Button>}</View>)}{notes.hasNextPage&&<Button loading={notes.isFetchingNextPage} onPress={()=>void notes.fetchNextPage()}>{common('loadMore')}</Button>}</View>}
+    {query.isError&&<QueryError error={query.error} retry={()=>void query.refetch()}/>}<Button variant="outline" disabled={saving} loading={query.isRefetching} onPress={()=>{void query.refetch();if(read.is_member)void notes.refetch();}}>{catalog('refresh')}</Button>
+  </ScrollView></SafeAreaView>;
 }

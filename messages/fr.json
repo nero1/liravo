@@ -1845,5 +1845,31 @@
     "inactiveReader": "Ce compte lecteur est inactif.",
     "viewOffers": "Voir les offres de lecture anticipée",
     "readerXp": "{count, number} XP"
+  },
+  "buddyReads": {
+    "title": "Lectures entre amis",
+    "description": "Lisez une édition ensemble à 2–5 lecteurs, vous compris.",
+    "mine": "Mes lectures entre amis",
+    "open": "Lectures ouvertes",
+    "create": "Démarrer une lecture",
+    "name": "Nom du groupe",
+    "capacity": "Nombre maximal de lecteurs (2–5)",
+    "startingChapter": "Chapitre de départ",
+    "empty": "Aucune lecture ici pour le moment.",
+    "loadFailed": "Impossible de charger les lectures. Réessayez.",
+    "saveFailed": "Enregistrement impossible. Réessayez avec les mêmes informations.",
+    "refresh": "Actualiser",
+    "view": "Voir le groupe",
+    "book": "Choisir une édition",
+    "selected": "Édition sélectionnée",
+    "changeBook": "Changer d’édition",
+    "search": "Rechercher par titre, auteur ou ISBN",
+    "noBooks": "Aucune édition correspondante.",
+    "searchFailed": "Recherche impossible. Réessayez.",
+    "full": "Ce groupe est complet.",
+    "membersOnly": "Rejoignez ce groupe pour lire et publier des notes de discussion.",
+    "notesFailed": "Impossible de charger la discussion. Réessayez.",
+    "replying": "Réponse à {name}",
+    "cancelReply": "Annuler la réponse"
   }
 }

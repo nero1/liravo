@@ -2350,5 +2350,25 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       for(const routine of ['arc_offer_document(uuid,uuid)','arc_catalog_snapshot(uuid,boolean,timestamptz,uuid,uuid,integer)','arc_application_snapshot(uuid,uuid,text,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
     }
+    {
+      const owner=crypto.randomUUID(),other=crypto.randomUUID();for(const [id,name] of [[owner,'buddy077_owner'],[other,'buddy077_other']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},${name})`;
+      const [book]=await sql`insert into books(title,author_name) values('Buddy edition 077','Writer') returning id`;
+      const [open]=await sql`insert into buddy_reads(book_id,created_by,title,max_participants) values(${book.id},${other},'Older open group',3) returning id`;
+      const own:string[]=[];for(let i=0;i<23;i++){const [room]=await sql`insert into buddy_reads(book_id,created_by,title,max_participants) values(${book.id},${owner},${'Own group '+i},3) returning id`;own.push(room.id);await sql`insert into buddy_read_members(buddy_read_id,user_id) values(${room.id},${owner})`;}
+      const [privateRoom]=await sql`insert into buddy_reads(book_id,created_by,is_private) values(${book.id},${other},true) returning id`;
+      const {getBuddyReads,getBuddyDetail,getBuddyNotes,decodeBuddyCursor}=await import('@/lib/buddy-reads');
+      const first=await getBuddyReads(owner,'mine');expect(first.buddy_reads).toHaveLength(20);expect(first.nextCursor).toBeTruthy();const second=await getBuddyReads(owner,'mine',first.nextCursor);expect(second.buddy_reads).toHaveLength(3);expect(new Set([...first.buddy_reads,...second.buddy_reads].map(row=>row.id)).size).toBe(23);
+      expect(()=>decodeBuddyCursor(first.nextCursor,other,'mine')).toThrow('Invalid cursor');expect(()=>decodeBuddyCursor(first.nextCursor,owner,'open')).toThrow('Invalid cursor');
+      const available=await getBuddyReads(owner,'open');expect(available.buddy_reads.some(row=>row.id===open.id)).toBe(true);expect(available.buddy_reads.some(row=>row.id===privateRoom.id)).toBe(false);expect(await getBuddyDetail(owner,privateRoom.id)).toBeNull();
+      await sql`update users set is_banned=true where id=${other}`;await expect(sql`insert into buddy_read_members(buddy_read_id,user_id) values(${open.id},${owner})`).rejects.toThrow('unavailable');await sql`update users set is_banned=false where id=${other}`;
+      const roomId=own[0],detail=await getBuddyDetail(owner,roomId);expect(detail).toMatchObject({actorId:owner,buddyRead:{title:'Own group 0',participant_count:1,is_member:true,can_update:true,book:{id:book.id,title:'Buddy edition 077'}},participants:[{id:owner}]});
+      await expect(getBuddyNotes(other,roomId)).rejects.toMatchObject({status:403});
+      for(let i=0;i<45;i++)await sql`insert into buddy_read_notes(buddy_read_id,user_id,content) values(${roomId},${owner},${'Note '+i})`;
+      let cursor:string|null=null;const notes:string[]=[];do{const page=await getBuddyNotes(owner,roomId,cursor);notes.push(...page.notes.map(note=>note.id));cursor=page.nextCursor;}while(cursor);expect(notes).toHaveLength(45);expect(new Set(notes).size).toBe(45);
+      const [alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id) select 'Retained alias','Writer',work_id,id from books where id=${book.id} returning id`;await sql`update buddy_reads set book_id=${alias.id} where id=${roomId}`;expect((await getBuddyDetail(owner,roomId))!.book.id).toBe(book.id);
+      const notesPage=await getBuddyNotes(owner,roomId);expect(()=>decodeBuddyCursor(notesPage.nextCursor,owner,'notes.'+own[1])).toThrow('Invalid cursor');
+      await sql`update buddy_reads set is_active=false where id=${roomId}`;expect((await getBuddyDetail(owner,roomId))!.buddyRead).toMatchObject({is_member:true,can_update:false,can_join:false});expect((await getBuddyReads(owner,'mine')).buddy_reads.some(row=>row.id===roomId)||second.buddy_reads.some(row=>row.id===roomId)).toBe(true);
+      for(const role of ['anon','authenticated'])for(const routine of ['buddy_read_document(uuid,uuid)','buddy_catalog_snapshot(uuid,text,timestamptz,uuid,integer)','buddy_detail_snapshot(uuid,uuid)','buddy_notes_snapshot(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

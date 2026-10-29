@@ -7,7 +7,7 @@ import fr from '../messages/fr.json';
 
 class ApiError extends Error{constructor(public status:number){super('Isolated failure');}}
 function mount(file:string,query:any,infinite:any={data:undefined},exportName='default'){
-  const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn(),push=vi.fn();let cursor=0;
+  const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn(),patch=vi.fn(),push=vi.fn();let cursor=0;
   const owner={id:'reader',username:'reader'},store=Object.assign((selector?:any)=>selector?selector({user:owner}):{user:owner},{getState:()=>({user:owner})}),translate=createTranslator({locale:'fr',messages:fr,onError:error=>{throw error;}});
   const exports:any={},code=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   runInNewContext(code,{exports,Intl,Map,Error,require:(name:string)=>{
@@ -15,20 +15,22 @@ function mount(file:string,query:any,infinite:any={data:undefined},exportName='d
     if(name==='react/jsx-runtime')return {jsx:(type:unknown,props:unknown)=>({type,props}),jsxs:(type:unknown,props:unknown)=>({type,props}),Fragment:'Fragment'};
     if(name==='react-native')return {View:'View',Text:'Text',ScrollView:'ScrollView',FlatList:'FlatList',TouchableOpacity:'TouchableOpacity',Alert:{alert:vi.fn()},KeyboardAvoidingView:'KeyboardAvoidingView',Platform:{OS:'android'},ActivityIndicator:'ActivityIndicator'};
     if(name==='react-native-safe-area-context')return {SafeAreaView:'SafeAreaView'};
-    if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push,back:vi.fn()})};
+    if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push,replace:push,back:vi.fn()})};
     if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:unknown)=>{queries.push(options);return infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&(key.includes('question')||key.includes('arc')||key.includes('arcs'))?infinite:query;target.data=update(target.data);}})};
+    if(name==='@/hooks/useBooks')return {useBookSearch:()=>query};
     if(name==='@/hooks/useTranslations')return {useTranslations:(namespace='')=>({locale:'fr',t:(key:string,values?:Record<string,string|number>)=>translate([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate>[0],values)})};
     if(name==='@/stores/auth')return {useAuthStore:store};
     if(name==='@/hooks/useRequestIntent')return {useRequestIntent:()=>({durableHeaders:async()=>({'Idempotency-Key':'durable-writing-key','X-Liravo-Actor':'reader'}),complete:completions})};
-    if(name==='@/lib/api')return {api:{get,post},ApiError};
+    if(name==='@/lib/api')return {api:{get,post,patch},ApiError};
     if(name==='@/constants/api')return {ENDPOINTS:{author:{arcs:'/author/arcs',byUsername:(name:string)=>'/author/'+name,createPost:'/author/posts'},write:{questions:'/questions',workshops:'/workshops',workshopById:(id:string)=>'/workshops/'+id,workshopSubmissions:(id:string)=>'/workshops/'+id+'/submissions',workshopFeedback:(id:string,draft:string)=>'/workshops/'+id+'/submissions/'+draft+'/feedback',joinWorkshop:(id:string)=>'/workshops/'+id+'/join',promptById:()=>'/prompt',submitPrompt:()=>'/prompt/submit'}}};
+    if(name==='@/components/books/BookPicker')return {BookPicker:'BookPicker'};
     if(name==='@/components/social/FollowButton')return {FollowButton:'FollowButton'};
     if(name==='@/components/ui/EmptyState')return {QueryError:'QueryError',EmptyState:'EmptyState'};
     const match=name.match(/^@\/components\/ui\/(\w+)$/);if(match)return {[match[1]]:match[1]};throw Error(name);
   }});
-  function render(){cursor=0;mutations.length=0;queries.length=0;return exports[exportName]({});}
+  function render(props:unknown={}){cursor=0;mutations.length=0;queries.length=0;return exports[exportName](props);}
   const find=(tree:any,type:string):any=>{if(!tree)return undefined;if(Array.isArray(tree))return tree.map(node=>find(node,type)).find(Boolean);if(tree.type===type)return tree;return find(tree.props?.children,type);};
-  return {render,find,mutations,queries,post,get,completions,push};
+  return {render,find,mutations,queries,post,patch,get,completions,push};
 }
 it('renders the actual workshop catalog contract and exposes query failures instead of an empty list',()=>{
   const data={pages:[{rooms:[{id:'room',name:'Atelier',topic:'Écriture',member_count:1}],nextCursor:null}]},view=mount('mobile/app/write/workshops/index.tsx',{}, {data});
@@ -104,4 +106,29 @@ it('uses acknowledged ARC decisions and complete counts while retaining foreign 
 it('updates native ARC application status immediately after the owned acknowledgement',async()=>{
   const arc={id:'arc',author_id:'author',books:{id:'book',title:'Edition'},my_application_status:null,can_apply:true,slots_remaining:1,is_open:true},view=mount('mobile/components/author/ArcCatalog.tsx',{}, {data:{pages:[{actorId:'reader',arcs:[arc]}]}},'ArcCatalog');view.render();
   view.post.mockResolvedValue({actorId:'reader',arcId:'arc',application:{id:'application',arc_id:'arc',reader_id:'reader',status:'pending'}});const result=await view.mutations[0].mutationFn('arc');view.mutations[0].onSuccess(result);const list=view.find(view.render(),'FlatList');expect(list.props.data[0]).toMatchObject({my_application_status:'pending',can_apply:false});expect(view.completions).toHaveBeenCalledExactlyOnceWith('arc.apply.arc');
+});
+
+it('renders native buddy catalogs from every real API page and surfaces failures',()=>{
+  const read=(id:string)=>({id,title:'Group '+id,book:{title:'Selected edition',author_name:'Writer'},participant_count:2,max_participants:3,current_chapter:4,is_active:true}),view=mount('mobile/app/buddy-reads/index.tsx',{}, {data:{pages:[{buddy_reads:[read('one')]},{buddy_reads:[read('two')]}]}}),list=view.find(view.render(),'FlatList');
+  expect(list.props.data).toHaveLength(2);list.props.renderItem({item:read('two')}).props.onPress();expect(view.push).toHaveBeenCalledWith('/buddy-reads/two');
+  const failure=mount('mobile/app/buddy-reads/index.tsx',{}, {isError:true,error:Error('Unavailable')});const failedList=failure.find(failure.render(),'FlatList');expect(failure.find(failedList.props.ListFooterComponent,'QueryError')).toBeTruthy();expect(failedList.props.ListEmptyComponent).toBeNull();
+});
+it('uses the actual native buddy detail contract and keeps discussion private',async()=>{
+  const detail={actorId:'reader',buddyRead:{id:'room',title:'Named group',book:{id:'book',title:'Selected edition'},is_member:false,can_join:true,participant_count:1,max_participants:3,current_chapter:1,is_active:true},participants:[]},view=mount('mobile/app/buddy-reads/[id].tsx',{data:detail},{data:{pages:[{notes:[{id:'secret',content:'PRIVATE DISCUSSION'}]}]}},'BuddyRoom'),tree=view.render({id:'room',owner:'reader'});
+  expect(JSON.stringify(tree)).toContain('Named group');expect(JSON.stringify(tree)).not.toContain('PRIVATE DISCUSSION');expect(view.queries[1].enabled).toBe(false);
+  view.post.mockResolvedValueOnce({joined:true,actorId:'other',roomId:'room'});await expect(view.mutations[0].mutationFn()).rejects.toThrow('Invalid join receipt');
+});
+it('retains native buddy note intents until the owned group acknowledges the note',async()=>{
+  const detail={buddyRead:{id:'room',title:'Named group',book:{id:'book',title:'Edition'},is_member:true,can_update:true,participant_count:1,max_participants:3,current_chapter:1,is_active:true},participants:[]},view=mount('mobile/app/buddy-reads/[id].tsx',{data:detail},{data:{pages:[{notes:[]}]}},'BuddyRoom'),props={id:'room',owner:'reader'};
+  view.render(props);view.post.mockResolvedValueOnce({actorId:'reader',roomId:'other',note:{id:'saved',user_id:'reader'}});await expect(view.mutations[1].mutationFn('note')).rejects.toThrow('Invalid note receipt');expect(view.completions).not.toHaveBeenCalled();
+  view.post.mockResolvedValueOnce({actorId:'reader',roomId:'room',note:{id:'saved',user_id:'reader'}});await view.mutations[1].mutationFn('note');expect(view.completions).toHaveBeenCalledExactlyOnceWith('buddy.room.note');
+});
+it('requires native edition selection before creating a buddy read and validates ownership',async()=>{
+  const view=mount('mobile/app/buddy-reads/new.tsx',{}),first=view.render();expect(view.find(first,'Button').props.disabled).toBe(true);view.find(first,'Input').props.onChangeText('My group');view.find(first,'BookPicker').props.onChange({id:'book',title:'Selected edition'});view.render();
+  view.post.mockResolvedValueOnce({actorId:'other',buddyRead:{id:'room',created_by:'reader'}});await expect(view.mutations[0].mutationFn()).rejects.toThrow('Invalid buddy receipt');expect(view.completions).not.toHaveBeenCalled();
+  view.post.mockResolvedValueOnce({actorId:'reader',buddyRead:{id:'room',created_by:'reader'}});await view.mutations[0].mutationFn();expect(view.completions).toHaveBeenCalledExactlyOnceWith('buddy.create');expect(view.post.mock.calls[1][1]).toMatchObject({book_id:'book',title:'My group',max_participants:3,current_chapter:1});
+});
+
+it('renders selected native editions without inventing a format for missing metadata',()=>{
+  const view=mount('mobile/components/books/BookPicker.tsx',{},undefined,'BookPicker'),tree=view.render({value:{id:'book',title:'Selected edition',author_name:'Writer',language:'fr',format:null,isbn_13:null,isbn_10:null},onChange:vi.fn()});expect(JSON.stringify(tree)).toContain('Selected edition');expect(JSON.stringify(tree)).toContain(fr.buddyReads.changeBook);expect(JSON.stringify(tree)).not.toContain('formats.null');
 });

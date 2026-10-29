@@ -35,3 +35,7 @@ it('rejects invalid buddy updates and submits chapter/note together under the au
   expect((await PATCH(request({current_chapter:5,note:' Shared note '}),{params:{id:room}})).status).toBe(200);
   expect(rpc).toHaveBeenCalledWith('update_buddy_progress',{p_actor_id:user,p_room_id:room,p_key:'buddy-route-intent',p_payload:{current_chapter:5,note:'Shared note'}});
 });
+
+it('rejects buddy progress from a changed account before performing database work',async()=>{
+  const response=await PATCH(new Request('https://app.test/api/buddy-reads/'+room+'/update',{method:'PATCH',headers:{'Content-Type':'application/json','Idempotency-Key':'buddy-owned-intent','X-Liravo-Actor':room},body:JSON.stringify({current_chapter:2})}),{params:{id:room}});expect(response.status).toBe(409);expect(rpc).not.toHaveBeenCalled();
+});

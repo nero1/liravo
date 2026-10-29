@@ -1845,5 +1845,31 @@
     "inactiveReader": "This reader account is inactive.",
     "viewOffers": "View ARC offers",
     "readerXp": "{count, number} XP"
+  },
+  "buddyReads": {
+    "title": "Buddy Reads",
+    "description": "Read a selected edition together with 2–5 readers, including you.",
+    "mine": "My buddy reads",
+    "open": "Open buddy reads",
+    "create": "Start a buddy read",
+    "name": "Group name",
+    "capacity": "Maximum readers (2–5)",
+    "startingChapter": "Starting chapter",
+    "empty": "No buddy reads here yet.",
+    "loadFailed": "Could not load buddy reads. Try again.",
+    "saveFailed": "Could not save. Retry with the same details.",
+    "refresh": "Refresh",
+    "view": "View group",
+    "book": "Choose an edition",
+    "selected": "Selected edition",
+    "changeBook": "Change edition",
+    "search": "Search by title, author or ISBN",
+    "noBooks": "No matching editions.",
+    "searchFailed": "Could not search books. Try again.",
+    "full": "This group is full.",
+    "membersOnly": "Join this group to read and post discussion notes.",
+    "notesFailed": "Could not load discussion notes. Try again.",
+    "replying": "Replying to {name}",
+    "cancelReply": "Cancel reply"
   }
 }

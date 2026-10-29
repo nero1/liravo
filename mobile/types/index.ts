@@ -182,17 +182,21 @@ export interface NotificationRow {
 export type {SocialFeedItem as FeedItem} from '../../src/lib/social-feed-contracts';
 
 export interface BuddyReadRow {
-  id: string;
-  title: string;
-  book_id: string;
-  organizer_id: string;
-  start_date: string;
-  end_date: string | null;
-  participant_count: number;
-  is_public: boolean;
-  created_at: string;
-  book?: Pick<BookRow, 'id' | 'title' | 'cover_url' | 'author_name'>;
+  id:string;title:string|null;book_id:string;created_by:string;created_at:string;
+  max_participants:number;current_chapter:number;is_active:boolean;is_private:boolean;
+  participant_count:number;is_member:boolean;can_join:boolean;can_update:boolean;
+  book:Pick<BookRow,'id'|'title'|'author_name'|'cover_url'|'isbn_13'|'isbn_10'|'language'|'format'>;
 }
+export interface BuddyReadDetail {
+  actorId:string;buddyRead:BuddyReadRow;book:BuddyReadRow['book'];
+  participants:Pick<UserRow,'id'|'username'|'display_name'|'avatar_url'>[];
+}
+export interface BuddyNote {
+  id:string;user_id:string;content:string;created_at:string;reply_to_id:string|null;
+  user?:Pick<UserRow,'username'|'display_name'|'avatar_url'>;
+}
+export interface BuddyReadPage {actorId:string;buddy_reads:BuddyReadRow[];nextCursor:string|null;}
+export interface BuddyNotePage {actorId:string;roomId:string;notes:BuddyNote[];nextCursor:string|null;}
 
 export interface ChallengeRow {
   id: string;

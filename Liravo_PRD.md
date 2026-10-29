@@ -570,6 +570,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 **Following system:** Follow any user or author. Suggested follows on sign-up.
 
 **Buddy reads:**
+- Public groups currently support 2–5 readers including the creator, edition search, participant-only paged discussion, replies and chapter updates on web/native in EN/FR/DE. Private invitations and expanded capacity below remain planned.
 - Invite one other user to read a book together.
 - Private discussion thread shared between participants.
 - Expandable to group reads (up to 20).

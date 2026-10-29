@@ -345,3 +345,20 @@ export interface ArcOffer {
 }
 export interface ArcApplication {id:string;arc_id:string;reader_id:string;status:ArcApplicationStatus;applied_at:string;reviewed_at:string|null;reader:{id:string;display_name:string;username:string;avatar_url:string|null;xp:number;active:boolean};}
 export interface ArcApplications {arc:ArcOffer;applications:ArcApplication[];statistics:{total:number;pending:number;approved:number;rejected:number};nextCursor:string|null;actorId:string;}
+
+export interface BuddyReadRow {
+  id:string;title:string|null;book_id:string;created_by:string;created_at:string;
+  max_participants:number;current_chapter:number;is_active:boolean;is_private:boolean;
+  participant_count:number;is_member:boolean;can_join:boolean;can_update:boolean;
+  book:Pick<BookRow,'id'|'title'|'author_name'|'cover_url'|'isbn_13'|'isbn_10'|'language'|'format'>;
+}
+export interface BuddyReadDetail {
+  actorId:string;buddyRead:BuddyReadRow;book:BuddyReadRow['book'];
+  participants:Pick<UserRow,'id'|'username'|'display_name'|'avatar_url'>[];
+}
+export interface BuddyNote {
+  id:string;user_id:string;content:string;created_at:string;reply_to_id:string|null;
+  user?:Pick<UserRow,'username'|'display_name'|'avatar_url'>;
+}
+export interface BuddyReadPage {actorId:string;buddy_reads:BuddyReadRow[];nextCursor:string|null;}
+export interface BuddyNotePage {actorId:string;roomId:string;notes:BuddyNote[];nextCursor:string|null;}

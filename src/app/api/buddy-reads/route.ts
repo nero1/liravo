@@ -1,5 +1,6 @@
+import {getBuddyReads,decodeBuddyCursor} from '@/lib/buddy-reads';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { awardXP } from '@/services/xp';
@@ -12,59 +13,20 @@ const createSchema = z.object({
   book_id: z.string().uuid(),
   title: z.string().trim().min(1).max(120).optional(),
   max_participants: z.number().int().min(2).max(5),
-  current_chapter: z.number().int().min(1).default(1),
+  current_chapter: z.number().int().min(1).max(100000).default(1),
 });
 
-export async function GET() {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Get buddy reads the user is part of, or open ones they can join
-  const { data: participating,error:membershipError } = await supabase
-    .from('buddy_read_members')
-    .select('buddy_read_id')
-    .eq('user_id', user.id);
-
-  if(membershipError)return NextResponse.json({error:'Membership unavailable'},{status:503});
-  const participatingIds = ((participating ?? []) as Array<{ buddy_read_id: string }>).map(
-    (p) => p.buddy_read_id
-  );
-
-  // Get buddy reads user is in
-  let myReads: unknown[] = [];
-  if (participatingIds.length > 0) {
-    const { data: myReadsData,error:readsError } = await supabase
-      .from('buddy_reads')
-      .select('id, title, book_id, max_participants, current_chapter, is_active, created_by, created_at')
-      .in('id', participatingIds)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-    if(readsError)return NextResponse.json({error:'Buddy reads unavailable'},{status:503});
-    myReads = myReadsData ?? [];
-  }
-
-  // Get open buddy reads user can join
-  const { data: openReads,error:openError } = await supabase
-    .from('buddy_reads')
-    .select('id, title, book_id, max_participants, current_chapter, is_active, created_by, created_at')
-    .eq('is_active', true)
-    .eq('is_private',false)
-    .order('created_at', { ascending: false })
-    .limit(20);
-
-  if(openError)return NextResponse.json({error:'Buddy reads unavailable'},{status:503});
-  const filteredOpen = ((openReads ?? []) as Array<{ id: string }>).filter(
-    (r) => !participatingIds.includes(r.id)
-  );
-
-  return NextResponse.json({
-    my_reads: myReads ?? [],
-    open_reads: filteredOpen,
-  });
+export async function GET(request:Request) {
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
+  const params=new URL(request.url).searchParams,scope=params.get('scope'),cursor=params.get('cursor');
+  if(scope!==null&&scope!=='mine'&&scope!=='open')return NextResponse.json({error:'Invalid catalog'},{status:400});
+  try{decodeBuddyCursor(cursor,user.id,scope??'mine');if(!scope&&cursor)throw Error();}catch{return NextResponse.json({error:'Invalid cursor'},{status:400});}
+  try{
+    if(scope)return NextResponse.json(await getBuddyReads(user.id,scope,cursor),{headers:{'Cache-Control':'private, no-store'}});
+    const [mine,open]=await Promise.all([getBuddyReads(user.id,'mine'),getBuddyReads(user.id,'open')]);
+    return NextResponse.json({my_reads:mine.buddy_reads,open_reads:open.buddy_reads,myNextCursor:mine.nextCursor,openNextCursor:open.nextCursor,actorId:user.id},{headers:{'Cache-Control':'private, no-store'}});
+  }catch{return NextResponse.json({error:'Buddy reads unavailable'},{status:503});}
 }
 
 export async function POST(req: Request) {
@@ -99,5 +61,5 @@ export async function POST(req: Request) {
   // Award XP for starting buddy read
   await awardXP(user.id, XP_CONFIG.START_BUDDY_READ, 'start_buddy_read', `buddy-read:${buddyRead.id}`);
 
-  return NextResponse.json({ buddyRead }, { status: 201 });
+  return NextResponse.json({ buddyRead,actorId:user.id }, { status: 201 });
 }
