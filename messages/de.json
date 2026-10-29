@@ -1664,5 +1664,47 @@
     "feedbackPlaceholder": "Gib konstruktives Feedback…",
     "sendFeedback": "Feedback senden",
     "feedbackSaved": "Feedback geteilt."
+  },
+  "writingProgress": {
+    "title": "Schreibfortschritt",
+    "description": "Deine Schreibstatistiken und Meilensteine.",
+    "words": "Geschriebene Wörter",
+    "prompts": "Abgeschlossene Schreibimpulse",
+    "challenges": "Abgeschlossene Challenges",
+    "critiques": "Workshop-Kritiken",
+    "streak": "Schreibserie",
+    "xp": "Gesamte XP",
+    "days": "{count, plural, one {# Tag} other {# Tage}}",
+    "weekly": "Wörter pro Woche (letzte 7 Wochen)",
+    "weeklyPeriod": "Wochen laufen von Montag bis Sonntag in UTC. Enthält Beiträge zu Schreibimpulsen und Challenges.",
+    "weekWords": "Woche ab {date}: {count, plural, one {# Wort} other {# Wörter}}",
+    "badges": "Schreibabzeichen",
+    "unearned": "Noch nicht verdient"
+  },
+  "writingResources": {
+    "title": "Wichtige Bücher für Schreibende",
+    "metadataTitle": "Wichtige Bücher für Schreibende — Liravo-Ressourcenbibliothek",
+    "description": "Ausgewählte Fachbücher, die dich in jeder Phase des Schreibens weiterbringen.",
+    "search": "Auf Liravo suchen",
+    "view": "Auf Liravo ansehen →",
+    "disclosure": "Einige Links können Affiliate-Links sein. Liravo erhält eine kleine Provision, ohne zusätzliche Kosten für dich.",
+    "sections": {
+      "craft": "Handwerk und Struktur",
+      "development": "Geschichtenentwicklung",
+      "grammar": "Grammatik und Stil",
+      "screenwriting": "Drehbuchschreiben"
+    },
+    "books": {
+      "9781439193600": "Ein Meister des Erzählens teilt sein Handwerk und sein Leben in einem unverzichtbaren Band.",
+      "9780060391683": "Ein maßgeblicher Leitfaden zur Erzählstruktur, den Drehbuchautoren weltweit nutzen.",
+      "9780385480017": "Anne Lamotts beliebter Ratgeber über Schreiben und Leben: warmherzig, humorvoll und unverzichtbar.",
+      "9780020130208": "Das zeitlose Handbuch für englischen Stil und Textgestaltung.",
+      "9781932907001": "Ein praktischer Drehbuchratgeber voller Techniken zur Strukturierung.",
+      "9780877733645": "Den inneren Autor durch Zen-Praxis und tägliche Schreibübungen befreien.",
+      "9780874776942": "Ein Weg zu mehr Kreativität durch Morgenseiten und Künstlertreffs.",
+      "9781592401277": "Ein strenger Blick auf Zeichensetzung, mit Witz und Leidenschaft erzählt.",
+      "9781936891023": "Schreibblockaden überwinden und innere kreative Kämpfe gewinnen.",
+      "9781594634727": "Kreativ leben ohne Angst: ein Manifest für ein Leben voller Neugier."
+    }
   }
 }

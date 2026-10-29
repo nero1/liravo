@@ -1,3 +1,4 @@
+import {useAuthStore} from '@/stores/auth';
 import {useTranslations} from '@/hooks/useTranslations';
 import { QueryError } from '@/components/ui/EmptyState';
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
@@ -18,8 +19,10 @@ interface ProgressData {
 
 export default function WritingProgressScreen() {
   const {t:ui,locale}=useTranslations('');
+  const owner=useAuthStore(state=>state.user?.id);
   const { data, isLoading,error,refetch } = useQuery({
-    queryKey: ['write', 'progress'],
+    queryKey: ['write', 'progress',owner],
+    enabled:!!owner,
     queryFn: () => api.get<ProgressData>(ENDPOINTS.write.progress),
   });
 

@@ -2162,5 +2162,35 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await sql`select bool_and(member_count=1) as correct from workshop_rooms where name like 'Catalog workshop 072 %'`)[0].correct).toBe(true);
     const {GET:catalog}=await import('@/app/api/write/workshops/route');let cursor:string|null=null;const found:string[]=[];do{const result=await catalog(new Request('https://app.test/workshops'+(cursor?'?cursor='+encodeURIComponent(cursor):''))),page=await result.json();expect(result.status).toBe(200);expect(page.rooms.length).toBeLessThanOrEqual(30);found.push(...page.rooms.map((item:any)=>item.id));cursor=page.nextCursor;}while(cursor);expect(new Set(found).size).toBe(found.length);expect(found).toHaveLength((await sql`select count(*)::int as count from workshop_rooms where is_active`)[0].count);
     }
+    {
+    const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'progress073@example.test','progress_073','Progress writer')`;
+    await sql`update users set reading_streak=27,writing_streak=3 where id=${owner}`;
+    const prompts=await sql`insert into writing_prompts(prompt_text,topic_seed,prompt_date,is_active) select 'Progress prompt 073 '||n,'Progress','1981-01-01'::date+n,false from generate_series(1,1105) n returning id`;
+    await sql`insert into writing_prompt_submissions(user_id,prompt_id,content,word_count,created_at) select ${owner},id,'Two words',2,date_trunc('week',now() at time zone 'UTC') at time zone 'UTC'-interval '1 second' from writing_prompts where id in ${sql(prompts.map(row=>row.id))}`;
+    const challenge=(await sql`insert into writing_challenges(title,type) values('Progress challenge 073','weekly') returning id`)[0].id;
+    await sql`insert into writing_challenge_submissions(user_id,challenge_id,content,word_count,submitted_at) values(${owner},${challenge},'A seven word entry for this challenge',7,date_trunc('week',now() at time zone 'UTC') at time zone 'UTC')`;
+    const room=(await sql`insert into workshop_rooms(name,facilitator_id,max_members) values('Progress workshop 073',${owner},8) returning id`)[0].id;
+    const drafts=await sql`insert into workshop_submissions(user_id,room_id,title,excerpt) values(${owner},${room},'Draft one','An excerpt'),(${owner},${room},'Draft two','Another excerpt') returning id`;
+    await sql`insert into workshop_feedback(user_id,submission_id,comment) values(${owner},${drafts[0].id},'A useful critique')`;
+    await sql`select award_badge_atomic(${owner},'first_draft',100,'First Draft','📝')`;
+    const progress=(await sql`select writing_progress_snapshot(${owner}) as snapshot`)[0].snapshot;
+    expect(progress).toMatchObject({total_words:2217,prompts_completed:1105,challenges_completed:1,workshop_critiques:1,writing_streak:3});
+    expect(progress.weekly_words).toHaveLength(7);expect(progress.weekly_words.slice(0,5).every((week:any)=>week.words===0)).toBe(true);expect(progress.weekly_words[5].words).toBe(2210);expect(progress.weekly_words[6].words).toBe(7);
+    expect(progress.badges).toEqual([expect.objectContaining({badge_id:'first_draft'})]);
+    const {GET:readProgress}=await import('@/app/api/write/progress/route');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);
+    const response=await readProgress(new Request('https://app.test/progress'));expect(response.status).toBe(200);expect(await response.json()).toEqual(progress);expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect((await readProgress(new Request('https://app.test/progress',{headers:{'X-Liravo-Actor':crypto.randomUUID()}}))).status).toBe(409);
+    vi.mocked(getCurrentUser).mockResolvedValue(null);expect((await readProgress(new Request('https://app.test/progress'))).status).toBe(401);
+    vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);
+    const known=(await sql`select id,isbn_13 from books where isbn_13 is not null and canonical_edition_id is null order by id limit 1`)[0];
+    const provider=vi.spyOn(globalThis,'fetch').mockRejectedValue(new Error('Providers offline'));
+    try{
+      const {GET:search}=await import('@/app/api/books/search/route');const response=await search(new Request('https://app.test/search?q='+known.isbn_13));
+      expect(response.status).toBe(200);expect(await response.json()).toMatchObject({source:'local',books:[{id:known.id,isbn_13:known.isbn_13}]});expect(provider).not.toHaveBeenCalled();
+    }finally{provider.mockRestore();}
+    await sql`update users set is_banned=true where id=${owner}`;expect((await sql`select writing_progress_snapshot(${owner}) as snapshot`)[0].snapshot).toBeNull();
+    vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);expect((await readProgress(new Request('https://app.test/progress'))).status).toBe(503);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

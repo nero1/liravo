@@ -535,7 +535,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 **Craft Resources Section:**
 - Curated reading lists of craft books: plotting, sentence-level writing, memoir, dialogue, screenwriting, etc.
-- All books in these lists are affiliate-linked.
+- Exact-ISBN book links use configured affiliate retailers when available; otherwise readers can search the catalog.
 - Community-sourced craft tips from established writers on the platform.
 
 **Writing Workshop Rooms:**
@@ -545,9 +545,9 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 - Created by any user with Newbie Writer or Author type.
 
 **Progress Tracking:**
-- Words written (self-reported per session, optionally extracted from submitted challenge responses).
+- Words written and completion counts come from all prompt/challenge submissions; workshop critiques count feedback, not drafts.
 - Challenge completions on profile.
-- Writing streak (separate from reading streak).
+- Writing streak (separate from reading streak), canonical writing badges and seven Monday–Sunday UTC word totals.
 
 **Ask a Writer:**
 - Newbie Writers post craft questions publicly.

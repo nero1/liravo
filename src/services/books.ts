@@ -129,9 +129,10 @@ export async function discoverOpenLibraryEditions(work:{open_library_id:string;t
   return {books,skipped:data.entries.length-books.length,nextOffset:data.entries.length===20&&offset+20<data.size&&offset+20<=100000?offset+20:null};
 }
 export async function searchBooks(query:string,maxResults=10){
-  const signal=AbortSignal.timeout(18000),googleVolumes=await searchGoogleBooks(query,maxResults,signal).catch(()=>[]);
-  const googleResults=googleVolumes.flatMap(volume=>{try{return [catalogBookData(googleVolumeToBookData(volume))];}catch{return [];}});
-  if(googleResults.length>=3)return googleResults;
+  const isbn10=normalizedIsbn(query,10),isbn=normalizedIsbn(query,13)??(isbn10?isbn13From10(isbn10):null);
+  const signal=AbortSignal.timeout(18000),googleVolumes=await searchGoogleBooks(isbn?'isbn:'+isbn:query,maxResults,signal).catch(()=>[]);
+  const googleResults=googleVolumes.flatMap(volume=>{try{const book=catalogBookData(googleVolumeToBookData(volume));return !isbn||book.isbn_13===isbn?[book]:[];}catch{return [];}});
+  if(googleResults.length>=3||(isbn&&googleResults.length))return googleResults;
   const olResults=await searchOpenLibrary(query,maxResults,signal).catch(error=>{if(googleResults.length)return [];throw error;});
   return [...googleResults,...olResults].slice(0,maxResults);
 }

@@ -1,5 +1,5 @@
 import {beforeEach,expect,it,vi} from 'vitest';
-import {googleVolumeToBookData,openLibraryEditionToBookData,searchOpenLibrary,discoverOpenLibraryEditions} from '@/services/books';
+import {googleVolumeToBookData,openLibraryEditionToBookData,searchOpenLibrary,searchBooks,discoverOpenLibraryEditions} from '@/services/books';
 import {fetchWithRetry} from '@/lib/retry';
 vi.mock('@/lib/retry',()=>({fetchWithRetry:vi.fn()}));
 vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
@@ -41,4 +41,13 @@ it('rejects oversized or malformed provider edition pages without advancing the 
     vi.mocked(fetchWithRetry).mockResolvedValue(Response.json(page));
     await expect(discoverOpenLibraryEditions({open_library_id:work.key,title:work.title,author_name:'Author'})).rejects.toThrow('Invalid editions page');
   }
+});
+
+it('filters Google ISBN results before choosing the exact Open Library edition',async()=>{
+  vi.mocked(fetchWithRetry).mockImplementation(async url=>Response.json(url.startsWith('https://www.googleapis.com/')?{items:Array.from({length:3},(_,n)=>({id:'wrong-isbn-'+n,volumeInfo:{title:'Unrelated book',industryIdentifiers:[{type:'ISBN_13',identifier:'9780141439518'}]}}))}:url.includes('/isbn/')?edition:url.includes('/authors/')?{name:'An author'}:{title:'A work'}));
+  const books=await searchBooks('0-306-40615-2');expect(books).toHaveLength(1);expect(books[0].isbn_13).toBe('9780306406157');expect(books[0].open_library_id).toBe('/books/OL1M');
+});
+it('uses an exact Google ISBN result without unnecessary provider fallback',async()=>{
+  vi.mocked(fetchWithRetry).mockResolvedValue(Response.json({items:[{id:'matching-isbn',volumeInfo:{title:'Exact edition',industryIdentifiers:[{type:'ISBN_10',identifier:'0306406152'}]}}]}));
+  expect((await searchBooks('9780306406157'))[0].isbn_13).toBe('9780306406157');expect(fetchWithRetry).toHaveBeenCalledTimes(1);expect(new URL(vi.mocked(fetchWithRetry).mock.calls[0][0]).searchParams.get('q')).toBe('isbn:9780306406157');
 });

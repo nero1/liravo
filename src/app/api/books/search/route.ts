@@ -20,10 +20,17 @@ export async function GET(request: Request) {
 
   const supabase = createServiceClient();
 
+  const columns='id,work_id,title,author_name,cover_url,published_year,google_books_id,isbn_10,isbn_13,publisher,language,edition_name,format';
+  if(normalizedIsbn(q,13)){
+    const {data:exact,error}=await supabase.from('books').select(columns).is('canonical_edition_id',null).eq('isbn_13',q).maybeSingle();
+    if(error)return NextResponse.json({error:'Book catalog unavailable'},{status:503});
+    if(exact)return NextResponse.json({books:[exact],source:'local'});
+  }
+
   // Search local DB first
   const { data: localBooks } = await supabase
     .from('books')
-    .select('id,work_id,title,author_name,cover_url,published_year,google_books_id,isbn_10,isbn_13,publisher,language,edition_name,format')
+    .select(columns)
     .is('canonical_edition_id',null)
     .textSearch('search_vector', q,{type:'websearch',config:'simple'})
     .limit(10);

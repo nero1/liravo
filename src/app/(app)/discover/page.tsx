@@ -312,7 +312,8 @@ function BookCard({ item }: { item: TrendingBook }) {
   );
 }
 
-export default async function DiscoverPage() {
+export default async function DiscoverPage({searchParams}:{searchParams?:{q?:string}}) {
+  const initialQuery=typeof searchParams?.q==='string'?searchParams.q.trim().slice(0,200):'';
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -343,7 +344,7 @@ export default async function DiscoverPage() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-8">
       <div>
         <h1 className="font-display text-2xl font-bold mb-4">Discover</h1>
-        <BookSearch />
+        <BookSearch key={initialQuery} initialQuery={initialQuery}/>
       </div>
 
       {/* Promoted Books */}

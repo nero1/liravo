@@ -1664,5 +1664,47 @@
     "feedbackPlaceholder": "Share constructive feedback…",
     "sendFeedback": "Send Feedback",
     "feedbackSaved": "Feedback shared."
+  },
+  "writingProgress": {
+    "title": "Writing Progress",
+    "description": "Your writing stats and milestones.",
+    "words": "Words Written",
+    "prompts": "Prompts Completed",
+    "challenges": "Challenges Completed",
+    "critiques": "Workshop Critiques",
+    "streak": "Writing Streak",
+    "xp": "Total XP",
+    "days": "{count, plural, one {# day} other {# days}}",
+    "weekly": "Weekly Words (last 7 weeks)",
+    "weeklyPeriod": "Weeks run Monday–Sunday in UTC. Includes prompt and challenge submissions.",
+    "weekWords": "Week of {date}: {count, plural, one {# word} other {# words}}",
+    "badges": "Writing Badges",
+    "unearned": "Not earned yet"
+  },
+  "writingResources": {
+    "title": "Essential Books for Writers",
+    "metadataTitle": "Essential Books for Writers — Liravo Resource Library",
+    "description": "Curated craft books to level up your writing at every stage.",
+    "search": "Search on Liravo",
+    "view": "View on Liravo →",
+    "disclosure": "Some links may be affiliate links. Liravo earns a small commission at no extra cost to you.",
+    "sections": {
+      "craft": "Craft & Structure",
+      "development": "Story Development",
+      "grammar": "Grammar & Style",
+      "screenwriting": "Screenwriting"
+    },
+    "books": {
+      "9781439193600": "A master storyteller shares his craft and life in one indispensable volume.",
+      "9780060391683": "The definitive guide to story structure, used by screenwriters worldwide.",
+      "9780385480017": "Anne Lamott’s beloved guide to writing and life — warm, funny, and essential.",
+      "9780020130208": "The timeless handbook of English style and composition.",
+      "9781932907001": "A practical guide to screenwriting, packed with structure techniques.",
+      "9780877733645": "Freeing the writer within through Zen practice and daily writing exercises.",
+      "9780874776942": "A spiritual path to higher creativity through morning pages and artist dates.",
+      "9781592401277": "A zero-tolerance approach to punctuation, told with wit and passion.",
+      "9781936891023": "Break through the blocks and win your inner creative battles.",
+      "9781594634727": "Creative living beyond fear — a manifesto for living a curiosity-driven life."
+    }
   }
 }

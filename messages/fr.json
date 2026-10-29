@@ -1664,5 +1664,47 @@
     "feedbackPlaceholder": "Proposez des commentaires constructifs…",
     "sendFeedback": "Envoyer les commentaires",
     "feedbackSaved": "Commentaires partagés."
+  },
+  "writingProgress": {
+    "title": "Progrès en écriture",
+    "description": "Vos statistiques et étapes en écriture.",
+    "words": "Mots écrits",
+    "prompts": "Exercices terminés",
+    "challenges": "Défis terminés",
+    "critiques": "Critiques en atelier",
+    "streak": "Série d’écriture",
+    "xp": "XP total",
+    "days": "{count, plural, one {# jour} other {# jours}}",
+    "weekly": "Mots par semaine (7 dernières semaines)",
+    "weeklyPeriod": "Les semaines vont du lundi au dimanche en UTC. Inclut les réponses aux exercices et les participations aux défis.",
+    "weekWords": "Semaine du {date} : {count, plural, one {# mot} other {# mots}}",
+    "badges": "Badges d’écriture",
+    "unearned": "Pas encore obtenu"
+  },
+  "writingResources": {
+    "title": "Livres essentiels pour écrire",
+    "metadataTitle": "Livres essentiels pour écrire — Bibliothèque de ressources Liravo",
+    "description": "Une sélection de livres pour progresser en écriture à chaque étape.",
+    "search": "Rechercher sur Liravo",
+    "view": "Voir sur Liravo →",
+    "disclosure": "Certains liens peuvent être affiliés. Liravo perçoit une petite commission sans frais supplémentaires pour vous.",
+    "sections": {
+      "craft": "Technique et structure",
+      "development": "Développement du récit",
+      "grammar": "Grammaire et style",
+      "screenwriting": "Écriture de scénarios"
+    },
+    "books": {
+      "9781439193600": "Un maître du récit partage son art et sa vie dans un ouvrage incontournable.",
+      "9780060391683": "Un guide de référence sur la structure du récit, utilisé par les scénaristes du monde entier.",
+      "9780385480017": "Le célèbre guide d’Anne Lamott sur l’écriture et la vie : chaleureux, drôle et essentiel.",
+      "9780020130208": "Un manuel intemporel de style et de composition en anglais.",
+      "9781932907001": "Un guide pratique du scénario, riche en techniques de structure.",
+      "9780877733645": "Libérer l’écrivain en soi grâce à la pratique zen et à des exercices quotidiens.",
+      "9780874776942": "Un chemin vers une créativité accrue grâce aux pages du matin et aux rendez-vous d’artiste.",
+      "9781592401277": "Une approche rigoureuse de la ponctuation, pleine d’esprit et de passion.",
+      "9781936891023": "Surmonter les blocages et remporter ses batailles créatives intérieures.",
+      "9781594634727": "Créer sans peur : un manifeste pour vivre guidé par la curiosité."
+    }
   }
 }

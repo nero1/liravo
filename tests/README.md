@@ -76,3 +76,5 @@ Notification suites cover owned boolean preferences, localized stored facts/badg
 Review rehearsals cover complete distribution/averages, cursor ties and edition aliases, hidden/inactive authors, concurrent inserts and catalog-score preservation. Legacy rating repair retains an audit snapshot; structured metadata tests verify safe HTML embedding and multilingual JSON round trips.
 
 Writing checks cover native workshop contracts/failure states, owned receipts and reopened prompt responses. PostgreSQL verifies workshop count repair, repeated/concurrent joins, private SQL/API access, cursor ties, owned recovery and browser write restrictions. Native receipts retain legacy keys while keeping long-entry persistence below the SecureStore size limit.
+
+Writing progress rehearsals cover more than 1,000 submissions, Sunday/Monday boundaries, empty weeks, challenge words, feedback versus draft counts, writing versus reading streaks, earned badges, account guards and private responses. ISBN checks reject unrelated Google results and resolve local editions with providers offline.

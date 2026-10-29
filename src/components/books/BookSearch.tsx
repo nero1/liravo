@@ -17,8 +17,8 @@ interface BookResult {
   isbn_10?:string;isbn_13?:string;publisher?:string;language?:string;format?:string;edition_name?:string;
 }
 
-export function BookSearch() {
-  const [query, setQuery] = useState('');
+export function BookSearch({initialQuery=''}:{initialQuery?:string}) {
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<BookResult[]>([]);
   const [loading, setLoading] = useState(false);
   const t=useTranslations('books'),common=useTranslations('common'),editionText=useTranslations('editions'),locale=useLocale(),[error,setError]=useState(false),[generation,setGeneration]=useState(0);

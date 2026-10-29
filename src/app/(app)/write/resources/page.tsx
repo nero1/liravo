@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import type { Metadata } from 'next';
+import {getTranslations} from 'next-intl/server';
+import {languageAlternates} from '@/lib/metadata';
 import type { BookRow } from '@/types/database';
 import {AffiliateLinkButtons} from '@/components/books/AffiliateLinkButtons';
 import type {AffiliateLink} from '@/services/books';
@@ -9,98 +10,82 @@ import { buildAffiliateLinks } from '@/services/books';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: 'Essential Books for Writers — Liravo Resource Library',
-  description:
-    'A curated selection of the best craft books for writers: storytelling, grammar, structure, memoir, and more.',
-};
+export async function generateMetadata(){const t=await getTranslations('writingResources');return {title:t('metadataTitle'),description:t('description'),alternates:languageAlternates('/write/resources')};}
 
 const WRITING_BOOKS = [
   {
     isbn: '9781439193600',
     title: 'On Writing',
     author: 'Stephen King',
-    description: 'A master storyteller shares his craft and life in one indispensable volume.',
-    section: 'Craft & Structure',
+    section: 'craft',
   },
   {
     isbn: '9780060391683',
     title: 'Story',
     author: 'Robert McKee',
-    description: 'The definitive guide to story structure, used by screenwriters worldwide.',
-    section: 'Craft & Structure',
+    section: 'craft',
   },
   {
     isbn: '9780385480017',
     title: 'Bird by Bird',
     author: 'Anne Lamott',
-    description: "Anne Lamott's beloved guide to writing and life — warm, funny, and essential.",
-    section: 'Craft & Structure',
+    section: 'craft',
   },
   {
     isbn: '9780020130208',
     title: 'The Elements of Style',
     author: 'William Strunk Jr. & E.B. White',
-    description: 'The timeless handbook of English style and composition.',
-    section: 'Grammar & Style',
+    section: 'grammar',
   },
   {
     isbn: '9781932907001',
     title: 'Save the Cat',
     author: 'Blake Snyder',
-    description: 'The last book on screenwriting you will ever need — packed with structure secrets.',
-    section: 'Screenwriting',
+    section: 'screenwriting',
   },
   {
     isbn: '9780877733645',
     title: 'Writing Down the Bones',
     author: 'Natalie Goldberg',
-    description: 'Freeing the writer within through Zen practice and daily writing exercises.',
-    section: 'Craft & Structure',
+    section: 'craft',
   },
   {
     isbn: '9780874776942',
     title: "The Artist's Way",
     author: 'Julia Cameron',
-    description: 'A spiritual path to higher creativity through morning pages and artist dates.',
-    section: 'Story Development',
+    section: 'development',
   },
   {
     isbn: '9781592401277',
     title: 'Eats, Shoots & Leaves',
     author: 'Lynne Truss',
-    description: 'A zero-tolerance approach to punctuation, told with wit and passion.',
-    section: 'Grammar & Style',
+    section: 'grammar',
   },
   {
     isbn: '9781936891023',
     title: 'The War of Art',
     author: 'Steven Pressfield',
-    description: 'Break through the blocks and win your inner creative battles.',
-    section: 'Story Development',
+    section: 'development',
   },
   {
     isbn: '9781594634727',
     title: 'Big Magic',
     author: 'Elizabeth Gilbert',
-    description: 'Creative living beyond fear — a manifesto for living a curiosity-driven life.',
-    section: 'Story Development',
+    section: 'development',
   },
 ];
 
 const SECTION_ORDER = [
-  'Craft & Structure',
-  'Story Development',
-  'Grammar & Style',
-  'Screenwriting',
-  'Memoir & Non-fiction',
+  'craft',
+  'development',
+  'grammar',
+  'screenwriting',
 ];
 
 interface BookWithLinks {
   isbn: string;
   title: string;
   author: string;
-  description: string;
   section: string;
   dbBook: BookRow | null;
   affiliateLinks:AffiliateLink[];
@@ -108,6 +93,7 @@ interface BookWithLinks {
 
 export default async function ResourceLibraryPage() {
   const supabase = createClient();
+  const t=await getTranslations('writingResources'),writing=await getTranslations('writing');
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -117,10 +103,11 @@ export default async function ResourceLibraryPage() {
 
   // Look up books in DB by ISBN
   const isbns = WRITING_BOOKS.map((b) => b.isbn);
-  const { data: dbBooks } = await supabase
+  const { data: dbBooks,error:booksError } = await supabase
     .from('books')
     .select('*')
     .in('isbn_13', isbns);
+  if(booksError)throw new Error('Resource books unavailable');
 
   const dbBookByIsbn = new Map<string, BookRow>(
     (dbBooks ?? []).map((b) => [b.isbn_13 ?? '', b])
@@ -150,13 +137,13 @@ export default async function ResourceLibraryPage() {
     <div className="max-w-3xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="font-display text-2xl font-bold">Essential Books for Writers</h1>
+          <h1 className="font-display text-2xl font-bold">{t('title')}</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Curated craft books to level up your writing at every stage.
+            {t('description')}
           </p>
         </div>
         <Link href="/write" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Write Hub
+          {writing('writeHub')}
         </Link>
       </div>
 
@@ -164,7 +151,7 @@ export default async function ResourceLibraryPage() {
         const sectionBooks = booksWithLinks.filter((b) => b.section === section);
         return (
           <div key={section} className="mb-10">
-            <h2 className="font-display text-lg font-semibold mb-4 border-b pb-2">{section}</h2>
+            <h2 className="font-display text-lg font-semibold mb-4 border-b pb-2">{t(`sections.${section}`)}</h2>
             <div className="space-y-4">
               {sectionBooks.map((book) => {
                 const primaryLink = book.affiliateLinks.find((l) => l.isPrimary);
@@ -193,25 +180,25 @@ export default async function ResourceLibraryPage() {
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold">{book.title}</h3>
                       <p className="text-sm text-muted-foreground">{book.author}</p>
-                      <p className="text-sm mt-1 leading-relaxed">{book.description}</p>
+                      <p className="text-sm mt-1 leading-relaxed">{t(`books.${book.isbn}`)}</p>
 
                       <div className="flex items-center gap-3 mt-3">
                         {buyLink&&book.dbBook ? (
                           <AffiliateLinkButtons links={[buyLink]} bookId={book.dbBook.id} userId={user.id}/>
                         ) : (
                           <Link
-                            href={`/discover?q=${encodeURIComponent(book.title)}`}
+                            href={`/discover?q=${encodeURIComponent(book.isbn)}`}
                             className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
                           >
-                            Search on Liravo
+                            {t('search')}
                           </Link>
                         )}
                         {book.dbBook && (
                           <Link
-                            href={`/books/${book.dbBook.id}`}
+                            href={`/book/${book.dbBook.id}`}
                             className="text-sm text-amber-600 hover:underline"
                           >
-                            View on Liravo →
+                            {t('view')}
                           </Link>
                         )}
                       </div>
@@ -225,7 +212,7 @@ export default async function ResourceLibraryPage() {
       })}
 
       <p className="text-xs text-muted-foreground text-center mt-6">
-        Some links may be affiliate links. Liravo earns a small commission at no extra cost to you.
+        {t('disclosure')}
       </p>
     </div>
   );
