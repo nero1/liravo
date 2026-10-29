@@ -1,31 +1,34 @@
+import {useState} from 'react';
+import {View,Text,FlatList,Alert,Linking} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useLocalSearchParams,useRouter} from 'expo-router';
+import {useInfiniteQuery,useMutation,useQueryClient} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useRequestIntent} from '@/hooks/useRequestIntent';
 import {useTranslations} from '@/hooks/useTranslations';
-import { View, Text, FlatList, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { Button } from '@/components/ui/Button';
-import { BookCard } from '@/components/books/BookCard';
-
-export default function ListDetailScreen() {
-  const {t:ui}=useTranslations('');
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const qc = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ['list', id], queryFn: () => api.get<{ list: any; books: any[] }>(ENDPOINTS.lists.byId(id!)), enabled: !!id });
-  const follow = useMutation({ mutationFn: () => api.post(ENDPOINTS.lists.follow(id!)), onSuccess: () => qc.invalidateQueries({ queryKey: ['list', id] }), onError: (err) => Alert.alert('Error', (err as Error).message) });
-  const list = data?.list;
-  const books = data?.books ?? [];
-  if (isLoading || !list) return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <View className="px-4 py-3 border-b border-border gap-1">
-        <Text className="text-xl font-bold text-foreground">{list.title}</Text>
-        <Text className="text-sm text-muted-foreground">{list.book_count} books · {list.follower_count}{ui('profile.followers')}</Text>
-        {list.description && <Text className="text-muted-foreground text-sm">{list.description}</Text>}
-        <Button onPress={() => follow.mutate()} loading={follow.isPending} variant="outline" size="sm" style={{ marginTop: 8, alignSelf: 'flex-start' }}>Follow List</Button>
-      </View>
-      <FlatList data={books} keyExtractor={(b) => b.id} renderItem={({ item }) => <View className="px-4 py-3 border-b border-border"><BookCard book={item} compact /></View>} contentContainerStyle={{ paddingBottom: 24 }} />
-    </SafeAreaView>
-  );
+import {Button} from '@/components/ui/Button';
+import {Input} from '@/components/ui/Input';
+import {QueryError,EmptyState} from '@/components/ui/EmptyState';
+import {BookPicker,type SelectedBook} from '@/components/books/BookPicker';
+import {SelectedEdition} from '@/components/books/SelectedEdition';
+import type {ReadingListDetail,ListRow} from '@/types';
+export default function ListDetailScreen(){const {id}=useLocalSearchParams<{id:string}>(),owner=useAuthStore(state=>state.user?.id);return <NativeListDetail key={owner+':'+id} id={id??''} owner={owner}/>;}
+export function NativeListDetail({id,owner}:{id:string;owner:string|undefined}){
+  const {t}=useTranslations('readingLists'),{t:common}=useTranslations('common'),router=useRouter(),qc=useQueryClient(),intent=useRequestIntent(owner),[selected,setSelected]=useState<SelectedBook|null>(null),[editing,setEditing]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState('');
+  const query=useInfiniteQuery({queryKey:['list',owner,id],enabled:!!owner&&!!id,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<ReadingListDetail>('/api/lists/'+id,pageParam?{cursor:pageParam}:{},signal);if(data.actorId!==owner||data.list?.id!==id)throw Error('Invalid list');return data;},getNextPageParam:page=>page.nextCursor}),list=query.data?.pages[0]?.list;
+  type Action={kind:'follow'|'fork'|'add'|'remove'|'update'|'delete';bookId?:string;following?:boolean;isPublic?:boolean};
+  const change=useMutation({mutationFn:async(action:Action)=>{const headers={'X-Liravo-Actor':owner??''},path='/api/lists/'+id;let result:{actorId?:string;listId?:string;sourceId?:string;following?:boolean;list?:ListRow;bookId?:string;deleted?:boolean};
+    if(action.kind==='fork')result=await api.post(path+'/fork',{},await intent.durableHeaders({listId:id},'list.fork.'+id));
+    else if(action.kind==='follow')result=action.following?await api.post(path+'/follow',undefined,headers):await api.delete(path+'/follow',headers);
+    else if(action.kind==='add')result=await api.post(path+'/books',{book_id:action.bookId},headers);
+    else if(action.kind==='remove')result=await api.delete(path+'/books?book_id='+encodeURIComponent(action.bookId!),headers);
+    else if(action.kind==='delete')result=await api.delete(path,headers);
+    else result=await api.patch(path,action.isPublic===undefined?{name:name.trim(),description:description.trim()}:{is_public:action.isPublic},headers);
+    if(result.actorId!==owner||(action.kind==='fork'?result.sourceId!==id||!result.list?.id||result.list.user_id!==owner:result.listId!==id)||(action.kind==='follow'&&result.following!==action.following)||(action.kind==='delete'&&!result.deleted)||(['add','remove'].includes(action.kind)&&result.bookId!==action.bookId)||(['add','remove','update'].includes(action.kind)&&result.list?.user_id!==owner))throw Error('Invalid list receipt');
+    if(action.kind==='fork')await intent.complete('list.fork.'+id);return {action,result};
+  },onSuccess:({action,result})=>{if(useAuthStore.getState().user?.id!==owner)return;void qc.invalidateQueries({queryKey:['lists']});if(action.kind==='fork'){router.push('/lists/'+result.list!.id);return;}if(action.kind==='delete'){router.replace('/lists');return;}if(action.kind==='add')setSelected(null);if(action.kind==='update')setEditing(false);void query.refetch();},onError:()=>Alert.alert(common('error'),t('saveFailed'))});
+  if(!list)return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>{query.isError?<QueryError error={query.error} retry={()=>void query.refetch()}/>:<Text className="p-4 text-muted-foreground">{common('loading')}</Text>}</SafeAreaView>;
+  const own=list.user_id===owner;
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={query.data?.pages.flatMap(page=>page.books)??[]} keyExtractor={book=>book.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:16}} ListHeaderComponent={<View className="gap-3"><Text accessibilityRole="header" className="text-xl font-bold text-foreground">{list.name}</Text>{!!list.description&&<Text className="text-muted-foreground">{list.description}</Text>}<Text className="text-muted-foreground">{t('books',{count:list.book_count})} · {t('followers',{count:list.follower_count})} · {t(list.is_public?'publicLabel':'private')}</Text>{query.data?.pages[0]?.bulkSearchUrl&&<Button variant="outline" onPress={()=>void Linking.openURL(query.data!.pages[0].bulkSearchUrl!).catch(()=>Alert.alert(common('error'),t('saveFailed')))}>{t('bulkSearch')}</Button>}{!own&&<><Button disabled={change.isPending} onPress={()=>change.mutate({kind:'follow',following:!list.is_following})}>{t(list.is_following?'unfollow':'follow')}</Button>{list.is_public&&<Button disabled={change.isPending} onPress={()=>change.mutate({kind:'fork'})}>{t('fork')}</Button>}</>}{own&&<><Button disabled={change.isPending} onPress={()=>{setName(list.name);setDescription(list.description??'');setEditing(!editing);}}>{t('edit')}</Button>{editing&&<><Input label={t('name')} value={name} onChangeText={setName} maxLength={100} editable={!change.isPending}/><Input label={t('details')} value={description} onChangeText={setDescription} maxLength={500} multiline editable={!change.isPending}/><Button disabled={change.isPending||!name.trim()} onPress={()=>change.mutate({kind:'update'})}>{t('save')}</Button></>}<Button variant="outline" disabled={change.isPending} onPress={()=>change.mutate({kind:'update',isPublic:!list.is_public})}>{t(list.is_public?'private':'publicLabel')}</Button><BookPicker value={selected} onChange={setSelected} disabled={change.isPending} label={t('add')}/><Text className="text-sm text-muted-foreground">{t('bookHelp')}</Text><Button disabled={!selected||change.isPending} onPress={()=>change.mutate({kind:'add',bookId:selected!.id})}>{t('add')}</Button><Button variant="outline" disabled={change.isPending} onPress={()=>Alert.alert(t('delete'),t('confirmDelete'),[{text:common('cancel'),style:'cancel'},{text:t('delete'),style:'destructive',onPress:()=>change.mutate({kind:'delete'})}])}>{t('delete')}</Button></>}</View>} renderItem={({item:book})=><View className="border-b border-border pb-3 gap-2"><SelectedEdition book={book}/><Button variant="outline" onPress={()=>router.push('/book/'+book.id)}>{t('buy')}</Button>{own&&<Button variant="outline" disabled={change.isPending} onPress={()=>change.mutate({kind:'remove',bookId:book.id})}>{t('remove')}</Button>}</View>} ListEmptyComponent={query.isError?null:<EmptyState title={t('emptyBooks')}/>} ListFooterComponent={<View className="gap-3">{query.isError&&<QueryError error={query.error} retry={()=>void query.refetch()}/>} {query.hasNextPage&&<Button loading={query.isFetchingNextPage} onPress={()=>void query.fetchNextPage()}>{common('loadMore')}</Button>}<Button variant="outline" loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></View>}/></SafeAreaView>;
 }

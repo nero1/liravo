@@ -388,3 +388,13 @@ export interface ReadingRoomPage {actorId:string;rooms:ReadingRoom[];nextCursor:
 export interface ReadingRoomDetail {actorId:string;room:ReadingRoom;participants:RoomParticipant[];participantsNextCursor:string|null;}
 export interface RoomMilestonePage {actorId:string;roomId:string;milestones:RoomMilestone[];nextCursor:string|null;serverNow:string;total:number;}
 export interface RoomPostPage {actorId:string;roomId:string;posts:RoomPost[];nextCursor:string|null;}
+
+export interface ReadingList {
+  id:string;user_id:string;name:string;description:string|null;is_public:boolean;created_at:string;updated_at:string;
+  book_count:number;follower_count:number;is_following:boolean;
+}
+export interface ReadingListBook {
+  id:string;title:string;author_name:string;cover_url:string|null;isbn_10:string|null;isbn_13:string|null;language:string;format:BookRow['format'];added_at:string;
+}
+export interface ReadingListPage {lists:ReadingList[];nextCursor:string|null;actorId:string;}
+export interface ReadingListDetail {list:ReadingList;books:ReadingListBook[];nextCursor:string|null;actorId:string|null;bulkSearchUrl:string|null;}

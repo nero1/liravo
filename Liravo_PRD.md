@@ -492,7 +492,7 @@ The affiliate store system must be designed so new stores can be added by admin 
 - Other users can follow (get notified of additions) or fork (copy to their own lists).
 - Every book in a list carries its appropriate buy link (affiliate or non-affiliate fallback as per Section 7.4).
 - "Buy all on Amazon" bulk CTA for lists where all books are Amazon-available.
-- Lists have SEO-friendly public URLs.
+- Lists have SEO-friendly public URLs. Web/native EN/FR/DE screens share complete own/followed catalogs, paged editions, counts, follow state and owner editing. Retained aliases display once; different editions of a work stay separate. Creation/copy retries retain owned receipts. Bulk searches use configured regional Amazon stores for complete ISBN lists up to 10 editions.
 
 ---
 

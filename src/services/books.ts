@@ -195,7 +195,7 @@ function identifiedLink(link:Omit<AffiliateLink,'linkId'>,identity:string):Affil
   const hash=createHash('sha256').update(JSON.stringify([link.country,link.storeVersion,link.name,link.url,link.isAffiliate,link.isPrimary])).digest('hex');
   return {...link,linkId:identity+':'+hash};
 }
-export async function buildAffiliateLinks(book:BookRow,country?:string,locale?:string):Promise<AffiliateLink[]>{
+export async function buildAffiliateLinks(book:Pick<BookRow,'title'|'isbn_13'|'isbn_10'>,country?:string,locale?:string):Promise<AffiliateLink[]>{
   const region=country&&/^[A-Za-z]{2}$/.test(country)?country.toUpperCase():LOCALE_TO_COUNTRY[locale??'']??'US';
   const {data:stores,error}=await createServiceClient().from('affiliate_stores').select('*').eq('is_active',true).order('priority',{ascending:true});
   if(error)throw new Error('Book stores unavailable');

@@ -286,7 +286,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
 
       {/* Affiliate buy links */}
       {affiliateLinks.length > 0 && (
-        <div className="mb-5">
+        <div id="buy-links" className="mb-5">
           <AffiliateLinkButtons links={affiliateLinks} bookId={params.id} userId={user.id}/>
         </div>
       )}

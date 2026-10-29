@@ -214,17 +214,14 @@ export interface ChallengeRow {
 }
 
 export interface ListRow {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string | null;
-  is_public: boolean;
-  book_count: number;
-  follower_count: number;
-  created_at: string;
-  updated_at: string;
-  user?: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url'>;
+  id:string;user_id:string;name:string;description:string|null;is_public:boolean;created_at:string;updated_at:string;
+  book_count:number;follower_count:number;is_following:boolean;
 }
+export interface ReadingListBook {
+  id:string;title:string;author_name:string;cover_url:string|null;isbn_10:string|null;isbn_13:string|null;language:string;format:BookRow['format'];added_at:string;
+}
+export interface ReadingListPage {lists:ListRow[];nextCursor:string|null;actorId:string;}
+export interface ReadingListDetail {list:ListRow;books:ReadingListBook[];nextCursor:string|null;actorId:string|null;bulkSearchUrl:string|null;}
 
 export interface WritingPromptRow {
   id: string;

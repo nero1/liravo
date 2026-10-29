@@ -63,3 +63,17 @@ it('rejects invisible sanitized content, overflow pages and malformed JSON befor
 it('rejects unsafe author proof links before creating a verification request',async()=>{
   const response=await requestVerification(new Request('https://app.test/verification',{method:'POST',body:JSON.stringify({pen_name:'Writer',book_titles:'Published book',website_url:'javascript:alert(1)'})}));expect(response.status).toBe(400);expect(rpc).not.toHaveBeenCalled();
 });
+
+it('binds list cursors to actor, list and scope and fails closed on unavailable snapshots',async()=>{
+  const {decodeListCursor,getReadingLists}=await import('@/lib/reading-lists'),cursor=Buffer.from(JSON.stringify({actorId:user,scope:'mine',at:'2026-01-01T00:00:00Z',id:room})).toString('base64url');expect(decodeListCursor(cursor,user,'mine')).toMatchObject({actorId:user});expect(()=>decodeListCursor(cursor,room,'mine')).toThrow('Invalid cursor');expect(()=>decodeListCursor(cursor,user,'followed')).toThrow('Invalid cursor');rpc.mockResolvedValue({error:{code:'XX000'},data:null});await expect(getReadingLists(user,'mine')).rejects.toMatchObject({status:503});
+});
+it('rejects changed actors and malformed list edits/books before database writes',async()=>{
+  const {PATCH:edit}=await import('@/app/api/lists/[id]/route'),{POST:add}=await import('@/app/api/lists/[id]/books/route'),{POST:follow}=await import('@/app/api/lists/[id]/follow/route'),{POST:fork}=await import('@/app/api/lists/[id]/fork/route');
+  for(const route of [edit,add,follow,fork])expect((await route(new Request('https://app.test/lists/'+room,{method:'POST',headers:{'Content-Type':'application/json','X-Liravo-Actor':room},body:'{}'}) as never,{params:{id:room}})).status).toBe(409);
+  for(const body of [{},{name:' '},{user_id:room},{is_public:'true'}])expect((await edit(new Request('https://app.test/lists/'+room,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}) as never,{params:{id:room}})).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
+});
+
+it('builds bulk searches only for complete ISBN lists and a configured regional Amazon store',async()=>{
+  const {bulkListSearchLink}=await import('@/lib/reading-lists'),books=[{isbn_13:'9780140328721'},{isbn_13:'9780439064873'}] as never,link={url:'https://www.amazon.de/s?k=9780140328721&tag=configured-partner',storeId:room} as import('@/services/books').AffiliateLink;
+  const url=new URL(bulkListSearchLink(books,2,[link])!);expect(url.hostname).toBe('www.amazon.de');expect(url.searchParams.get('k')).toBe('9780140328721 9780439064873');expect(url.searchParams.get('tag')).toBe('configured-partner');for(const [total,rows,links] of [[3,books,[link]],[11,books,[link]],[2,[{isbn_13:null},{isbn_13:'9780439064873'}],[link]],[2,books,[{...link,url:'https://www.amazon.de.attacker.test/s?k=x'}]],[2,books,[{...link,storeId:null}]]])expect(bulkListSearchLink(rows as never,total as number,links as never)).toBeNull();
+});
