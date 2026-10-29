@@ -231,6 +231,8 @@ export interface WritingPromptRow {
 }
 
 export interface WritingChallengeRow {
+  goal_type:'word_count'|'submission_count';
+  goal_value:number;
   id: string;
   title: string;
   description: string | null;

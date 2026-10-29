@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/ui/EmptyState';
 import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,18 +14,19 @@ import type { WritingChallengeRow } from '@/types';
 export default function WritingChallengesScreen() {
   const {t:ui}=useTranslations('');
   const router = useRouter();
-  const { data, isLoading } = useQuery({ queryKey: ['write', 'challenges'], queryFn: () => api.get<{ challenges: WritingChallengeRow[] }>(ENDPOINTS.write.challenges) });
+  const { data, isLoading,error,refetch } = useQuery({ queryKey: ['write', 'challenges'], queryFn: () => api.get<{ challenges: WritingChallengeRow[] }>(ENDPOINTS.write.challenges) });
   const challenges = data?.challenges ?? [];
+  if(error)return <QueryError error={error} retry={()=>void refetch()}/>;
   if (isLoading) return <LoadingSpinner />;
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <FlatList data={challenges} keyExtractor={(c) => c.id} renderItem={({ item }) => (
-        <TouchableOpacity className="px-4 py-4 border-b border-border gap-1" onPress={() => router.push(`/write/challenges/${item.id}`)} activeOpacity={0.7}>
+        <TouchableOpacity accessibilityRole="button" className="px-4 py-4 border-b border-border gap-1" onPress={() => router.push(`/write/challenges/${item.id}`)} activeOpacity={0.7}>
           <View className="flex-row items-center gap-2"><Text className="font-semibold text-foreground flex-1">{item.title}</Text>{item.is_premium && <Badge variant="accent">{ui('premium.premium')}</Badge>}</View>
           {item.description && <Text className="text-sm text-muted-foreground" numberOfLines={2}>{item.description}</Text>}
-          <Text className="text-xs text-accent">{item.xp_reward} XP{item.word_limit ? ` · ${item.word_limit} word limit` : ''}</Text>
+          <Text className="text-xs text-accent">{ui('writing.xpCount',{count:item.xp_reward})}{item.goal_value?' · '+ui(item.goal_type==='word_count'?'writing.goalWords':'writing.goalSubmissions',{count:item.goal_value}):''}</Text>
         </TouchableOpacity>
-      )} ListEmptyComponent={<EmptyState title="No writing challenges" />} contentContainerStyle={{ paddingBottom: 24 }} />
+      )} ListEmptyComponent={<EmptyState title={ui('writing.noChallenges')}/>} contentContainerStyle={{ paddingBottom: 24 }} />
     </SafeAreaView>
   );
 }

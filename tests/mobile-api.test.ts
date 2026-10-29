@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -140,13 +141,16 @@ it('restores native financial keys from secure storage across remounts and omits
   const code=ts.transpileModule(readFileSync('mobile/hooks/useRequestIntent.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
   runInNewContext(code,{exports,require:(name:string)=>{
     if(name==='react')return {useRef:(current:unknown)=>({current})};
-    if(name==='expo-secure-store')return {getItemAsync:async(key:string)=>saved.get(key)??null,setItemAsync:async(key:string,value:string)=>{saved.set(key,value);},deleteItemAsync:async(key:string)=>{saved.delete(key);}};
+    if(name==='expo-secure-store')return {getItemAsync:async(key:string)=>saved.get(key)??null,setItemAsync:async(key:string,value:string)=>{expect(Buffer.byteLength(value,'utf8')).toBeLessThan(2048);saved.set(key,value);},deleteItemAsync:async(key:string)=>{saved.delete(key);}};
+    if(name==='expo-crypto')return {CryptoDigestAlgorithm:{SHA256:'SHA256'},digestStringAsync:async(_algorithm:string,value:string)=>createHash('sha256').update(value).digest('hex')};
     throw new Error('Unexpected dependency');
   }});
   const payload={amount:'5',currency:'USD',pin:'2468'},first=exports.useRequestIntent!('reader-a');
   const key=(await first.durableHeaders(payload,'payout:USD'))['Idempotency-Key'];
   const restored=exports.useRequestIntent!('reader-a');expect((await restored.durableHeaders({...payload,pin:'1357'},'payout:USD'))['Idempotency-Key']).toBe(key);
-  const record=JSON.parse(saved.get('financial.reader-a.payout_USD')!);expect(JSON.parse(record.payload)).toEqual({amount:'5',currency:'USD'});
+  const record=JSON.parse(saved.get('financial.reader-a.payout_USD')!);expect(record).not.toHaveProperty('payload');expect(record.fingerprint).toBe(createHash('sha256').update(JSON.stringify({amount:'5',currency:'USD'})).digest('hex'));
+  const longBody={body:'😀'.repeat(50000)},longIntent=exports.useRequestIntent!('reader-a');await longIntent.durableHeaders(longBody,'long-draft');expect(saved.get('financial.reader-a.long-draft')!.length).toBeLessThan(300);
+  saved.set('financial.reader-a.legacy-draft',JSON.stringify({payload:JSON.stringify({body:'Legacy text'}),key:'legacy-writing-intent-key'}));expect((await exports.useRequestIntent!('reader-a').durableHeaders({body:'Legacy text'},'legacy-draft'))['Idempotency-Key']).toBe('legacy-writing-intent-key');expect(JSON.parse(saved.get('financial.reader-a.legacy-draft')!)).not.toHaveProperty('payload');
   expect((await exports.useRequestIntent!('reader-b').durableHeaders(payload,'payout:USD'))['Idempotency-Key']).not.toBe(key);
   await restored.complete('payout:USD');expect(saved.has('financial.reader-a.payout_USD')).toBe(false);
 });

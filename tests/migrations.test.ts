@@ -34,11 +34,16 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
+    let legacyWorkshop:{id:string;owner:string}|undefined;
     let legacyRating:string|undefined;
     let legacyNotification:{owner:string;badge:string;goal:string}|undefined;
     let legacyEditions:{owner:string;ids:string[];reviewId:string}|undefined;
     let legacyImport:{owner:string;rows:unknown[];response:unknown}|undefined;
     for (const file of migrations) {
+      if(file.startsWith('072_')){
+        const owner=legacyNotification!.owner,id=(await sql`insert into workshop_rooms(name,facilitator_id,max_members,member_count) values('Legacy workshop 072',${owner},8,1) returning id`)[0].id;
+        expect((await sql`select member_count from workshop_rooms where id=${id}`)[0].member_count).toBe(2);legacyWorkshop={id,owner};
+      }
       if(file.startsWith('071_')){
         const owner=legacyNotification!.owner;legacyRating=(await sql`insert into books(title,author_name,average_rating,ratings_count) values('Legacy mixed ratings 071','Author',4.6,100) returning id`)[0].id;
         await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status) values(${owner},${legacyRating!},5,'Legacy cached review','short','published')`;
@@ -2120,6 +2125,42 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     await sql`select award_badge_atomic(${actor},'first_book',50,'First Book','📖')`;const {getEarnedBadges}=await import('@/services/badges');expect(await getEarnedBadges(actor)).toContainEqual({id:'first_book',name:'First Book',icon:'📖'});
     const {GET:profile}=await import('@/app/api/users/[id]/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);const profileData=await(await profile(new Request('https://app.test/api/users/review_reader_071'),{params:{id:'review_reader_071'}})).json();expect(profileData.user.badges).toContainEqual({id:'first_book',name:'First Book',icon:'📖'});
     for(const role of ['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'book_review_snapshot(uuid,integer,integer,timestamptz,uuid)','EXECUTE') as allowed`)[0].allowed).toBe(false);expect((await sql`select has_function_privilege('service_role','store_catalog_book_066(jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const {id:room,owner}=legacyWorkshop!,other=crypto.randomUUID();await sql`select create_direct_account(${other},'workshop_other072@example.test','workshop_other072','Other writer')`;
+    expect((await sql`select member_count from workshop_rooms where id=${room}`)[0].member_count).toBe(1);
+    await sql`update workshop_rooms set member_count=999 where id=${room}`;expect((await sql`select member_count from workshop_rooms where id=${room}`)[0].member_count).toBe(1);
+    const peers=Array.from({length:4},()=>crypto.randomUUID());for(const [n,id] of peers.entries())await sql`select create_direct_account(${id},${'workshop_peer072_'+n+'@example.test'},${'workshop_peer072_'+n},'Peer writer')`;
+    await Promise.all(peers.flatMap(id=>Array.from({length:2},()=>sql`select join_content_group(${id},'workshop',${room})`)));
+    expect((await sql`select member_count from workshop_rooms where id=${room}`)[0].member_count).toBe(5);
+    expect((await sql`select count(*)::int as count from workshop_members where room_id=${room}`)[0].count).toBe(5);
+    const submissions=await sql`insert into workshop_submissions(user_id,room_id,title,excerpt,created_at) select ${owner},${room},'Draft 072 '||n,'A useful writing excerpt '||n,'2026-10-29T00:00:00.123456Z'::timestamptz from generate_series(1,45) n returning id`;
+    for(const [n,id] of [owner,...peers].entries())await sql`insert into workshop_feedback(user_id,submission_id,comment,created_at) values(${id},${submissions[0].id},${'Feedback 072 '+n},'2026-10-29T00:00:00.123456Z'::timestamptz)`;
+    const {GET:metadata}=await import('@/app/api/write/workshops/[id]/route'),{GET:drafts}=await import('@/app/api/write/workshops/[id]/submissions/route'),{GET:feedback}=await import('@/app/api/write/workshops/[id]/submissions/[submissionId]/feedback/route');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:other} as never);for(const handler of [metadata,drafts])expect((await handler(new Request('https://app.test/workshop'),{params:{id:room}})).status).toBe(403);
+    expect((await feedback(new Request('https://app.test/workshop'),{params:{id:room,submissionId:submissions[0].id}})).status).toBe(403);
+    await sql.begin(async tx=>{await tx`set local role authenticated`;await tx`select set_config('request.jwt.claim.sub',${other},true)`;expect(await tx`select id from workshop_submissions where room_id=${room}`).toHaveLength(0);expect(await tx`select id from workshop_feedback where submission_id=${submissions[0].id}`).toHaveLength(0);});
+    vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);
+    const summary=await(await metadata(new Request('https://app.test/workshop?summary=1'),{params:{id:room}})).json();expect(summary).toMatchObject({actorId:owner,room:{id:room,member_count:5}});expect(summary).not.toHaveProperty('submissions');expect(summary.room).not.toHaveProperty('request_hash');
+    const collect=async(handler:typeof drafts|typeof feedback,params:{id:string;submissionId:string},key:'submissions'|'feedback')=>{let cursor:string|null=null;const found:string[]=[];do{const result:Response=await handler(new Request('https://app.test/workshop'+(cursor?'?cursor='+encodeURIComponent(cursor):'')),{params}),data:Record<string,any>=await result.json();expect(result.status).toBe(200);expect(data[key].length).toBeLessThanOrEqual(20);found.push(...data[key].map((row:any)=>row.id));cursor=data.nextCursor;}while(cursor);expect(found).toHaveLength(key==='submissions'?45:5);expect(new Set(found).size).toBe(key==='submissions'?45:5);};
+    await collect(drafts,{id:room,submissionId:submissions[0].id},'submissions');await collect(feedback,{id:room,submissionId:submissions[0].id},'feedback');
+    const foreign=(await sql`insert into workshop_rooms(name,facilitator_id,max_members) values('Other workshop 072',${owner},8) returning id`)[0].id;
+    expect((await feedback(new Request('https://app.test/workshop'),{params:{id:foreign,submissionId:submissions[0].id}})).status).toBe(404);
+    expect((await drafts(new Request('https://app.test/workshop?cursor=broken'),{params:{id:room}})).status).toBe(400);
+    const changed=new Request('https://app.test/workshop',{headers:{'X-Liravo-Actor':other}});expect((await metadata(changed,{params:{id:room}})).status).toBe(409);expect((await drafts(changed,{params:{id:room}})).status).toBe(409);
+    const {applyWritingIntent}=await import('@/lib/writing-intents');await expect(applyWritingIntent(changed,owner,'join',room,{})).rejects.toMatchObject({status:409});
+    for(const role of ['anon','authenticated'])for(const table of ['workshop_rooms','workshop_members'])for(const privilege of ['INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
+    const prompt=(await sql`insert into writing_prompts(prompt_text,topic_seed,prompt_date,is_active) values('Recovery prompt 072','Recovery','1972-01-01',true) returning id`)[0].id;
+    await sql`select apply_writing_intent(${owner},'prompt',${prompt},'recover-prompt-072',${sql.json({content:'A useful prompt response '.repeat(4).trim()})})`;
+    const {GET:readPrompt}=await import('@/app/api/write/prompts/[id]/route');const response=await readPrompt(new Request('https://app.test/prompt'),{params:{id:prompt}}),owned=await response.json();expect(response.status).toBe(200);expect(owned).toMatchObject({actorId:owner,submission:{user_id:owner,content:'A useful prompt response '.repeat(4).trim()}});expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:other} as never);expect((await(await readPrompt(new Request('https://app.test/prompt'),{params:{id:prompt}})).json()).submission).toBeNull();
+    const challenge=(await sql`insert into writing_challenges(title,type,start_date,end_date,is_active) values('Recovery challenge 072','weekly',now()-interval '1 day',now()+interval '1 day',true) returning id`)[0].id;
+    await sql`select apply_writing_intent(${owner},'challenge',${challenge},'recover-entry-072',${sql.json({title:'Owned draft',content:'A recovered challenge entry'})})`;
+    const {GET:readChallenge}=await import('@/app/api/write/challenges/[id]/route');vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);expect((await(await readChallenge(new Request('https://app.test/challenge'),{params:{id:challenge}})).json()).entry).toMatchObject({user_id:owner,title:'Owned draft',content:'A recovered challenge entry'});
+    vi.mocked(getCurrentUser).mockResolvedValue({id:other} as never);expect((await(await readChallenge(new Request('https://app.test/challenge'),{params:{id:challenge}})).json()).entry).toBeNull();vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);
+    for(let n=0;n<35;n++)await sql`insert into workshop_rooms(name,facilitator_id,max_members,member_count) values(${'Catalog workshop 072 '+n},${owner},8,500)`;
+    expect((await sql`select bool_and(member_count=1) as correct from workshop_rooms where name like 'Catalog workshop 072 %'`)[0].correct).toBe(true);
+    const {GET:catalog}=await import('@/app/api/write/workshops/route');let cursor:string|null=null;const found:string[]=[];do{const result=await catalog(new Request('https://app.test/workshops'+(cursor?'?cursor='+encodeURIComponent(cursor):''))),page=await result.json();expect(result.status).toBe(200);expect(page.rooms.length).toBeLessThanOrEqual(30);found.push(...page.rooms.map((item:any)=>item.id));cursor=page.nextCursor;}while(cursor);expect(new Set(found).size).toBe(found.length);expect(found).toHaveLength((await sql`select count(*)::int as count from workshop_rooms where is_active`)[0].count);
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

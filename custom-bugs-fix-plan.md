@@ -52,6 +52,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Persist and enforce notification preferences; translate stored messages and push delivery.
 - ✅ Preserve the selected language when creating email/social accounts.
 - ✅ Show earned badges consistently on owned and public profiles.
+- ✅ Translate native writing and workshop screens; repair workshop contracts, counters, pagination and retry handling.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

@@ -74,3 +74,5 @@ Paid-ticket tests cover fixed product pricing, owned checkout/session persistenc
 Notification suites cover owned boolean preferences, localized stored facts/badge names, independent release-email opt-in and Expo error receipts. PostgreSQL rehearses legacy backfill, category opt-outs, restricted browser writes, individual read ownership and outbox replay/context cleanup. Push transports are mocked; physical-device delivery remains unverified.
 
 Review rehearsals cover complete distribution/averages, cursor ties and edition aliases, hidden/inactive authors, concurrent inserts and catalog-score preservation. Legacy rating repair retains an audit snapshot; structured metadata tests verify safe HTML embedding and multilingual JSON round trips.
+
+Writing checks cover native workshop contracts/failure states, owned receipts and reopened prompt responses. PostgreSQL verifies workshop count repair, repeated/concurrent joins, private SQL/API access, cursor ties, owned recovery and browser write restrictions. Native receipts retain legacy keys while keeping long-entry persistence below the SecureStore size limit.

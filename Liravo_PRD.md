@@ -539,6 +539,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 - Community-sourced craft tips from established writers on the platform.
 
 **Writing Workshop Rooms:**
+- Membership counters follow actual membership. Member-only drafts/feedback use bounded pages; each member can leave one feedback entry per draft. Web/native create and join through the shared atomic API.
 - Small groups (max 8) read and critique each other's writing submissions.
 - Structured feedback format enforced: What worked / What to improve / One specific suggestion.
 - Created by any user with Newbie Writer or Author type.

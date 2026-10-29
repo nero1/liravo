@@ -121,6 +121,8 @@ export const ENDPOINTS = {
     workshops: '/api/write/workshops',
     workshopById: (id: string) => `/api/write/workshops/${id}`,
     joinWorkshop: (id: string) => `/api/write/workshops/${id}/join`,
+    workshopSubmissions:(id:string)=>`/api/write/workshops/${id}/submissions`,
+    workshopFeedback:(id:string,submissionId:string)=>`/api/write/workshops/${id}/submissions/${submissionId}/feedback`,
   },
   // Author
   author: {
