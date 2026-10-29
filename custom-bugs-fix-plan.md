@@ -62,6 +62,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Repair native review/quote/shelf and author-verification forms, selected-edition context, owned recovery and EN/FR/DE labels.
 - ✅ Repair web/native list creation, catalogs, detail paging, edition management and follow/fork controls against verified API contracts.
 - ✅ Expose owned moderation actions/history and general appeals, translate web/native appeal queues and recover owned submission/decision receipts.
+- ✅ Correct XP/helpfulness leaderboard periods, privacy, country isolation, vote cast times, UTC archives and web/native translations.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

@@ -825,7 +825,7 @@ Earned badge IDs and localized names are shared across owned/public web and nati
 - Top referrers by confirmed sign-ups (monthly)
 - Top referrers by commission earned (monthly)
 
-Leaderboards refresh nightly via cron.
+Current XP and helpfulness views support UTC weekly/monthly/all-time filters, privacy and EN/FR/DE on web/native. Period XP uses net ledger changes; reader levels use lifetime XP. Live rankings use authoritative snapshots; the daily cron archives the public weekly XP top 100.
 
 ### 9.5 Reading Streaks
 

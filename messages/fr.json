@@ -374,7 +374,18 @@
     "monthly": "Mensuel",
     "allTime": "Tout le temps",
     "helpfulVotes": "{count, plural, one {# vote utile} other {# votes utiles}}",
-    "reviews": "{count, plural, one {# critique} other {# critiques}}"
+    "reviews": "{count, plural, one {# critique} other {# critiques}}",
+    "empty": "Aucun classement n’est disponible pour le moment.",
+    "loadFailed": "Impossible de charger le classement.",
+    "refresh": "Actualiser",
+    "topLimit": "Les {count, number} premiers",
+    "periodHelp": "Les semaines commencent le lundi. Les périodes suivent l’heure UTC ; les totaux d’XP incluent les annulations.",
+    "reviewerHelp": "Classement selon les votes utiles actuels sur les critiques visibles, datés dans la période sélectionnée.",
+    "ratedReviews": "{count, plural, one {# critique jugée utile} other {# critiques jugées utiles}}",
+    "countryRequired": "Indiquez votre pays pour afficher le classement national.",
+    "setCountry": "Choisir le pays",
+    "since": "Depuis le {date} (UTC)",
+    "lifetimeLevel": "Niveau de lecture cumulé"
   },
   "common": {
     "loading": "Chargement...",

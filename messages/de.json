@@ -374,7 +374,18 @@
     "monthly": "Monatlich",
     "allTime": "Gesamtzeit",
     "helpfulVotes": "{count, plural, one {# hilfreiche Stimme} other {# hilfreiche Stimmen}}",
-    "reviews": "{count, plural, one {# Rezension} other {# Rezensionen}}"
+    "reviews": "{count, plural, one {# Rezension} other {# Rezensionen}}",
+    "empty": "Noch keine Ranglisten verfügbar.",
+    "loadFailed": "Die Rangliste konnte nicht geladen werden.",
+    "refresh": "Aktualisieren",
+    "topLimit": "Top {count, number}",
+    "periodHelp": "Wochen beginnen am Montag. Zeiträume verwenden UTC; XP-Summen enthalten Rückbuchungen.",
+    "reviewerHelp": "Sortiert nach aktuellen Hilfreich-Stimmen zu sichtbaren Rezensionen aus dem gewählten Zeitraum.",
+    "ratedReviews": "{count, plural, one {# als hilfreich bewertete Rezension} other {# als hilfreich bewertete Rezensionen}}",
+    "countryRequired": "Lege dein Land fest, um nationale Ranglisten zu sehen.",
+    "setCountry": "Land festlegen",
+    "since": "Seit {date} (UTC)",
+    "lifetimeLevel": "Gesamte Lesestufe"
   },
   "common": {
     "loading": "Laden...",

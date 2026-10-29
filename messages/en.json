@@ -374,7 +374,18 @@
     "monthly": "Monthly",
     "allTime": "All Time",
     "helpfulVotes": "{count, plural, one {# helpful vote} other {# helpful votes}}",
-    "reviews": "{count, plural, one {# review} other {# reviews}}"
+    "reviews": "{count, plural, one {# review} other {# reviews}}",
+    "empty": "No rankings are available yet.",
+    "loadFailed": "The leaderboard could not be loaded.",
+    "refresh": "Refresh",
+    "topLimit": "Top {count, number}",
+    "periodHelp": "Weeks start on Monday. Periods use UTC; XP totals include reversals.",
+    "reviewerHelp": "Ranked by current helpful votes on visible reviews, dated within the selected period.",
+    "ratedReviews": "{count, plural, one {# review rated helpful} other {# reviews rated helpful}}",
+    "countryRequired": "Set your country to see national rankings.",
+    "setCountry": "Set country",
+    "since": "From {date} (UTC)",
+    "lifetimeLevel": "Lifetime reader level"
   },
   "common": {
     "loading": "Loading...",

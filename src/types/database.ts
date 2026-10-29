@@ -403,3 +403,8 @@ export interface AppealAction {id:string;content_type:'review'|'quote'|'profile'
 export interface AppealRow {id:string;user_id:string;report_id:string|null;reason:string;content_type:string|null;status:'pending'|'approved'|'rejected';created_at:string;reviewer_note:string|null;reviewed_at:string|null;user:{username:string;display_name:string};action:AppealAction|null;can_review:boolean;}
 export interface AppealPage {appeals:AppealRow[];nextCursor:string|null;actorId:string;}
 export interface AppealActionPage {actions:AppealAction[];nextCursor:string|null;actorId:string;}
+
+export type LeaderboardType='global'|'national'|'friends'|'reviewers';
+export type LeaderboardPeriod='weekly'|'monthly'|'alltime';
+export interface LeaderboardEntry {rank:number;id:string;username:string;display_name:string;avatar_url:string|null;xp:number;lifetime_xp:number;level_title:string;level_min:number;helpful_votes:number;review_count:number;}
+export interface LeaderboardPage {leaderboard:LeaderboardEntry[];type:LeaderboardType;period:LeaderboardPeriod;periodStart:string|null;periodEnd:string|null;country:string|null;generatedAt:string;actorId:string|null;limit:number;}
