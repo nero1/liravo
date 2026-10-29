@@ -414,11 +414,13 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         ];
         for(const page of pages) expect(await page.default({searchParams:{}})).toBeTruthy();
       } finally { queryGuard.mockRestore(); }
+      const originalWriter=(await sql`select is_verified_author from users where id=${recipient}`)[0].is_verified_author;await sql`update users set is_verified_author=true where id=${recipient}`;
       const answerRequest = new Request('https://app.test/api/content',{headers:{'Idempotency-Key':'answer-intent-key'}});
       const answerPayload = {question_id:questionId,answer:'A sufficiently detailed answer.'};
       await (await contentIntent(answerRequest,recipient,'ask_writer_answers',answerPayload)).insert();
       await (await contentIntent(answerRequest,recipient,'ask_writer_answers',answerPayload)).insert();
       expect((await sql`select answer_count from ask_writer_questions where id=${questionId}`)[0].answer_count).toBe(1);
+      await sql`update users set is_verified_author=${originalWriter} where id=${recipient}`;
     } finally {
       vi.unstubAllEnvs();
     }
@@ -495,7 +497,9 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await sql`select community_votes from writing_challenge_submissions where id=${entryId}`)[0].community_votes).toBe(0);
     await expect(sql`select apply_writing_intent(${sender},'vote',${entryId},'writing-self-vote','{"voted":true}')`).rejects.toThrow('own submission');
     const [bestQuestion]=await sql`insert into ask_writer_questions(user_id,question) values(${sender},'Which writing technique works best?') returning id`;
+    const originalWriters=await sql`select id,is_verified_author from users where id in(${recipient},${referred})`;await sql`update users set is_verified_author=true where id in(${recipient},${referred})`;
     const bestCandidates=await sql`insert into ask_writer_answers(user_id,question_id,answer) values(${recipient},${bestQuestion.id},'First useful answer for testing.'),(${referred},${bestQuestion.id},'Second useful answer for testing.') returning id,user_id`;
+    for(const writer of originalWriters)await sql`update users set is_verified_author=${writer.is_verified_author} where id=${writer.id}`;
     const bestOutcomes=await Promise.allSettled(bestCandidates.map(answer=>sql`select apply_writing_intent(${sender},'best_answer',${bestQuestion.id},${'best-answer-key-'+answer.id},${sql.json({answer_id:answer.id})})`));
     expect(bestOutcomes.filter(result=>result.status==='fulfilled')).toHaveLength(1);
     const [selectedAnswer]=await sql`select best_answer_id from ask_writer_questions where id=${bestQuestion.id}`;
@@ -2256,6 +2260,53 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     for(const role of ['anon','authenticated']){
       for(const table of ['author_books','author_work_claims','author_catalog_intents'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
       for(const routine of ['set_author_work_claim(uuid,uuid,uuid,boolean,text)','author_owns_book(uuid,uuid)','author_catalog_snapshot(uuid,timestamptz,uuid,integer)','book_authors_snapshot(uuid)','author_analytics_snapshot(uuid)','followed_author_books(uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    const owner=crypto.randomUUID(),writer=crypto.randomUUID(),novice=crypto.randomUUID(),inactive=crypto.randomUUID(),inactiveOwner=crypto.randomUUID();
+    for(const [n,id] of [owner,writer,novice,inactive,inactiveOwner].entries())await sql`select create_direct_account(${id},${'writer075_'+n+'@example.test'},${'writer075_'+n},'Question writer')`;
+    await sql`update users set is_verified_author=true where id in(${writer},${inactive})`;await sql`update users set user_types=array['author'] where id=${novice}`;
+    const questions=await sql`insert into ask_writer_questions(user_id,question,tags,created_at) select ${owner},'Writer pagination question 075 '||n,array['craft'],'2026-10-29T00:00:00.123456Z' from generate_series(1,45)n returning id`;
+    const target=questions[0].id,answers=await sql`insert into ask_writer_answers(user_id,question_id,answer,created_at) select ${writer},${target},'A useful detailed writing answer '||n,'2026-10-29T00:00:00.123456Z' from generate_series(1,45)n returning id`;
+    const hidden=(await sql`insert into ask_writer_answers(user_id,question_id,answer) values(${inactive},${target},'A response from a now inactive author') returning id`)[0].id;
+    await sql`update users set is_banned=true where id=${inactive}`;
+    await expect(sql`select apply_writing_intent(${owner},'best_answer',${target},'writer075-hidden-best',${sql.json({answer_id:hidden})})`).rejects.toThrow('Answer unavailable');
+    const chosen=answers.map(row=>row.id).sort()[0],selection=(await sql`select apply_writing_intent(${owner},'best_answer',${target},'writer075-best-replay',${sql.json({answer_id:chosen})}) as result`)[0].result;expect(selection.ok).toBe(true);
+    await sql`select apply_writing_intent(${owner},'best_answer',${target},'writer075-best-replay',${sql.json({answer_id:chosen})})`;
+    expect((await sql`select count(*)::int as n from notifications where user_id=${writer} and entity_id=${target} and message_key='writerBestAnswer'`)[0].n).toBe(1);
+    expect((await sql`select count(*)::int as n from xp_ledger where event_key=${'best-answer:'+target}`)[0].n).toBe(1);
+    const {getWriterThread,getWriterQuestions}=await import('@/lib/writer-questions');
+    const first=await getWriterThread(target,owner);expect(first).toMatchObject({actorId:owner,isOwner:true,canAnswer:false,question:{answer_count:45},bestAnswer:{id:chosen}});expect(first!.answers).toHaveLength(20);
+    let cursor:string|null=null;const found:string[]=[];do{const page=await getWriterThread(target,owner,cursor);expect(page!.answers.length).toBeLessThanOrEqual(20);expect(page!.bestAnswer!.id).toBe(chosen);found.push(...page!.answers.map(row=>row.id));cursor=page!.nextCursor;}while(cursor);expect(found).toHaveLength(44);expect(new Set([...found,chosen]).size).toBe(45);expect(found).not.toContain(hidden);
+    expect((await getWriterThread(target,novice))!.canAnswer).toBe(false);
+    vi.mocked(getCurrentUser).mockResolvedValue({id:novice} as never);
+    const {POST:answer}=await import('@/app/api/write/questions/[id]/answer/route'),{GET:read}=await import('@/app/api/write/questions/[id]/route'),{GET:list,POST:ask}=await import('@/app/api/write/questions/route');
+    const answerRequest=(key:string,body:unknown={answer:'An API answer with enough detail'},actor=novice)=>new Request('https://app.test/answer',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'X-Liravo-Actor':actor},body:JSON.stringify(body)});
+    expect((await answer(answerRequest('writer075-novice-answer'),{params:{id:target}})).status).toBe(403);
+    await expect(sql`insert into ask_writer_answers(user_id,question_id,answer) values(${novice},${target},'Role selection must not grant answering rights')`).rejects.toThrow('Verified author');
+    await sql`update users set xp=1000 where id=${novice}`;expect((await answer(answerRequest('writer075-boundary-answer'),{params:{id:target}})).status).toBe(403);
+    await sql`update users set xp=1001 where id=${novice}`;expect((await getWriterThread(target,novice))!.canAnswer).toBe(true);
+    expect((await answer(answerRequest('writer075-account-mismatch',undefined,writer),{params:{id:target}})).status).toBe(409);
+    expect((await answer(answerRequest('writer075-blank-answer',{answer:' '.repeat(30)}),{params:{id:target}})).status).toBe(422);
+    const before=(await sql`select count(*)::int as n from notifications where user_id=${owner} and entity_id=${target} and message_key='writerAnswer'`)[0].n;
+    const response=await answer(answerRequest('writer075-answer-replay'),{params:{id:target}}),saved=await response.json();expect(response.status).toBe(201);expect(saved).toMatchObject({actorId:novice,answer:{user_id:novice,question_id:target,author:{id:novice}}});
+    const replay=await answer(answerRequest('writer075-answer-replay'),{params:{id:target}});expect((await replay.json()).answer.id).toBe(saved.answer.id);
+    expect((await sql`select count(*)::int as n from notifications where user_id=${owner} and entity_id=${target} and message_key='writerAnswer'`)[0].n).toBe(before+1);
+    await sql`update users set notify_replies=false where id=${owner}`;expect((await answer(answerRequest('writer075-optout-answer'),{params:{id:target}})).status).toBe(201);
+    expect((await sql`select count(*)::int as n from notifications where user_id=${owner} and entity_id=${target} and message_key='writerAnswer'`)[0].n).toBe(before+1);
+    expect((await read(new Request('https://app.test/question?cursor='+encodeURIComponent(first!.nextCursor!)),{params:{id:questions[1].id}})).status).toBe(400);
+    for(const url of ['?page=bad','?page=2','?filter=bad','?cursor=bad'])expect((await list(new Request('https://app.test/questions'+url))).status).toBe(400);
+    const all=await getWriterQuestions('all');expect(all.nextCursor).toBeTruthy();expect((await list(new Request('https://app.test/questions?filter=unanswered&cursor='+encodeURIComponent(all.nextCursor!)))).status).toBe(400);
+    for(const filter of ['all','unanswered','most_answered'] as const){let cursor:string|null=null;const ids:string[]=[];let expected=0;do{const page=await getWriterQuestions(filter,cursor);expected=page.total;expect(page.questions.length).toBeLessThanOrEqual(20);if(filter==='unanswered')expect(page.questions.every(row=>row.answer_count===0)).toBe(true);ids.push(...page.questions.map(row=>row.id));cursor=page.nextCursor;}while(cursor);expect(ids).toHaveLength(expected);expect(new Set(ids).size).toBe(expected);expect(ids).toContain(questions[1].id);}
+    const hiddenQuestion=(await sql`insert into ask_writer_questions(user_id,question) values(${inactiveOwner},'A question by a now inactive writer') returning id`)[0].id;
+    await sql`update users set deleted_at=now() where id=${inactiveOwner}`;
+    expect(await getWriterThread(hiddenQuestion,writer)).toBeNull();vi.mocked(getCurrentUser).mockResolvedValue({id:writer} as never);expect((await read(new Request('https://app.test/question'),{params:{id:hiddenQuestion}})).status).toBe(404);
+    expect((await answer(answerRequest('writer075-inactive-question',undefined,writer),{params:{id:hiddenQuestion}})).status).toBe(404);
+    expect((await ask(new Request('https://app.test/questions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'writer075-invalid-question'},body:JSON.stringify({question:' '.repeat(20),tags:[]})}))).status).toBe(422);
+    vi.mocked(getCurrentUser).mockResolvedValue(null);const publicRead=await read(new Request('https://app.test/question'),{params:{id:target}});expect(publicRead.status).toBe(200);expect(await publicRead.json()).toMatchObject({actorId:null,isOwner:false,canAnswer:false});expect(publicRead.headers.get('Cache-Control')).toBe('private, no-store');
+    for(const role of ['anon','authenticated']){
+      for(const table of ['ask_writer_questions','ask_writer_answers'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['writer_question_catalog(text,jsonb,integer)','writer_question_thread(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }

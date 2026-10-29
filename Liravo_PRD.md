@@ -552,8 +552,9 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 **Ask a Writer:**
 - Newbie Writers post craft questions publicly.
-- Any verified Author or experienced Newbie Writer can respond.
-- Best answer marked by the asker.
+- Verified authors and members with more than 1,000 XP can answer; selecting the Author profile type alone does not qualify.
+- Web/native expose complete question and answer pages. The asker chooses one final best answer, which stays pinned.
+- Replies notify the asker; best-answer decisions notify the writer. Both respect reply preferences and link to the thread.
 
 **Writing Resource Library:**
 - Standalone page linking to the best craft books across genres and writing types.

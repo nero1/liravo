@@ -80,3 +80,5 @@ Writing checks cover native workshop contracts/failure states, owned receipts an
 Writing progress rehearsals cover more than 1,000 submissions, Sunday/Monday boundaries, empty weeks, challenge words, feedback versus draft counts, writing versus reading streaks, earned badges, account guards and private responses. ISBN checks reject unrelated Google results and resolve local editions with providers offline.
 
 Author-work checks cover legacy repair/audits, staff-only grants, coauthors, edition aliases/work merges, complete catalog pagination, full analytics, wrong-name denial, SQL/API write protection and replay-safe revocation. Native tests cover all catalog pages, failure states and owned ARC receipts; release email tests reject absent/unavailable ownership.
+
+Writer-thread rehearsals cover complete question filters, 45 visible answers, cursor ties/scope, pinned best answers, inactive accounts, verified-author/XP boundaries, owned receipts, one-time rewards/notifications and opt-outs. Native tests cover thread navigation, eligibility and acknowledgement ownership; shared notification tests validate translated facts and safe question links.

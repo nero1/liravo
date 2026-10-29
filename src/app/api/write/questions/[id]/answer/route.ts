@@ -1,76 +1,19 @@
-import { contentIntent, ContentIntentError } from '@/lib/content-intents';
-import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { awardXP } from '@/services/xp';
-import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-
-export const dynamic = 'force-dynamic';
-
-const AnswerSchema = z.object({
-  answer: z.string().min(20).max(5000),
-});
-
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  // Check eligibility: must be author, verified_author, or have XP > 1000
-  const { data: profile } = await supabase
-    .from('users')
-    .select('is_verified_author, user_types, xp')
-    .eq('id', user.id)
-    .single();
-
-  const isAuthor = profile?.user_types?.includes('author') ?? false;
-  const isVerifiedAuthor = profile?.is_verified_author ?? false;
-  const hasHighXP = (profile?.xp ?? 0) > 1000;
-
-  if (!isAuthor && !isVerifiedAuthor && !hasHighXP) {
-    return NextResponse.json(
-      {
-        error:
-          'You must be an author or have more than 1000 XP to answer questions.',
-      },
-      { status: 403 }
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-
-  const parsed = AnswerSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
-  }
-
-  // Check question exists
-  const { data: question } = await supabase
-    .from('ask_writer_questions')
-    .select('id, answer_count')
-    .eq('id', params.id)
-    .single();
-
-  if (!question) return NextResponse.json({ error: 'Question not found' }, { status: 404 });
-
-  let answer;
-  try {
-    const intent = await contentIntent(req, user.id, 'ask_writer_answers', { question_id: params.id, answer: parsed.data.answer });
-    answer = await intent.insert();
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Content creation unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
-  }
-
-  // Award 10 XP for answering
-  await awardXP(user.id, 10, 'answer_question', `answer:${answer.id}`);
-
-  return NextResponse.json({ answer }, { status: 201 });
+import {awardXP} from '@/services/xp';
+import {contentIntent,ContentIntentError} from '@/lib/content-intents';
+import {createServiceClient} from '@/lib/supabase/server';
+import {NextResponse} from 'next/server';
+import {z} from 'zod';
+import {getCurrentUser} from '@/lib/auth/getCurrentUser';
+export const dynamic='force-dynamic';
+const schema=z.object({answer:z.string().trim().min(20).max(5000)}).strict();
+export async function POST(request:Request,{params}:{params:{id:string}}){
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid question'},{status:400});
+  const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:'Invalid answer'},{status:422});
+  const {data:profile,error}=await createServiceClient().from('users').select('id,username,display_name,avatar_url,is_verified_author,xp').eq('id',user.id).is('deleted_at',null).eq('is_banned',false).maybeSingle();
+  if(error)return NextResponse.json({error:'Writer profile unavailable'},{status:503});
+  if(!profile||(!profile.is_verified_author&&profile.xp<=1000))return NextResponse.json({error:'Verified author or more than 1000 XP required'},{status:403});
+  try{const intent=await contentIntent(request,user.id,'ask_writer_answers',{question_id:params.id,answer:parsed.data.answer}),answer=await intent.insert();await awardXP(user.id,10,'answer_question',`answer:${answer.id}`);return NextResponse.json({answer:{...answer,author:{id:profile.id,username:profile.username,display_name:profile.display_name,avatar_url:profile.avatar_url,is_verified_author:profile.is_verified_author}},actorId:user.id},{status:201,headers:{'Cache-Control':'private, no-store'}});}
+  catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Answer unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
 }

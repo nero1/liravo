@@ -1544,7 +1544,9 @@
       "tip": "Nouveau pourboire",
       "badge": "Badge obtenu",
       "activity": "Nouvelle notification"
-    }
+    },
+    "writerAnswer": "{name} a répondu à votre question d’écriture : {content}",
+    "writerBestAnswer": "{name} a choisi votre réponse comme meilleure réponse : {content}"
   },
   "badgeNames": {
     "first_book": "Premier livre",
@@ -1778,5 +1780,33 @@
     "wantCount": "{count, number} souhaitent le lire",
     "readCount": "{count, number} l’ont lu",
     "catalogRating": "Note du catalogue : {rating}"
+  },
+  "writerQuestions": {
+    "title": "Demander à un écrivain",
+    "threadTitle": "Question d’écriture",
+    "description": "Obtenez des réponses d’auteurs vérifiés et d’écrivains expérimentés.",
+    "questionLabel": "Votre question (10–280 caractères)",
+    "tags": "Étiquettes (5 maximum, séparées par des virgules, facultatives)",
+    "postQuestion": "Publier la question",
+    "all": "Toutes",
+    "unanswered": "Sans réponse",
+    "most_answered": "Les plus répondues",
+    "refresh": "Actualiser",
+    "loadFailed": "Impossible de charger les questions ou réponses. Réessayez.",
+    "saveFailed": "Impossible d’enregistrer. Vérifiez votre texte et réessayez.",
+    "noQuestions": "Aucune question pour le moment.",
+    "noAnswers": "Aucune réponse pour le moment.",
+    "by": "Par {name}",
+    "answers": "{count, plural, one {# réponse} other {# réponses}}",
+    "back": "← Questions d’écriture",
+    "bestAnswer": "Meilleure réponse",
+    "chooseBest": "Choisir la meilleure réponse",
+    "bestHint": "En tant qu’auteur de la question, vous pouvez choisir une meilleure réponse. Ce choix est définitif.",
+    "verified": "Auteur vérifié",
+    "yourAnswer": "Votre réponse",
+    "answerLength": "20 à 5 000 caractères.",
+    "postAnswer": "Publier la réponse",
+    "answerSaved": "Réponse publiée.",
+    "eligibility": "Les auteurs vérifiés et les membres ayant plus de 1 000 XP peuvent répondre."
   }
 }

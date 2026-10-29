@@ -54,7 +54,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Show earned badges consistently on owned and public profiles.
 - ✅ Translate native writing and workshop screens; repair workshop contracts, counters, pagination and retry handling.
 - ✅ Repair and translate web writing progress/resources, complete weekly totals and exact-ISBN catalog links.
-- 🔵 Complete translated web/native writer question threads and answer selection.
+- ✅ Complete translated web/native writer question threads and answer selection.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

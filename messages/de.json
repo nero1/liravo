@@ -1544,7 +1544,9 @@
       "tip": "Neues Trinkgeld",
       "badge": "Abzeichen erhalten",
       "activity": "Neue Benachrichtigung"
-    }
+    },
+    "writerAnswer": "{name} hat deine Frage zum Schreiben beantwortet: {content}",
+    "writerBestAnswer": "{name} hat deine Antwort als beste Antwort ausgewählt: {content}"
   },
   "badgeNames": {
     "first_book": "Erstes Buch",
@@ -1778,5 +1780,33 @@
     "wantCount": "{count, number} möchten es lesen",
     "readCount": "{count, number} haben es gelesen",
     "catalogRating": "Katalogbewertung: {rating}"
+  },
+  "writerQuestions": {
+    "title": "Frag einen Schreibenden",
+    "threadTitle": "Frage zum Schreiben",
+    "description": "Erhalte Antworten von verifizierten Autoren und erfahrenen Schreibenden.",
+    "questionLabel": "Deine Frage (10–280 Zeichen)",
+    "tags": "Tags (bis zu 5, durch Kommas getrennt, optional)",
+    "postQuestion": "Frage veröffentlichen",
+    "all": "Alle",
+    "unanswered": "Unbeantwortet",
+    "most_answered": "Meiste Antworten",
+    "refresh": "Aktualisieren",
+    "loadFailed": "Fragen oder Antworten konnten nicht geladen werden. Bitte erneut versuchen.",
+    "saveFailed": "Speichern fehlgeschlagen. Prüfe deinen Text und versuche es erneut.",
+    "noQuestions": "Noch keine Fragen.",
+    "noAnswers": "Noch keine Antworten.",
+    "by": "Von {name}",
+    "answers": "{count, plural, one {# Antwort} other {# Antworten}}",
+    "back": "← Fragen zum Schreiben",
+    "bestAnswer": "Beste Antwort",
+    "chooseBest": "Beste Antwort auswählen",
+    "bestHint": "Als Fragesteller kannst du eine beste Antwort auswählen. Die Auswahl ist endgültig.",
+    "verified": "Verifizierter Autor",
+    "yourAnswer": "Deine Antwort",
+    "answerLength": "20–5.000 Zeichen.",
+    "postAnswer": "Antwort veröffentlichen",
+    "answerSaved": "Antwort veröffentlicht.",
+    "eligibility": "Verifizierte Autoren und Mitglieder mit mehr als 1.000 XP können antworten."
   }
 }

@@ -21,3 +21,7 @@ export function notificationText(notice:Notice,t:Translate,has:(key:Notification
   const path=('notificationMessages.'+key) as NotificationTextKey;
   try{return has(path)?t(path,values):t('notificationMessages.activity');}catch{return t('notificationMessages.activity');}
 }
+
+export function writerQuestionLink(notice:{entity_type?:string|null;entity_id?:string|null}):string|null{
+  return notice.entity_type==='writer_question'&&typeof notice.entity_id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(notice.entity_id)?'/write/ask/'+notice.entity_id:null;
+}

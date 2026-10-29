@@ -104,6 +104,7 @@ export default function RootLayout() {
               <Stack.Screen name="write/progress" options={{ headerShown: true, title: t('writingProgress') }} />
               <Stack.Screen name="write/resources" options={{ headerShown: true, title: t('resources') }} />
               <Stack.Screen name="write/ask" options={{ headerShown: true, title: t('askanAuthor') }} />
+              <Stack.Screen name="write/ask/[id]" options={{headerShown:true,title:t('askanAuthor')}}/>
               <Stack.Screen name="write/my-plan" options={{ headerShown: true, title: t('myWritingPlan') }} />
               <Stack.Screen name="author/[username]" options={{ headerShown: true, title: '' }} />
               <Stack.Screen name="author/arcs" options={{ headerShown: true, title: t('aRCs') }} />

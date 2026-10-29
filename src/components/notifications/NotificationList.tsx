@@ -1,6 +1,7 @@
 'use client';
 
-import {notificationText} from '@/lib/notification-message';
+import Link from 'next/link';
+import {notificationText,writerQuestionLink} from '@/lib/notification-message';
 
 import { useState,useEffect,useRef } from 'react';
 import { Bell, UserPlus, Heart, MessageSquare, Award, Target } from 'lucide-react';
@@ -121,7 +122,7 @@ export function NotificationList(){
                   'text-sm',
                   !notification.is_read ? 'font-medium text-foreground' : 'text-muted-foreground'
                 )}>
-                  {notificationText(notification,messages,key=>messages.has(key),locale)}
+                  {writerQuestionLink(notification)?<Link href={writerQuestionLink(notification)!} className="hover:underline">{notificationText(notification,messages,key=>messages.has(key),locale)}</Link>:notificationText(notification,messages,key=>messages.has(key),locale)}
                 </p>
                 <p className="text-xs text-muted-foreground/60 mt-0.5">
                   {formatter.relativeTime(new Date(notification.created_at),now)}

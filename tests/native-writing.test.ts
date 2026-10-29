@@ -7,7 +7,7 @@ import fr from '../messages/fr.json';
 
 class ApiError extends Error{constructor(public status:number){super('Isolated failure');}}
 function mount(file:string,query:any,infinite:any={data:undefined}){
-  const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn();let cursor=0;
+  const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn(),push=vi.fn();let cursor=0;
   const owner={id:'reader',username:'reader'},store=Object.assign((selector?:any)=>selector?selector({user:owner}):{user:owner},{getState:()=>({user:owner})}),translate=createTranslator({locale:'fr',messages:fr,onError:error=>{throw error;}});
   const exports:any={},code=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   runInNewContext(code,{exports,Intl,Map,Error,require:(name:string)=>{
@@ -15,20 +15,20 @@ function mount(file:string,query:any,infinite:any={data:undefined}){
     if(name==='react/jsx-runtime')return {jsx:(type:unknown,props:unknown)=>({type,props}),jsxs:(type:unknown,props:unknown)=>({type,props}),Fragment:'Fragment'};
     if(name==='react-native')return {View:'View',Text:'Text',ScrollView:'ScrollView',FlatList:'FlatList',TouchableOpacity:'TouchableOpacity',Alert:{alert:vi.fn()},KeyboardAvoidingView:'KeyboardAvoidingView',Platform:{OS:'android'},ActivityIndicator:'ActivityIndicator'};
     if(name==='react-native-safe-area-context')return {SafeAreaView:'SafeAreaView'};
-    if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push:vi.fn(),back:vi.fn()})};
-    if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:unknown)=>{queries.push(options);return infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(_key:unknown,update:(value:unknown)=>unknown)=>{query.data=update(query.data);}})};
+    if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push,back:vi.fn()})};
+    if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:unknown)=>{queries.push(options);return infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&key.includes('question')?infinite:query;target.data=update(target.data);}})};
     if(name==='@/hooks/useTranslations')return {useTranslations:(namespace='')=>({locale:'fr',t:(key:string,values?:Record<string,string|number>)=>translate([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate>[0],values)})};
     if(name==='@/stores/auth')return {useAuthStore:store};
     if(name==='@/hooks/useRequestIntent')return {useRequestIntent:()=>({durableHeaders:async()=>({'Idempotency-Key':'durable-writing-key','X-Liravo-Actor':'reader'}),complete:completions})};
     if(name==='@/lib/api')return {api:{get,post},ApiError};
-    if(name==='@/constants/api')return {ENDPOINTS:{author:{arcs:'/author/arcs',byUsername:(name:string)=>'/author/'+name,createPost:'/author/posts'},write:{workshops:'/workshops',workshopById:(id:string)=>'/workshops/'+id,workshopSubmissions:(id:string)=>'/workshops/'+id+'/submissions',workshopFeedback:(id:string,draft:string)=>'/workshops/'+id+'/submissions/'+draft+'/feedback',joinWorkshop:(id:string)=>'/workshops/'+id+'/join',promptById:()=>'/prompt',submitPrompt:()=>'/prompt/submit'}}};
+    if(name==='@/constants/api')return {ENDPOINTS:{author:{arcs:'/author/arcs',byUsername:(name:string)=>'/author/'+name,createPost:'/author/posts'},write:{questions:'/questions',workshops:'/workshops',workshopById:(id:string)=>'/workshops/'+id,workshopSubmissions:(id:string)=>'/workshops/'+id+'/submissions',workshopFeedback:(id:string,draft:string)=>'/workshops/'+id+'/submissions/'+draft+'/feedback',joinWorkshop:(id:string)=>'/workshops/'+id+'/join',promptById:()=>'/prompt',submitPrompt:()=>'/prompt/submit'}}};
     if(name==='@/components/social/FollowButton')return {FollowButton:'FollowButton'};
     if(name==='@/components/ui/EmptyState')return {QueryError:'QueryError',EmptyState:'EmptyState'};
     const match=name.match(/^@\/components\/ui\/(\w+)$/);if(match)return {[match[1]]:match[1]};throw Error(name);
   }});
   function render(){cursor=0;mutations.length=0;queries.length=0;return exports.default();}
   const find=(tree:any,type:string):any=>{if(!tree)return undefined;if(Array.isArray(tree))return tree.map(node=>find(node,type)).find(Boolean);if(tree.type===type)return tree;return find(tree.props?.children,type);};
-  return {render,find,mutations,queries,post,get,completions};
+  return {render,find,mutations,queries,post,get,completions,push};
 }
 it('renders the actual workshop catalog contract and exposes query failures instead of an empty list',()=>{
   const data={pages:[{rooms:[{id:'room',name:'Atelier',topic:'Écriture',member_count:1}],nextCursor:null}]},view=mount('mobile/app/write/workshops/index.tsx',{}, {data});
@@ -69,4 +69,23 @@ it('renders every native author catalog page and the real follower count',()=>{
   const author={id:'writer',username:'writer',display_name:'Writer',is_verified_author:true};
   const view=mount('mobile/app/author/[username].tsx',{data:{qa:[]}}, {data:{pages:[{author,posts:[],followerCount:7,books:[{id:'first',title:'First catalog edition'}]},{books:[{id:'second',title:'Second catalog edition'}]}]}}),tree=JSON.stringify(view.render());
   expect(tree).toContain('First catalog edition');expect(tree).toContain('Second catalog edition');expect(tree).toContain('7 abonnés');expect(tree).toContain(fr.authorProfile.verified);
+});
+
+it('opens writer question threads from every native catalog page',()=>{
+  const question=(id:string)=>({id,question:'A useful writing question',answer_count:0,created_at:'2026-10-29T00:00:00Z',author:{display_name:'Writer'}}),view=mount('mobile/app/write/ask.tsx',{}, {data:{pages:[{questions:[question('one')]},{questions:[question('two')]}]}}),list=view.find(view.render(),'FlatList');
+  expect(list.props.data).toHaveLength(2);list.props.renderItem({item:question('two')}).props.onPress();expect(view.push).toHaveBeenCalledWith('/write/ask/two');
+});
+it('pins the native best answer while keeping ineligible readers out of the answer form',()=>{
+  const author={id:'writer',username:'writer',display_name:'Writer'},thread={question:{id:'workshop-id',question:'A useful question',answer_count:1,author},bestAnswer:{id:'best',answer:'The selected answer',author,created_at:'2026-10-29T00:00:00Z'},answers:[],canAnswer:false,isOwner:false};
+  const view=mount('mobile/app/write/ask/[id].tsx',{}, {data:{pages:[thread]}}),list=view.find(view.render(),'FlatList');expect(JSON.stringify(list.props.ListHeaderComponent)).toContain(fr.writerQuestions.bestAnswer);expect(view.find(list.props.ListFooterComponent,'TextInput')).toBeUndefined();
+});
+it('keeps native answer receipts until the acknowledged question and author both match',async()=>{
+  const author={id:'reader',username:'reader',display_name:'Reader'},thread={question:{id:'workshop-id',question:'A useful question',answer_count:0,author},bestAnswer:null,answers:[],canAnswer:true,isOwner:false},view=mount('mobile/app/write/ask/[id].tsx',{}, {data:{pages:[thread]}});view.render();
+  const row={id:'answer',user_id:'reader',question_id:'workshop-id',answer:'A detailed acknowledged answer',created_at:'2026-10-29T00:00:00Z',author};
+  view.post.mockResolvedValueOnce({actorId:'reader',answer:{...row,question_id:'different'}});await expect(view.mutations[0].mutationFn()).rejects.toThrow('Invalid answer receipt');expect(view.completions).not.toHaveBeenCalled();
+  view.post.mockResolvedValueOnce({actorId:'reader',answer:row});const saved=await view.mutations[0].mutationFn();view.mutations[0].onSuccess(saved);expect(view.completions).toHaveBeenCalledExactlyOnceWith('writing.answer.workshop-id');const list=view.find(view.render(),'FlatList');expect(list.props.data[0].id).toBe('answer');expect(JSON.stringify(list.props.ListHeaderComponent)).toContain('1 réponse');
+});
+it('keeps native best-answer receipts when the acknowledgement belongs to another account',async()=>{
+  const author={id:'reader',username:'reader',display_name:'Reader'},thread={question:{id:'workshop-id',question:'A useful question',answer_count:1,author},bestAnswer:null,answers:[],canAnswer:false,isOwner:true},view=mount('mobile/app/write/ask/[id].tsx',{}, {data:{pages:[thread]}});view.render();
+  view.post.mockResolvedValue({ok:true,actorId:'someone-else',questionId:'workshop-id',answerId:'answer'});await expect(view.mutations[1].mutationFn({id:'answer'})).rejects.toThrow('Invalid best answer receipt');expect(view.completions).not.toHaveBeenCalled();
 });

@@ -1544,7 +1544,9 @@
       "tip": "New tip",
       "badge": "Badge earned",
       "activity": "New notification"
-    }
+    },
+    "writerAnswer": "{name} answered your writing question: {content}",
+    "writerBestAnswer": "{name} selected your answer as the best answer: {content}"
   },
   "badgeNames": {
     "first_book": "First Book",
@@ -1778,5 +1780,33 @@
     "wantCount": "{count, number} want to read",
     "readCount": "{count, number} read",
     "catalogRating": "Catalog rating: {rating}"
+  },
+  "writerQuestions": {
+    "title": "Ask a Writer",
+    "threadTitle": "Writing Question",
+    "description": "Get answers from verified authors and experienced writers.",
+    "questionLabel": "Your question (10–280 characters)",
+    "tags": "Tags (up to 5, comma-separated, optional)",
+    "postQuestion": "Post question",
+    "all": "All",
+    "unanswered": "Unanswered",
+    "most_answered": "Most answered",
+    "refresh": "Refresh",
+    "loadFailed": "Could not load the questions or answers. Please try again.",
+    "saveFailed": "Could not save. Check your entry and try again.",
+    "noQuestions": "No questions yet.",
+    "noAnswers": "No answers yet.",
+    "by": "By {name}",
+    "answers": "{count, plural, one {# answer} other {# answers}}",
+    "back": "← Writing questions",
+    "bestAnswer": "Best answer",
+    "chooseBest": "Choose best answer",
+    "bestHint": "As the asker, you can choose one best answer. The choice is final.",
+    "verified": "Verified author",
+    "yourAnswer": "Your answer",
+    "answerLength": "20–5,000 characters.",
+    "postAnswer": "Post answer",
+    "answerSaved": "Answer posted.",
+    "eligibility": "Verified authors and members with more than 1,000 XP can answer."
   }
 }

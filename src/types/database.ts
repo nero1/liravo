@@ -329,3 +329,9 @@ export interface BookReviewPage {
   statistics:ReviewStatistics;
   nextCursor:string|null;
 }
+
+export type QuestionFilter='all'|'unanswered'|'most_answered';
+export interface Writer {id:string;username:string;display_name:string;avatar_url:string|null;is_verified_author:boolean;}
+export interface WriterQuestion {id:string;user_id:string;question:string;tags:string[];answer_count:number;created_at:string;author:Writer;}
+export interface WriterAnswer {id:string;question_id:string;user_id:string;answer:string;created_at:string;author:Writer;}
+export interface WriterThread {question:WriterQuestion;bestAnswer:WriterAnswer|null;answers:WriterAnswer[];actorId:string|null;isOwner:boolean;canAnswer:boolean;nextCursor:string|null;}
