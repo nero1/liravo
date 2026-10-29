@@ -95,5 +95,6 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Verify imports, seeds, search, reviews, shelves and purchase links against the edition model.
 - ✅ Aggregate complete visible review statistics, page reviews and preserve catalog rating sources.
 - ✅ Share bounded, ranked mood discovery across web/native with canonical edition aliases and visible-review filtering.
+- ✅ Require staff-approved work ownership for author catalogs, ARC offers and post book links; cover coauthors, edition aliases, work merges, complete analytics and revocation.
 
 Footer/Signature: Generated on May 23, 2026 09:39 PM UTC

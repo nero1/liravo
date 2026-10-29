@@ -8,11 +8,11 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 export const dynamic = 'force-dynamic';
 
 const postSchema = z.object({
-  title: z.string().min(1).max(200),
-  body: z.string().min(1).max(2000),
+  title: z.string().trim().min(1).max(200),
+  body: z.string().trim().min(1).max(2000),
   book_id: z.string().uuid().optional(),
   type: z.enum(['announcement', 'blog', 'arc_invite']),
-});
+}).refine(value=>value.type!=='arc_invite'||!!value.book_id,{message:'ARC invites require an approved book'});
 
 export async function GET(req: Request) {
   const supabase = createClient();
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Author access required' }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(()=>null);
   const parsed = postSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

@@ -1,3 +1,4 @@
+import {getAuthorCatalog} from '@/lib/author-catalog';
 import { singleRelation } from '@/lib/utils';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
@@ -9,9 +10,9 @@ export const dynamic = 'force-dynamic';
 
 const arcSchema = z.object({
   book_id: z.string().uuid(),
-  description: z.string().min(1).max(1000),
+  description: z.string().trim().min(1).max(1000),
   reader_slots: z.number().int().min(1).max(20),
-  close_date: z.string().datetime().optional(),
+  close_date: z.string().datetime().refine(value=>new Date(value).getTime()>Date.now()).optional(),
 });
 
 export async function GET(req: Request) {
@@ -37,9 +38,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const {data:authorBooks,error:booksError}=await supabase.from('author_books').select('book:book_id(id,title)').eq('author_id',user.id).limit(100);
-  if(booksError)return NextResponse.json({error:'Author books unavailable'},{status:503});
-  return NextResponse.json({arcs:(data??[]).map(row=>({...row,title:singleRelation(row.books)?.title??''})),books:(authorBooks??[]).map(row=>singleRelation(row.book)).filter(Boolean)});
+  try{const catalog=await getAuthorCatalog(user.id,searchParams.get('cursor'));
+    return NextResponse.json({arcs:(data??[]).map(row=>({...row,title:singleRelation(row.books)?.title??''})),...catalog,actorId:user.id},{headers:{'Cache-Control':'private, no-store'}});
+  }catch{return NextResponse.json({error:'Author books unavailable'},{status:503});}
 }
 
 export async function POST(req: Request) {
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Author access required' }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(()=>null);
   const parsed = arcSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

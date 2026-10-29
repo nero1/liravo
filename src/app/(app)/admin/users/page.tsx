@@ -2,6 +2,7 @@
 
 import { useTranslations, useFormatter } from 'next-intl';
 import { useState, useEffect, useCallback } from 'react';
+import {AuthorCatalog} from '@/components/admin/AuthorCatalog';
 import { cn } from '@/lib/utils';
 
 interface AdminUser {
@@ -26,6 +27,7 @@ interface PageData {
 
 export default function AdminUsersPage() {
   const formatter = useFormatter();
+  const catalog=useTranslations('authorCatalog'),[authorId,setAuthorId]=useState<string|null>(null);
   const t = useTranslations('admin');
   const [data, setData] = useState<PageData | null>(null);
   const [search, setSearch] = useState('');
@@ -75,6 +77,7 @@ export default function AdminUsersPage() {
     <div className="max-w-6xl mx-auto px-4 py-6">
       <h1 className="font-display text-2xl font-bold mb-6">{t('userManagement')}</h1>
 
+      {authorId&&<AuthorCatalog key={authorId} authorId={authorId} onClose={()=>setAuthorId(null)}/>}
       <div className="mb-4">
         <input
           type="search"
@@ -134,6 +137,7 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 flex-wrap">
+                      <button type="button" onClick={()=>setAuthorId(u.id)} className="px-2 py-1 text-xs border rounded hover:bg-muted">{catalog('manage')}</button>
                       <button
                         onClick={() => handleAction(u.id, 'is_moderator', !u.is_moderator)}
                         disabled={actionLoading === `${u.id}-is_moderator`}

@@ -1,3 +1,4 @@
+import {getBookAuthors} from '@/lib/author-catalog';
 import {getBookReviews,ReviewCursorError} from '@/services/book-reviews';
 import {EditionSelector} from '@/components/books/EditionSelector';
 import { getTranslations,getFormatter } from 'next-intl/server';
@@ -161,13 +162,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
     readingLists = (data ?? []).map(row => ({ ...row, users: singleRelation(row.users) }));
   }
 
-  // Author's Liravo profile
-  const { data: authorProfile } = await serviceSupabase
-    .from('users')
-    .select('username, display_name, avatar_url, is_verified_author')
-    .ilike('display_name', book.author_name)
-    .eq('is_verified_author', true)
-    .maybeSingle();
+  const authorProfiles=await getBookAuthors(book.id);
 
   // Similar books: check computed table first, then fall back to book.similar_book_ids, then genre
   let similarBooks: Array<{ id: string; title: string; author_name: string; cover_url: string | null }> = [];
@@ -263,8 +258,8 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
       </div>
 
       {/* Author Liravo profile */}
-      {authorProfile && (
-        <Link href={`/user/${authorProfile.username}`} className="flex items-center gap-3 mb-4 p-3 border border-amber-200 dark:border-amber-800 rounded-xl bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors">
+      {authorProfiles.map(authorProfile=>(
+        <Link key={authorProfile.id} href={`/author/${authorProfile.username}`} className="flex items-center gap-3 mb-4 p-3 border border-amber-200 dark:border-amber-800 rounded-xl bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors">
           {authorProfile.avatar_url ? (
             <Image src={authorProfile.avatar_url} alt={authorProfile.display_name} width={36} height={36} className="w-9 h-9 rounded-full object-cover" />
           ) : (
@@ -278,7 +273,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
           </div>
           <span className="text-xs text-accent font-medium shrink-0">{t('followAuthor')}</span>
         </Link>
-      )}
+      ))}
 
       {/* Action buttons */}
       <div className="flex items-center gap-3 mb-5">

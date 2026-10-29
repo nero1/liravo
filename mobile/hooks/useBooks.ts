@@ -22,7 +22,7 @@ export function useBookSearch(query: string) {
 export function useBook(id: string) {
   return useQuery({
     queryKey: ['book', id],
-    queryFn: () => api.get<WorkCatalog&{book:BookRow;affiliateLinks:AffiliateLink[];audibleLink:AffiliateLink|null}>(ENDPOINTS.books.byId(id)),
+    queryFn: () => api.get<WorkCatalog&{book:BookRow;authors:{id:string;username:string;display_name:string;is_verified_author:boolean}[];affiliateLinks:AffiliateLink[];audibleLink:AffiliateLink|null}>(ENDPOINTS.books.byId(id)),
   });
 }
 

@@ -35,6 +35,10 @@ async function run() {
   let totalSent = 0;
 
   for (const post of posts) {
+    const {data:owned,error:ownershipError}=await supabase.rpc('author_owns_book' as never,{p_author:post.author_id,p_book:post.book_id} as never);
+    if(ownershipError)throw new Error('Author ownership unavailable');
+    if(!owned)continue;
+
     // Get author info
     const { data: author } = await supabase
       .from('users')

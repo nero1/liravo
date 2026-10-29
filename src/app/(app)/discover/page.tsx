@@ -1,3 +1,4 @@
+import {createServiceClient} from '@/lib/supabase/server';
 import { bookRating } from '@/lib/catalog-book';
 import { getActivePromotions } from '@/services/promotions';
 import { PromotedBookLink } from '@/components/books/PromotedBookLink';
@@ -214,41 +215,9 @@ interface FollowedAuthorBook {
 async function getNewReleasesFromFollowedAuthors(userId?: string): Promise<FollowedAuthorBook[]> {
   if (!userId) return [];
 
-  const supabase = createClient();
-
-  const { data: follows } = await supabase
-    .from('follows')
-    .select('following_id')
-    .eq('follower_id', userId);
-
-  if (!follows || follows.length === 0) return [];
-
-  const followingIds = follows.map((f) => f.following_id);
-
-  const { data: authors } = await supabase
-    .from('users')
-    .select('display_name')
-    .in('id', followingIds)
-    .eq('is_verified_author', true);
-
-  if (!authors || authors.length === 0) return [];
-
-  const authorNames = authors.map((a) => a.display_name).filter(Boolean) as string[];
-
-  // Use ilike ANY with a manual OR approach — Supabase doesn't expose ilike any directly,
-  // so we build a filter string for the PostgREST `or` operator.
-  const orFilter = authorNames
-    .map((name) => `author_name.ilike.${name}`)
-    .join(',');
-
-  const { data: books } = await supabase
-    .from('books')
-    .select('id, title, author_name, cover_url')
-    .or(orFilter)
-    .order('created_at', { ascending: false })
-    .limit(10);
-
-  return books ?? [];
+  const {data,error}=await createServiceClient().rpc('followed_author_books' as never,{p_user:userId} as never);
+  if(error)throw new Error('Followed author books unavailable');
+  return data as FollowedAuthorBook[];
 }
 
 async function getShelfOverlapRecommendations(userId?: string): Promise<FollowedAuthorBook[]> {

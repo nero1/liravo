@@ -1,3 +1,4 @@
+import {getBookAuthors} from '@/lib/author-catalog';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -15,6 +16,6 @@ export async function GET(request:Request,{params}:{params:{id:string}}){
     if(error)throw error;
     const affiliateLinks=await buildAffiliateLinks(book,profile?.country??'US',profile?.preferred_locale);
     const workCatalog=await getWorkCatalog(book.work_id);if(!workCatalog)throw new Error('Work unavailable');
-    return NextResponse.json({book,...workCatalog,affiliateLinks,audibleLink:getAudibleLink(book,profile?.preferred_locale??'en',profile?.country??'US')});
+    return NextResponse.json({book,...workCatalog,authors:await getBookAuthors(book.id),affiliateLinks,audibleLink:getAudibleLink(book,profile?.preferred_locale??'en',profile?.country??'US')});
   }catch{return NextResponse.json({error:'Book unavailable'},{status:503});}
 }

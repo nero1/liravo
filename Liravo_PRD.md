@@ -511,10 +511,11 @@ Authors get an enhanced version of the standard profile.
 - Event hosting (Section 7.13)
 
 **Author verification:**
-- Author submits verification request with one or more ISBNs associated with their name.
-- System cross-references against Google Books / Open Library.
-- Moderator (not necessarily admin) reviews and approves or rejects.
-- Verified badge applied.
+- Author submits a pen name, book titles and optional publisher/evidence links.
+- An administrator reviews the evidence and approves or rejects the identity request.
+- Administrators approve catalog works separately under Users → Author works; approval covers all editions and coauthors. Editable names do not establish ownership.
+- ARC offers and linked posts require approved work ownership. Revocation disables affected offers and removes post book links; prior values remain audited.
+- Verified badge applied after identity approval.
 
 ---
 

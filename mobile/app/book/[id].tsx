@@ -136,6 +136,7 @@ export default function BookDetailScreen() {
             </View>
           )}
 
+          {bookData?.authors?.map(author=><TouchableOpacity key={author.id} accessibilityRole="link" onPress={()=>router.push('/author/'+author.username)} className="rounded-xl border border-border p-3"><Text className="font-medium text-foreground">{t('authorOnLiravo',{author:author.display_name})}</Text><Text className="text-xs text-muted-foreground">{t('verifiedAuthor')}</Text></TouchableOpacity>)}
           {bookData&&<EditionSelector catalog={bookData} book={book}/>}
 
           {/* Affiliate links */}

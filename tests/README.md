@@ -78,3 +78,5 @@ Review rehearsals cover complete distribution/averages, cursor ties and edition 
 Writing checks cover native workshop contracts/failure states, owned receipts and reopened prompt responses. PostgreSQL verifies workshop count repair, repeated/concurrent joins, private SQL/API access, cursor ties, owned recovery and browser write restrictions. Native receipts retain legacy keys while keeping long-entry persistence below the SecureStore size limit.
 
 Writing progress rehearsals cover more than 1,000 submissions, Sunday/Monday boundaries, empty weeks, challenge words, feedback versus draft counts, writing versus reading streaks, earned badges, account guards and private responses. ISBN checks reject unrelated Google results and resolve local editions with providers offline.
+
+Author-work checks cover legacy repair/audits, staff-only grants, coauthors, edition aliases/work merges, complete catalog pagination, full analytics, wrong-name denial, SQL/API write protection and replay-safe revocation. Native tests cover all catalog pages, failure states and owned ARC receipts; release email tests reject absent/unavailable ownership.

@@ -34,12 +34,20 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
+    let legacyAuthor:{owner:string;book:string;arc:string;post:string}|undefined;
     let legacyWorkshop:{id:string;owner:string}|undefined;
     let legacyRating:string|undefined;
     let legacyNotification:{owner:string;badge:string;goal:string}|undefined;
     let legacyEditions:{owner:string;ids:string[];reviewId:string}|undefined;
     let legacyImport:{owner:string;rows:unknown[];response:unknown}|undefined;
     for (const file of migrations) {
+      if(file.startsWith('074_')){
+        const owner=legacyNotification!.owner,book=(await sql`insert into books(title,author_name) values('Unverified legacy author book','Other author') returning id`)[0].id;
+        await sql`insert into author_books(author_id,book_id) values(${owner},${book})`;
+        const arc=(await sql`insert into arcs(author_id,book_id,description,is_active) values(${owner},${book},'Legacy offer',true) returning id`)[0].id;
+        const post=(await sql`insert into author_posts(author_id,title,body,type,book_id) values(${owner},'Legacy post','A linked post','announcement',${book}) returning id`)[0].id;
+        legacyAuthor={owner,book,arc,post};
+      }
       if(file.startsWith('072_')){
         const owner=legacyNotification!.owner,id=(await sql`insert into workshop_rooms(name,facilitator_id,max_members,member_count) values('Legacy workshop 072',${owner},8,1) returning id`)[0].id;
         expect((await sql`select member_count from workshop_rooms where id=${id}`)[0].member_count).toBe(2);legacyWorkshop={id,owner};
@@ -765,6 +773,8 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     await sql`insert into auth.users(id,email,raw_user_meta_data)
       select ('00000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'fan'||i||'@example.test',jsonb_build_object('username','fan_'||i) from generate_series(10001,10501) i`;
     await sql`insert into follows(follower_id,following_id) select id,${recipient} from users where username like 'fan_%' on conflict do nothing`;
+    await sql`update users set is_verified_author=true where id=${recipient}`;
+    await sql`insert into author_work_claims(author_id,work_id) select ${recipient},work_id from books where id=${book.id} on conflict do nothing`;
     const announcement=await createContent('author_posts','announcement-root',{title:'A new chapter',body:'Announcement body',book_id:book.id,type:'announcement'});
     const [announcementRow]=await sql`select content,body,created_at from author_posts where id=${announcement.id}`;
     expect(announcementRow.content).toBe(announcementRow.body);
@@ -2191,6 +2201,62 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     }finally{provider.mockRestore();}
     await sql`update users set is_banned=true where id=${owner}`;expect((await sql`select writing_progress_snapshot(${owner}) as snapshot`)[0].snapshot).toBeNull();
     vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);expect((await readProgress(new Request('https://app.test/progress'))).status).toBe(503);
+    }
+    {
+    expect((await sql`select is_active from arcs where id=${legacyAuthor!.arc}`)[0].is_active).toBe(false);
+    expect((await sql`select book_id from author_posts where id=${legacyAuthor!.post}`)[0].book_id).toBeNull();
+    expect((await sql`select author_owns_book(${legacyAuthor!.owner},${legacyAuthor!.book}) as owned`)[0].owned).toBe(false);
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${legacyAuthor!.book} and reason in('unverified_author_arc','unverified_author_post')`)[0].count).toBe(2);
+    const admin=crypto.randomUUID(),author=crypto.randomUUID(),coauthor=crypto.randomUUID(),impostor=crypto.randomUUID();
+    for(const [n,id] of [admin,author,coauthor,impostor].entries())await sql`select create_direct_account(${id},${'author074_'+n+'@example.test'},${'author074_'+n},'Identical editable name')`;
+    await sql`update users set is_admin=true where id=${admin}`;await sql`update users set is_verified_author=true,user_types=array['author'] where id in(${author},${coauthor},${impostor})`;
+    const store=async(payload:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({title:'Author catalog fixture',author_name:'Bibliographic pen name',...payload})}) as book`)[0].book;
+    const first=await store({google_books_id:'author074-first'}),second=await store({open_library_id:'/books/OL740002M',open_library_work_id:'/works/OL740001W'});
+    const grant=async(who:string,book:string,key:string,granted=true)=>(await sql`select set_author_work_claim(${admin},${who},${book},${granted},${key}) as result`)[0].result;
+    const {contentIntent}=await import('@/lib/content-intents');
+    const create=async(table:'arcs'|'author_posts',key:string,payload:Record<string,unknown>)=>(await contentIntent(new Request('https://app.test/content',{headers:{'Idempotency-Key':key}}),author,table,payload)).insert();
+    const arcBody={book_id:first.id,description:'A verified offer',reader_slots:3,is_active:true};
+    await expect(create('arcs','author074-unowned-arc',arcBody)).rejects.toMatchObject({status:403});
+    await expect(create('author_posts','author074-unowned-post',{book_id:first.id,title:'Unowned book',body:'An announcement',type:'announcement'})).rejects.toMatchObject({status:403});
+    await expect(sql`select set_author_work_claim(${author},${author},${first.id},true,'author074-self-grant')`).rejects.toThrow('Admin access');
+    const results=await Promise.all(Array.from({length:4},()=>grant(author,first.id,'author074-grant-replay')));expect(results.every(row=>row.workId===first.work_id)).toBe(true);
+    expect((await sql`select count(*)::int as count from author_work_claims where author_id=${author}`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from moderation_log where target_user_id=${author} and action='author_work_granted'`)[0].count).toBe(1);
+    await expect(grant(author,first.id,'author074-grant-replay',false)).rejects.toThrow('Intent already used');
+    await store({google_books_id:'author074-first',open_library_id:'/books/OL740001M',open_library_work_id:'/works/OL740001W'});
+    expect((await sql`select author_owns_book(${author},${second.id}) as owned`)[0].owned).toBe(true);
+    const extra=await sql`insert into books(work_id,title,author_name,created_at) select ${second.work_id},'Author edition 074 '||n,'Bibliographic pen name','2026-10-29T00:00:00.123456Z' from generate_series(1,35) n returning id`;
+    const alias=(await sql`insert into books(work_id,title,author_name,canonical_edition_id) values(${second.work_id},'Retained author edition alias','Bibliographic pen name',${second.id}) returning id`)[0].id;
+    expect((await sql`select author_owns_book(${author},${alias}) as owned`)[0].owned).toBe(true);
+    await grant(coauthor,second.id,'author074-coauthor');
+    expect((await sql`select book_authors_snapshot(${second.id}) as authors`)[0].authors.map((row:any)=>row.id).sort()).toEqual([author,coauthor].sort());
+    expect((await sql`select author_owns_book(${impostor},${first.id}) as owned`)[0].owned).toBe(false);
+    const {getAuthorCatalog,getAuthorAnalytics}=await import('@/lib/author-catalog');let cursor:string|null=null;const found:string[]=[];do{const page=await getAuthorCatalog(author,cursor);expect(page.books.length).toBeLessThanOrEqual(30);found.push(...page.books.map(book=>book.id));cursor=page.nextCursor;}while(cursor);expect(found).toHaveLength(37);expect(new Set(found).size).toBe(37);
+    const arc=await create('arcs','author074-owned-arc',{...arcBody,book_id:alias});
+    const post=await create('author_posts','author074-owned-post',{book_id:second.id,title:'Owned book',body:'An announcement',type:'announcement'});
+    await sql`update users set is_banned=true where id=${author}`;await expect(sql`insert into arc_applications(arc_id,reader_id) values(${arc.id},${coauthor})`).rejects.toThrow('Verified ARC ownership required');await sql`update users set is_banned=false where id=${author}`;
+    await sql`insert into arc_applications(arc_id,reader_id) values(${arc.id},${coauthor})`;
+    const shelf=(await sql`select id from shelves where user_id=${coauthor} and default_type='want_to_read'`)[0].id;
+    await sql`insert into shelf_books(shelf_id,user_id,book_id) values(${shelf},${coauthor},${first.id}),(${shelf},${coauthor},${extra[0].id})`;
+    await sql`insert into follows(follower_id,following_id) values(${coauthor},${author})`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status) values(${coauthor},${extra[34].id},5,'A full-catalog review','short','published')`;
+    expect(await getAuthorAnalytics(author)).toMatchObject({totalWantToReads:1,totalReviews:1,followerCount:1});
+    expect((await sql`select followed_author_books(${coauthor}) as books`)[0].books).toHaveLength(10);
+    const {GET:readAuthor}=await import('@/app/api/author/[username]/route');const publicResponse=await readAuthor(new Request('https://app.test/author'),{params:{username:'author074_1'}});expect(publicResponse.status).toBe(200);expect(await publicResponse.json()).toMatchObject({followerCount:1,total:37,author:{id:author}});
+    const {GET:readBooks}=await import('@/app/api/author/books/route');vi.mocked(getCurrentUser).mockResolvedValue({id:author} as never);expect((await readBooks(new Request('https://app.test/books'))).status).toBe(200);expect((await readBooks(new Request('https://app.test/books?cursor=invalid'))).status).toBe(400);
+    const {GET:manage,PUT:update}=await import('@/app/api/admin/users/[id]/books/route');
+    expect((await manage(new Request('https://app.test/admin'),{params:{id:author}})).status).toBe(403);
+    vi.mocked(getCurrentUser).mockResolvedValue({id:admin} as never);const managed=await manage(new Request('https://app.test/admin?q=Author'),{params:{id:author}});expect(managed.status).toBe(200);expect(await managed.json()).toMatchObject({actorId:admin,total:37});
+    const mismatched=new Request('https://app.test/admin',{method:'PUT',headers:{'X-Liravo-Actor':author,'Idempotency-Key':'author074-mismatch'},body:JSON.stringify({book_id:first.id,granted:true})});expect((await update(mismatched,{params:{id:author}})).status).toBe(409);
+    await grant(author,second.id,'author074-revoke',false);expect((await sql`select author_owns_book(${author},${alias}) as owned`)[0].owned).toBe(false);
+    expect((await sql`select is_active from arcs where id=${arc.id}`)[0].is_active).toBe(false);expect((await sql`select book_id from author_posts where id=${post.id}`)[0].book_id).toBeNull();
+    await grant(author,first.id,'author074-grant-replay');expect((await sql`select author_owns_book(${author},${first.id}) as owned`)[0].owned).toBe(false);
+    expect((await sql`select book_authors_snapshot(${first.id}) as authors`)[0].authors.map((row:any)=>row.id)).toEqual([coauthor]);
+    await expect(sql`update arcs set is_active=true where id=${arc.id}`).rejects.toThrow('ownership required');
+    for(const role of ['anon','authenticated']){
+      for(const table of ['author_books','author_work_claims','author_catalog_intents'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['set_author_work_claim(uuid,uuid,uuid,boolean,text)','author_owns_book(uuid,uuid)','author_catalog_snapshot(uuid,timestamptz,uuid,integer)','book_authors_snapshot(uuid)','author_analytics_snapshot(uuid)','followed_author_books(uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
     }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);
