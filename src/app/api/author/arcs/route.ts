@@ -1,5 +1,5 @@
+import {getArcs,decodeArcCursor} from '@/lib/arcs';
 import {getAuthorCatalog} from '@/lib/author-catalog';
-import { singleRelation } from '@/lib/utils';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
@@ -16,7 +16,6 @@ const arcSchema = z.object({
 });
 
 export async function GET(req: Request) {
-  const supabase = createClient();
   const user = await getCurrentUser();
 
   if (!user) {
@@ -26,21 +25,11 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const requestedAuthor=searchParams.get('authorId');
   if(requestedAuthor&&requestedAuthor!=='me'&&requestedAuthor!==user.id)return NextResponse.json({error:'Forbidden'},{status:403});
-  const authorId=user.id;
 
-  const { data, error } = await supabase
-    .from('arcs')
-    .select('id, book_id, description, reader_slots, close_date, is_active, created_at, books:book_id(id,title,author_name,cover_url)')
-    .eq('author_id', authorId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  try{const catalog=await getAuthorCatalog(user.id,searchParams.get('cursor'));
-    return NextResponse.json({arcs:(data??[]).map(row=>({...row,title:singleRelation(row.books)?.title??''})),...catalog,actorId:user.id},{headers:{'Cache-Control':'private, no-store'}});
-  }catch{return NextResponse.json({error:'Author books unavailable'},{status:503});}
+  const cursor=searchParams.get('cursor');try{decodeArcCursor(cursor,user.id,true);}catch{return NextResponse.json({error:'Invalid cursor'},{status:400});}
+  try{const [catalog,offers]=await Promise.all([getAuthorCatalog(user.id),getArcs(user.id,true,cursor)]);
+    return NextResponse.json({...offers,books:catalog.books,booksNextCursor:catalog.nextCursor,actorId:user.id},{headers:{'Cache-Control':'private, no-store'}});
+  }catch{return NextResponse.json({error:'Author ARCs unavailable'},{status:503});}
 }
 
 export async function POST(req: Request) {
@@ -51,12 +40,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
+  const { data: profile,error:profileError } = await supabase
     .from('users')
     .select('is_verified_author, user_types')
     .eq('id', user.id)
     .single();
 
+  if(profileError)return NextResponse.json({error:'Author profile unavailable'},{status:503});
   const isAuthor =
     profile?.is_verified_author ||
     (profile?.user_types ?? []).includes('author');

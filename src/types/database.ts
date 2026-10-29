@@ -335,3 +335,13 @@ export interface Writer {id:string;username:string;display_name:string;avatar_ur
 export interface WriterQuestion {id:string;user_id:string;question:string;tags:string[];answer_count:number;created_at:string;author:Writer;}
 export interface WriterAnswer {id:string;question_id:string;user_id:string;answer:string;created_at:string;author:Writer;}
 export interface WriterThread {question:WriterQuestion;bestAnswer:WriterAnswer|null;answers:WriterAnswer[];actorId:string|null;isOwner:boolean;canAnswer:boolean;nextCursor:string|null;}
+
+export type ArcApplicationStatus='pending'|'approved'|'rejected';
+export interface ArcOffer {
+  id:string;author_id:string;book_id:string;title:string;description:string;reader_slots:number;close_date:string|null;is_active:boolean;created_at:string;
+  books:{id:string;title:string;author_name:string;cover_url:string|null;isbn_13:string|null;language:string;format:string|null};
+  author:{id:string;display_name:string;username:string;avatar_url:string|null;is_verified_author:boolean};
+  approved_count:number;pending_count:number|null;total_applications:number|null;slots_remaining:number;my_application_status:ArcApplicationStatus|null;is_open:boolean;can_apply:boolean;can_review:boolean;
+}
+export interface ArcApplication {id:string;arc_id:string;reader_id:string;status:ArcApplicationStatus;applied_at:string;reviewed_at:string|null;reader:{id:string;display_name:string;username:string;avatar_url:string|null;xp:number;active:boolean};}
+export interface ArcApplications {arc:ArcOffer;applications:ArcApplication[];statistics:{total:number;pending:number;approved:number;rejected:number};nextCursor:string|null;actorId:string;}

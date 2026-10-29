@@ -507,6 +507,7 @@ Authors get an enhanced version of the standard profile.
 - "From the Author" posts (updates, writing process content, book news)
 - Reader Q&A (fans submit, author answers publicly)
 - ARC distribution (author uploads file, sets eligibility criteria, platform identifies and notifies eligible readers)
+- ARC applications use complete private counts and paginated reader/author views. Authors approve or decline readers; inactive accounts cannot receive new approvals, final decisions are immutable and approved slots are serialized.
 - New release announcements (in-app notification to followers)
 - Event hosting (Section 7.13)
 

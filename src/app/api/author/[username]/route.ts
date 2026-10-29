@@ -1,3 +1,4 @@
+import {getArcs} from '@/lib/arcs';
 import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 import {getAuthorCatalog} from '@/lib/author-catalog';
 import {decodeCursor} from '@/lib/pagination';
@@ -14,11 +15,11 @@ export async function GET(request:Request,{params}:{params:{username:string}}){
     const [catalog,posts,arcs,followers,following]=await Promise.all([
       getAuthorCatalog(author.id,cursor),
       service.from('author_posts').select('id,title,body,type,book_id,created_at').eq('author_id',author.id).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(10),
-      service.from('arcs').select('id,book_id,description,reader_slots,close_date,created_at').eq('author_id',author.id).eq('is_active',true).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(10),
+      getArcs(viewer?.id??null,false,null,author.id),
       service.from('follows').select('follower_id',{count:'exact',head:true}).eq('following_id',author.id),
       viewer?service.from('follows').select('follower_id').eq('follower_id',viewer.id).eq('following_id',author.id).maybeSingle():Promise.resolve({data:null,error:null}),
     ]);
-    if(posts.error||arcs.error||followers.error||following.error)throw Error('Author data unavailable');
-    return NextResponse.json({author:{...author,is_following:!!following.data},...catalog,posts:posts.data??[],arcs:arcs.data??[],followerCount:followers.count??0},{headers:{'Cache-Control':'private, no-store'}});
+    if(posts.error||followers.error||following.error)throw Error('Author data unavailable');
+    return NextResponse.json({author:{...author,is_following:!!following.data},...catalog,posts:posts.data??[],arcs:arcs.arcs,arcsNextCursor:arcs.nextCursor,followerCount:followers.count??0},{headers:{'Cache-Control':'private, no-store'}});
   }catch{return NextResponse.json({error:'Author unavailable'},{status:503});}
 }

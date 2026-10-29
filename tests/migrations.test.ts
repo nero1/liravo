@@ -2309,5 +2309,46 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       for(const routine of ['writer_question_catalog(text,jsonb,integer)','writer_question_thread(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
     }
+    {
+    const author=crypto.randomUUID(),first=crypto.randomUUID(),second=crypto.randomUUID(),observer=crypto.randomUUID();
+    for(const [n,id] of [author,first,second,observer].entries())await sql`select create_direct_account(${id},${'arc076_'+n+'@example.test'},${'arc076_'+n},'ARC participant')`;
+    await sql`update users set is_verified_author=true where id=${author}`;
+    const book=(await sql`insert into books(title,author_name) values('ARC snapshot book 076','ARC author') returning id,work_id`)[0];await sql`insert into author_work_claims(author_id,work_id) values(${author},${book.work_id})`;
+    const offers=await sql`insert into arcs(author_id,book_id,description,reader_slots,is_active,created_at) select ${author},${book.id},'ARC catalog 076 '||n,3,true,'2026-10-29T00:00:00.123456Z' from generate_series(1,35)n returning id`;
+    const arc=offers[0].id;await sql`insert into arc_applications(arc_id,reader_id,status) values(${arc},${first},'approved'),(${arc},${second},'approved')`;
+    const pending=[];for(let n=0;n<43;n++){const id=crypto.randomUUID();await sql`select create_direct_account(${id},${'arc076_pending_'+n+'@example.test'},${'arc076_pending_'+n},'Pending reader')`;pending.push((await sql`insert into arc_applications(arc_id,reader_id,applied_at) values(${arc},${id},'2026-10-29T00:00:00.123456Z') returning id,reader_id`)[0]);}
+    const history=(await sql`insert into arcs(author_id,book_id,description,reader_slots,is_active) values(${author},${book.id},'Expired history 076',3,true) returning id`)[0].id;await sql`insert into arc_applications(arc_id,reader_id) values(${history},${observer})`;await sql`update arcs set close_date=now()-interval '1 day' where id=${history}`;
+    const withdrawn=(await sql`insert into arcs(author_id,book_id,description,reader_slots,is_active) values(${author},${book.id},'Withdrawn offer 076',3,false) returning id`)[0].id;
+    const {getArcs,getArcApplications}=await import('@/lib/arcs');
+    let cursor:string|null=null;const ids:string[]=[];do{const page=await getArcs(observer,false,cursor,author);expect(page.arcs.length).toBeLessThanOrEqual(20);ids.push(...page.arcs.map(row=>row.id));cursor=page.nextCursor;}while(cursor);expect(ids).toHaveLength(36);expect(new Set(ids).size).toBe(36);expect(ids).toContain(history);expect(ids).not.toContain(withdrawn);
+    const others=await getArcs(first,false,null,author);expect(others.arcs.some(row=>row.id===history)).toBe(false);
+    const publicOffer=(await sql`select arc_offer_document(${arc},${observer}) as offer`)[0].offer;expect(publicOffer).toMatchObject({approved_count:2,slots_remaining:1,my_application_status:null,pending_count:null,total_applications:null});expect(JSON.stringify(publicOffer)).not.toContain(pending[0].reader_id);
+    const expired=(await sql`select arc_offer_document(${history},${observer}) as offer`)[0].offer;expect(expired).toMatchObject({is_open:false,can_apply:false,my_application_status:'pending'});
+    let appCursor:string|null=null;const apps:string[]=[];do{const page=await getArcApplications(author,arc,'all',appCursor);expect(page!.statistics).toEqual({total:45,pending:43,approved:2,rejected:0});expect(page!.applications.length).toBeLessThanOrEqual(20);apps.push(...page!.applications.map(row=>row.id));appCursor=page!.nextCursor;}while(appCursor);expect(apps).toHaveLength(45);expect(new Set(apps).size).toBe(45);
+    const {GET:readApplications}=await import('@/app/api/author/arcs/[id]/applications/route'),{GET:readOffers}=await import('@/app/api/arcs/route'),{GET:readOwned}=await import('@/app/api/author/arcs/route'),{POST:decide}=await import('@/app/api/author/arcs/[id]/approve/route');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:observer} as never);expect((await readApplications(new Request('https://app.test/applications'),{params:{id:arc}})).status).toBe(403);
+    const visible=await readOffers(new Request('https://app.test/arcs?authorId='+author));expect(visible.status).toBe(200);expect(visible.headers.get('Cache-Control')).toBe('private, no-store');expect((await visible.json()).actorId).toBe(observer);
+    vi.mocked(getCurrentUser).mockResolvedValue({id:author} as never);expect((await readOwned(new Request('https://app.test/author/arcs'))).status).toBe(200);
+    const firstPage=await getArcApplications(author,arc);expect((await readApplications(new Request('https://app.test/applications?status=pending&cursor='+encodeURIComponent(firstPage!.nextCursor!)),{params:{id:arc}})).status).toBe(400);
+    expect((await readApplications(new Request('https://app.test/applications?cursor='+encodeURIComponent(firstPage!.nextCursor!)),{params:{id:offers[1].id}})).status).toBe(400);
+    const inactive=pending[42];await sql`update users set is_banned=true where id=${inactive.reader_id}`;
+    const request=(applicationId:string,approved:boolean,key:string,actor=author)=>new Request('https://app.test/approve',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'X-Liravo-Actor':actor},body:JSON.stringify({applicationId,approved})});
+    expect((await decide(request(inactive.id,true,'arc076-inactive-approval'),{params:{id:arc}})).status).toBe(404);
+    expect((await sql`select status from arc_applications where id=${inactive.id}`)[0].status).toBe('pending');
+    const decisions=await Promise.all([pending[0],pending[1]].map(row=>decide(request(row.id,true,'arc076-last-slot-'+row.id),{params:{id:arc}})));expect(decisions.map(response=>response.status).sort()).toEqual([200,409]);
+    const winning=await decisions.find(response=>response.status===200)!.json();expect(winning).toMatchObject({actorId:author,arcId:arc,application:{status:'approved',arc_id:arc}});
+    const winningKey='arc076-last-slot-'+winning.application.id;expect((await decide(request(winning.application.id,true,winningKey),{params:{id:arc}})).status).toBe(200);
+    await expect(sql`update arc_applications set status='rejected' where id=${winning.application.id}`).rejects.toThrow('Decision is final');
+    expect((await decide(request(inactive.id,false,'arc076-inactive-rejection'),{params:{id:arc}})).status).toBe(200);expect((await decide(request(inactive.id,false,'arc076-inactive-rejection'),{params:{id:arc}})).status).toBe(200);
+    expect((await sql`select count(*)::int as n from notifications where user_id=${inactive.reader_id} and entity_id=${arc}`)[0].n).toBe(1);
+    const complete=await getArcApplications(author,arc);expect(complete).toMatchObject({statistics:{total:45,pending:41,approved:3,rejected:1},arc:{slots_remaining:0,can_review:false}});
+    for(const status of ['pending','approved','rejected'] as const){let cursor:string|null=null;const rows:string[]=[];do{const page=await getArcApplications(author,arc,status,cursor);expect(page!.applications.every(row=>row.status===status)).toBe(true);rows.push(...page!.applications.map(row=>row.id));cursor=page!.nextCursor;}while(cursor);expect(rows).toHaveLength(complete!.statistics[status]);}
+    const denied=await decide(request(pending[2].id,false,'arc076-actor-mismatch',observer),{params:{id:arc}});expect(denied.status).toBe(409);
+    const own=await getArcs(author,true);expect((await readOffers(new Request('https://app.test/arcs?cursor='+encodeURIComponent(own.nextCursor!)))).status).toBe(400);
+    for(const role of ['anon','authenticated']){
+      for(const table of ['arcs','arc_applications'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['arc_offer_document(uuid,uuid)','arc_catalog_snapshot(uuid,boolean,timestamptz,uuid,uuid,integer)','arc_application_snapshot(uuid,uuid,text,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

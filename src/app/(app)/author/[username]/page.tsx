@@ -1,10 +1,12 @@
+import {getArcs} from '@/lib/arcs';
+import {ArcOfferCard} from '@/components/author/ArcCatalog';
 import {decodeCursor} from '@/lib/pagination';
-import {getTranslations,getFormatter} from 'next-intl/server';
+import {getTranslations} from 'next-intl/server';
 import {getAuthorCatalog} from '@/lib/author-catalog';
 import {jsonForHtml} from '@/lib/metadata';
 import { languageAlternates } from '@/lib/metadata';
 import { singleRelation } from '@/lib/utils';
-import { CsrfInput } from '@/components/layout/CsrfInput';
+import {createServiceClient} from '@/lib/supabase/server';
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
@@ -61,17 +63,9 @@ interface AuthorPost {
   created_at: string;
 }
 
-interface Arc {
-  id: string;
-  book_id: string;
-  description: string;
-  reader_slots: number;
-  close_date: string | null;
-  created_at: string;
-}
 
 export default async function AuthorProfilePage({params,searchParams}:{params:{username:string};searchParams?:{cursor?:string}}) {
-  const common=await getTranslations('common'),t=await getTranslations('authorProfile'),format=await getFormatter();
+  const common=await getTranslations('common'),t=await getTranslations('authorProfile');
   try{decodeCursor(searchParams?.cursor??null);}catch{notFound();}
   const supabase = createClient();
   const {
@@ -142,23 +136,11 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
       .filter(Boolean) as Array<{ id: string; title: string; cover_url: string | null }>;
   }
 
-  // Active ARCs
-  const { data: arcsRaw } = await supabase
-    .from('arcs')
-    .select('id, book_id, description, reader_slots, close_date, created_at')
-    .eq('author_id', author.id)
-    .eq('is_active', true)
-    .limit(5);
+  const {arcs}=await getArcs(currentUser?.id??null,false,null,author.id);
 
-  const arcs: Arc[] = arcsRaw ?? [];
+  const {count:followerCount,error:followerError}=await createServiceClient().from('follows').select('follower_id',{count:'exact',head:true}).eq('following_id',author.id);
+  if(followerError)throw new Error('Followers unavailable');
 
-  // Follower count
-  const { count: followerCount } = await supabase
-    .from('follows')
-    .select('follower_id', { count: 'exact', head: true })
-    .eq('following_id', author.id);
-
-  // Is current user following
   let isFollowing = false;
   if (currentUser) {
     const { data: follow } = await supabase
@@ -283,47 +265,7 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
 
       {nextCursor&&<Link href={`/author/${encodeURIComponent(params.username)}?cursor=${encodeURIComponent(nextCursor)}#books`} className="text-sm underline">{common('loadMore')}</Link>}
 
-      {/* Active ARCs */}
-      {arcs.length > 0 && (
-        <section>
-          <h2 className="font-display text-xl font-bold mb-4">{t('arcs')}</h2>
-          <div className="space-y-3">
-            {arcs.map((arc) => (
-              <div
-                key={arc.id}
-                className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <p className="text-sm text-neutral-700 dark:text-neutral-300 mb-2">
-                      {arc.description}
-                    </p>
-                    <div className="flex items-center gap-3 text-xs text-neutral-500">
-                      <span>{t('slots',{count:arc.reader_slots})}</span>
-                      {arc.close_date && (
-                        <span>{t('closes',{date:format.dateTime(new Date(arc.close_date),{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'})})}</span>
-                      )}
-                    </div>
-                  </div>
-                  {currentUser && currentUser.id !== author.id && (
-                    <form
-                      action={`/api/author/arcs/${arc.id}/apply`}
-                      method="POST"
-                    ><CsrfInput />
-                      <button
-                        type="submit"
-                        className="px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-semibold hover:opacity-90 transition-opacity flex-shrink-0"
-                      >
-                        {t('apply')}
-                      </button>
-                    </form>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {arcs.length>0&&<section className="space-y-3"><h2 className="font-display text-xl font-bold">{t('arcs')}</h2>{arcs.map(arc=><ArcOfferCard key={arc.id} arc={arc} actorId={currentUser?.id??null}/>)}<Link href={'/arcs?authorId='+author.id} className="text-sm underline">{common('loadMore')}</Link></section>}
 
       {/* From the Author Posts */}
       {posts.length > 0 && (

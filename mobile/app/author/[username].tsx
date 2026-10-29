@@ -95,6 +95,7 @@ export default function AuthorProfileScreen() {
           </View>
         </View>
 
+        {author.is_verified_author&&<Button variant="outline" onPress={()=>router.push('/arcs?authorId='+author.id)}>{ui('arcs.viewOffers')}</Button>}
         {author.bio && <Text className="text-foreground text-sm">{author.bio}</Text>}
 
         {/* Actions */}

@@ -6,7 +6,7 @@ import {createTranslator} from 'next-intl';
 import fr from '../messages/fr.json';
 
 class ApiError extends Error{constructor(public status:number){super('Isolated failure');}}
-function mount(file:string,query:any,infinite:any={data:undefined}){
+function mount(file:string,query:any,infinite:any={data:undefined},exportName='default'){
   const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn(),push=vi.fn();let cursor=0;
   const owner={id:'reader',username:'reader'},store=Object.assign((selector?:any)=>selector?selector({user:owner}):{user:owner},{getState:()=>({user:owner})}),translate=createTranslator({locale:'fr',messages:fr,onError:error=>{throw error;}});
   const exports:any={},code=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
@@ -16,7 +16,7 @@ function mount(file:string,query:any,infinite:any={data:undefined}){
     if(name==='react-native')return {View:'View',Text:'Text',ScrollView:'ScrollView',FlatList:'FlatList',TouchableOpacity:'TouchableOpacity',Alert:{alert:vi.fn()},KeyboardAvoidingView:'KeyboardAvoidingView',Platform:{OS:'android'},ActivityIndicator:'ActivityIndicator'};
     if(name==='react-native-safe-area-context')return {SafeAreaView:'SafeAreaView'};
     if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push,back:vi.fn()})};
-    if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:unknown)=>{queries.push(options);return infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&key.includes('question')?infinite:query;target.data=update(target.data);}})};
+    if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:unknown)=>{queries.push(options);return infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&(key.includes('question')||key.includes('arc')||key.includes('arcs'))?infinite:query;target.data=update(target.data);}})};
     if(name==='@/hooks/useTranslations')return {useTranslations:(namespace='')=>({locale:'fr',t:(key:string,values?:Record<string,string|number>)=>translate([namespace,key].filter(Boolean).join('.') as Parameters<typeof translate>[0],values)})};
     if(name==='@/stores/auth')return {useAuthStore:store};
     if(name==='@/hooks/useRequestIntent')return {useRequestIntent:()=>({durableHeaders:async()=>({'Idempotency-Key':'durable-writing-key','X-Liravo-Actor':'reader'}),complete:completions})};
@@ -26,7 +26,7 @@ function mount(file:string,query:any,infinite:any={data:undefined}){
     if(name==='@/components/ui/EmptyState')return {QueryError:'QueryError',EmptyState:'EmptyState'};
     const match=name.match(/^@\/components\/ui\/(\w+)$/);if(match)return {[match[1]]:match[1]};throw Error(name);
   }});
-  function render(){cursor=0;mutations.length=0;queries.length=0;return exports.default();}
+  function render(){cursor=0;mutations.length=0;queries.length=0;return exports[exportName]({});}
   const find=(tree:any,type:string):any=>{if(!tree)return undefined;if(Array.isArray(tree))return tree.map(node=>find(node,type)).find(Boolean);if(tree.type===type)return tree;return find(tree.props?.children,type);};
   return {render,find,mutations,queries,post,get,completions,push};
 }
@@ -88,4 +88,20 @@ it('keeps native answer receipts until the acknowledged question and author both
 it('keeps native best-answer receipts when the acknowledgement belongs to another account',async()=>{
   const author={id:'reader',username:'reader',display_name:'Reader'},thread={question:{id:'workshop-id',question:'A useful question',answer_count:1,author},bestAnswer:null,answers:[],canAnswer:false,isOwner:true},view=mount('mobile/app/write/ask/[id].tsx',{}, {data:{pages:[thread]}});view.render();
   view.post.mockResolvedValue({ok:true,actorId:'someone-else',questionId:'workshop-id',answerId:'answer'});await expect(view.mutations[1].mutationFn({id:'answer'})).rejects.toThrow('Invalid best answer receipt');expect(view.completions).not.toHaveBeenCalled();
+});
+
+it('renders ARC failures without a permanent spinner and disables only approval for inactive readers',()=>{
+  const failure=mount('mobile/app/author/arcs/[id].tsx',{}, {error:new ApiError(403)});expect(failure.find(failure.render(),'QueryError')).toBeTruthy();
+  const row={id:'application',reader_id:'applicant',status:'pending',applied_at:'2026-10-29T00:00:00Z',reader:{display_name:'Inactive reader',username:'inactive',active:false,xp:10}},snapshot={actorId:'reader',arc:{id:'workshop-id',books:{title:'An edition'},reader_slots:3,can_review:true,is_open:true},statistics:{total:45,pending:43,approved:2,rejected:0},applications:[row]};
+  const view=mount('mobile/app/author/arcs/[id].tsx',{}, {data:{pages:[snapshot]}}),list=view.find(view.render(),'FlatList'),card=list.props.renderItem({item:row}),buttons=card.props.children[2].props.children;
+  expect(JSON.stringify(list.props.ListHeaderComponent)).toContain('45');expect(buttons[0].props.disabled).toBe(true);expect(buttons[1].props.disabled).toBe(false);expect(buttons[1].props.children).toBe(fr.arcs.reject);
+});
+it('uses acknowledged ARC decisions and complete counts while retaining foreign receipts',async()=>{
+  const row={id:'application',arc_id:'workshop-id',reader_id:'applicant',status:'pending',applied_at:'2026-10-29T00:00:00Z',reader:{display_name:'Reader',username:'reader',active:true,xp:10}},snapshot={actorId:'reader',arc:{id:'workshop-id',books:{title:'An edition'},reader_slots:3,can_review:true,is_open:true},statistics:{total:45,pending:43,approved:2,rejected:0},applications:[row]},view=mount('mobile/app/author/arcs/[id].tsx',{}, {data:{pages:[snapshot]}});view.render();
+  view.post.mockResolvedValueOnce({actorId:'reader',arcId:'different',application:{...row,status:'approved'}});await expect(view.mutations[0].mutationFn({row,approved:true})).rejects.toThrow('Invalid ARC decision receipt');expect(view.completions).not.toHaveBeenCalled();
+  view.post.mockResolvedValueOnce({actorId:'reader',arcId:'workshop-id',application:{...row,status:'approved',reviewed_at:'2026-10-29T01:00:00Z'}});const saved=await view.mutations[0].mutationFn({row,approved:true});view.mutations[0].onSuccess(saved);expect(view.completions).toHaveBeenCalledExactlyOnceWith('arc.review.workshop-id.application');const list=view.find(view.render(),'FlatList');expect(list.props.data[0].status).toBe('approved');expect(JSON.stringify(list.props.ListHeaderComponent)).toContain('3 / 3');
+});
+it('updates native ARC application status immediately after the owned acknowledgement',async()=>{
+  const arc={id:'arc',author_id:'author',books:{id:'book',title:'Edition'},my_application_status:null,can_apply:true,slots_remaining:1,is_open:true},view=mount('mobile/components/author/ArcCatalog.tsx',{}, {data:{pages:[{actorId:'reader',arcs:[arc]}]}},'ArcCatalog');view.render();
+  view.post.mockResolvedValue({actorId:'reader',arcId:'arc',application:{id:'application',arc_id:'arc',reader_id:'reader',status:'pending'}});const result=await view.mutations[0].mutationFn('arc');view.mutations[0].onSuccess(result);const list=view.find(view.render(),'FlatList');expect(list.props.data[0]).toMatchObject({my_application_status:'pending',can_apply:false});expect(view.completions).toHaveBeenCalledExactlyOnceWith('arc.apply.arc');
 });
