@@ -9,7 +9,7 @@
 1. **An Expo account** — sign up free at [expo.dev](https://expo.dev)
 2. **A Google Play Console account** — one-time $25 registration fee at [play.google.com/console](https://play.google.com/console)
 3. **A Google Cloud Console account** — free, used for service account credentials
-4. **The `mobile/` folder** pushed to your GitHub repo (already done)
+4. **The repository checkout**, including `mobile/`, `messages/` and shared `src/lib`/`src/constants` files
 5. **Your environment variables** from `mobile/.env.example`
 
 ---

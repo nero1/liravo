@@ -979,6 +979,8 @@ The goal is a self-moderating community with minimal admin involvement in day-to
 
 ## 13. Admin Panel
 
+Native admin catalogs use complete private cursor pages, real user/theme/event fields, owned retry receipts and EN/FR/DE controls. Cron Status includes outbox, integrity and operational data alongside health; web theme catalogs also paginate.
+
 Accessible at `/admin`. Every admin route verifies `is_admin = true` against the `users` table in the database server-side. Session data alone is never trusted for admin access.
 
 ### 13.1 Dashboard

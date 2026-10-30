@@ -2175,5 +2175,38 @@
     "restoredMessage": "Your Premium access has been restored.",
     "partiallyRestoredMessage": "Premium access was restored, but some purchases could not be verified. Try restoring again.",
     "openFailed": "Could not open subscription management. Please try again."
+  },
+  "nativeAdmin": {
+    "entries": "{count, plural, one {# entry} other {# entries}}",
+    "empty": "No entries",
+    "refresh": "Refresh",
+    "updateFailed": "Could not confirm the change. Please try again.",
+    "signInRequired": "At least one sign-in provider must remain active.",
+    "suspended": "Suspended",
+    "banned": "Banned",
+    "actions": "Actions",
+    "moderateUser": "Moderate {name}",
+    "suspend": "Suspend",
+    "unsuspend": "Restore account",
+    "activate": "Activate {name}",
+    "promotion": "Promotion",
+    "until": "Until {date}",
+    "dateRange": "{start} – {end}",
+    "published": "Published",
+    "draft": "Draft",
+    "challengeSummary": "{count, plural, one {# participant} other {# participants}} · {xp} XP",
+    "systemStatus": "System status",
+    "utcSchedule": "{schedule} (UTC)",
+    "statuses": {
+      "ok": "Healthy",
+      "error": "Error",
+      "degraded": "Degraded",
+      "unknown": "Unknown"
+    },
+    "services": {
+      "database": "Database",
+      "redis": "Redis"
+    },
+    "noEndDate": "No end date"
   }
 }

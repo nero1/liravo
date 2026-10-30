@@ -2175,5 +2175,38 @@
     "restoredMessage": "Votre accès Premium a été restauré.",
     "partiallyRestoredMessage": "L’accès Premium a été restauré, mais certains achats n’ont pas pu être vérifiés. Réessayez de restaurer.",
     "openFailed": "Impossible d’ouvrir la gestion de l’abonnement. Veuillez réessayer."
+  },
+  "nativeAdmin": {
+    "entries": "{count, plural, one {# élément} other {# éléments}}",
+    "empty": "Aucun élément",
+    "refresh": "Actualiser",
+    "updateFailed": "Impossible de confirmer la modification. Veuillez réessayer.",
+    "signInRequired": "Au moins un fournisseur de connexion doit rester actif.",
+    "suspended": "Suspendu",
+    "banned": "Banni",
+    "actions": "Actions",
+    "moderateUser": "Modérer {name}",
+    "suspend": "Suspendre",
+    "unsuspend": "Rétablir le compte",
+    "activate": "Activer {name}",
+    "promotion": "Promotion",
+    "until": "Jusqu’au {date}",
+    "dateRange": "{start} – {end}",
+    "published": "Publié",
+    "draft": "Brouillon",
+    "challengeSummary": "{count, plural, one {# participant} other {# participants}} · {xp} XP",
+    "systemStatus": "État du système",
+    "utcSchedule": "{schedule} (UTC)",
+    "statuses": {
+      "ok": "Opérationnel",
+      "error": "Erreur",
+      "degraded": "Dégradé",
+      "unknown": "Inconnu"
+    },
+    "services": {
+      "database": "Base de données",
+      "redis": "Redis"
+    },
+    "noEndDate": "Sans date de fin"
   }
 }

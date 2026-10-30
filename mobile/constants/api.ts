@@ -174,9 +174,10 @@ export const ENDPOINTS = {
     promotedListings: '/api/admin/promoted-listings',
     seasonalEvents: '/api/admin/seasonal-events',
     themes: '/api/admin/themes',
+    writingChallenges:'/api/admin/writing-challenges',
     payouts: (id: string) => `/api/admin/payouts/${id}/process`,
     verifyAuthor: '/api/admin/verify-author',
-    cronStatus: '/api/health',
+    cronStatus: '/api/admin/cron-status',
   },
   // Import
   import: {

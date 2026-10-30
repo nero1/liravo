@@ -2175,5 +2175,38 @@
     "restoredMessage": "Dein Premium-Zugang wurde wiederhergestellt.",
     "partiallyRestoredMessage": "Premium wurde wiederhergestellt, aber einige Käufe konnten nicht bestätigt werden. Versuche die Wiederherstellung erneut.",
     "openFailed": "Die Aboverwaltung konnte nicht geöffnet werden. Bitte versuche es erneut."
+  },
+  "nativeAdmin": {
+    "entries": "{count, plural, one {# Eintrag} other {# Einträge}}",
+    "empty": "Keine Einträge",
+    "refresh": "Aktualisieren",
+    "updateFailed": "Die Änderung konnte nicht bestätigt werden. Bitte versuche es erneut.",
+    "signInRequired": "Mindestens ein Anmeldeanbieter muss aktiv bleiben.",
+    "suspended": "Gesperrt",
+    "banned": "Verbannt",
+    "actions": "Aktionen",
+    "moderateUser": "{name} moderieren",
+    "suspend": "Sperren",
+    "unsuspend": "Konto wieder freigeben",
+    "activate": "{name} aktivieren",
+    "promotion": "Werbeeintrag",
+    "until": "Bis {date}",
+    "dateRange": "{start} – {end}",
+    "published": "Veröffentlicht",
+    "draft": "Entwurf",
+    "challengeSummary": "{count, plural, one {# Teilnehmer} other {# Teilnehmer}} · {xp} XP",
+    "systemStatus": "Systemstatus",
+    "utcSchedule": "{schedule} (UTC)",
+    "statuses": {
+      "ok": "Funktionsfähig",
+      "error": "Fehler",
+      "degraded": "Eingeschränkt",
+      "unknown": "Unbekannt"
+    },
+    "services": {
+      "database": "Datenbank",
+      "redis": "Redis"
+    },
+    "noEndDate": "Ohne Enddatum"
   }
 }
