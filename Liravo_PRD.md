@@ -454,6 +454,7 @@ The affiliate store system must be designed so new stores can be added by admin 
 ### 7.6 Quotes
 
 - Users submit a quote from any book.
+- Web/native catalogs paginate all visible quotes, preserve the selected edition and honor restricted profiles.
 - Displayed on the book page.
 - Styled into a shareable image card using the book cover's colour palette.
 - Quote cards are a primary virality mechanism for Instagram, X/Twitter, and WhatsApp.
@@ -584,6 +585,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 **Book Debates:**
 - User posts a provocative claim about a book.
+- Web/native creation selects an edition and validates 5–200 trimmed characters. Catalogs/detail show complete counts and final votes with owned retry recovery; public share cards use EN/FR/DE.
 - Others vote agree/disagree and add arguments.
 - Debate cards are shareable.
 

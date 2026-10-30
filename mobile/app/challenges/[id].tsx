@@ -1,49 +1,20 @@
+import {useState} from 'react';
+import {View,Text,FlatList,TouchableOpacity,Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useRouter,useLocalSearchParams} from 'expo-router';
+import {useInfiniteQuery,useQueryClient} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
 import {useTranslations} from '@/hooks/useTranslations';
-import { QueryError } from '@/components/ui/EmptyState';
-import { View, Text, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { Button } from '@/components/ui/Button';
-import type { ChallengeRow } from '@/types';
-
-export default function ChallengeDetailScreen() {
-  const {t:ui}=useTranslations('');
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const qc = useQueryClient();
-  const { data, isLoading,error,refetch } = useQuery({
-    queryKey: ['challenge', id],
-    queryFn: () => api.get<{ challenge: ChallengeRow;joined:boolean }>(ENDPOINTS.challenges.byId(id!)),
-    enabled: !!id,
-  });
-  const join = useMutation({
-    mutationFn: () => api.post(ENDPOINTS.challenges.join(id!)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['challenge', id] }); Alert.alert('Joined!'); },
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  const challenge = data?.challenge;
-  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
-
-  if (isLoading || !challenge) return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 16 }}>
-        <View className="flex-row items-center gap-2 flex-wrap">
-          <Text className="text-2xl font-bold text-foreground flex-1">{challenge.title}</Text>
-
-        </View>
-        {challenge.description && <Text className="text-foreground">{challenge.description}</Text>}
-        <View className="flex-row gap-4">
-          <Text className="text-sm text-muted-foreground">📚 {challenge.goal_books??0} books · {challenge.goal_pages??0} pages</Text>
-          <Text className="text-sm text-muted-foreground">👥 {challenge.participant_count??0}{ui('writingChallenge.joined')}</Text>
-          {challenge.end_date && <Text className="text-sm text-muted-foreground">📅 Ends {new Date(challenge.end_date).toLocaleDateString()}</Text>}
-        </View>
-        <Button onPress={() => join.mutate()} loading={join.isPending} disabled={data?.joined||!challenge.is_active||!!challenge.end_date&&new Date(challenge.end_date)<=new Date()} size="lg">{data?.joined?"Joined":"Join Challenge"}</Button>
-      </ScrollView>
-    </SafeAreaView>
-  );
+import {Button} from '@/components/ui/Button';
+import {QueryError} from '@/components/ui/EmptyState';
+import type {ReadingChallengeDetail} from '@/types';
+export default function ChallengeDetailScreen(){const {id}=useLocalSearchParams<{id:string}>(),owner=useAuthStore(state=>state.user?.id);return <NativeReadingChallenge key={owner+':'+id} id={id??''} owner={owner}/>;}
+export function NativeReadingChallenge({id,owner}:{id:string;owner:string|undefined}){
+  const {t,locale}=useTranslations('readingChallenges'),{t:common}=useTranslations('common'),router=useRouter(),qc=useQueryClient(),[saving,setSaving]=useState(false);
+  const query=useInfiniteQuery({queryKey:['challenge',owner,id],enabled:!!owner&&!!id,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<ReadingChallengeDetail>('/api/challenges/'+id,pageParam?{participantsCursor:pageParam}:{},signal);if(data.actorId!==owner||data.challenge?.id!==id||!Array.isArray(data.participants))throw Error('Invalid challenge');return data;},getNextPageParam:page=>page.participantsNextCursor}),data=query.data?.pages[0],challenge=data?.challenge;
+  async function join(){if(saving||!challenge?.can_join||!owner)return;setSaving(true);let confirmed=false;try{const result=await api.post<{actorId:string;challengeId:string;joined:boolean;success:boolean}>('/api/challenges/'+id+'/join',undefined,{'X-Liravo-Actor':owner});if(result.actorId!==owner||result.challengeId!==id||!result.joined||!result.success)throw Error('Invalid challenge receipt');confirmed=true;}catch{try{const result=await api.get<ReadingChallengeDetail>('/api/challenges/'+id);confirmed=result.actorId===owner&&result.challenge?.id===id&&result.joined;}catch{}}finally{if(confirmed){if(useAuthStore.getState().user?.id===owner){void qc.invalidateQueries({queryKey:['challenges']});await query.refetch();}}else Alert.alert(common('error'),t('joinFailed'));setSaving(false);}}
+  if(!challenge)return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>{query.isError?<QueryError error={query.error} retry={()=>void query.refetch()}/>:<Text className="p-4">{common('loading')}</Text>}</SafeAreaView>;
+  const date=(value:string)=>new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeZone:'UTC'}).format(new Date(value));
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={query.data?.pages.flatMap(page=>page.participants)??[]} keyExtractor={participant=>participant.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:16}} ListHeaderComponent={<View className="gap-3"><Text accessibilityRole="header" className="text-2xl font-bold text-foreground">{challenge.title}</Text>{!!challenge.description&&<Text className="text-muted-foreground">{challenge.description}</Text>}<Text className="text-accent">{t(challenge.cadence)}</Text><Text className="text-muted-foreground">{t('participants',{count:challenge.participant_count})}</Text>{challenge.start_date&&<Text className="text-sm text-muted-foreground">{t('starts',{date:date(challenge.start_date)})}</Text>}<Text className="text-sm text-muted-foreground">{challenge.end_date?t('ends',{date:date(challenge.end_date)}):t('openEnded')}</Text><Text accessibilityRole="header" className="font-semibold text-foreground">{t('goals')}</Text>{challenge.goal_books!==null&&<Text className="text-foreground">{t('books',{count:challenge.goal_books})}</Text>}{challenge.goal_pages!==null&&<Text className="text-foreground">{t('pages',{count:challenge.goal_pages})}</Text>}<Button disabled={saving||!challenge.can_join} loading={saving} onPress={()=>void join()}>{t(data?.joined?'joined':'join')}</Button>{!data?.joined&&<Text className="text-sm text-muted-foreground">{t(challenge.can_join?'joinHelp':'notOpen')}</Text>}{data?.joined&&data.progress&&<View className="gap-2"><Text accessibilityRole="header" className="font-semibold text-foreground">{t('progress')}</Text>{data.progress.goalBooks!==null&&<Text className="text-foreground">{t('bookProgress',{count:data.progress.booksFinished,goal:data.progress.goalBooks})}</Text>}{data.progress.goalPages!==null&&<Text className="text-foreground">{t('pageProgress',{count:data.progress.pagesRead,goal:data.progress.goalPages})}</Text>}<Text className="text-xs text-muted-foreground">{t('editionRule')}</Text></View>}<Text accessibilityRole="header" className="font-semibold text-foreground">{t('roster')}</Text></View>} renderItem={({item:participant})=><TouchableOpacity accessibilityRole="link" onPress={()=>router.push('/user/'+participant.username)} className="border-b border-border pb-3 gap-1"><Text className="font-medium text-foreground">{participant.display_name} (@{participant.username})</Text></TouchableOpacity>} ListFooterComponent={<View className="gap-3">{query.isError&&<QueryError error={query.error} retry={()=>void query.refetch()}/>} {query.hasNextPage&&<Button loading={query.isFetchingNextPage} onPress={()=>void query.fetchNextPage()}>{common('loadMore')}</Button>}<Button variant="outline" loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></View>}/></SafeAreaView>;
 }

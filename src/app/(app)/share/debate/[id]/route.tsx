@@ -1,103 +1,14 @@
-import { singleRelation } from '@/lib/utils';
-import { ImageResponse } from '@vercel/og';
-import { createServiceClient } from '@/lib/supabase/server';
-
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
-
-export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createServiceClient();
-
-  const { data: debate } = await supabase
-    .from('debates')
-    .select('id, question, yes_count, no_count, books:book_id(title, author_name, cover_url)')
-    .eq('id', params.id)
-    .single();
-
-  if (!debate) {
-    return new Response('Not found', { status: 404 });
-  }
-
-  const book = singleRelation(debate.books);
-  const total = (debate.yes_count ?? 0) + (debate.no_count ?? 0);
-  const yesPct = total > 0 ? Math.round((debate.yes_count / total) * 100) : 50;
-  const noPct = 100 - yesPct;
-
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          width: '100%',
-          height: '100%',
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-          padding: '56px',
-          fontFamily: 'sans-serif',
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: '#d97706' }}>Liravo</span>
-          <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.08)', padding: '4px 12px', borderRadius: '999px' }}>
-            Book Debate
-          </span>
-        </div>
-
-        {/* Question */}
-        <h1
-          style={{
-            fontSize: debate.question.length > 80 ? '30px' : '40px',
-            fontWeight: 700,
-            color: '#ffffff',
-            margin: 0,
-            lineHeight: 1.2,
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-          }}
-        >
-          {debate.question}
-        </h1>
-
-        {/* Book attribution */}
-        {book && (
-          <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', margin: '16px 0 24px' }}>
-            Re: <span style={{ color: 'rgba(255,255,255,0.75)' }}>{book.title}</span>
-            {book.author_name ? ` by ${book.author_name}` : ''}
-          </p>
-        )}
-
-        {/* Vote bar */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Bar */}
-          <div style={{ display: 'flex', height: '16px', borderRadius: '8px', overflow: 'hidden' }}>
-            <div style={{ width: `${yesPct}%`, background: '#16a34a' }} />
-            <div style={{ width: `${noPct}%`, background: '#dc2626' }} />
-          </div>
-
-          {/* Labels */}
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '20px', fontWeight: 700, color: '#4ade80' }}>
-              👍 {yesPct}% Agree ({debate.yes_count ?? 0})
-            </span>
-            <span style={{ fontSize: '20px', fontWeight: 700, color: '#f87171' }}>
-              👎 {noPct}% Disagree ({debate.no_count ?? 0})
-            </span>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.35)', marginTop: '24px' }}>
-          {APP_URL}/debates/{params.id}
-        </p>
-      </div>
-    ),
-    { width: 1200, height: 630 }
-  );
+import {ImageResponse} from '@vercel/og';
+import {getLocale,getTranslations} from 'next-intl/server';
+import {z} from 'zod';
+import {getReadingDebate,ReadingCatalogError} from '@/lib/reading-discovery';
+import {APP_URL} from '@/constants/config';
+export const dynamic='force-dynamic';
+export const runtime='nodejs';
+export async function GET(request:Request,{params}:{params:{id:string}}){
+  if(!z.string().uuid().safeParse(params.id).success)return new Response('Invalid share request',{status:400});
+  const locale=z.enum(['en','fr','de']).safeParse(new URL(request.url).searchParams.get('locale')??await getLocale());if(!locale.success)return new Response('Invalid share request',{status:400});
+  let debate;try{debate=(await getReadingDebate(null,params.id)).debate;}catch(error){return new Response('Debate unavailable',{status:error instanceof ReadingCatalogError?error.status:503});}
+  const t=await getTranslations({locale:locale.data,namespace:'bookDebates'}),total=debate.yes_count+debate.no_count,yes=total?Math.round(debate.yes_count*100/total)/100:0,percent=new Intl.NumberFormat(locale.data,{style:'percent',maximumFractionDigits:0});
+  return new ImageResponse(<div style={{display:'flex',flexDirection:'column',width:'100%',height:'100%',background:'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',padding:56,fontFamily:'sans-serif',color:'#ffffff'}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:24}}><span style={{fontSize:24,fontWeight:700,color:'#d97706'}}>Liravo</span><span style={{fontSize:18,color:'#cbd5e1'}}>{t('title')}</span></div><h1 style={{display:'flex',alignItems:'center',flex:1,fontSize:debate.question.length>80?32:42,fontWeight:700,lineHeight:1.2,margin:0}}>{debate.question}</h1><p style={{display:'flex',fontSize:16,color:'#cbd5e1',margin:'16px 0 24px'}}>{t('shareBook',{title:debate.book.title,author:debate.book.author_name})}</p><div style={{display:'flex',height:16,borderRadius:8,overflow:'hidden',background:'#475569'}}>{total>0&&<><div style={{display:'flex',width:yes*100+'%',background:'#16a34a'}}/><div style={{display:'flex',width:(1-yes)*100+'%',background:'#dc2626'}}/></>}</div><div style={{display:'flex',justifyContent:'space-between',marginTop:12,fontSize:20,fontWeight:700}}>{total>0?<><span style={{color:'#4ade80'}}>{t('yesCount',{count:debate.yes_count})+' · '+percent.format(yes)}</span><span style={{color:'#f87171'}}>{t('noCount',{count:debate.no_count})+' · '+percent.format(1-yes)}</span></>:<span style={{color:'#cbd5e1'}}>{t('noVotes')}</span>}</div>{!debate.is_active&&<p style={{display:'flex',fontSize:16,color:'#cbd5e1'}}>{t('closed')}</p>}<p style={{display:'flex',fontSize:14,color:'#94a3b8',marginTop:24}}>{APP_URL+'/debates/'+params.id}</p></div>,{width:1200,height:630});
 }

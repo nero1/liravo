@@ -1,49 +1,17 @@
-import { QueryError } from '@/components/ui/EmptyState';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { EmptyState } from '@/components/ui/EmptyState';
-import type { ChallengeRow } from '@/types';
-
-export default function ChallengesScreen() {
-  const router = useRouter();
-  const { data, isLoading,error,refetch } = useQuery({
-    queryKey: ['challenges'],
-    queryFn: () => api.get<{ challenges: ChallengeRow[] }>(ENDPOINTS.challenges.list),
-  });
-  const challenges = data?.challenges ?? [];
-
-  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      {isLoading ? (
-        <View className="flex-1 items-center justify-center"><ActivityIndicator color="#d97706" /></View>
-      ) : (
-        <FlatList
-          data={challenges}
-          keyExtractor={(c) => c.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              className="px-4 py-4 border-b border-border gap-1"
-              onPress={() => router.push(`/challenges/${item.id}`)}
-              activeOpacity={0.7}
-            >
-              <View className="flex-row items-center justify-between">
-                <Text className="font-semibold text-foreground flex-1">{item.title}</Text>
-
-              </View>
-              {item.description && <Text className="text-sm text-muted-foreground" numberOfLines={2}>{item.description}</Text>}
-              <Text className="text-xs text-accent">{item.goal_books??0} books · {item.goal_pages??0} pages</Text>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={<EmptyState title="No challenges yet" />}
-          contentContainerStyle={{ paddingBottom: 24 }}
-        />
-      )}
-    </SafeAreaView>
-  );
+import {useState} from 'react';
+import {View,Text,FlatList,TouchableOpacity} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useRouter} from 'expo-router';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useTranslations} from '@/hooks/useTranslations';
+import {Button} from '@/components/ui/Button';
+import {QueryError,EmptyState} from '@/components/ui/EmptyState';
+import type {ReadingChallengePage} from '@/types';
+export default function ChallengesScreen(){
+  const owner=useAuthStore(state=>state.user?.id),{t,locale}=useTranslations('readingChallenges'),{t:common}=useTranslations('common'),router=useRouter(),[scope,setScope]=useState<'active'|'mine'>('active');
+  const query=useInfiniteQuery({queryKey:['challenges',owner,scope],enabled:!!owner,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<ReadingChallengePage>('/api/challenges',{scope,...(pageParam?{cursor:pageParam}:{})},signal);if(data.actorId!==owner||!Array.isArray(data.challenges))throw Error('Invalid challenge catalog');return data;},getNextPageParam:page=>page.nextCursor});
+  const date=(value:string)=>new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeZone:'UTC'}).format(new Date(value));
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={query.data?.pages.flatMap(page=>page.challenges)??[]} keyExtractor={challenge=>challenge.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:16}} ListHeaderComponent={<View className="gap-3 mb-2"><Text accessibilityRole="header" className="text-xl font-bold text-foreground">{t('title')}</Text><Text className="text-muted-foreground">{t('description')}</Text><View className="flex-row gap-2">{(['active','mine']as const).map(value=><Button key={value} variant={scope===value?'primary':'outline'} accessibilityState={{selected:scope===value}} onPress={()=>setScope(value)}>{t(value)}</Button>)}</View></View>} renderItem={({item:challenge})=><TouchableOpacity accessibilityRole="link" onPress={()=>router.push('/challenges/'+challenge.id)} className="rounded-xl border border-border p-4 gap-2"><Text className="font-semibold text-foreground">{challenge.title}</Text>{!!challenge.description&&<Text className="text-sm text-muted-foreground">{challenge.description}</Text>}<Text className="text-sm text-accent">{t(challenge.cadence)}{challenge.joined?' · '+t('joined'):''}</Text><Text className="text-sm text-muted-foreground">{t('participants',{count:challenge.participant_count})}</Text>{challenge.goal_books!==null&&<Text className="text-sm text-muted-foreground">{t('books',{count:challenge.goal_books})}</Text>}{challenge.goal_pages!==null&&<Text className="text-sm text-muted-foreground">{t('pages',{count:challenge.goal_pages})}</Text>}<Text className="text-xs text-muted-foreground">{challenge.end_date?t('ends',{date:date(challenge.end_date)}):t('openEnded')}</Text></TouchableOpacity>} ListEmptyComponent={query.isLoading?<Text>{common('loading')}</Text>:query.isError?null:<EmptyState title={t('empty')}/>} ListFooterComponent={<View className="gap-3">{query.isError&&<QueryError error={query.error} retry={()=>void query.refetch()}/>} {query.hasNextPage&&<Button loading={query.isFetchingNextPage} onPress={()=>void query.fetchNextPage()}>{common('loadMore')}</Button>}<Button variant="outline" loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></View>}/></SafeAreaView>;
 }

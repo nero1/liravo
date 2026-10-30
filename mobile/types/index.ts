@@ -198,20 +198,7 @@ export interface BuddyNote {
 export interface BuddyReadPage {actorId:string;buddy_reads:BuddyReadRow[];nextCursor:string|null;}
 export interface BuddyNotePage {actorId:string;roomId:string;notes:BuddyNote[];nextCursor:string|null;}
 
-export interface ChallengeRow {
-  id: string;
-  title: string;
-  description: string | null;
-  type: 'reading' | 'writing';
-  cadence:'weekly'|'monthly';
-  start_date: string | null;
-  end_date: string | null;
-  goal_books:number|null;
-  goal_pages:number|null;
-  is_active:boolean;
-  participant_count?: number;
-  created_at: string;
-}
+export type ChallengeRow=ReadingChallenge;
 
 export interface ListRow {
   id:string;user_id:string;name:string;description:string|null;is_public:boolean;created_at:string;updated_at:string;
@@ -389,3 +376,14 @@ export interface AppealActionPage {actions:AppealAction[];nextCursor:string|null
 export type LeaderboardType='global'|'national'|'friends'|'reviewers';
 export type LeaderboardPeriod='weekly'|'monthly'|'alltime';
 export interface LeaderboardPage {leaderboard:LeaderboardEntry[];type:LeaderboardType;period:LeaderboardPeriod;periodStart:string|null;periodEnd:string|null;country:string|null;generatedAt:string;actorId:string|null;limit:number;}
+
+export type ReadingEdition=Pick<BookRow,'id'|'title'|'author_name'|'cover_url'|'isbn_10'|'isbn_13'|'language'|'format'>;
+export interface ReadingQuote {id:string;user_id:string;book_id:string;content:string;page_number:number|null;created_at:string;books:ReadingEdition;users:{username:string;display_name:string;avatar_url:string|null};}
+export interface ReadingQuotePage {quotes:ReadingQuote[];total:number;nextCursor:string|null;actorId:string;}
+export interface ReadingDebate {id:string;book_id:string;user_id:string;question:string;yes_count:number;no_count:number;is_active:boolean;created_at:string;current_vote:'yes'|'no'|null;can_vote:boolean;can_share:boolean;book:ReadingEdition;}
+export interface ReadingDebatePage {debates:ReadingDebate[];nextCursor:string|null;actorId:string|null;}
+export interface DebateVoteReceipt {actorId:string;debateId:string;success:true;vote:'yes'|'no';yes_count:number|null;no_count:number|null;alreadyVoted?:boolean;}
+export interface ReadingChallenge {id:string;title:string;description:string|null;type:'reading'|'writing';cadence:'weekly'|'monthly';start_date:string|null;end_date:string|null;goal_books:number|null;goal_pages:number|null;is_active:boolean;created_at:string;participant_count:number;joined:boolean;can_join:boolean;}
+export interface ReadingChallengeProgress {booksFinished:number;pagesRead:number;goalBooks:number|null;goalPages:number|null;booksPercent:number|null;pagesPercent:number|null;}
+export interface ReadingChallengePage {challenges:ReadingChallenge[];nextCursor:string|null;actorId:string;}
+export interface ReadingChallengeDetail {challenge:ReadingChallenge;joined:boolean;joinedAt?:string;progress:ReadingChallengeProgress|null;participants:{id:string;username:string;display_name:string;avatar_url:string|null;joined_at:string}[];participantsNextCursor:string|null;actorId:string;}

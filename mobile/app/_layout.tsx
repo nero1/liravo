@@ -85,6 +85,7 @@ export default function RootLayout() {
               <Stack.Screen name="reading-rooms/new" options={{ headerShown: true, title: t('createRoom'), presentation: 'modal' }} />
               <Stack.Screen name="reading-rooms/[id]" options={{ headerShown: true, title: '' }} />
               <Stack.Screen name="debates" options={{ headerShown: true, title: t('debates') }} />
+              <Stack.Screen name="debates/new" options={{ headerShown: true, title: t('newDebate') }} />
               <Stack.Screen name="debates/[id]" options={{ headerShown: true, title: '' }} />
               <Stack.Screen name="events" options={{ headerShown: true, title: t('events') }} />
               <Stack.Screen name="events/new" options={{ headerShown: true, title: t('createEvent'), presentation: 'modal' }} />

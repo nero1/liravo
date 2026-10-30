@@ -17,6 +17,7 @@ import {ReviewWantToReadButton} from '@/components/books/ReviewWantToReadButton'
 import {useAuthStore} from '@/stores/auth';
 
 export default function BookDetailScreen() {
+  const {t:debateText}=useTranslations('bookDebates');
   const { id } = useLocalSearchParams<{ id: string }>();
   const router=useRouter(),{t,locale}=useTranslations('book'),{t:books}=useTranslations('books'),{t:common}=useTranslations('common');
   const owner=useAuthStore(state=>state.user?.id);
@@ -91,6 +92,8 @@ export default function BookDetailScreen() {
               <Text className="text-foreground font-medium">{t('quote')}</Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity accessibilityRole="link" onPress={()=>router.push({pathname:'/debates/new',params:{bookId:book.id}})} className="rounded-lg border border-border px-4 py-3"><Text className="text-accent">{debateText('create')}</Text></TouchableOpacity>
 
           {/* Genres */}
           {book.genres.length > 0 && (

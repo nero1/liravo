@@ -74,7 +74,7 @@ function RatingBar({ star, count, total,label }: { star: number; count: number; 
 }
 
 export default async function BookPage({ params,searchParams }: BookPageProps) {
-  const [t,books,common,reviewText,moods,communityText,format]=await Promise.all([getTranslations('book'),getTranslations('books'),getTranslations('common'),getTranslations('reviewForm'),getTranslations('moods'),getTranslations('communityNotes'),getFormatter()]);
+  const [t,books,common,reviewText,moods,communityText,format,debateText]=await Promise.all([getTranslations('book'),getTranslations('books'),getTranslations('common'),getTranslations('reviewForm'),getTranslations('moods'),getTranslations('communityNotes'),getFormatter(),getTranslations('bookDebates')]);
   const supabase = createClient();
   const serviceSupabase = createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -470,6 +470,8 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
       </nav>}
 
       {workCatalog&&<div className="mb-8"><EditionSelector catalog={workCatalog} book={book}/></div>}
+
+      <Link href={'/debates/new?bookId='+book.id} className="block mb-8 text-sm underline">{debateText('create')}</Link>
 
       {/* Save a quote */}
       <section className="mb-8">

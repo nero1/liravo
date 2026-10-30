@@ -1,7 +1,7 @@
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import {getReadingQuotes,readingCatalogFailure} from '@/lib/reading-discovery';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import {MAX_QUOTE_PAGE} from '@/lib/content-form-values';
@@ -47,47 +47,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ quote }, { status: 201 });
 }
 
-export async function GET(request: NextRequest) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get('user_id') ?? user.id;
-  const bookId = searchParams.get('book_id');
-  const cursor = searchParams.get('cursor');
-  const limit = 20;
-
-  let query = supabase
-    .from('quotes')
-    .select(`
-      id, content, page_number, created_at,
-      books:book_id (id, title, author_name, cover_url),
-      users:user_id (username, display_name, avatar_url)
-    `)
-    .eq('is_hidden', false)
-    .order('created_at', { ascending: false })
-    .limit(limit + 1);
-
-  if (bookId) {
-    query = query.eq('book_id', bookId);
-  } else {
-    query = query.eq('user_id', userId);
-  }
-
-  if (cursor) {
-    query = query.lt('created_at', cursor);
-  }
-
-  const { data: quotes, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  const hasMore = (quotes?.length ?? 0) > limit;
-  const results = hasMore ? quotes!.slice(0, limit) : (quotes ?? []);
-  const nextCursor = hasMore ? results[results.length - 1]?.created_at ?? null : null;
-
-  return NextResponse.json({ quotes: results, nextCursor });
+export async function GET(request:NextRequest){
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  const query=new URL(request.url).searchParams,owner=query.get('user_id')??user.id,book=query.get('book_id');if(!z.string().uuid().safeParse(owner).success||book&&!z.string().uuid().safeParse(book).success)return NextResponse.json({error:'Invalid filter'},{status:400});
+  try{return NextResponse.json(await getReadingQuotes(user.id,owner,book,query.get('cursor')),{headers:{'Cache-Control':'private, no-store'}});}catch(error){const result=readingCatalogFailure(error);return NextResponse.json({error:result.error},{status:result.status});}
 }
