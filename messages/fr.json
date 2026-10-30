@@ -2151,5 +2151,29 @@
     "ends": "Fin le {date}",
     "openEnded": "Sans date de fin",
     "editionRule": "Une œuvre compte une fois ; les pages proviennent de sa dernière édition terminée."
+  },
+  "nativeBilling": {
+    "monthlyPrice": "{price} par mois",
+    "priceUnavailable": "Prix indisponible",
+    "subscribe": "S’abonner — {price} par mois",
+    "restore": "Restaurer les achats",
+    "terms": "L’abonnement est facturé via Google Play. Gérez le renouvellement ou annulez dans le Play Store.",
+    "refreshStatus": "Actualiser l’accès",
+    "storeUnavailableTitle": "Boutique indisponible",
+    "storeUnavailableMessage": "La facturation Google Play est indisponible sur cet appareil.",
+    "offerUnavailable": "L’offre mensuelle est indisponible. Réessayez plus tard.",
+    "purchaseFailedTitle": "Échec de l’achat",
+    "purchaseFailedMessage": "Impossible de démarrer l’achat. Veuillez réessayer.",
+    "pendingTitle": "Vérification en attente",
+    "pendingMessage": "Google Play n’a pas encore confirmé cet achat. Réessayez bientôt de restaurer les achats.",
+    "inactiveTitle": "Abonnement inactif",
+    "inactiveMessage": "Aucun abonnement Google Play actif trouvé. Les droits de votre compte ont été actualisés.",
+    "verificationFailedTitle": "Échec de la vérification",
+    "verificationFailedMessage": "Impossible de confirmer tous les achats. Votre achat est conservé par Google Play ; réessayez de restaurer ou contactez l’assistance avec votre numéro de commande.",
+    "restoreFailedTitle": "Échec de la restauration",
+    "restoredTitle": "Abonnement restauré",
+    "restoredMessage": "Votre accès Premium a été restauré.",
+    "partiallyRestoredMessage": "L’accès Premium a été restauré, mais certains achats n’ont pas pu être vérifiés. Réessayez de restaurer.",
+    "openFailed": "Impossible d’ouvrir la gestion de l’abonnement. Veuillez réessayer."
   }
 }

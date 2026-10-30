@@ -11,7 +11,7 @@ import {MOOD_TAGS} from '../mobile/types';
 class ApiError extends Error{constructor(public status:number,public code?:string){super('Isolated failure');}}
 function mount(file:string,query:any,infinite:any={data:undefined},exportName='default'){
   const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn(),patch=vi.fn(),del=vi.fn(),push=vi.fn();let cursor=0;
-  const owner={id:'reader',username:'reader'},store=Object.assign((selector?:any)=>selector?selector({user:owner}):{user:owner},{getState:()=>({user:owner})}),translate=createTranslator({locale:'fr',messages:fr,onError:error=>{throw error;}});
+  const owner={id:'reader',username:'reader',...query.profile},store=Object.assign((selector?:any)=>selector?selector({user:owner}):{user:owner},{getState:()=>({user:owner})}),translate=createTranslator({locale:'fr',messages:fr,onError:error=>{throw error;}});
   const exports:any={},code=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   runInNewContext(code,{exports,Intl,Map,Error,require:(name:string)=>{
     if(name==='react')return {useEffect:()=>{},useRef:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]={current:value};return slots[index];},useState:(value:unknown)=>{const index=cursor++;if(!(index in slots))slots[index]=value;return [slots[index],(next:unknown)=>{slots[index]=typeof next==='function'?(next as (value:unknown)=>unknown)(slots[index]):next;}];}};
@@ -21,6 +21,8 @@ function mount(file:string,query:any,infinite:any={data:undefined},exportName='d
     if(name==='expo-router')return {useLocalSearchParams:()=>({id:'workshop-id',username:'writer'}),useRouter:()=>({push,replace:push,back:vi.fn()})};
     if(name==='@tanstack/react-query')return {useQuery:(options:unknown)=>{queries.push(options);return query;},useInfiniteQuery:(options:any)=>{queries.push(options);return infinite.byKey?.[options.queryKey[0]]??infinite;},useMutation:(options:unknown)=>{mutations.push(options);return {mutate:vi.fn(),isPending:false};},useQueryClient:()=>({invalidateQueries:vi.fn(),setQueryData:(key:unknown,update:(value:unknown)=>unknown)=>{const target=Array.isArray(key)&&(key.includes('question')||key.includes('arc')||key.includes('arcs'))?infinite:query;target.data=update(target.data);}})};
     if(name.endsWith('reading-room-date'))return {readingRoomUnlockDate};
+    if(name==='expo-web-browser')return {openBrowserAsync:vi.fn()};
+    if(name==='@/hooks/useGooglePlayBilling')return {useGooglePlayBilling:()=>({connected:true,premiumPrice:'4,99 €',purchasing:false,restoring:false})};
     if(name==='@/hooks/useBooks')return {useBookSearch:()=>query,useBook:()=>query};
     if(name==='@/hooks/useShelf')return {useCreateShelf:()=>query};
     if(name==='@/types')return {MOOD_TAGS};
@@ -33,7 +35,7 @@ function mount(file:string,query:any,infinite:any={data:undefined},exportName='d
     if(name==='@/stores/auth')return {useAuthStore:store};
     if(name==='@/hooks/useRequestIntent')return {useRequestIntent:()=>({durableHeaders:async()=>({'Idempotency-Key':'durable-writing-key','X-Liravo-Actor':'reader'}),complete:completions})};
     if(name==='@/lib/api')return {api:{get,post,patch,delete:del},ApiError};
-    if(name==='@/constants/api')return {ENDPOINTS:{shelves:{create:'/api/shelves'},author:{arcs:'/author/arcs',byUsername:(name:string)=>'/author/'+name,createPost:'/author/posts'},write:{questions:'/questions',workshops:'/workshops',workshopById:(id:string)=>'/workshops/'+id,workshopSubmissions:(id:string)=>'/workshops/'+id+'/submissions',workshopFeedback:(id:string,draft:string)=>'/workshops/'+id+'/submissions/'+draft+'/feedback',joinWorkshop:(id:string)=>'/workshops/'+id+'/join',promptById:()=>'/prompt',submitPrompt:()=>'/prompt/submit'}}};
+    if(name==='@/constants/api')return {API_BASE:'https://app.test',ENDPOINTS:{shelves:{create:'/api/shelves'},author:{arcs:'/author/arcs',byUsername:(name:string)=>'/author/'+name,createPost:'/author/posts'},write:{questions:'/questions',workshops:'/workshops',workshopById:(id:string)=>'/workshops/'+id,workshopSubmissions:(id:string)=>'/workshops/'+id+'/submissions',workshopFeedback:(id:string,draft:string)=>'/workshops/'+id+'/submissions/'+draft+'/feedback',joinWorkshop:(id:string)=>'/workshops/'+id+'/join',promptById:()=>'/prompt',submitPrompt:()=>'/prompt/submit'}}};
     if(name==='@/components/books/BookPicker')return {BookPicker:'BookPicker'};
     if(name==='@/components/social/FollowButton')return {FollowButton:'FollowButton'};
     if(name==='@/components/ui/EmptyState')return {QueryError:'QueryError',EmptyState:'EmptyState'};
@@ -234,4 +236,13 @@ it('shows localized taste eligibility and actionable Premium denial instead of a
   const empty=mount('mobile/app/taste-profile.tsx',{data:{profile:null,eligible:false}}),tree=empty.render();expect(JSON.stringify(tree)).toContain(fr.aiProfiles.insufficientHistory);expect(empty.find(tree,'Button').props.disabled).toBe(true);
   const denied=mount('mobile/app/taste-profile.tsx',{error:new ApiError(403,'premiumRequired')}),locked=denied.render();expect(JSON.stringify(locked)).toContain(fr.aiProfiles.premiumRequired);denied.find(locked,'Button').props.onPress();expect(denied.push).toHaveBeenCalledWith('/premium');
   const failure=mount('mobile/app/taste-profile.tsx',{error:new ApiError(503)});expect(failure.find(failure.render(),'QueryError')).toBeTruthy();
+});
+
+it('uses authoritative Premium status instead of cached profile flags and preserves formatted Play prices',()=>{
+  const inactive=mount('mobile/app/premium/index.tsx',{profile:{is_premium:true},data:{actorId:'reader',active:false,subscriptions:[]}}),tree=inactive.render();expect(JSON.stringify(tree)).not.toContain(fr.premium.activeTitle);expect(JSON.stringify(tree)).toContain('4,99 €');expect(JSON.stringify(tree)).toContain(fr.nativeBilling.restore);expect(JSON.stringify(tree)).toContain(fr.premium.features.feedback.label);expect(inactive.queries[0].queryKey).toEqual(['premium-status','reader']);
+  const active=mount('mobile/app/premium/index.tsx',{data:{actorId:'reader',active:true,subscriptions:[],googlePlayManageUrl:'https://play.google.com/store/account/subscriptions'}}),paid=active.render();expect(JSON.stringify(paid)).toContain(fr.premium.activeTitle);expect(JSON.stringify(paid)).toContain(fr.nativeBilling.restore);expect(JSON.stringify(paid)).not.toContain(fr.nativeBilling.subscribe.replace('{price}','4,99 €'));
+});
+it('keeps Premium status failures retryable and rejects a different account snapshot',async()=>{
+  const failure=mount('mobile/app/premium/index.tsx',{error:new Error('Unavailable')});expect(failure.find(failure.render(),'QueryError')).toBeTruthy();
+  const changed=mount('mobile/app/premium/index.tsx',{});changed.render();changed.get.mockResolvedValueOnce({actorId:'someone-else',active:true,subscriptions:[]});await expect(changed.queries[0].queryFn({})).rejects.toThrow('Invalid Premium status');
 });

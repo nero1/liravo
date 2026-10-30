@@ -2519,5 +2519,17 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       source=(await sql`select taste_profile_input(${reader.id})source`)[0].source;expect(source.books).toHaveLength(20);expect(new Set(source.books.map((book:{id:string})=>book.id)).size).toBe(20);expect(source.books.some((book:{id:string})=>[first.id,latest.id,alias.id,outside.id].includes(book.id))).toBe(false);expect(source.books[0].finished_at).toBe('2026-04-25');expect((await readTasteProfile(reader.id)).eligible).toBe(true);
       expect((await sql`select has_function_privilege('authenticated','taste_profile_input(uuid)','EXECUTE')allowed`)[0].allowed).toBe(false);
     }
+    {
+      const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'premium086@example.test','premium_status_086','Premium status')`;await sql`update users set is_premium=true,premium_override=false where id=${owner}`;
+      const status=async()=>(await sql`select premium_status_snapshot(${owner})result`)[0].result;
+      expect(await status()).toEqual({active:false,subscriptions:[]});
+      await sql`insert into subscriptions(user_id,provider,status,amount,currency,current_period_end,renewal_cancelled)values(${owner},'google_play','active',4.99,'USD',now()-interval '1 day',false),(${owner},'google_play','active',4.99,'USD',null,false)`;
+      expect(await status()).toEqual({active:false,subscriptions:[]});
+      const [paid]=await sql`insert into subscriptions(user_id,provider,status,amount,currency,current_period_end,renewal_cancelled)values(${owner},'google_play','active',4.99,'USD',now()+interval '14 days',true)returning id`;
+      expect(await status()).toMatchObject({active:true,subscriptions:[{provider:'google_play',renewalCancelled:true}]});await sql`update subscriptions set current_period_end=now()-interval '1 second' where id=${paid.id}`;expect((await status()).active).toBe(false);
+      const [legacy]=await sql`insert into subscriptions(user_id,provider,status,amount,currency,current_period_end)values(${owner},'dodopayments','active',4.99,'USD',null)returning id`;expect(await status()).toEqual({active:false,subscriptions:[]});await sql`update subscriptions set status='cancelled' where id=${legacy.id}`;await sql`update users set premium_override=true where id=${owner}`;expect(await status()).toEqual({active:true,subscriptions:[]});
+      await sql`update users set is_banned=true where id=${owner}`;await expect(status()).rejects.toMatchObject({code:'P1003'});await sql`update users set is_banned=false,deleted_at=now() where id=${owner}`;await expect(status()).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'premium_status_snapshot(uuid)','EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

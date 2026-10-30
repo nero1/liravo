@@ -733,6 +733,7 @@ When a book page is rendered, the server checks this table for the user's countr
 - Advanced reading statistics dashboard (pace, genre distribution over time, seasonal patterns)
 - Unlimited custom shelves
 - AI taste profile analysis (requires three finished canonical works; uses the latest completed edition for each of the 20 most recent works, actual genre/mood counts and validated prose; refreshed when reading history changes)
+- Native Premium reads authoritative access, restores all unique supported Google Play purchases and provides translated EN/FR/DE billing/retry/management controls; cached profile flags do not grant access.
 - AI-powered personalised writing challenges and weekly plan (for Newbie Writer users on premium)
 - Priority matching in buddy read finder
 - Exclusive seasonal badge designs

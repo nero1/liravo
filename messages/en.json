@@ -2151,5 +2151,29 @@
     "ends": "Ends {date}",
     "openEnded": "No end date",
     "editionRule": "A work counts once; pages use its latest completed edition."
+  },
+  "nativeBilling": {
+    "monthlyPrice": "{price} per month",
+    "priceUnavailable": "Price unavailable",
+    "subscribe": "Subscribe — {price} per month",
+    "restore": "Restore purchases",
+    "terms": "Subscription is charged through Google Play. Manage renewal or cancel in the Play Store.",
+    "refreshStatus": "Refresh access",
+    "storeUnavailableTitle": "Store unavailable",
+    "storeUnavailableMessage": "Google Play Billing is unavailable on this device.",
+    "offerUnavailable": "The monthly subscription offer is unavailable. Please try again later.",
+    "purchaseFailedTitle": "Purchase failed",
+    "purchaseFailedMessage": "We could not start the purchase. Please try again.",
+    "pendingTitle": "Verification pending",
+    "pendingMessage": "Google Play has not confirmed this purchase yet. Try restoring purchases shortly.",
+    "inactiveTitle": "Subscription inactive",
+    "inactiveMessage": "No active Google Play subscription was found. Your account access has been refreshed.",
+    "verificationFailedTitle": "Purchase verification failed",
+    "verificationFailedMessage": "We could not confirm all purchases. Google Play retains your purchase; try restoring again or contact support with your order ID.",
+    "restoreFailedTitle": "Restore failed",
+    "restoredTitle": "Subscription restored",
+    "restoredMessage": "Your Premium access has been restored.",
+    "partiallyRestoredMessage": "Premium access was restored, but some purchases could not be verified. Try restoring again.",
+    "openFailed": "Could not open subscription management. Please try again."
   }
 }

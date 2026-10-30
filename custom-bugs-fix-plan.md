@@ -65,6 +65,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Correct XP/helpfulness leaderboard periods, privacy, country isolation, vote cast times, UTC archives and web/native translations.
 - ✅ Repair quote/debate/challenge catalogs, privacy, complete rosters, final votes, debate creation/share cards and web/native translations.
 - ✅ Translate taste-profile controls and known genre/mood labels while preserving provider prose/categories.
+- ✅ Repair native Premium access, complete Play restoration, account-bound acknowledgements, store retry and EN/FR/DE billing controls.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

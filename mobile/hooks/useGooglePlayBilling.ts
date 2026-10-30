@@ -1,164 +1,85 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { Platform, Alert } from 'react-native';
-import {
-  initConnection,
-  endConnection,
-  getSubscriptions,
-  requestSubscription,
-  finishTransaction,
-  purchaseUpdatedListener,
-  purchaseErrorListener,
-  getAvailablePurchases,
-  type SubscriptionPurchase,
-  type ProductPurchase,
-  type Subscription,
-  type SubscriptionAndroid,
-  PurchaseStateAndroid,
-} from 'react-native-iap';
-import type { UserRow } from '@/types';
-import { api } from '@/lib/api';
-import { useAuthStore } from '@/stores/auth';
-import { SUBSCRIPTION_SKUS, PREMIUM_MONTHLY_SKU } from '@/constants/iap';
-import { monthlyGooglePlayOffer } from '@/lib/google-play-offer';
+import {useEffect,useState,useRef,useCallback} from 'react';
+import {Platform,Alert} from 'react-native';
+import {useQueryClient} from '@tanstack/react-query';
+import {initConnection,endConnection,getSubscriptions,requestSubscription,finishTransaction,purchaseUpdatedListener,purchaseErrorListener,getAvailablePurchases,type SubscriptionPurchase,type ProductPurchase,type Subscription,type SubscriptionAndroid,PurchaseStateAndroid} from 'react-native-iap';
+import type {UserRow} from '@/types';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useTranslations} from '@/hooks/useTranslations';
+import {SUBSCRIPTION_SKUS,PREMIUM_MONTHLY_SKU} from '@/constants/iap';
+import {monthlyGooglePlayOffer} from '@/lib/google-play-offer';
 
-export function useGooglePlayBilling() {
-  const [connected, setConnected] = useState(false);
-  const [products, setProducts] = useState<Subscription[]>([]);
-  const [purchasing, setPurchasing] = useState(false);
-  const [verifying,setVerifying] = useState(false);
-  const inFlight = useRef(new Set<string>());
-  const [restoring, setRestoring] = useState(false);
-
-  const purchaseListenerRef = useRef<ReturnType<typeof purchaseUpdatedListener> | null>(null);
-  const errorListenerRef = useRef<ReturnType<typeof purchaseErrorListener> | null>(null);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-
-    let mounted = true;
-
-    async function setup() {
-      try {
-        const ok = await initConnection();
-        if (!mounted || !ok) return;
-        setConnected(true);
-
-        // Listen for completed purchases (fires after user approves billing sheet)
-        purchaseListenerRef.current = purchaseUpdatedListener(
-          async (purchase: SubscriptionPurchase | ProductPurchase) => {
-            const sub = purchase as SubscriptionPurchase;
-            // Only process confirmed purchases
-            if (
-              sub.purchaseStateAndroid !== undefined &&
-              sub.purchaseStateAndroid !== PurchaseStateAndroid.PURCHASED
-            ) return;
-
-            if (!sub.purchaseToken || !SUBSCRIPTION_SKUS.includes(sub.productId as typeof SUBSCRIPTION_SKUS[number]) || inFlight.current.has(sub.purchaseToken)) return;
-            inFlight.current.add(sub.purchaseToken);
-            if (mounted) setVerifying(true);
-
-            try {
-              const res = await api.post<{ user:UserRow; active:boolean; pending:boolean; acknowledged:boolean }>('/api/mobile/verify-purchase', {
-                purchaseToken: sub.purchaseToken,
-                productId: sub.productId,
-                packageName: 'org.liravo.app',
-              });
-
-              if (res.user && useAuthStore.getState().user?.id === res.user.id) useAuthStore.getState().setUser(res.user);
-              if (res.pending) {
-                Alert.alert('Verification pending','Your subscription is awaiting Google Play confirmation. Try restoring purchases shortly.');
-                return;
-              }
-              if (res.active && !res.acknowledged) await finishTransaction({purchase,isConsumable:false});
-              if (!res.active) Alert.alert('Subscription inactive','No active Google Play subscription was found. Your account has been refreshed.');
-            } catch {
-              Alert.alert(
-                'Purchase verification failed',
-                'We could not confirm your subscription. Your purchase is retained by Google Play; try restoring purchases or contact support with your order ID.',
-              );
-            } finally {
-              inFlight.current.delete(sub.purchaseToken);
-              if (mounted) setVerifying(false);
-            }
-          },
-        );
-
-        errorListenerRef.current = purchaseErrorListener((err) => {
-          if ((err as { code?: string }).code !== 'E_USER_CANCELLED') {
-            Alert.alert('Purchase error', err.message ?? 'Something went wrong. Please try again.');
-          }
-        });
-        const subs = await getSubscriptions({ skus: [...SUBSCRIPTION_SKUS] });
-        if (mounted) setProducts(subs);
-      } catch (err) {
-        console.warn('IAP setup failed', err);
-      }
-    }
-
-    setup();
-
-    return () => {
-      mounted = false;
-      purchaseListenerRef.current?.remove();
-      errorListenerRef.current?.remove();
-      endConnection();
-    };
-  }, []);
-
-  const subscribe = useCallback(async () => {
-    if (!connected) {
-      Alert.alert('Store unavailable', 'Google Play Billing is not available on this device.');
-      return;
-    }
-    setPurchasing(true);
-    try {
-      const product=products.find(item=>item.productId===PREMIUM_MONTHLY_SKU) as SubscriptionAndroid | undefined;
-      const offer=monthlyGooglePlayOffer(product,PREMIUM_MONTHLY_SKU);
-      if (!offer) throw new Error('The monthly subscription offer is unavailable. Please try again later.');
-      const {accountId}=await api.post<{accountId:string}>('/api/mobile/billing-account');
-      await requestSubscription({ subscriptionOffers:[{sku:offer.sku,offerToken:offer.offerToken}],obfuscatedAccountIdAndroid:accountId });
-      // Result comes through purchaseUpdatedListener, not here
-    } catch (err: unknown) {
-      const e = err as { code?: string; message?: string };
-      if (e.code !== 'E_USER_CANCELLED') {
-        Alert.alert('Purchase failed', e.message ?? 'Please try again.');
-      }
-    } finally {
-      setPurchasing(false);
-    }
-  }, [connected,products]);
-
-  const restorePurchases = useCallback(async () => {
-    setRestoring(true);
-    try {
-      const purchases = await getAvailablePurchases();
-      const premiumPurchase = purchases.find(
-        (p) => SUBSCRIPTION_SKUS.includes(p.productId as typeof SUBSCRIPTION_SKUS[number]),
-      ) as SubscriptionPurchase | undefined;
-
-      if (!premiumPurchase?.purchaseToken) {
-        Alert.alert('No active subscription found', 'If you believe this is an error, contact support.');
-        return;
-      }
-
-      const res = await api.post<{ user:UserRow; active:boolean; pending:boolean; acknowledged:boolean }>('/api/mobile/verify-purchase', {
-        purchaseToken: premiumPurchase.purchaseToken,
-        productId: premiumPurchase.productId,
-        packageName: 'org.liravo.app',
-      });
-
-      if (res.user && useAuthStore.getState().user?.id === res.user.id) useAuthStore.getState().setUser(res.user);
-      if (res.active) Alert.alert('Subscription restored!', 'Your Premium access has been restored.');
-      else Alert.alert(res.pending?'Verification pending':'Subscription inactive',res.pending?'Google Play has not confirmed this purchase yet.':'No active Google Play subscription was found.');
-    } catch (err) {
-      Alert.alert('Restore failed', (err as Error).message ?? 'Please try again.');
-    } finally {
-      setRestoring(false);
-    }
-  }, []);
-
-  const premiumProduct = products.find((p) => p.productId === PREMIUM_MONTHLY_SKU);
-
-  const premiumOffer=monthlyGooglePlayOffer(premiumProduct as SubscriptionAndroid|undefined,PREMIUM_MONTHLY_SKU);
-  return { connected, premiumProduct, premiumPrice:premiumOffer?.formattedPrice??null, purchasing:purchasing||verifying, restoring, subscribe, restorePurchases };
+type Purchase=SubscriptionPurchase|ProductPurchase;
+let connection=Promise.resolve();
+type Receipt={actorId:string;user:UserRow;active:boolean;pending:boolean;acknowledged:boolean};
+export function useGooglePlayBilling(){
+  const owner=useAuthStore(state=>state.user?.id),qc=useQueryClient(),{t}=useTranslations('nativeBilling'),text=useRef(t);text.current=t;
+  const [connected,setConnected]=useState(false),[products,setProducts]=useState<Subscription[]>([]),[connecting,setConnecting]=useState(false),[storeError,setStoreError]=useState(false),[attempt,setAttempt]=useState(0);
+  const [purchasing,setPurchasing]=useState(false),[verifying,setVerifying]=useState(false),[restoring,setRestoring]=useState(false),alive=useRef(false),busy=useRef<symbol|null>(null),inFlight=useRef(new Map<string,Promise<Receipt|null>>());
+  const current=useCallback(()=>!!owner&&alive.current&&useAuthStore.getState().user?.id===owner,[owner]);
+  const verify=useCallback(async(purchase:Purchase):Promise<Receipt|null>=>{
+    if(!current()||!purchase.purchaseToken)return null;
+    const key=owner+':'+purchase.purchaseToken,existing=inFlight.current.get(key);if(existing)return existing;
+    setVerifying(true);
+    const operation=(async()=>{
+      const result=await api.post<Receipt>('/api/mobile/verify-purchase',{purchaseToken:purchase.purchaseToken,productId:purchase.productId,packageName:'org.liravo.app'},{'X-Liravo-Actor':owner!});
+      if(!current())return null;
+      if(result.actorId!==owner||result.user?.id!==owner||typeof result.active!=='boolean'||typeof result.pending!=='boolean'||typeof result.acknowledged!=='boolean'||result.pending&&result.active)throw new Error('Invalid purchase receipt');
+      useAuthStore.getState().setUser(result.user);
+      void qc.invalidateQueries({queryKey:['premium-status',owner]});
+      if(result.active&&!result.acknowledged)await finishTransaction({purchase,isConsumable:false});
+      return current()?result:null;
+    })();inFlight.current.set(key,operation);
+    try{return await operation;}finally{inFlight.current.delete(key);if(current())setVerifying([...inFlight.current.keys()].some(key=>key.startsWith(owner+':')));}
+  },[owner,current,qc]);
+  useEffect(()=>{
+    alive.current=true;busy.current=null;setConnected(false);setProducts([]);setStoreError(false);setPurchasing(false);setRestoring(false);setVerifying(false);
+    if(Platform.OS!=='android'||!owner)return()=>{alive.current=false;};
+    let mounted=true,updates:ReturnType<typeof purchaseUpdatedListener>|undefined,errors:ReturnType<typeof purchaseErrorListener>|undefined;
+    setConnecting(true);
+    connection=connection.catch(()=>{}).then(async()=>{
+      if(!mounted)return;
+      try{
+        const ok=await initConnection();if(!mounted)return;if(!ok)throw new Error('Store unavailable');
+        updates=purchaseUpdatedListener(purchase=>{if(!SUBSCRIPTION_SKUS.includes(purchase.productId as typeof SUBSCRIPTION_SKUS[number])||!purchase.purchaseToken||inFlight.current.has(owner+':'+purchase.purchaseToken)||purchase.purchaseStateAndroid!==undefined&&purchase.purchaseStateAndroid!==PurchaseStateAndroid.PURCHASED)return;
+          void verify(purchase).then(result=>{if(!result||!current())return;if(result.pending)Alert.alert(text.current('pendingTitle'),text.current('pendingMessage'));else if(!result.active)Alert.alert(text.current('inactiveTitle'),text.current('inactiveMessage'));}).catch(()=>{if(current())Alert.alert(text.current('verificationFailedTitle'),text.current('verificationFailedMessage'));});});
+        errors=purchaseErrorListener(error=>{if(current()&&error.code!=='E_USER_CANCELLED')Alert.alert(text.current('purchaseFailedTitle'),text.current('purchaseFailedMessage'));});
+        const subscriptions=await getSubscriptions({skus:[...SUBSCRIPTION_SKUS]});if(!mounted)return;
+        setProducts(subscriptions);setConnected(true);
+      }catch{if(mounted)setStoreError(true);}finally{if(mounted)setConnecting(false);}
+    });
+    return()=>{mounted=false;alive.current=false;updates?.remove();errors?.remove();connection=connection.then(()=>endConnection()).then(()=>{},()=>{});};
+  },[owner,attempt,current,verify]);
+  const subscribe=useCallback(async()=>{
+    if(!current()||busy.current)return;
+    if(!connected){Alert.alert(text.current('storeUnavailableTitle'),text.current('storeUnavailableMessage'));return;}
+    const product=products.find(item=>item.productId===PREMIUM_MONTHLY_SKU) as SubscriptionAndroid|undefined,offer=monthlyGooglePlayOffer(product,PREMIUM_MONTHLY_SKU);
+    if(!offer){Alert.alert(text.current('storeUnavailableTitle'),text.current('offerUnavailable'));return;}
+    const lease=Symbol();busy.current=lease;setPurchasing(true);
+    try{
+      const result=await api.post<{actorId:string;accountId:string}>('/api/mobile/billing-account',undefined,{'X-Liravo-Actor':owner!});
+      if(!current())return;if(result.actorId!==owner||!/^[a-f0-9]{64}$/.test(result.accountId))throw new Error('Invalid billing account');
+      await requestSubscription({subscriptionOffers:[{sku:offer.sku,offerToken:offer.offerToken}],obfuscatedAccountIdAndroid:result.accountId});
+    }catch(error){if(current()&&(error as {code?:string}).code!=='E_USER_CANCELLED')Alert.alert(text.current('purchaseFailedTitle'),text.current('purchaseFailedMessage'));}
+    finally{if(busy.current===lease)busy.current=null;if(current())setPurchasing(false);}
+  },[owner,current,connected,products]);
+  const restorePurchases=useCallback(async()=>{
+    if(!current()||busy.current)return;
+    if(!connected){Alert.alert(text.current('storeUnavailableTitle'),text.current('storeUnavailableMessage'));return;}
+    const lease=Symbol();busy.current=lease;setRestoring(true);
+    try{
+      const purchases=await getAvailablePurchases();if(!current())return;
+      const seen=new Set<string>(),eligible=purchases.filter(purchase=>{if(!purchase.purchaseToken||!SUBSCRIPTION_SKUS.includes(purchase.productId as typeof SUBSCRIPTION_SKUS[number])||seen.has(purchase.purchaseToken))return false;seen.add(purchase.purchaseToken);return true;});
+      let active=false,pending=false,failed=false;
+      for(const purchase of eligible){if(!current())return;try{const result=await verify(purchase);if(!result)return;active=active||result.active;pending=pending||result.pending;}catch{failed=true;}}
+      if(!current())return;
+      if(active)Alert.alert(text.current('restoredTitle'),text.current(failed?'partiallyRestoredMessage':'restoredMessage'));
+      else if(failed)Alert.alert(text.current('restoreFailedTitle'),text.current('verificationFailedMessage'));
+      else if(pending)Alert.alert(text.current('pendingTitle'),text.current('pendingMessage'));
+      else Alert.alert(text.current('inactiveTitle'),text.current('inactiveMessage'));
+    }catch{if(current())Alert.alert(text.current('restoreFailedTitle'),text.current('verificationFailedMessage'));}
+    finally{if(busy.current===lease)busy.current=null;if(current())setRestoring(false);}
+  },[current,connected,verify]);
+  const premiumProduct=products.find(product=>product.productId===PREMIUM_MONTHLY_SKU),offer=monthlyGooglePlayOffer(premiumProduct as SubscriptionAndroid|undefined,PREMIUM_MONTHLY_SKU);
+  return{connected,connecting,storeError,premiumProduct,premiumPrice:offer?.formattedPrice??null,purchasing:purchasing||verifying,restoring,subscribe,restorePurchases,retryStore:()=>{if(current()&&!busy.current)setAttempt(value=>value+1);}};
 }

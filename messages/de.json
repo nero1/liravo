@@ -2151,5 +2151,29 @@
     "ends": "Ende: {date}",
     "openEnded": "Ohne Enddatum",
     "editionRule": "Ein Werk zählt einmal; die Seiten stammen aus seiner zuletzt abgeschlossenen Ausgabe."
+  },
+  "nativeBilling": {
+    "monthlyPrice": "{price} pro Monat",
+    "priceUnavailable": "Preis nicht verfügbar",
+    "subscribe": "Abonnieren — {price} pro Monat",
+    "restore": "Käufe wiederherstellen",
+    "terms": "Das Abo wird über Google Play abgerechnet. Verlängerung und Kündigung verwaltest du im Play Store.",
+    "refreshStatus": "Zugang aktualisieren",
+    "storeUnavailableTitle": "Store nicht verfügbar",
+    "storeUnavailableMessage": "Google Play Billing ist auf diesem Gerät nicht verfügbar.",
+    "offerUnavailable": "Das Monatsabo ist nicht verfügbar. Bitte versuche es später erneut.",
+    "purchaseFailedTitle": "Kauf fehlgeschlagen",
+    "purchaseFailedMessage": "Der Kauf konnte nicht gestartet werden. Bitte versuche es erneut.",
+    "pendingTitle": "Bestätigung ausstehend",
+    "pendingMessage": "Google Play hat diesen Kauf noch nicht bestätigt. Versuche bald erneut, die Käufe wiederherzustellen.",
+    "inactiveTitle": "Abo inaktiv",
+    "inactiveMessage": "Kein aktives Google-Play-Abo gefunden. Dein Kontozugang wurde aktualisiert.",
+    "verificationFailedTitle": "Kaufprüfung fehlgeschlagen",
+    "verificationFailedMessage": "Nicht alle Käufe konnten bestätigt werden. Google Play behält deinen Kauf. Versuche die Wiederherstellung erneut oder kontaktiere den Support mit deiner Bestellnummer.",
+    "restoreFailedTitle": "Wiederherstellung fehlgeschlagen",
+    "restoredTitle": "Abo wiederhergestellt",
+    "restoredMessage": "Dein Premium-Zugang wurde wiederhergestellt.",
+    "partiallyRestoredMessage": "Premium wurde wiederhergestellt, aber einige Käufe konnten nicht bestätigt werden. Versuche die Wiederherstellung erneut.",
+    "openFailed": "Die Aboverwaltung konnte nicht geöffnet werden. Bitte versuche es erneut."
   }
 }

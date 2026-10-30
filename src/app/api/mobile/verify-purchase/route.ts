@@ -18,6 +18,7 @@ const schema = z.object({purchaseToken:z.string().min(1).max(4096),productId:z.s
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(request.headers.has('X-Liravo-Actor')&&request.headers.get('X-Liravo-Actor')!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   const correlationId = getRequestCorrelationId(request);
   const rate = await checkMoneyRateLimit(user.id,getClientIp(request));
   if (!rate.allowed) return NextResponse.json({error:'Too many requests',correlationId},{status:429});
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     const {data:profile,error} = await createServiceClient().from('users').select('*').eq('id',user.id).single();
     if (error || !profile) throw new Error('Profile refresh unavailable');
     const pending=result.providerState==='SUBSCRIPTION_STATE_PENDING';
-    return NextResponse.json({ok:!pending,pending,active:result.active,acknowledged:result.acknowledged,user:clientUser(profile),correlationId},{status:pending?202:200});
+    return NextResponse.json({ok:!pending,pending,active:result.active,acknowledged:result.acknowledged,actorId:user.id,user:clientUser(profile),correlationId},{status:pending?202:200});
   } catch (error) {
     await observeOperationalSignal('paymentFailures',correlationId);
     const status=error instanceof PurchaseBindingError?error.status:502;
