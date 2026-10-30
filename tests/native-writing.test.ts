@@ -8,7 +8,7 @@ import {readingRoomUnlockDate} from '../src/lib/reading-room-date';
 import {quotePageNumber,validReadDate,validProofUrl} from '../src/lib/content-form-values';
 import {MOOD_TAGS} from '../mobile/types';
 
-class ApiError extends Error{constructor(public status:number){super('Isolated failure');}}
+class ApiError extends Error{constructor(public status:number,public code?:string){super('Isolated failure');}}
 function mount(file:string,query:any,infinite:any={data:undefined},exportName='default'){
   const slots:any[]=[],mutations:any[]=[],queries:any[]=[],completions=vi.fn(),get=vi.fn(),post=vi.fn(),patch=vi.fn(),del=vi.fn(),push=vi.fn();let cursor=0;
   const owner={id:'reader',username:'reader'},store=Object.assign((selector?:any)=>selector?selector({user:owner}):{user:owner},{getState:()=>({user:owner})}),translate=createTranslator({locale:'fr',messages:fr,onError:error=>{throw error;}});
@@ -224,4 +224,14 @@ it('shows native reading progress, the complete roster count and history without
 
 it('creates native debates with the selected edition and retains failed creation receipts',async()=>{
   const view=mount('mobile/app/debates/new.tsx',{},undefined,'NativeDebateForm');let tree=view.render({owner:'reader'});view.find(tree,'BookPicker').props.onChange({id:'edition',title:'Selected edition'});view.find(tree,'Input').props.onChangeText('  Is this edition worth reading?  ');tree=view.render({owner:'reader'});view.post.mockResolvedValue({actorId:'reader',debate:{id:'saved',user_id:'other',book_id:'edition'}});view.find(tree,'Button').props.onPress();await new Promise(setImmediate);expect(view.completions).not.toHaveBeenCalled();tree=view.render({owner:'reader'});view.post.mockResolvedValue({actorId:'reader',debate:{id:'saved',user_id:'reader',book_id:'edition'}});view.find(tree,'Button').props.onPress();await new Promise(setImmediate);expect(view.post).toHaveBeenLastCalledWith('/api/debates',{book_id:'edition',question:'Is this edition worth reading?'},{'Idempotency-Key':'durable-writing-key','X-Liravo-Actor':'reader'});expect(view.completions).toHaveBeenCalledExactlyOnceWith('debate.create');expect(view.push).toHaveBeenCalledWith('/debates/saved');
+});
+
+it('translates taste-profile controls and known facts while preserving provider labels and authored prose',()=>{
+  const view=mount('mobile/app/taste-profile.tsx',{data:{profile:{summary:'Authored model prose',top_genres:['Fantasy','Provider category'],mood_preferences:['Cozy','Provider mood']},eligible:true,generatedAt:'2026-10-30T23:30:00Z'}}),tree=view.render(),text=JSON.stringify(tree);
+  expect(text).toContain(fr.aiProfiles.genreLabels.Fantasy);expect(text).toContain(fr.moods.Cozy);expect(text).toContain('Provider category');expect(text).toContain('Provider mood');expect(text).toContain('Authored model prose');expect(view.find(tree,'Button').props.children).toBe(fr.aiProfiles.refresh);expect(view.queries[0].queryKey).toEqual(['taste-profile','reader','fr']);
+});
+it('shows localized taste eligibility and actionable Premium denial instead of a generation control',()=>{
+  const empty=mount('mobile/app/taste-profile.tsx',{data:{profile:null,eligible:false}}),tree=empty.render();expect(JSON.stringify(tree)).toContain(fr.aiProfiles.insufficientHistory);expect(empty.find(tree,'Button').props.disabled).toBe(true);
+  const denied=mount('mobile/app/taste-profile.tsx',{error:new ApiError(403,'premiumRequired')}),locked=denied.render();expect(JSON.stringify(locked)).toContain(fr.aiProfiles.premiumRequired);denied.find(locked,'Button').props.onPress();expect(denied.push).toHaveBeenCalledWith('/premium');
+  const failure=mount('mobile/app/taste-profile.tsx',{error:new ApiError(503)});expect(failure.find(failure.render(),'QueryError')).toBeTruthy();
 });

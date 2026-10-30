@@ -419,6 +419,8 @@ Liravo aims to send users to the best available purchase or access point for eac
 4. **Non-affiliate external link:** If the book exists on a non-affiliate store, a library, an open-access repository (Project Gutenberg, Standard Ebooks, Internet Archive), or the author's own site, show a clearly labelled non-affiliate external link (e.g. "Available free on Project Gutenberg" or "Find at your library via WorldCat"). These links use `rel="nofollow noopener"` and are clearly not presented as primary CTAs.
 5. **No link available:** Show a "Not yet available online — check your local library" message with a WorldCat search link.
 
+ISBN-less editions omit ISBN-required templates and retain title searches. WorldCat fallback searches use ISBN-13, ISBN-10 or the title; generated links do not verify store availability.
+
 All link clicks are logged (book_id, link_type, affiliate/non-affiliate, store, user country) for reporting. This data guides future affiliate program priority.
 
 The affiliate store system must be designed so new stores can be added by admin without a code deployment.
@@ -730,7 +732,7 @@ When a book page is rendered, the server checks this table for the user's countr
 - Email digests (weekly activity, new release alerts, challenge reminders)
 - Advanced reading statistics dashboard (pace, genre distribution over time, seasonal patterns)
 - Unlimited custom shelves
-- AI taste profile analysis (requires three finished books; generated on demand with actual genre/mood counts and validated prose, refreshed when reading history changes)
+- AI taste profile analysis (requires three finished canonical works; uses the latest completed edition for each of the 20 most recent works, actual genre/mood counts and validated prose; refreshed when reading history changes)
 - AI-powered personalised writing challenges and weekly plan (for Newbie Writer users on premium)
 - Priority matching in buddy read finder
 - Exclusive seasonal badge designs

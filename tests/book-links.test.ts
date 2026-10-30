@@ -45,3 +45,15 @@ it('supports receipt replay after store changes and never acknowledges storage f
   for(const [code,status] of [['P1001',409],['P1005',404],['08006',503]] as const){rpc.mockResolvedValueOnce({data:null,error:{code}});expect((await POST(request({bookId,linkId}))).status).toBe(status);}
   rpc.mockResolvedValueOnce({data:{ok:true},error:null});expect((await POST(request({bookId,linkId}))).status).toBe(503);
 });
+
+it('omits ISBN-dependent stores for ISBN-less editions while retaining encoded title searches',async()=>{
+  const title='A title & / question?',edition={title,isbn_13:null,isbn_10:null};
+  stores.push({...stores[0],id:'00000000-0000-4000-8000-000000000005',name:'Title search',url_template:'https://titles.example.test/search?q={title}&tag={tag}'});
+  const links=await buildAffiliateLinks(edition,'NG');expect(links).toHaveLength(1);expect(links[0].name).toBe('Title search');expect(new URL(links[0].url).searchParams.get('q')).toBe(title);
+  stores.pop();const [fallback]=await buildAffiliateLinks(edition,'NG');expect(fallback.storeId).toBeNull();expect(new URL(fallback.url).searchParams.get('q')).toBe(title);
+});
+it('retains ISBN-10-only searches, region filtering and fallback identity',async()=>{
+  const edition={title:'ISBN ten edition',isbn_13:null,isbn_10:'0140328726'};
+  const [store]=await buildAffiliateLinks(edition,'NG');expect(new URL(store.url).searchParams.get('isbn')).toBe('0140328726');
+  const [fallback]=await buildAffiliateLinks(edition,'DE');expect(fallback.country).toBe('DE');expect(fallback.linkId).toMatch(/^worldcat:/);expect(new URL(fallback.url).searchParams.get('q')).toBe('0140328726');
+});

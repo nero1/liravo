@@ -64,6 +64,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Expose owned moderation actions/history and general appeals, translate web/native appeal queues and recover owned submission/decision receipts.
 - ✅ Correct XP/helpfulness leaderboard periods, privacy, country isolation, vote cast times, UTC archives and web/native translations.
 - ✅ Repair quote/debate/challenge catalogs, privacy, complete rosters, final votes, debate creation/share cards and web/native translations.
+- ✅ Translate taste-profile controls and known genre/mood labels while preserving provider prose/categories.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
@@ -104,6 +105,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Verify imports, seeds, search, reviews, shelves and purchase links against the edition model.
 - ✅ Aggregate complete visible review statistics, page reviews and preserve catalog rating sources.
 - ✅ Preserve selected editions in quotes/debates and count challenge pages from the latest completed edition per canonical work.
+- ✅ Omit ISBN-required purchase links for ISBN-less editions; derive taste eligibility/recent reading from canonical works and latest editions.
 - ✅ Share bounded, ranked mood discovery across web/native with canonical edition aliases and visible-review filtering.
 - ✅ Require staff-approved work ownership for author catalogs, ARC offers and post book links; cover coauthors, edition aliases, work merges, complete analytics and revocation.
 

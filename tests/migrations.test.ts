@@ -2502,5 +2502,22 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       const[window]=await sql`insert into challenges(title,type,cadence,goal_books,goal_pages,start_date,end_date,is_active)values('UTC completion dates 084','reading','weekly',5,1000,'2026-02-01T00:30:00Z','2026-02-03T00:00:00Z',false)returning id`;await sql`insert into challenge_participants(challenge_id,user_id,joined_at)values(${window.id},${owner},'2026-02-01T00:30:00Z')`;await sql`update shelf_books set finished_at=case when book_id=${large.id} then '2026-01-31'::date when book_id=${secondWork.id} then '2026-02-03'::date else '2026-02-01'::date end where user_id=${owner}`;await sql.begin(async tx=>{await tx`set local time zone 'America/New_York'`;expect((await tx`select reading_challenge_progress(${owner},${window.id})result`)[0].result.progress).toMatchObject({booksFinished:1,pagesRead:100});});
       for(const routine of['quote_catalog_snapshot(uuid,uuid,uuid,timestamptz,uuid,integer)','debate_detail_snapshot(uuid,uuid)','reading_challenge_detail_snapshot(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege('authenticated',${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
     }
+    {
+      const reader={id:crypto.randomUUID()};await sql`select create_direct_account(${reader.id},'taste085@example.test','taste_editions_085','Taste editions')`;await sql`update users set premium_override=true where id=${reader.id}`;
+      const [shelf]=await sql`select id from shelves where user_id=${reader.id} and default_type='have_read'`;
+      const [first]=await sql`insert into books(title,author_name,genres)values('Older taste edition','Taste author',array['Horror'])returning id,work_id`;
+      const [latest]=await sql`insert into books(title,author_name,genres,work_id)values('Latest taste edition','Taste author',array['Fantasy'],${first.work_id})returning id`;
+      const [alias]=await sql`insert into books(title,author_name,genres,work_id,canonical_edition_id)values('Retained taste alias','Taste author',array['Wrong alias genre'],${first.work_id},${latest.id})returning id`;
+      for(const [id,date]of[[first.id,'2026-01-01'],[latest.id,'2026-02-01'],[alias.id,'2026-03-01']])await sql`insert into shelf_books(user_id,shelf_id,book_id,finished_at)values(${reader.id},${shelf.id},${id},${date})`;
+      await sql`insert into reviews(user_id,book_id,rating,mood_tags,content)values(${reader.id},${alias.id},5,array['Cozy'],'Alias reading preferences.')`;
+      const {readTasteProfile}=await import('@/services/ai-profiles');expect((await readTasteProfile(reader.id)).eligible).toBe(false);
+      let source=(await sql`select taste_profile_input(${reader.id})source`)[0].source;expect(source.books).toHaveLength(1);expect(source.books[0]).toMatchObject({id:latest.id,title:'Latest taste edition',genres:['Fantasy'],review:{moods:['Cozy']}});
+      const [custom]=await sql`insert into shelves(user_id,name,is_default)values(${reader.id},'Not completed',false)returning id`;
+      const [outside]=await sql`insert into books(title,author_name)values('Custom shelf only','Taste author')returning id`;await sql`insert into shelf_books(user_id,shelf_id,book_id,finished_at)values(${reader.id},${custom.id},${outside.id},'2026-12-31')`;
+      const extra=await sql`insert into books(title,author_name,genres)select 'Other taste work '||n,'Taste author',array['Poetry']from generate_series(1,25)n returning id`;
+      for(const [index,book]of extra.entries())await sql`insert into shelf_books(user_id,shelf_id,book_id,finished_at)values(${reader.id},${shelf.id},${book.id},${'2026-04-'+String(index+1).padStart(2,'0')})`;
+      source=(await sql`select taste_profile_input(${reader.id})source`)[0].source;expect(source.books).toHaveLength(20);expect(new Set(source.books.map((book:{id:string})=>book.id)).size).toBe(20);expect(source.books.some((book:{id:string})=>[first.id,latest.id,alias.id,outside.id].includes(book.id))).toBe(false);expect(source.books[0].finished_at).toBe('2026-04-25');expect((await readTasteProfile(reader.id)).eligible).toBe(true);
+      expect((await sql`select has_function_privilege('authenticated','taste_profile_input(uuid)','EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

@@ -17,6 +17,7 @@ import {ReviewWantToReadButton} from '@/components/books/ReviewWantToReadButton'
 import {useAuthStore} from '@/stores/auth';
 
 export default function BookDetailScreen() {
+  const genres=useTranslations('aiProfiles');
   const {t:debateText}=useTranslations('bookDebates');
   const { id } = useLocalSearchParams<{ id: string }>();
   const router=useRouter(),{t,locale}=useTranslations('book'),{t:books}=useTranslations('books'),{t:common}=useTranslations('common');
@@ -99,7 +100,7 @@ export default function BookDetailScreen() {
           {book.genres.length > 0 && (
             <View className="flex-row flex-wrap gap-2">
               {book.genres.slice(0, 5).map((g) => (
-                <Badge key={g}>{g}</Badge>
+                <Badge key={g}>{genres.has('genreLabels.'+g)?genres.t('genreLabels.'+g):g}</Badge>
               ))}
             </View>
           )}

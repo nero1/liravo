@@ -199,15 +199,17 @@ export async function buildAffiliateLinks(book:Pick<BookRow,'title'|'isbn_13'|'i
   const region=country&&/^[A-Za-z]{2}$/.test(country)?country.toUpperCase():LOCALE_TO_COUNTRY[locale??'']??'US';
   const {data:stores,error}=await createServiceClient().from('affiliate_stores').select('*').eq('is_active',true).order('priority',{ascending:true});
   if(error)throw new Error('Book stores unavailable');
+  const isbn=book.isbn_13??book.isbn_10;
   const links:AffiliateLink[]=[];
   for(const store of stores??[]){
     if(store.countries.length&&!store.countries.includes(region))continue;
-    const raw=store.url_template.replaceAll('{isbn}',encodeURIComponent(book.isbn_13??book.isbn_10??'')).replaceAll('{tag}',encodeURIComponent(store.affiliate_tag??'')).replaceAll('{title}',encodeURIComponent(book.title));
+    if(store.url_template.includes('{isbn}')&&!isbn)continue;
+    const raw=store.url_template.replaceAll('{isbn}',encodeURIComponent(isbn??'')).replaceAll('{tag}',encodeURIComponent(store.affiliate_tag??'')).replaceAll('{title}',encodeURIComponent(book.title));
     let url:URL;try{url=new URL(raw);if(url.protocol!=='https:'||url.username||url.password||/[{}]/.test(url.hostname))throw new Error('Invalid store URL');}catch{throw new Error('Book store configuration unavailable');}
     const version=typeof store.updated_at==='string'?store.updated_at:new Date(store.updated_at).toISOString();
     links.push(identifiedLink({name:store.name,url:url.toString(),isAffiliate:!store.is_non_affiliate,isPrimary:store.priority===1,storeId:store.id,storeVersion:version,country:region},store.id));
   }
-  if(!links.length)links.push(identifiedLink({name:'WorldCat',url:'https://www.worldcat.org/search?q='+encodeURIComponent(book.isbn_13??book.title),isAffiliate:false,isPrimary:false,storeId:null,storeVersion:null,country:region},'worldcat'));
+  if(!links.length)links.push(identifiedLink({name:'WorldCat',url:'https://www.worldcat.org/search?q='+encodeURIComponent(isbn??book.title),isAffiliate:false,isPrimary:false,storeId:null,storeVersion:null,country:region},'worldcat'));
   return links;
 }
 export function getAudibleLink(book:Pick<BookRow,'id'|'title'|'has_audiobook'>,locale='en',country='US'):AffiliateLink|null{
