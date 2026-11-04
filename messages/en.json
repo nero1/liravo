@@ -2215,5 +2215,76 @@
       "redis": "Redis"
     },
     "noEndDate": "No end date"
+  },
+  "moderation": {
+    "title": "Moderation",
+    "dashboard": "Moderation dashboard",
+    "reports": "Report queue",
+    "log": "Action log",
+    "appeals": "Appeals",
+    "queueDescription": "Review reports and moderate content",
+    "appealDescription": "Review appeals against moderation decisions",
+    "logDescription": "Audit trail of moderation actions (administrators)",
+    "pendingCount": "Pending reports",
+    "todayCount": "Reports today (UTC)",
+    "emptyReports": "No reports match this filter.",
+    "emptyLog": "No moderation actions yet.",
+    "unavailable": "Moderation could not be loaded. Please retry.",
+    "retry": "Retry",
+    "entries": "{count, plural, one {# entry} other {# entries}}",
+    "first": "First page",
+    "next": "Next page",
+    "refresh": "Refresh",
+    "reporter": "Reported by {name}",
+    "moderator": "Reviewed by {name}",
+    "unknown": "Unavailable content or account",
+    "reason": "Reason",
+    "note": "Moderator note",
+    "noActions": "This report requires another reviewer or has already been resolved.",
+    "content": "Reported content",
+    "action": "Action",
+    "date": "Date",
+    "otherAction": "Other action: {action}",
+    "statuses": {
+      "pending": "Pending",
+      "escalated": "Escalated",
+      "approved": "Dismissed",
+      "removed": "Removed",
+      "warned": "Warned",
+      "all": "All"
+    },
+    "entities": {
+      "review": "Review",
+      "quote": "Quote",
+      "comment": "Comment",
+      "user": "Account",
+      "appeal": "Appeal",
+      "community_note": "Community note",
+      "author_verification_request": "Author verification",
+      "book_work": "Book work"
+    },
+    "actions": {
+      "approve": "Dismiss report",
+      "remove": "Remove content",
+      "warn": "Warn account",
+      "escalate": "Escalate",
+      "suspend": "Suspend account"
+    },
+    "audit": {
+      "suspend_user": "Account suspended",
+      "unsuspend_user": "Account suspension lifted",
+      "community_note_approved": "Community note approved",
+      "community_note_rejected": "Community note rejected",
+      "appeal_approved": "Appeal approved",
+      "appeal_rejected": "Appeal rejected",
+      "restore_user": "Account suspension lifted",
+      "grant_moderator": "Moderator access granted",
+      "revoke_moderator": "Moderator access revoked",
+      "author_approved": "Author verified",
+      "author_rejected": "Author verification rejected",
+      "author_work_granted": "Author work granted",
+      "author_work_revoked": "Author work revoked"
+    },
+    "moderatorColumn": "Moderator"
   }
 }

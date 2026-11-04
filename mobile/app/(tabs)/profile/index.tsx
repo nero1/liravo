@@ -96,7 +96,8 @@ export default function ProfileScreen() {
               { label: '🎁 '+navigation('referral'), path: '/referral' },
               ...(user.is_verified_author ? [{ label: '📖 '+navigation('aRCs'), path: '/author/arcs' }] : []),
               ...(user.is_creator ? [{ label: '💰 '+navigation('earnings'), path: '/earnings' }] : []),
-              ...(user.is_moderator ? [{ label: '🛡️ '+navigation('reports'), path: '/moderation/reports' }] : []),
+              ...((user.is_moderator||user.is_admin) ? [{ label: '🛡️ '+navigation('reports'), path: '/moderation/reports' },{ label: '⚖️ '+navigation('appeals'), path: '/moderation/appeals' }] : []),
+              ...(user.is_admin ? [{ label: '📋 '+navigation('moderationLog'), path: '/moderation/log' }] : []),
               ...(user.is_admin ? [{ label: '⚙️ '+navigation('admin'), path: '/admin' }] : []),
             ].map(({ label, path }) => (
               <TouchableOpacity

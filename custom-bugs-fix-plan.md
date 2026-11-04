@@ -68,6 +68,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Repair native Premium access, complete Play restoration, account-bound acknowledgements, store retry and EN/FR/DE billing controls.
 - ✅ Repair native admin catalog pagination/contracts, moderation/configuration receipts, real cron status and EN/FR/DE controls; page web themes.
 - ✅ Page web book/promotion/season/writing administration and retain promotion form positions.
+- ✅ Repair report/audit-log contracts, tied paging, current-role permissions, owned decision recovery and EN/FR/DE web/native screens.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

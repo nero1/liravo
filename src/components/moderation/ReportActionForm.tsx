@@ -1,14 +1,17 @@
 'use client';
 
-import { useState,useRef } from 'react';
+import { useState,useRef,useEffect } from 'react';
 import {useTranslations} from 'next-intl';
 import {useRequestIntent} from '@/lib/client/useRequestIntent';
+import {recoverModerationDecision,validModerationReceipt} from '@/lib/client/moderation-decision';
+import type {ModerationAction,ContentReportRow} from '@/types/database';
 import { useRouter } from 'next/navigation';
 
 interface ReportActionFormProps {
   reportId: string;
   userId:string;
-  reportedUserId?: string;
+  allowedActions:ModerationAction[];
+  entityType:ContentReportRow['entity_type'];
 }
 
 type ActionType = 'approve' | 'remove' | 'warn' | 'escalate';
@@ -16,39 +19,28 @@ type ActionType = 'approve' | 'remove' | 'warn' | 'escalate';
 const ACTIONS:ActionType[]=['approve','remove','warn','escalate'];
 
 export function ReportActionForm(props:ReportActionFormProps){return <OwnedReportActionForm key={props.userId+':'+props.reportId} {...props}/>;}
-function OwnedReportActionForm({reportId,userId}:ReportActionFormProps){
-  const t=useTranslations('reportAction'),common=useTranslations('common'),intent=useRequestIntent(userId),busy=useRef(false);
+function OwnedReportActionForm({reportId,userId,allowedActions,entityType}:ReportActionFormProps){
+  const t=useTranslations('reportAction'),moderation=useTranslations('moderation'),common=useTranslations('common'),intent=useRequestIntent(userId),busy=useRef(false);
   const router = useRouter();
-  const [action, setAction] = useState<ActionType>('approve');
+  const [action, setAction] = useState<ActionType>(allowedActions[0]??'approve');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();if(busy.current)return;busy.current=true;
-    setLoading(true);
+  useEffect(()=>{let active=true;void(async()=>{const headers=await intent.pending('report-action:'+reportId);if(!headers)return;try{await recoverModerationDecision(userId,reportId,headers['Idempotency-Key']);if(active){intent.complete('report-action:'+reportId,headers['Idempotency-Key']);setDone(true);router.refresh();}}catch{}})();return()=>{active=false;};},[userId,reportId]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function handleSubmit(e:React.FormEvent){
+    e.preventDefault();if(busy.current||!allowedActions.includes(action))return;busy.current=true;setLoading(true);setError(null);
     const payload={action,reason:reason.trim()||undefined},scope='report-action:'+reportId;
-    setError(null);
-
-    try {
-      const res = await fetch(`/api/moderation/reports/${reportId}/action`, {
-        method: 'POST',
-        headers:{'Content-Type':'application/json',...await intent.durableHeaders(payload,scope)},body:JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        setError(t('failed'));
-        return;
-      }
-
-      await res.json();intent.complete(scope);setDone(true);
-      router.refresh();
-    } catch {
-      setError(t('failed'));
-    } finally {
-      busy.current=false;setLoading(false);
-    }
+    try{
+      const headers=await intent.durableHeaders(payload,scope);
+      let data;
+      try{const response=await fetch(`/api/moderation/reports/${reportId}/action`,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(payload)});if(!response.ok)throw Error();data=await response.json();if(!validModerationReceipt(data,userId,reportId))throw Error();}
+      catch{data=await recoverModerationDecision(userId,reportId,headers['Idempotency-Key']);}
+      const status={approve:'approved',remove:'removed',warn:'warned',escalate:'escalated'}[action];
+      if(data.report.status!==status||data.report.moderator_id!==userId||data.report.moderator_note!==(payload.reason??null))throw Error();
+      intent.complete(scope,headers['Idempotency-Key']);setDone(true);router.refresh();
+    }catch{setError(t('failed'));}finally{busy.current=false;setLoading(false);}
   }
 
   if (done) {
@@ -56,6 +48,8 @@ function OwnedReportActionForm({reportId,userId}:ReportActionFormProps){
       <p role="status" className="text-sm text-green-600 font-medium">{t('submitted')}</p>
     );
   }
+
+  if(!allowedActions.length)return <p className="text-sm text-muted-foreground">{moderation('noActions')}</p>;
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2 mt-2">
@@ -65,8 +59,8 @@ function OwnedReportActionForm({reportId,userId}:ReportActionFormProps){
         className="text-sm border border-border rounded-md px-2 py-1.5 bg-background"
         disabled={loading}
       >
-        {ACTIONS.map((a) => (
-          <option key={a} value={a}>{t('actions.'+a)}</option>
+        {ACTIONS.filter(a=>allowedActions.includes(a)).map((a) => (
+          <option key={a} value={a}>{a==='remove'&&entityType==='user'?moderation('actions.suspend'):t('actions.'+a)}</option>
         ))}
       </select>
 

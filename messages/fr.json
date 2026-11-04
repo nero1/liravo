@@ -2215,5 +2215,76 @@
       "redis": "Redis"
     },
     "noEndDate": "Sans date de fin"
+  },
+  "moderation": {
+    "title": "Modération",
+    "dashboard": "Tableau de modération",
+    "reports": "Signalements",
+    "log": "Journal des actions",
+    "appeals": "Appels",
+    "queueDescription": "Examiner les signalements et modérer le contenu",
+    "appealDescription": "Examiner les appels des décisions de modération",
+    "logDescription": "Historique des actions de modération (administrateurs)",
+    "pendingCount": "Signalements en attente",
+    "todayCount": "Signalements du jour (UTC)",
+    "emptyReports": "Aucun signalement ne correspond à ce filtre.",
+    "emptyLog": "Aucune action de modération.",
+    "unavailable": "Impossible de charger la modération. Réessayez.",
+    "retry": "Réessayer",
+    "entries": "{count, plural, one {# entrée} other {# entrées}}",
+    "first": "Première page",
+    "next": "Page suivante",
+    "refresh": "Actualiser",
+    "reporter": "Signalé par {name}",
+    "moderator": "Examiné par {name}",
+    "unknown": "Contenu ou compte indisponible",
+    "reason": "Motif",
+    "note": "Note de modération",
+    "noActions": "Ce signalement nécessite un autre examinateur ou est déjà résolu.",
+    "content": "Contenu signalé",
+    "action": "Action",
+    "date": "Date",
+    "otherAction": "Autre action : {action}",
+    "statuses": {
+      "pending": "En attente",
+      "escalated": "Transmis",
+      "approved": "Classé sans suite",
+      "removed": "Supprimé",
+      "warned": "Avertissement",
+      "all": "Tous"
+    },
+    "entities": {
+      "review": "Critique",
+      "quote": "Citation",
+      "comment": "Commentaire",
+      "user": "Compte",
+      "appeal": "Appel",
+      "community_note": "Note communautaire",
+      "author_verification_request": "Vérification d’auteur",
+      "book_work": "Œuvre"
+    },
+    "actions": {
+      "approve": "Classer sans suite",
+      "remove": "Supprimer le contenu",
+      "warn": "Avertir le compte",
+      "escalate": "Transmettre",
+      "suspend": "Suspendre le compte"
+    },
+    "audit": {
+      "suspend_user": "Compte suspendu",
+      "unsuspend_user": "Suspension du compte levée",
+      "community_note_approved": "Note communautaire approuvée",
+      "community_note_rejected": "Note communautaire rejetée",
+      "appeal_approved": "Appel accepté",
+      "appeal_rejected": "Appel rejeté",
+      "restore_user": "Suspension du compte levée",
+      "grant_moderator": "Droits de modération accordés",
+      "revoke_moderator": "Droits de modération retirés",
+      "author_approved": "Auteur vérifié",
+      "author_rejected": "Vérification d’auteur rejetée",
+      "author_work_granted": "Œuvre attribuée à l’auteur",
+      "author_work_revoked": "Attribution de l’œuvre révoquée"
+    },
+    "moderatorColumn": "Modérateur"
   }
 }

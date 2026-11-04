@@ -2215,5 +2215,76 @@
       "redis": "Redis"
     },
     "noEndDate": "Ohne Enddatum"
+  },
+  "moderation": {
+    "title": "Moderation",
+    "dashboard": "Moderationsübersicht",
+    "reports": "Meldungen",
+    "log": "Aktionsprotokoll",
+    "appeals": "Einsprüche",
+    "queueDescription": "Meldungen prüfen und Inhalte moderieren",
+    "appealDescription": "Einsprüche gegen Moderationsentscheidungen prüfen",
+    "logDescription": "Protokoll aller Moderationsaktionen (Administratoren)",
+    "pendingCount": "Offene Meldungen",
+    "todayCount": "Heutige Meldungen (UTC)",
+    "emptyReports": "Keine Meldungen für diesen Filter.",
+    "emptyLog": "Noch keine Moderationsaktionen.",
+    "unavailable": "Moderation konnte nicht geladen werden. Bitte erneut versuchen.",
+    "retry": "Erneut versuchen",
+    "entries": "{count, plural, one {# Eintrag} other {# Einträge}}",
+    "first": "Erste Seite",
+    "next": "Nächste Seite",
+    "refresh": "Aktualisieren",
+    "reporter": "Gemeldet von {name}",
+    "moderator": "Geprüft von {name}",
+    "unknown": "Inhalt oder Konto nicht verfügbar",
+    "reason": "Grund",
+    "note": "Moderationsnotiz",
+    "noActions": "Diese Meldung benötigt eine andere prüfende Person oder wurde bereits abgeschlossen.",
+    "content": "Gemeldeter Inhalt",
+    "action": "Aktion",
+    "date": "Datum",
+    "otherAction": "Andere Aktion: {action}",
+    "statuses": {
+      "pending": "Offen",
+      "escalated": "Weitergeleitet",
+      "approved": "Abgewiesen",
+      "removed": "Entfernt",
+      "warned": "Verwarnt",
+      "all": "Alle"
+    },
+    "entities": {
+      "review": "Rezension",
+      "quote": "Zitat",
+      "comment": "Kommentar",
+      "user": "Konto",
+      "appeal": "Einspruch",
+      "community_note": "Community-Notiz",
+      "author_verification_request": "Autorenverifizierung",
+      "book_work": "Buchwerk"
+    },
+    "actions": {
+      "approve": "Meldung abweisen",
+      "remove": "Inhalt entfernen",
+      "warn": "Konto verwarnen",
+      "escalate": "Weiterleiten",
+      "suspend": "Konto sperren"
+    },
+    "audit": {
+      "suspend_user": "Konto gesperrt",
+      "unsuspend_user": "Kontosperre aufgehoben",
+      "community_note_approved": "Community-Notiz genehmigt",
+      "community_note_rejected": "Community-Notiz abgelehnt",
+      "appeal_approved": "Einspruch angenommen",
+      "appeal_rejected": "Einspruch abgelehnt",
+      "restore_user": "Kontosperre aufgehoben",
+      "grant_moderator": "Moderationsrechte erteilt",
+      "revoke_moderator": "Moderationsrechte entzogen",
+      "author_approved": "Autor verifiziert",
+      "author_rejected": "Autorenverifizierung abgelehnt",
+      "author_work_granted": "Autorenwerk zugeordnet",
+      "author_work_revoked": "Zuordnung des Autorenwerks aufgehoben"
+    },
+    "moderatorColumn": "Moderator"
   }
 }

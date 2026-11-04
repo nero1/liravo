@@ -419,3 +419,9 @@ export interface ReadingChallenge {id:string;title:string;description:string|nul
 export interface ReadingChallengeProgress {booksFinished:number;pagesRead:number;goalBooks:number|null;goalPages:number|null;booksPercent:number|null;pagesPercent:number|null;}
 export interface ReadingChallengePage {challenges:ReadingChallenge[];nextCursor:string|null;actorId:string;}
 export interface ReadingChallengeDetail {challenge:ReadingChallenge;joined:boolean;joinedAt?:string;progress:ReadingChallengeProgress|null;participants:{id:string;username:string;display_name:string;avatar_url:string|null;joined_at:string}[];participantsNextCursor:string|null;actorId:string;}
+
+export type ModerationAction='approve'|'remove'|'warn'|'escalate';
+export interface ModerationPerson {username:string;display_name:string;}
+export interface ModerationReport extends ContentReportRow {reporter:ModerationPerson;moderator:ModerationPerson|null;target:{owner_id:string|null;username:string|null;display_name:string|null;label:string|null;content:string|null};allowed_actions:ModerationAction[];}
+export interface ModerationLog {id:string;moderator_id:string|null;target_user_id:string|null;report_id:string|null;action:string;reason:string|null;notes:string|null;entity_type:string|null;entity_id:string|null;created_at:string;moderator:ModerationPerson|null;target:ModerationPerson|null;}
+export interface ModerationPage<T> {items:T[];total:number;actorId:string;nextCursor:string|null;page:number;pageSize:number;}

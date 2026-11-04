@@ -947,7 +947,7 @@ The goal is a self-moderating community with minimal admin involvement in day-to
 
 **Tier 2 — Moderator review:**
 - Trusted, dedicated community members can be granted Moderator role by admin.
-- Moderators see the content report queue.
+- Moderators see the content report queue. EN/FR/DE web/native queues show all statuses, content context, complete cursor pages and permitted actions; owned decision receipts recover lost responses. Dashboard counts use UTC, and the administrator-only audit log includes moderator names and complete paging.
 - Moderators can: approve reported content (dismiss the report), edit content, remove content, send a warning to a user, or escalate to admin.
 - Moderators cannot: ban users, grant roles, or access financial data.
 - Moderator role is granted and revoked by admin. Admin can see a moderator's action history.

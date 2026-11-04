@@ -2558,5 +2558,29 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await expect(sql`select set_admin_edition_audiobook(${admin},${crypto.randomUUID()},true)`).rejects.toMatchObject({code:'P1005'});await expect(sql`select set_admin_edition_audiobook(${reader},${book.id},true)`).rejects.toMatchObject({code:'P1003'});await sql`update users set is_admin=false where id=${admin}`;await expect(mutate()).rejects.toMatchObject({code:'P1003'});
       for(const role of['anon','authenticated'])for(const routine of['admin_edition_audiobook_snapshot(uuid,uuid)','set_admin_edition_audiobook(uuid,uuid,boolean)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
     }
+    {
+      const admin=crypto.randomUUID(),moderator=crypto.randomUUID(),reader=crypto.randomUUID();
+      for(const [user,name]of [[admin,'admin'],[moderator,'moderator'],[reader,'reader']])await sql`select create_direct_account(${user},${name+'089@example.test'},${name+'089'},${name+' 089'})`;
+      await sql`update users set is_admin=true where id=${admin}`;await sql`update users set is_moderator=true where id=${moderator}`;
+      const [book]=await sql`insert into books(title,author_name)values('Moderation089 book','Writer')returning id`;
+      const [review]=await sql`insert into reviews(user_id,book_id,rating,content)values(${reader},${book.id},4,'<p>Reading &amp; reflection</p>')returning id`;
+      await sql`insert into content_reports(reporter_id,entity_type,entity_id,reason,created_at)select ${reader},'review',${review.id},'Moderation089 report '||n,'2026-11-04T00:00:00.123456Z'::timestamptz from generate_series(1,45)n`;
+      const snapshot=async(user:string,scope='reports',status='pending',cursor:{at:string;key:string}|null=null)=>(await sql`select moderation_catalog_snapshot(${user},${scope},${status},${cursor?.at??null}::text::timestamptz,${cursor?.key??null}::uuid,20,0)data`)[0].data;
+      let page=await snapshot(admin),rows=page.rows.slice(0,20),cursor=page.rows.length>20?rows.at(-1):null;
+      while(cursor){page=await snapshot(admin,'reports','pending',cursor);rows.push(...page.rows.slice(0,20));cursor=page.rows.length>20?page.rows[19]:null;}
+      expect(rows).toHaveLength(page.total);expect(new Set(rows.map((row:{key:string})=>row.key)).size).toBe(rows.length);expect(rows.filter((row:{item:{reason:string}})=>row.item.reason.startsWith('Moderation089'))).toHaveLength(45);
+      const target=rows.find((row:{item:{reason:string}})=>row.item.reason==='Moderation089 report 1').item;
+      expect(target).toMatchObject({reporter:{username:'reader089'},target:{owner_id:reader,label:'Moderation089 book'},allowed_actions:['approve','remove','warn','escalate']});expect(JSON.stringify(target)).not.toContain('password_hash');
+      await sql`update users set is_moderator=true where id=${reader}`;expect((await sql`select moderation_report_document(${reader},${target.id},false)data`)[0].data.allowed_actions).toEqual([]);await sql`update users set is_moderator=false where id=${reader}`;
+      await sql`update content_reports set status='escalated' where id=${target.id}`;expect((await snapshot(moderator,'reports','escalated')).rows.find((row:{key:string})=>row.key===target.id).item.allowed_actions).toEqual([]);
+      const [userReport]=await sql`insert into content_reports(reporter_id,entity_type,entity_id,reason)values(${reader},'user',${reader},'Account report')returning id`;
+      expect((await snapshot(moderator)).rows.find((row:{key:string})=>row.key===userReport.id).item.allowed_actions).not.toContain('remove');
+      const decide=()=>sql`select apply_community_intent(${admin},'report_review',${target.id},'moderation089-owned',${sql.json({status:'approved',note:'Checked'})})data`;
+      const decision=(await decide())[0].data;expect((await decide())[0].data).toEqual(decision);expect((await sql`select moderation_receipt_snapshot(${admin},${target.id},'moderation089-owned')data`)[0].data).toEqual(decision);
+      expect((await snapshot(admin,'log')).rows.some((row:{item:{report_id:string;moderator:{username:string};action:string}})=>row.item.report_id===target.id&&row.item.action==='approved'&&row.item.moderator.username==='admin089')).toBe(true);
+      await expect(snapshot(moderator,'log')).rejects.toMatchObject({code:'P1003'});await expect(snapshot(reader)).rejects.toMatchObject({code:'P1003'});await expect(snapshot(admin,'reports','bogus')).rejects.toMatchObject({code:'P1004'});await expect(sql`select moderation_receipt_snapshot(${moderator},${target.id},'moderation089-owned')`).rejects.toMatchObject({code:'P1005'});
+      await sql`update users set is_admin=false where id=${admin}`;await expect(snapshot(admin)).rejects.toMatchObject({code:'P1003'});await expect(sql`select moderation_receipt_snapshot(${admin},${target.id},'moderation089-owned')`).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])for(const routine of['moderation_report_document(uuid,uuid,boolean)','moderation_catalog_snapshot(uuid,text,text,timestamptz,uuid,integer,integer)','moderation_receipt_snapshot(uuid,uuid,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

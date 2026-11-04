@@ -10,12 +10,14 @@ const schema=z.object({action:z.enum(['approve','remove','warn','escalate']),rea
 
 export async function POST(request:Request,{params}:{params:{id:string}}) {
   const auth=await requireModerator();if(auth instanceof NextResponse)return auth;
+  if(request.headers.has('X-Liravo-Actor')&&request.headers.get('X-Liravo-Actor')!==auth.userId)return NextResponse.json({error:'Account changed'},{status:409});
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid report'},{status:400});
   let body;try{body=await request.json();}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
   const parsed=schema.safeParse(body);if(!parsed.success)return NextResponse.json({error:'Invalid input'},{status:400});
   const status={approve:'approved',remove:'removed',warn:'warned',escalate:'escalated'}[parsed.data.action];
   try{
-    await applyCommunityIntent(request,auth.userId,'report_review',params.id,{status,note:parsed.data.reason??null});
-    return NextResponse.json({ok:true,action:parsed.data.action,reportId:params.id});
+    const result=await applyCommunityIntent(request,auth.userId,'report_review',params.id,{status,note:parsed.data.reason??null});
+    return NextResponse.json({...result,ok:true,actorId:auth.userId,action:parsed.data.action,reportId:params.id},{headers:{'Cache-Control':'private, no-store'}});
   }catch(error){
     return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
