@@ -2,7 +2,8 @@ import { CsrfInput } from '@/components/layout/CsrfInput';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { isAdmin } from '@/lib/moderation';
 import { getTranslations, getFormatter } from 'next-intl/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import {readAdminCatalog} from '@/lib/admin-catalog';
+import {CatalogPager} from '@/components/admin/CatalogPager';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 
@@ -25,21 +26,13 @@ interface Listing {
   book: { title: string; author_name: string } | null;
 }
 
-export default async function PromotedListingsPage({searchParams={}}:{searchParams?:{error?:string}}) {
+export default async function PromotedListingsPage({searchParams={}}:{searchParams?:{error?:string;cursor?:string}}) {
   const formatter = await getFormatter();
   const t = await getTranslations('admin');
   const user = await getCurrentUser();
   if (!user) redirect('/login');
   if (!await isAdmin(user.id)) redirect('/');
-  const supabase = createServiceClient();
-
-  const { data: listings } = await supabase
-    .from('promoted_listings')
-    .select('id, book_id, is_active, start_date, end_date, clicks, price_usd, created_at, book:books(title, author_name)')
-    .order('created_at', { ascending: false })
-    .limit(100);
-
-  const items = (listings ?? []) as unknown as Listing[];
+  const catalog=await readAdminCatalog<Listing>(user.id,'promotions',{cursor:searchParams.cursor}),items=catalog.items,action='/api/admin/promoted-listings'+(searchParams.cursor?'?cursor='+encodeURIComponent(searchParams.cursor):'');
   const now = new Date();
 
   return (
@@ -48,7 +41,7 @@ export default async function PromotedListingsPage({searchParams={}}:{searchPara
       {searchParams.error&&<p role="alert" className="text-sm mb-4">{t('promotionUpdateFailed')}</p>}
 
       {items.length === 0 ? (
-        <p className="text-muted-foreground text-sm">{t('noPromotedListingsYet')}</p>
+        <p className="text-muted-foreground text-sm">{catalog.total?t('noEntriesOnPage'):t('noPromotedListingsYet')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
@@ -97,11 +90,11 @@ export default async function PromotedListingsPage({searchParams={}}:{searchPara
                       {listing.price_usd != null ? formatter.number(Number(listing.price_usd), { style: 'currency', currency: 'USD' }) : '—'}
                     </td>
                     <td className="py-3 pl-4 space-y-2">
-                      <form action="/api/admin/promoted-listings" method="POST"><CsrfInput />
+                      <form action={action} method="POST"><CsrfInput />
                         <input type="hidden" name="_action" value="update" /><input type="hidden" name="id" value={listing.id} /><input type="hidden" name="_idempotency" value={crypto.randomUUID()} /><input type="hidden" name="is_active" value={String(!listing.is_active)} />
                         <button className="underline text-sm">{listing.is_active?t('deactivate'):t('activate')}</button>
                       </form>
-                      <form action="/api/admin/promoted-listings" method="POST" className="space-y-2"><CsrfInput />
+                      <form action={action} method="POST" className="space-y-2"><CsrfInput />
                         <input type="hidden" name="_action" value="update" /><input type="hidden" name="id" value={listing.id} /><input type="hidden" name="_idempotency" value={crypto.randomUUID()} />
                         <label className="block text-xs">{t('promotionStartUtc')}<input type="datetime-local" name="start_date" required defaultValue={listing.start_date?new Date(listing.start_date).toISOString().slice(0,16):''} className="block border rounded p-1 bg-background" /></label>
                         <label className="block text-xs">{t('promotionEndUtc')}<input type="datetime-local" name="end_date" required defaultValue={listing.end_date?new Date(listing.end_date).toISOString().slice(0,16):''} className="block border rounded p-1 bg-background" /></label>
@@ -116,6 +109,7 @@ export default async function PromotedListingsPage({searchParams={}}:{searchPara
         </div>
       )}
 
+      <CatalogPager base="/admin/promoted-listings" total={catalog.total} cursor={searchParams.cursor} nextCursor={catalog.nextCursor}/>
       <p className="text-xs text-muted-foreground mt-6">{t('activationHelp')}</p>
     </div>
   );

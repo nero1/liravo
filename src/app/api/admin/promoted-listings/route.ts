@@ -14,6 +14,7 @@ async function mutate(request:Request,method:'create'|'update'|'delete'){
   const guard=await requireAdmin();if(guard instanceof NextResponse)return guard;
   if(request.headers.has('X-Liravo-Actor')&&request.headers.get('X-Liravo-Actor')!==guard.userId)return NextResponse.json({error:'Account changed'},{status:409});
   const form=request.headers.get('content-type')?.includes('application/x-www-form-urlencoded');
+  const cursor=new URL(request.url).searchParams.get('cursor'),returnPath='/admin/promoted-listings'+(cursor&&cursor.length<=2000?'?cursor='+encodeURIComponent(cursor):''),errorPath=returnPath+(returnPath.includes('?')?'&':'?')+'error=update';
   let raw:Record<string,unknown>,action:string=method,key=request.headers.get('idempotency-key')??request.headers.get('x-idempotency-key');
   if(form){
     const data=await request.formData().catch(()=>null);
@@ -35,13 +36,13 @@ async function mutate(request:Request,method:'create'|'update'|'delete'){
   if(!parsed.success)return NextResponse.json({error:'Invalid promotion dates or fields'},{status:422});
   const {data,error}=await createServiceClient().rpc('apply_promotion_intent' as never,{p_actor:guard.userId,p_action:action,p_id:id,p_key:key,p_data:parsed.data,p_correlation_id:getRequestCorrelationId(request)} as never);
   if(error){
-    if(form)return new Response(null,{status:303,headers:{Location:'/admin/promoted-listings?error=update'}});
+    if(form)return new Response(null,{status:303,headers:{Location:errorPath}});
     return NextResponse.json({error:'Promotion update unavailable'},{status:({P1001:409,P1003:403,P1004:422,P1005:404} as Record<string,number>)[error.code]??503});
   }
   const receipt=z.object({id:z.string().uuid(),is_active:z.boolean()}).passthrough().safeParse(data);
   const acknowledged=action==='delete'?z.object({deleted:z.literal(true)}).safeParse(data).success:receipt.success&&(action!=='update'||receipt.data.id===String(id).toLowerCase())&&(!('is_active'in parsed.data)||receipt.data.is_active===parsed.data.is_active);
-  if(!acknowledged)return form?new Response(null,{status:303,headers:{Location:'/admin/promoted-listings?error=update'}}):NextResponse.json({error:'Promotion update unavailable'},{status:503});
-  if(form)return new Response(null,{status:303,headers:{Location:'/admin/promoted-listings'}});
+  if(!acknowledged)return form?new Response(null,{status:303,headers:{Location:errorPath}}):NextResponse.json({error:'Promotion update unavailable'},{status:503});
+  if(form)return new Response(null,{status:303,headers:{Location:returnPath}});
   return NextResponse.json(action==='delete'?{...data,actorId:guard.userId}:{listing:data,actorId:guard.userId},{status:action==='create'?201:200});
 }
 export const POST=(request:Request)=>mutate(request,'create');

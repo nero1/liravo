@@ -749,7 +749,14 @@
     "promotionEndUtc": "Ends (UTC)",
     "savePromotionDates": "Save dates",
     "deactivate": "Deactivate",
-    "expired": "Expired"
+    "expired": "Expired",
+    "catalogPages": "Catalog pages",
+    "catalogEntries": "{count, plural, one {# entry} other {# entries}}",
+    "firstPage": "First page",
+    "nextPage": "Next page",
+    "noEntriesOnPage": "No entries on this page.",
+    "audiobookForBook": "Audiobook availability for {title}",
+    "viewPurchaseLinks": "View purchase links"
   },
   "tips": {
     "tip": "Tip",

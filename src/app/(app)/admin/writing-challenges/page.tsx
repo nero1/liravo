@@ -1,3 +1,5 @@
+import {readAdminCatalog} from '@/lib/admin-catalog';
+import {CatalogPager} from '@/components/admin/CatalogPager';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { isAdmin } from '@/lib/moderation';
 import { getTranslations, getFormatter } from 'next-intl/server';
@@ -28,7 +30,7 @@ interface WritingPrompt {
   is_active: boolean;
 }
 
-export default async function WritingChallengesAdminPage() {
+export default async function WritingChallengesAdminPage({searchParams={}}:{searchParams?:{cursor?:string}}) {
   const formatter = await getFormatter();
   const t = await getTranslations('admin');
   const user = await getCurrentUser();
@@ -36,18 +38,9 @@ export default async function WritingChallengesAdminPage() {
   if (!await isAdmin(user.id)) redirect('/');
   const supabase = createServiceClient();
 
-  const [{ data: challenges }, { data: prompts }] = await Promise.all([
-    supabase
-      .from('writing_challenges')
-      .select('id, title, type, start_date, end_date, is_active')
-      .order('created_at', { ascending: false })
-      .limit(50),
-    supabase
-      .from('writing_prompts')
-      .select('id, prompt_text, prompt_date, is_active')
-      .order('prompt_date', { ascending: false })
-      .limit(30),
-  ]);
+  const [catalog,{data:prompts,error:promptError}]=await Promise.all([readAdminCatalog<WritingChallenge>(user.id,'writing',{cursor:searchParams.cursor}),supabase.from('writing_prompts').select('id,prompt_text,prompt_date,is_active').order('prompt_date',{ascending:false}).limit(30)]);
+  if(promptError)throw new Error('Writing prompts unavailable');
+  const challenges=catalog.items;
 
   const now = new Date();
 
@@ -58,7 +51,7 @@ export default async function WritingChallengesAdminPage() {
         <p className="text-sm text-muted-foreground mb-6">{t('writingChallengesDescription')}</p>
 
         {(challenges ?? []).length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t('noWritingChallengesYet')}</p>
+          <p className="text-muted-foreground text-sm">{catalog.total?t('noEntriesOnPage'):t('noWritingChallengesYet')}</p>
         ) : (
           <div className="space-y-2">
             {(challenges as WritingChallenge[]).map((c) => {
@@ -86,6 +79,7 @@ export default async function WritingChallengesAdminPage() {
             })}
           </div>
         )}
+      <CatalogPager base="/admin/writing-challenges" total={catalog.total} cursor={searchParams.cursor} nextCursor={catalog.nextCursor}/>
       </div>
 
       <div>

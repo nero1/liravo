@@ -67,6 +67,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Translate taste-profile controls and known genre/mood labels while preserving provider prose/categories.
 - ✅ Repair native Premium access, complete Play restoration, account-bound acknowledgements, store retry and EN/FR/DE billing controls.
 - ✅ Repair native admin catalog pagination/contracts, moderation/configuration receipts, real cron status and EN/FR/DE controls; page web themes.
+- ✅ Page web book/promotion/season/writing administration and retain promotion form positions.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
@@ -108,6 +109,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Aggregate complete visible review statistics, page reviews and preserve catalog rating sources.
 - ✅ Preserve selected editions in quotes/debates and count challenge pages from the latest completed edition per canonical work.
 - ✅ Omit ISBN-required purchase links for ISBN-less editions; derive taste eligibility/recent reading from canonical works and latest editions.
+- ✅ Apply owned audiobook edits to canonical editions, exclude retained aliases from editable catalogs and count complete affiliate/shelf activity per edition.
 - ✅ Share bounded, ranked mood discovery across web/native with canonical edition aliases and visible-review filtering.
 - ✅ Require staff-approved work ownership for author catalogs, ARC offers and post book links; cover coauthors, edition aliases, work merges, complete analytics and revocation.
 

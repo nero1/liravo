@@ -1,7 +1,8 @@
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { isAdmin } from '@/lib/moderation';
 import { getTranslations, getFormatter } from 'next-intl/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import {readAdminCatalog} from '@/lib/admin-catalog';
+import {CatalogPager} from '@/components/admin/CatalogPager';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
@@ -23,22 +24,13 @@ interface SeasonalEvent {
   is_published: boolean;
 }
 
-export default async function SeasonalEventsPage() {
+export default async function SeasonalEventsPage({searchParams={}}:{searchParams?:{cursor?:string}}) {
   const formatter = await getFormatter();
   const t = await getTranslations('admin');
   const user = await getCurrentUser();
   if (!user) redirect('/login');
   if (!await isAdmin(user.id)) redirect('/');
-  const supabase = createServiceClient();
-
-  const { data: events,error } = await supabase
-    .from('seasonal_events')
-    .select('id, name, theme, start_date, end_date, badge_name, is_published')
-    .order('start_date', { ascending: false })
-    .limit(50);
-
-  if(error)throw new Error('Seasonal events unavailable');
-  const items = (events ?? []) as SeasonalEvent[];
+  const catalog=await readAdminCatalog<SeasonalEvent>(user.id,'seasons',{cursor:searchParams.cursor}),items=catalog.items;
   const now = new Date();
 
   return (
@@ -52,7 +44,7 @@ export default async function SeasonalEventsPage() {
       </div>
 
       {items.length === 0 ? (
-        <p className="text-muted-foreground text-sm">{t('noSeasonalEventsYetCreateOneToGetStarted')}</p>
+        <p className="text-muted-foreground text-sm">{catalog.total?t('noEntriesOnPage'):t('noSeasonalEventsYetCreateOneToGetStarted')}</p>
       ) : (
         <div className="space-y-3">
           {items.map((event) => {
@@ -94,6 +86,7 @@ export default async function SeasonalEventsPage() {
           })}
         </div>
       )}
+      <CatalogPager base="/admin/seasonal-events" total={catalog.total} cursor={searchParams.cursor} nextCursor={catalog.nextCursor}/>
     </div>
   );
 }

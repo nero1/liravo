@@ -1021,8 +1021,9 @@ Accessible at `/admin`. Every admin route verifies `is_admin = true` against the
 
 - Add books manually.
 - Edit book metadata.
-- Mark book as having an audiobook (enables Audible CTA).
-- Manage affiliate links per book.
+- Mark a canonical edition as having an audiobook (enables Audible CTA); retained book links resolve to that edition.
+- Manage affiliate links per book. Preview current purchase links from active store templates.
+- Editable catalogs page canonical editions, preserve separate physical editions and show full edition-family affiliate/shelf counts.
 - Affiliate store registry management (add, edit, deactivate stores).
 
 ### 13.6 Promoted Listings

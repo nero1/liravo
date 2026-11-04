@@ -749,7 +749,14 @@
     "promotionEndUtc": "Fin (UTC)",
     "savePromotionDates": "Enregistrer les dates",
     "deactivate": "Désactiver",
-    "expired": "Expirée"
+    "expired": "Expirée",
+    "catalogPages": "Pages du catalogue",
+    "catalogEntries": "{count, plural, one {# élément} other {# éléments}}",
+    "firstPage": "Première page",
+    "nextPage": "Page suivante",
+    "noEntriesOnPage": "Aucun élément sur cette page.",
+    "audiobookForBook": "Disponibilité du livre audio pour {title}",
+    "viewPurchaseLinks": "Voir les liens d’achat"
   },
   "tips": {
     "tip": "Pourboire",

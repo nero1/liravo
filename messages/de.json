@@ -749,7 +749,14 @@
     "promotionEndUtc": "Ende (UTC)",
     "savePromotionDates": "Daten speichern",
     "deactivate": "Deaktivieren",
-    "expired": "Abgelaufen"
+    "expired": "Abgelaufen",
+    "catalogPages": "Katalogseiten",
+    "catalogEntries": "{count, plural, one {# Eintrag} other {# Einträge}}",
+    "firstPage": "Erste Seite",
+    "nextPage": "Nächste Seite",
+    "noEntriesOnPage": "Keine Einträge auf dieser Seite.",
+    "audiobookForBook": "Hörbuchverfügbarkeit für {title}",
+    "viewPurchaseLinks": "Kauflinks ansehen"
   },
   "tips": {
     "tip": "Trinkgeld",
