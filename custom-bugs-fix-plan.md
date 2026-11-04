@@ -71,7 +71,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Repair report/audit-log contracts, tied paging, current-role permissions, owned decision recovery and EN/FR/DE web/native screens.
 - ✅ Repair complete book-chain/pass catalogs and rosters, edition/reader selection, deleted-recipient checks, owned retries and EN/FR/DE web/native controls.
 - ✅ Localize all six email templates, HTML/text footers and stored-recipient language dispatch.
-- 🟡 Complete paid email delivery paging/receipts and working opt-out links.
+- ✅ Complete durable paid-email audiences/receipts, retry cooldowns, canonical weekly counts and anonymous recoverable opt-out links.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

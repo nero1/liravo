@@ -600,8 +600,9 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 - Free tier: no email notifications. Account-critical transactional emails only (e.g. email verification link, recovery link if email added, 2FA recovery code delivery).
 - Paid tier: opt-in weekly activity digest, new release alerts from followed authors, challenge reminder emails.
 - Transactional and paid-email templates use the recipient’s saved EN/FR/DE language for subjects, content, plurals and HTML/text footers; unsupported locales fall back to English. Names, titles and recovery codes remain intact.
-- Every email has a one-click unsubscribe link.
+- Optional email includes standard one-click unsubscribe headers and a signed-out confirmation link; account-critical email links to notification settings. Limited, expiring proofs update only the matching preference, remain safe on retry and stop working after an email-address change.
 - No marketing or promotional email to free users.
+- Paid-email campaigns and recipient receipts persist across runs and week boundaries. Delivery checks current access, verified email, preferences and author ownership; uncertain sends are quarantined. Weekly digests summarize the previous complete UTC week and count tracked canonical works once across shelves/edition aliases.
 
 ---
 

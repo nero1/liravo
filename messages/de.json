@@ -553,7 +553,12 @@
         "duplicatePayments": "Zahlungen mit Klärungsbedarf",
         "unreconciledCheckouts": "Zu prüfende Zahlungen",
         "unresolvedPaymentReturns": "Erstattungen mit Abgleichbedarf",
-        "legacyEventTickets": "Ältere Tickets ohne geprüften Zahlungsnachweis"
+        "legacyEventTickets": "Ältere Tickets ohne geprüften Zahlungsnachweis",
+        "uncertainReleaseEmails": "Unklare Neuerscheinungs-E-Mails",
+        "failedReleaseEmails": "Fehlgeschlagene Neuerscheinungs-E-Mails",
+        "failedDigestEmails": "Fehlgeschlagene Wochenrückblicke",
+        "pendingReleaseEmails": "Ausstehende Neuerscheinungs-E-Mails",
+        "pendingDigestEmails": "Ausstehende Wochenrückblicke"
       },
       "jobs": {
         "outbox-drain": {
@@ -2328,10 +2333,10 @@
     "codesBody": "Hier sind deine einmaligen 2FA-Wiederherstellungscodes. Bewahre sie sicher auf. Jeder Code kann nur einmal verwendet werden.",
     "codesWarning": "Teile diese Codes mit niemandem.",
     "digestSubject": "Deine Woche auf Liravo, {name}",
-    "digestBody": "Das ist diese Woche auf deinem Liravo-Konto passiert:",
+    "digestBody": "Das ist letzte Woche auf deinem Liravo-Konto passiert:",
     "digestFollowers": "{count, plural, one {# neuer Follower} other {# neue Follower}}",
     "digestNotifications": "{count, plural, one {# neue Benachrichtigung} other {# neue Benachrichtigungen}}",
-    "digestBooks": "{count, plural, one {# Buch diese Woche erfasst} other {# Bücher diese Woche erfasst}}",
+    "digestBooks": "{count, plural, one {# Buch letzte Woche erfasst} other {# Bücher letzte Woche erfasst}}",
     "digestAction": "Deinen Feed ansehen",
     "profile": "Profil",
     "releaseSubject": "Neuerscheinung von {author} — Liravo",
@@ -2343,5 +2348,16 @@
     "footerManage": "Benachrichtigungseinstellungen verwalten",
     "footerUnsubscribe": "Abbestellen",
     "reader": "Leser"
+  },
+  "emailUnsubscribe": {
+    "title": "E-Mails abbestellen",
+    "description": "Bestätige, um diese optionalen E-Mails abzubestellen. Sicherheits-E-Mails bleiben weiterhin verfügbar.",
+    "loading": "Wird geladen…",
+    "pending": "Wird gespeichert…",
+    "confirm": "Abbestellen",
+    "done": "Deine E-Mail-Einstellung wurde aktualisiert.",
+    "invalid": "Dieser Link ist ungültig, abgelaufen oder wurde bereits verwendet. Verwende eine aktuelle E-Mail oder verwalte deine Einstellungen.",
+    "failed": "Einstellung konnte nicht aktualisiert werden. Bitte erneut versuchen.",
+    "settings": "Benachrichtigungseinstellungen verwalten"
   }
 }

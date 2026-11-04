@@ -74,14 +74,15 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
     return { ok: false, error: 'Email suppressed: free tier user' };
   }
 
+  if(!TRANSACTIONAL_TYPES.has(type)&&!unsubscribeToken)return{ok:false,error:'Email suppressed: unsubscribe token required'};
+
   if (!DOMAIN) {
     console.warn('[email] MAILGUN_DOMAIN not set — email suppressed in dev');
     return { ok: false, error: 'MAILGUN_DOMAIN not configured' };
   }
 
-  const unsubscribeUrl = unsubscribeToken
-    ? `${APP_URL}/api/users/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`
-    : `${APP_URL}/settings/notifications`;
+  const unsubscribeUrl=unsubscribeToken?`${APP_URL}/email/unsubscribe?lang=${locale}#token=${encodeURIComponent(unsubscribeToken)}`:`${APP_URL}/settings/notifications`;
+  const oneClickUrl=unsubscribeToken?`${APP_URL}/api/users/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`:null;
 
   const footer=t(unsubscribeToken?'footerUnsubscribe':'footerManage');
   const htmlWithFooter=`<!doctype html><html lang="${locale}"><body>${html}
@@ -97,6 +98,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
       subject,
       html: htmlWithFooter,
       text:textWithFooter,
+      ...(oneClickUrl?{'h:List-Unsubscribe':'<'+oneClickUrl+'>','h:List-Unsubscribe-Post':'List-Unsubscribe=One-Click'}:{}),
     });
     return { ok: true, messageId: response.id };
   } catch (err) {

@@ -37,6 +37,7 @@ export async function middleware(request: NextRequest) {
     && !pathname.startsWith('/api/webhooks/')
     && !pathname.startsWith('/api/cron/')
     && !['/api/subscriptions/webhook', '/api/tips/webhook'].includes(pathname)
+    && pathname!=='/api/users/unsubscribe' // Uses its own limited unsubscribe proof.
     && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)
   ) {
     if (!origin) return finish(NextResponse.json({ error: 'Invalid request origin', code: 'ORIGIN_REJECTED', correlationId }, { status: 403 }));

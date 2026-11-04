@@ -1,25 +1,14 @@
-import {beforeEach,expect,it,vi} from 'vitest';
-import {GET} from '@/app/api/cron/new-release-alerts/route';
-import {sendEmail,buildNewReleaseEmail} from '@/lib/email';
-const {ownership}=vi.hoisted(()=>({ownership:vi.fn()}));
-beforeEach(()=>{vi.clearAllMocks();ownership.mockResolvedValue({data:true,error:null});});
-vi.mock('@/lib/cron',()=>({cron:(_name:string,task:()=>Promise<Response>)=>task}));
-vi.mock('@/lib/email',()=>({sendEmail:vi.fn(async()=>({ok:true})),buildNewReleaseEmail:vi.fn(()=>({subject:'Fixture',html:'Fixture',text:'Fixture'}))}));
-vi.mock('@/lib/supabase/server',()=>({createServiceClient:()=>({rpc:ownership,from:(table:string)=>{
-  const chain={select:()=>chain,eq:()=>chain,gte:()=>chain,not:()=>chain,single:async()=>({data:table==='users'?{display_name:'Author',username:'author'}:{title:'Book'}}),limit:async()=>({data:table==='author_posts'?[{id:'post',author_id:'author',book_id:'book'}]:[
-    {user:{email:'allowed@example.test',preferred_locale:'fr',email_verified:true,is_premium:true,email_digest_enabled:false,notify_new_releases:true}},
-    {user:{email:'opted-out@example.test',email_verified:true,is_premium:true,email_digest_enabled:true,notify_new_releases:false}},
-    {user:{email:'free@example.test',email_verified:true,is_premium:false,notify_new_releases:true}},
-    {user:{email:'unverified@example.test',email_verified:false,is_premium:true,notify_new_releases:true}},
-  ]})};return chain;
-}})}));
-it('uses the independent new-release preference while retaining paid and verified-email gates',async()=>{
-  expect((await GET(new Request('https://app.test/api/cron/new-release-alerts'))).status).toBe(200);expect(sendEmail).toHaveBeenCalledTimes(1);expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({to:'allowed@example.test',type:'new_release_alert',locale:'fr'}));expect(buildNewReleaseEmail).toHaveBeenCalledWith('', 'Author','Book',expect.stringContaining('/book/book'),'fr');
-});
-
-it('does not send a release email without current verified work ownership',async()=>{
-  ownership.mockResolvedValue({data:false,error:null});const response=await GET(new Request('https://app.test/api/cron/new-release-alerts'));expect(await response.json()).toMatchObject({sent:0});expect(sendEmail).not.toHaveBeenCalled();
-});
-it('fails without sending when work ownership cannot be checked',async()=>{
-  ownership.mockResolvedValue({data:null,error:{message:'Unavailable'}});await expect(GET(new Request('https://app.test/api/cron/new-release-alerts'))).rejects.toThrow('ownership unavailable');expect(sendEmail).not.toHaveBeenCalled();
-});
+import{beforeEach,expect,it,vi}from'vitest';
+import{GET}from'@/app/api/cron/new-release-alerts/route';
+import{sendEmail}from'@/lib/email';
+import{createServiceClient}from'@/lib/supabase/server';
+vi.mock('@/lib/cron',()=>({cron:(_name:string,run:()=>Promise<Response>)=>run}));
+vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
+vi.mock('@/lib/email',async original=>({...await original<typeof import('@/lib/email')>(),sendEmail:vi.fn(async()=>({ok:true,messageId:'isolated-message'}))}));
+const rpc=vi.fn(),fixture={userId:'reader',postId:'post',claimId:'claim',email:'reader@example.test',displayName:'Lecteur',locale:'fr',authorName:'Auteur',bookTitle:'Livre',bookId:'edition',unsubscribeToken:'a'.repeat(64)};let pending:typeof fixture[]=[];
+beforeEach(()=>{vi.clearAllMocks();pending=[fixture];vi.mocked(createServiceClient).mockReturnValue({rpc}as never);rpc.mockImplementation(async(name:string)=>({data:name==='cleanup_email_unsubscribe_proofs'?0:name==='queue_release_email_audience'?45:name==='finish_paid_email'?true:(()=>{const claims=pending.splice(0,4);return{claims,examined:claims.length};})(),error:null}));vi.mocked(sendEmail).mockResolvedValue({ok:true,messageId:'isolated-message'});});
+it('sends claimed recipients with stored language, selected edition and a real opt-out proof',async()=>{expect((await GET(new Request('https://app.test/releases'))).status).toBe(200);expect(sendEmail).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({to:'reader@example.test',locale:'fr',subject:'Nouvelle parution de Auteur — Liravo',unsubscribeToken:fixture.unsubscribeToken,text:expect.stringContaining('/book/edition')}));expect(rpc).toHaveBeenCalledWith('finish_paid_email',expect.objectContaining({p_claim:'claim',p_post:'post',p_status:'sent',p_message:'isolated-message'}));});
+it('continues durable work beyond 40 recipients without resending completed claims',async()=>{pending=Array.from({length:45},(_,i)=>({...fixture,postId:'post'+i,claimId:'claim'+i}));expect(await(await GET(new Request('https://app.test/releases'))).json()).toMatchObject({processed:40,sent:40});expect(await(await GET(new Request('https://app.test/releases'))).json()).toMatchObject({processed:5,sent:5});expect(sendEmail).toHaveBeenCalledTimes(45);});
+it('keeps paging after ineligible claims and fails on unavailable storage',async()=>{let first=true;rpc.mockImplementation(async(name:string)=>{if(name==='cleanup_email_unsubscribe_proofs')return{data:0,error:null};if(name==='queue_release_email_audience')return{data:1,error:null};if(name==='finish_paid_email')return{data:true,error:null};if(first){first=false;return{data:{claims:[],examined:4},error:null};}const claims=pending.splice(0,4);return{data:{claims,examined:claims.length},error:null};});expect(await(await GET(new Request('https://app.test/releases'))).json()).toMatchObject({processed:5,skipped:4,sent:1});rpc.mockResolvedValue({data:null,error:{code:'08006'}});await expect(GET(new Request('https://app.test/releases'))).rejects.toThrow('storage unavailable');});
+it('quarantines ambiguous sends and lost receipt acknowledgements instead of marking them retryable',async()=>{vi.mocked(sendEmail).mockResolvedValueOnce({ok:false,ambiguous:true,error:'Isolated timeout'});expect((await GET(new Request('https://app.test/releases'))).status).toBe(503);expect(rpc).toHaveBeenCalledWith('finish_paid_email',expect.objectContaining({p_status:'unknown'}));pending=[fixture];rpc.mockImplementation(async(name:string)=>({data:name==='cleanup_email_unsubscribe_proofs'?0:name==='queue_release_email_audience'?0:name==='finish_paid_email'?false:(()=>{const claims=pending.splice(0,4);return{claims,examined:claims.length};})(),error:null}));expect(await(await GET(new Request('https://app.test/releases'))).json()).toMatchObject({unknown:1});});
+it('reports definite transport failures as retryable failures and preserves claim identity',async()=>{vi.mocked(sendEmail).mockResolvedValueOnce({ok:false,ambiguous:false,error:'Isolated rejection'});expect((await GET(new Request('https://app.test/releases'))).status).toBe(503);expect(rpc).toHaveBeenCalledWith('finish_paid_email',expect.objectContaining({p_status:'failed',p_claim:'claim'}));});

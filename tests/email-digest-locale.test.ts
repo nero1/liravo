@@ -1,8 +1,10 @@
-import{expect,it,vi}from'vitest';
+import{beforeEach,expect,it,vi}from'vitest';
 import{GET}from'@/app/api/cron/email-digest/route';
 import{sendEmail}from'@/lib/email';
+import{createServiceClient}from'@/lib/supabase/server';
 vi.mock('@/lib/email',async original=>({...await original<typeof import('@/lib/email')>(),sendEmail:vi.fn(async()=>({ok:true,messageId:'isolated-message'}))}));
-vi.mock('@/lib/cron',()=>({cron:(_name:string,run:()=>Promise<Response>)=>run,mapBatches:async(items:unknown[],_size:number,run:(item:unknown)=>Promise<void>)=>{for(const item of items)await run(item);return items.length;}}));
-vi.mock('@/lib/redis',()=>({getRedisClient:()=>({get:async()=>null,del:async()=>{}})}));
-vi.mock('@/lib/supabase/server',()=>({createServiceClient:()=>({rpc:async()=>({data:true,error:null}),from:(table:string)=>{const result=table==='users'?{data:[{id:'reader',email:'reader@example.test',display_name:'Lecteur',username:'lecteur',preferred_locale:'fr'}],error:null}:{count:table==='follows'?1:2,error:null};const builder={select:()=>builder,eq:()=>builder,not:()=>builder,order:()=>builder,limit:()=>builder,gte:()=>builder,update:()=>builder,then:(resolve:(value:unknown)=>unknown)=>Promise.resolve(result).then(resolve)};return builder;}})}));
-it('uses the stored language throughout digest template and transport dispatch',async()=>{const response=await GET(new Request('https://app.test/digest'));expect(await response.json()).toMatchObject({sent:1});expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({locale:'fr',subject:'Votre semaine sur Liravo, Lecteur',text:expect.stringContaining('1 nouvel abonné')}));});
+vi.mock('@/lib/cron',()=>({cron:(_name:string,run:()=>Promise<Response>)=>run}));
+vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
+const rpc=vi.fn();let pending=true;
+beforeEach(()=>{vi.clearAllMocks();pending=true;vi.mocked(createServiceClient).mockReturnValue({rpc}as never);rpc.mockImplementation(async(name:string)=>{if(name==='cleanup_email_unsubscribe_proofs')return{data:0,error:null};if(name==='queue_paid_digest_audience')return{data:1,error:null};if(name==='finish_paid_email')return{data:true,error:null};const claims=pending?[{userId:'reader',claimId:'claim',period:'2026-11-02',email:'reader@example.test',displayName:'Lecteur',username:'lecteur',locale:'fr',stats:{newFollowers:1,newNotifications:2,booksThisWeek:1},unsubscribeToken:'b'.repeat(64)}]:[];pending=false;return{data:{claims,examined:claims.length},error:null};});});
+it('uses durable period claims, canonical weekly counts and stored language throughout dispatch',async()=>{const response=await GET(new Request('https://app.test/digest'));expect(await response.json()).toMatchObject({sent:1});expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({locale:'fr',subject:'Votre semaine sur Liravo, Lecteur',text:expect.stringContaining('1 livre suivi la semaine dernière'),unsubscribeToken:'b'.repeat(64)}));expect(rpc).toHaveBeenCalledWith('finish_paid_email',expect.objectContaining({p_period:'2026-11-02',p_claim:'claim'}));});

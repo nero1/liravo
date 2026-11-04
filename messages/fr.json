@@ -553,7 +553,12 @@
         "duplicatePayments": "Paiements à rapprocher",
         "unreconciledCheckouts": "Paiements à rapprocher",
         "unresolvedPaymentReturns": "Remboursements nécessitant un rapprochement",
-        "legacyEventTickets": "Anciens billets nécessitant une preuve de paiement vérifiée"
+        "legacyEventTickets": "Anciens billets nécessitant une preuve de paiement vérifiée",
+        "uncertainReleaseEmails": "E-mails de parution incertains",
+        "failedReleaseEmails": "Échecs d’e-mails de parution",
+        "failedDigestEmails": "Échecs d’e-mails récapitulatifs",
+        "pendingReleaseEmails": "E-mails de parution en attente",
+        "pendingDigestEmails": "E-mails récapitulatifs en attente"
       },
       "jobs": {
         "outbox-drain": {
@@ -2328,10 +2333,10 @@
     "codesBody": "Voici vos codes de récupération 2FA à usage unique. Conservez-les en lieu sûr. Chaque code ne peut être utilisé qu’une seule fois.",
     "codesWarning": "Ne partagez ces codes avec personne.",
     "digestSubject": "Votre semaine sur Liravo, {name}",
-    "digestBody": "Voici l’activité de votre compte Liravo cette semaine :",
+    "digestBody": "Voici l’activité de votre compte Liravo la semaine dernière :",
     "digestFollowers": "{count, plural, one {# nouvel abonné} other {# nouveaux abonnés}}",
     "digestNotifications": "{count, plural, one {# nouvelle notification} other {# nouvelles notifications}}",
-    "digestBooks": "{count, plural, one {# livre suivi cette semaine} other {# livres suivis cette semaine}}",
+    "digestBooks": "{count, plural, one {# livre suivi la semaine dernière} other {# livres suivis la semaine dernière}}",
     "digestAction": "Voir mon fil",
     "profile": "Profil",
     "releaseSubject": "Nouvelle parution de {author} — Liravo",
@@ -2343,5 +2348,16 @@
     "footerManage": "Gérer les préférences de notification",
     "footerUnsubscribe": "Se désabonner",
     "reader": "Lecteur"
+  },
+  "emailUnsubscribe": {
+    "title": "Se désabonner des e-mails",
+    "description": "Confirmez pour arrêter ce type d’e-mail facultatif. Les e-mails de sécurité du compte restent disponibles.",
+    "loading": "Chargement…",
+    "pending": "Enregistrement…",
+    "confirm": "Se désabonner",
+    "done": "Votre préférence d’e-mail a été mise à jour.",
+    "invalid": "Ce lien est invalide, expiré ou déjà utilisé. Utilisez un e-mail récent ou gérez vos préférences.",
+    "failed": "Impossible de mettre à jour votre préférence. Réessayez.",
+    "settings": "Gérer les préférences de notification"
   }
 }

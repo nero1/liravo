@@ -553,7 +553,12 @@
         "duplicatePayments": "Charges needing reconciliation",
         "unreconciledCheckouts": "Checkouts needing reconciliation",
         "unresolvedPaymentReturns": "Payment returns needing reconciliation",
-        "legacyEventTickets": "Older tickets needing verified payment evidence"
+        "legacyEventTickets": "Older tickets needing verified payment evidence",
+        "uncertainReleaseEmails": "Uncertain release emails",
+        "failedReleaseEmails": "Failed release emails",
+        "failedDigestEmails": "Failed digest emails",
+        "pendingReleaseEmails": "Pending release emails",
+        "pendingDigestEmails": "Pending digest emails"
       },
       "jobs": {
         "outbox-drain": {
@@ -2328,10 +2333,10 @@
     "codesBody": "Here are your single-use 2FA recovery codes. Store them somewhere safe. Each code can only be used once.",
     "codesWarning": "Do not share these codes with anyone.",
     "digestSubject": "Your Liravo week, {name}",
-    "digestBody": "Here is what happened on your Liravo account this week:",
+    "digestBody": "Here is what happened on your Liravo account last week:",
     "digestFollowers": "{count, plural, one {# new follower} other {# new followers}}",
     "digestNotifications": "{count, plural, one {# new notification} other {# new notifications}}",
-    "digestBooks": "{count, plural, one {# book tracked this week} other {# books tracked this week}}",
+    "digestBooks": "{count, plural, one {# book tracked last week} other {# books tracked last week}}",
     "digestAction": "View your feed",
     "profile": "Profile",
     "releaseSubject": "New release from {author} — Liravo",
@@ -2343,5 +2348,16 @@
     "footerManage": "Manage notification preferences",
     "footerUnsubscribe": "Unsubscribe",
     "reader": "Reader"
+  },
+  "emailUnsubscribe": {
+    "title": "Unsubscribe from email",
+    "description": "Confirm to stop this type of optional email. Account security emails remain available.",
+    "loading": "Loading…",
+    "pending": "Saving…",
+    "confirm": "Unsubscribe",
+    "done": "Your email preference has been updated.",
+    "invalid": "This link is invalid, expired or already used. Use a recent email or manage your preferences.",
+    "failed": "Could not update your preference. Please retry.",
+    "settings": "Manage notification preferences"
   }
 }
