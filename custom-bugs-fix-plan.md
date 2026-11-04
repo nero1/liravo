@@ -79,7 +79,7 @@ Updated 4 November 2026. Section status summarizes its bullets; individual verif
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Restrict offline caching to public assets, clear legacy private pages and localize installation/offline metadata.
 - ✅ Authorize and localize legacy share cards; verify actual completions, canonical editions and private cache policy.
-- 🔵 Repair the author-owned question queue, answer recovery, rich-text display and EN/FR/DE controls.
+- ✅ Repair the author-owned question queue, answer recovery, rich-text display and EN/FR/DE controls.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
 ✅ 8. Pagination and scalability cleanup (Medium)

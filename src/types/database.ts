@@ -432,7 +432,7 @@ export interface BookPassEntry {id:string;sender_id:string;recipient_id:string;b
 export interface BookPassPage<T> {items:T[];total:number;actorId:string;nextCursor:string|null;}
 export interface BookPassReceipt {actorId:string;chainId?:string;bookId?:string;nomineeId?:string;chain?:{id:string;book_id:string;creator_id:string};success?:boolean;position?:number;pass?:{id:string;sender_id:string;recipient_id:string;book_id:string;message:string|null};}
 
-export interface AuthorQuestion {id:string;author_id:string;asked_by:string|null;question:string;answer:string|null;created_at:string;answered_at:string|null;}
+export interface AuthorQuestion {id:string;author_id:string;asked_by:string|null;question:string;answer:string|null;answer_text?:string|null;created_at:string;answered_at:string|null;}
 export interface AuthorQuestionPage {qa:AuthorQuestion[];total:number;authorId:string;nextCursor:string|null;}
 export interface ReadingGoalData {actorId:string;goal:{id:string;user_id:string;year:number;target_books:number}|null;progress:{books_read:number;year:number;percentage:number|null};}
 

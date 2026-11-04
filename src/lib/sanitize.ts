@@ -20,6 +20,11 @@ export function hasVisibleText(input:string):boolean {
   return (fragment.textContent??'').replace(/\p{Default_Ignorable_Code_Point}/gu,'').trim().length>0;
 }
 
+export function richTextPlain(input:string):string {
+  const fragment=DOMPurify.sanitize(input.replace(/<br\s*\/?\s*>/gi,'\n').replace(/<\/(p|li|blockquote|h[2-4])>/gi,'</$1>\n'),{ALLOWED_TAGS:[],ALLOWED_ATTR:[],RETURN_DOM_FRAGMENT:true});
+  return (fragment.textContent??'').trim();
+}
+
 export function sanitizeExcerpt(input:string):string {
   return (DOMPurify.sanitize(input,{ALLOWED_TAGS:[],ALLOWED_ATTR:[],RETURN_DOM_FRAGMENT:true}).textContent??'').trim().slice(0,500);
 }

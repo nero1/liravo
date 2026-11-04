@@ -400,7 +400,23 @@
     "failed": "Deine Frage konnte nicht gesendet werden. Versuche es erneut.",
     "loadFailed": "Fragen konnten nicht geladen werden. Versuche es erneut.",
     "answeredCount": "{count, plural, one {# beantwortete Frage} other {# beantwortete Fragen}}",
-    "empty": "Noch keine öffentlichen Antworten."
+    "empty": "Noch keine öffentlichen Antworten.",
+    "ownerTitle": "Leserfragen",
+    "analytics": "Statistiken",
+    "filterLabel": "Fragenstatus",
+    "filters": {
+      "all": "Alle",
+      "unanswered": "Unbeantwortet",
+      "answered": "Beantwortet"
+    },
+    "ownerCounts": "{total, number} Fragen · {unanswered, number} unbeantwortet · {answered, number} beantwortet",
+    "ownerEmpty": "Keine Fragen entsprechen diesem Filter.",
+    "askedOn": "Gefragt am {date}",
+    "yourAnswer": "Deine Antwort",
+    "answerLabel": "Antwort",
+    "answerFailed": "Deine Antwort konnte nicht bestätigt werden. Bitte versuche es erneut.",
+    "privateQuestion": "Private Frage",
+    "refresh": "Aktualisieren"
   },
   "writingChallenge": {
     "aiFeedbackTitle": "KI-Schreibfeedback",

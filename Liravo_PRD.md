@@ -508,7 +508,7 @@ Authors get an enhanced version of the standard profile.
 - Full book catalog with buy links (affiliate where available). Web/native followed-author discovery uses approved works and shows recent catalog additions rather than inferring publication dates from author names.
 - "Books that inspired me" shelf (affiliate-linked — high-value placement)
 - "From the Author" posts (updates, writing process content, book news)
-- Reader Q&A (fans submit, author answers publicly). Web/native submissions retain owned retry receipts; public answers have full counts and deterministic cursor pages.
+- Reader Q&A (fans submit, author answers publicly). Web/native submissions retain owned retry receipts; public answers have full counts and deterministic cursor pages. The EN/FR/DE author queue pages every status with full counts, named answer fields and owned publish/recovery receipts. Blank rich-text answers are rejected; web/native display readable answer text.
 - ARC distribution (author uploads file, sets eligibility criteria, platform identifies and notifies eligible readers)
 - ARC applications use complete private counts and paginated reader/author views. Authors approve or decline readers; inactive accounts cannot receive new approvals, final decisions are immutable and approved slots are serialized.
 - New release announcements (in-app notification to followers)

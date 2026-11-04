@@ -40,7 +40,9 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     let legacyNotification:{owner:string;badge:string;goal:string}|undefined;
     let legacyEditions:{owner:string;ids:string[];reviewId:string}|undefined;
     let legacyImport:{owner:string;rows:unknown[];response:unknown}|undefined;
+    let legacyBlankAnswer:string|undefined;
     for (const file of migrations) {
+      if(file.startsWith('095_')){const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy095@example.test','legacy095','Legacy095')`;await sql`update users set is_verified_author=true where id=${owner}`;legacyBlankAnswer=(await sql`insert into author_qa(author_id,asked_by,question,answer,answered_at)values(${owner},${owner},'A legacy blank answer question','<p></p>',now())returning id`)[0].id;}
       if(file.startsWith('074_')){
         const owner=legacyNotification!.owner,book=(await sql`insert into books(title,author_name) values('Unverified legacy author book','Other author') returning id`)[0].id;
         await sql`insert into author_books(author_id,book_id) values(${owner},${book})`;
@@ -188,6 +190,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         });}catch(error){if(error!==rolledBack)throw error;}
       }
       await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
+      if(file.startsWith('095_'))expect((await sql`select answer,answered_at from author_qa where id=${legacyBlankAnswer!}`)[0]).toMatchObject({answer:null,answered_at:null});
       if(legacyTicket){
         expect((await sql`select status from event_tickets where id=${legacyUser}`)[0].status).toBe('legacy_hold');
         expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.events)).toBe(0);
@@ -2732,5 +2735,23 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('verifies share privacy, can
   await sql`update quotes set is_hidden=true where id=${quote.id}`;await sql`update reviews set is_hidden=true where id=${review.id}`;expect(await snapshot('quote',quote.id,null,owner)).toBeNull();expect(await snapshot('review',review.id,null,owner)).toBeNull();
   await sql`update users set is_banned=true where id=${owner}`;expect(await snapshot('shelf',owner,owner)).toBeNull();await expect(snapshot('shelf',owner,owner,owner)).rejects.toMatchObject({code:'P1003'});await sql`update users set is_banned=false,deleted_at=now()where id=${owner}`;expect(await snapshot('writing-challenge',writing.id,owner)).toBeNull();
   expect((await sql`select has_function_privilege('anon','share_card_snapshot(text,uuid,uuid,uuid)','execute')anon,has_function_privilege('authenticated','share_card_snapshot(text,uuid,uuid,uuid)','execute')authenticated`)[0]).toMatchObject({anon:false,authenticated:false});
+ }finally{await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('verifies owned author question paging, immutable answer receipts and role revocation on PostgreSQL',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Author rehearsal requires isolated loopback PostgreSQL');const sql=postgres(url,{max:4,prepare:false,ssl:false,onnotice:()=>{}});
+ try{
+  const author=crypto.randomUUID(),reader=crypto.randomUUID(),other=crypto.randomUUID();for(const[id,name]of[[author,'author'],[reader,'reader'],[other,'other']])await sql`select create_direct_account(${id},${name+'098@example.test'},${name+'098'},${name+'098'})`;await sql`update users set is_verified_author=true where id=${author}`;await sql`update users set user_types=array['author']where id=${other}`;
+  const rows=await sql`insert into author_qa(author_id,asked_by,question,is_public,created_at)select ${author},${reader},'A tied question098 '||n,n%2=0,'2026-10-20T12:00:00.123456Z'::timestamptz from generate_series(1,55)n returning id`;
+  const page=async(state='all',at:string|null=null,id:string|null=null)=>(await sql`select author_question_owner_snapshot(${author},${state},${at}::text::timestamptz,${id}::uuid,20)data`)[0].data;
+  let cursor:{at:string;id:string}|null=null;const seen=new Set();for(let n=0;n<3;n++){const data=await page('all',cursor?.at??null,cursor?.id??null);expect(data).toMatchObject({total:55,unanswered:55,answered:0});const visible=data.qa.slice(0,20);for(const row of visible){expect(seen.has(row.id)).toBe(false);seen.add(row.id);}const last=visible.at(-1);cursor={at:last.created_at,id:last.id};}expect(seen.size).toBe(55);
+  const question=rows[0].id,payload={answer:'<p>A <strong>real</strong> answer.</p>'},key='author098-answer-key',answer=async(value=payload,intent=key)=>(await sql`select apply_community_intent(${author},'author_answer',${question},${intent},${sql.json(value)})data`)[0].data;
+  for(const blank of['<p></p>','<p>&nbsp;</p>','\n\t','\u200b'])await expect(sql`update author_qa set answer=${blank} where id=${question}`).rejects.toMatchObject({code:'P1004'});
+  const [a,b]=await Promise.all([answer(),answer()]);expect(a).toEqual(b);expect(a).toMatchObject({actorId:author,requestKey:key,qa:{id:question,author_id:author,answer:payload.answer}});expect(a.qa.answered_at).toBeTruthy();expect(Number((await sql`select count(*)from notifications where entity_id=${question} and type='author_qa_answer'`)[0].count)).toBe(1);
+  const newer=await answer({answer:'A newer answer.'},'author098-newer-key');expect(newer.qa.answer).toBe('A newer answer.');expect(await answer()).toEqual(a);expect((await sql`select author_answer_receipt_snapshot(${author},${question},${key})data`)[0].data).toEqual(a);await expect(answer({answer:'Conflicting answer.'})).rejects.toMatchObject({code:'P1001'});
+  expect(await page('unanswered')).toMatchObject({total:55,unanswered:54,answered:1});expect((await page('answered')).qa).toHaveLength(1);await expect(sql`select author_answer_receipt_snapshot(${other},${question},${key})`).rejects.toMatchObject({code:'P1005'});await expect(sql`select author_answer_receipt_snapshot(${author},${rows[1].id},${key})`).rejects.toMatchObject({code:'P1005'});await expect(sql`select author_question_owner_snapshot(${reader})`).rejects.toMatchObject({code:'P1003'});expect((await sql`select author_question_owner_snapshot(${other})data`)[0].data.total).toBe(0);
+  const legacyKey='author098-legacy-key';await sql`insert into content_intents(actor_id,action,intent_key,fingerprint,response)values(${author},'author_answer',${legacyKey},encode(sha256(convert_to(jsonb_build_object('target',${question}::uuid,'payload',${sql.json(payload)})::text,'UTF8')),'hex'),' {"ok":true}'::jsonb)`;expect(await answer(payload,legacyKey)).toMatchObject({ok:true,legacy:true,actorId:author});await expect(sql`select author_answer_receipt_snapshot(${author},${question},${legacyKey})`).rejects.toMatchObject({code:'P1005'});
+  await sql`update users set is_verified_author=false where id=${author}`;await expect(answer()).rejects.toMatchObject({code:'P1003'});await expect(page()).rejects.toMatchObject({code:'P1003'});await sql`update users set is_verified_author=true,deleted_at=now()where id=${author}`;await expect(answer()).rejects.toMatchObject({code:'P1003'});
+  expect((await sql`select has_function_privilege('authenticated','author_question_owner_snapshot(uuid,text,timestamptz,uuid,integer)','execute')owned,has_function_privilege('anon','author_answer_receipt_snapshot(uuid,uuid,text)','execute')receipt,has_function_privilege('service_role','apply_community_intent_before095(uuid,text,uuid,text,jsonb,text)','execute')bypass`)[0]).toMatchObject({owned:false,receipt:false,bypass:false});
  }finally{await sql.end();}
 },60_000);

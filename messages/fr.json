@@ -400,7 +400,23 @@
     "failed": "Impossible d’envoyer votre question. Réessayez.",
     "loadFailed": "Impossible de charger les questions. Réessayez.",
     "answeredCount": "{count, plural, one {# question avec réponse} other {# questions avec réponse}}",
-    "empty": "Aucune réponse publique pour le moment."
+    "empty": "Aucune réponse publique pour le moment.",
+    "ownerTitle": "Questions des lecteurs",
+    "analytics": "Statistiques",
+    "filterLabel": "Statut des questions",
+    "filters": {
+      "all": "Toutes",
+      "unanswered": "Sans réponse",
+      "answered": "Avec réponse"
+    },
+    "ownerCounts": "{total, number} questions · {unanswered, number} sans réponse · {answered, number} avec réponse",
+    "ownerEmpty": "Aucune question ne correspond à ce filtre.",
+    "askedOn": "Posée le {date}",
+    "yourAnswer": "Votre réponse",
+    "answerLabel": "Réponse",
+    "answerFailed": "Impossible de confirmer votre réponse. Réessayez.",
+    "privateQuestion": "Question privée",
+    "refresh": "Actualiser"
   },
   "writingChallenge": {
     "aiFeedbackTitle": "Retour IA sur votre écriture",

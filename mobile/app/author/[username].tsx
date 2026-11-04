@@ -15,7 +15,7 @@ import { Card } from '@/components/ui/Card';
 import { FollowButton } from '@/components/social/FollowButton';
 import { useAuthStore } from '@/stores/auth';
 
-interface QAItem { id: string; question: string; answer: string | null; answered_at: string | null; }
+interface QAItem { id: string; question: string; answer: string | null; answer_text?:string|null; answered_at: string | null; }
 interface AuthorPost { id: string; title: string; body: string; type: string; created_at: string; }
 
 export default function AuthorProfileScreen(){const {username}=useLocalSearchParams<{username:string}>(),actor=useAuthStore(state=>state.user?.id);return <OwnedAuthorProfileScreen key={(actor??'guest')+username}/>;}
@@ -184,7 +184,7 @@ export function OwnedAuthorProfileScreen() {
               <Card key={item.id}>
                 <Text className="font-semibold text-foreground text-sm mb-2">{item.question}</Text>
                 {item.answer && (
-                  <Text className="text-sm text-muted-foreground">{item.answer}</Text>
+                  <Text className="text-sm text-muted-foreground">{item.answer_text??item.answer}</Text>
                 )}
               </Card>
             ))}
