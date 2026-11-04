@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { APP_URL } from '@/constants/config';
 import localFont from 'next/font/local';
 import { NextIntlClientProvider } from 'next-intl';
-import { getLocale, getMessages } from 'next-intl/server';
+import { getLocale, getMessages,getTranslations } from 'next-intl/server';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister';
 import { getDirection } from '@/lib/rtl';
@@ -22,23 +22,25 @@ const playfair = localFont({
   display: 'swap',
 });
 
-export const metadata: Metadata = {
+export async function generateMetadata():Promise<Metadata>{
+  const t=await getTranslations('site'),locale=await getLocale();
+  return {
   metadataBase: new URL(APP_URL),
-  title: { default: 'Liravo — Book Discovery Social Network', template: '%s | Liravo' },
-  description: 'Discover books through people whose taste you trust. Track reading, write reviews, and connect with readers worldwide.',
+  title: { default:t('title'), template: '%s | Liravo' },
+  description:t('description'),
   manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Liravo' },
-  keywords: ['books', 'reading', 'book reviews', 'book discovery', 'social reading'],
+  keywords:t('keywords').split(','),
   authors: [{ name: 'Liravo' }],
   openGraph: {
     type: 'website',
-    locale: 'en_US',
+    locale:({en:'en_US',fr:'fr_FR',de:'de_DE'}as Record<string,string>)[locale]??'en_US',
     url: 'https://liravo.org',
     siteName: 'Liravo',
   },
   twitter: { card: 'summary_large_image' },
   robots: { index: true, follow: true },
-};
+};}
 
 export const viewport: Viewport = {
   themeColor: [

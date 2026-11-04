@@ -74,7 +74,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Complete durable paid-email audiences/receipts, retry cooldowns, canonical weekly counts and anonymous recoverable opt-out links.
 - ✅ Repair core author/shelf/goal/mood forms, authoritative shelf access, complete author Q&A paging and translated read/error states.
 - ✅ Share complete shelf catalogs/contents, canonical edition counts, latest progress, current-year summaries, configured bulk stores and native create recovery.
-- 🟡 Complete remaining home/discovery/writer pages and verify their aggregate counts and edition identities.
+- ✅ Complete home/discovery/writer pages, private-aware canonical feeds, full public rankings/current ratings, approved native author works and resumable canonical shelf-overlap cohorts.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

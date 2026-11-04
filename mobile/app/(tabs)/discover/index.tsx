@@ -1,3 +1,4 @@
+import {useAuthStore} from '@/stores/auth';
 import {useTranslations} from '@/hooks/useTranslations';
 import { useState } from 'react';
 import {
@@ -25,20 +26,10 @@ interface SimpleBook {
   cover_url: string | null;
 }
 
-function useNewReleasesFromFollowed() {
-  return useQuery({
-    queryKey: ['discover', 'new-releases-followed'],
-    queryFn: () => api.get<{ books: SimpleBook[] }>('/api/discover/new-releases-followed'),
-    staleTime: 10 * 60 * 1000,
-  });
-}
-
-function useShelfOverlapRecs() {
-  return useQuery({
-    queryKey: ['discover', 'shelf-overlap'],
-    queryFn: () => api.get<{ books: SimpleBook[] }>('/api/discover/shelf-overlap'),
-    staleTime: 30 * 60 * 1000,
-  });
+export function useDiscoveryBooks(kind:string,path:string,staleTime:number){
+ const owner=useAuthStore(state=>state.user?.id);
+ return useQuery({queryKey:['discover',kind,owner],enabled:!!owner,staleTime,
+  queryFn:async({signal})=>{const result=await api.get<{books:SimpleBook[];actorId:string}>(path,{userId:owner},signal);if(useAuthStore.getState().user?.id!==owner||result.actorId!==owner||!Array.isArray(result.books)||!result.books.every(book=>book&&typeof book.id==='string'&&typeof book.title==='string'&&typeof book.author_name==='string'))throw Error('Invalid discovery response');return result;}});
 }
 
 function BookCoverCard({ book, onPress }: { book: SimpleBook; onPress: () => void }) {
@@ -82,8 +73,8 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const { data, isLoading, isFetching,error,refetch } = useBookSearch(query);
-  const { data: newReleasesData,error:releasesError,refetch:retryReleases } = useNewReleasesFromFollowed();
-  const { data: shelfOverlapData,error:overlapError,refetch:retryOverlap } = useShelfOverlapRecs();
+  const { data: newReleasesData,error:releasesError,refetch:retryReleases } = useDiscoveryBooks('new-releases-followed','/api/discover/new-releases-followed',10*60*1000);
+  const { data: shelfOverlapData,error:overlapError,refetch:retryOverlap } = useDiscoveryBooks('shelf-overlap','/api/discover/shelf-overlap',30*60*1000);
 
   const books = data?.books ?? [];
   const newReleases = (newReleasesData?.books ?? []);

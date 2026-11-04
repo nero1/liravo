@@ -1,34 +1,9 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-import { getRedisClient } from '@/lib/redis';
-
-export const dynamic = 'force-dynamic';
-
-export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ books: [] });
-
-  try {
-    const redis = getRedisClient();
-    const raw = await redis.get(`recommendations:user:${user.id}`);
-    if (!raw) return NextResponse.json({ books: [] });
-
-    const bookIds = JSON.parse(raw) as string[];
-    if (!Array.isArray(bookIds) || bookIds.length === 0) return NextResponse.json({ books: [] });
-
-    const supabase = createClient();
-    const { data: books } = await supabase
-      .from('books')
-      .select('id, title, author_name, cover_url')
-      .in('id', bookIds);
-
-    const ordered = bookIds
-      .map((id) => books?.find((b) => b.id === id))
-      .filter(Boolean);
-
-    return NextResponse.json({ books: ordered });
-  } catch {
-    return NextResponse.json({ books: [] });
-  }
+import {NextResponse} from 'next/server';
+import {getCurrentUser} from '@/lib/auth/getCurrentUser';
+import {getShelfOverlapBooks,DiscoveryError} from '@/lib/discovery';
+export const dynamic='force-dynamic';
+export async function GET(request:Request){
+ const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+ const actor=request.headers.get('X-Liravo-Actor'),query=new URL(request.url).searchParams.get('userId');if(actor&&actor!==user.id||query&&query!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
+ try{return NextResponse.json({books:await getShelfOverlapBooks(user.id),actorId:user.id},{headers:{'Cache-Control':'private, no-store'}});}catch(error){return NextResponse.json({error:'Discovery unavailable'},{status:error instanceof DiscoveryError?error.status:503});}
 }

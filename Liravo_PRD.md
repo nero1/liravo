@@ -471,10 +471,10 @@ The affiliate store system must be designed so new stores can be added by admin 
 - Cursor-based pagination, load more on scroll.
 
 **Discover tab:**
-- Trending books (past 7 days, by shelf additions and reviews)
+- Trending works from the past 7 days, ranked by distinct active public shelf readers before preview limits; retained aliases count once.
 - Trending in your country
 - New releases from followed authors
-- "Readers like you also loved" (shelf-overlap, computed nightly)
+- "Readers like you also loved": nightly cohorts share at least three completed works. Reads recheck current privacy, account state and owned works; the cron resumes from durable reader checkpoints.
 - Mood-based search: type a mood, AI returns matched books
 - Hidden gems: books with fewer than 50 ratings but high scores from trusted readers
 - Genre streams
@@ -505,7 +505,7 @@ Authors get an enhanced version of the standard profile.
 
 **Additional author features:**
 - Verified author badge (admin-granted after verification)
-- Full book catalog with buy links (affiliate where available)
+- Full book catalog with buy links (affiliate where available). Web/native followed-author discovery uses approved works and shows recent catalog additions rather than inferring publication dates from author names.
 - "Books that inspired me" shelf (affiliate-linked — high-value placement)
 - "From the Author" posts (updates, writing process content, book news)
 - Reader Q&A (fans submit, author answers publicly). Web/native submissions retain owned retry receipts; public answers have full counts and deterministic cursor pages.
@@ -1422,7 +1422,7 @@ Distinctive display font for headings. System-friendly variable font for body (s
 
 - Discover tab: trending books, country trending, mood-based AI search.
 - AI recommendation layer (DeepSeek/Gemini) — mood matching.
-- Nightly cron: shelf-overlap recommendation pre-computation.
+- Nightly cron: bounded shelf-overlap cohort pre-computation with persisted continuation. Failed cache/checkpoint writes retain unfinished work.
 - Full badge system.
 - Leaderboards (global, national, friend circle).
 - Reading streaks and freeze tokens.
