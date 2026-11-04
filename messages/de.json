@@ -2313,5 +2313,35 @@
       "author_work_revoked": "Zuordnung des Autorenwerks aufgehoben"
     },
     "moderatorColumn": "Moderator"
+  },
+  "emails": {
+    "greeting": "Hallo {name},",
+    "verifySubject": "Bestätige deine E-Mail-Adresse — Liravo",
+    "verifyBody": "Bestätige deine E-Mail-Adresse. Dieser Link läuft in 24 Stunden ab.",
+    "verifyAction": "E-Mail-Adresse bestätigen",
+    "verifyIgnore": "Falls du diese Adresse nicht zu deinem Liravo-Konto hinzugefügt hast, kannst du diese Nachricht ignorieren.",
+    "recoverySubject": "Kontowiederherstellung — Liravo",
+    "recoveryBody": "Wir haben eine Anfrage zur Wiederherstellung deines Liravo-Kontos erhalten. Verwende den Link unten, um fortzufahren. Dieser Link läuft in 1 Stunde ab.",
+    "recoveryAction": "Mein Konto wiederherstellen",
+    "recoveryIgnore": "Falls du dies nicht angefordert hast, kannst du diese Nachricht ignorieren.",
+    "codesSubject": "Deine 2FA-Wiederherstellungscodes — Liravo",
+    "codesBody": "Hier sind deine einmaligen 2FA-Wiederherstellungscodes. Bewahre sie sicher auf. Jeder Code kann nur einmal verwendet werden.",
+    "codesWarning": "Teile diese Codes mit niemandem.",
+    "digestSubject": "Deine Woche auf Liravo, {name}",
+    "digestBody": "Das ist diese Woche auf deinem Liravo-Konto passiert:",
+    "digestFollowers": "{count, plural, one {# neuer Follower} other {# neue Follower}}",
+    "digestNotifications": "{count, plural, one {# neue Benachrichtigung} other {# neue Benachrichtigungen}}",
+    "digestBooks": "{count, plural, one {# Buch diese Woche erfasst} other {# Bücher diese Woche erfasst}}",
+    "digestAction": "Deinen Feed ansehen",
+    "profile": "Profil",
+    "releaseSubject": "Neuerscheinung von {author} — Liravo",
+    "releaseBody": "{author}, dem du auf Liravo folgst, hat eine Neuerscheinung angekündigt:",
+    "releaseAction": "Auf Liravo ansehen",
+    "challengeSubject": "Noch {days, plural, one {# Tag} other {# Tage}} für „{challenge}“ — Liravo",
+    "challengeBody": "Du hast noch {days, plural, one {# Tag} other {# Tage}}, um „{challenge}“ abzuschließen.",
+    "challengeAction": "Challenge fortsetzen",
+    "footerManage": "Benachrichtigungseinstellungen verwalten",
+    "footerUnsubscribe": "Abbestellen",
+    "reader": "Leser"
   }
 }

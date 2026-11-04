@@ -60,7 +60,7 @@ async function run() {
     // Get paid followers with verified email who haven't been alerted about this post
     const { data: followers } = await supabase
       .from('follows')
-      .select('follower_id, user:users!follower_id(email, display_name, email_verified, is_premium,notify_new_releases)')
+      .select('follower_id, user:users!follower_id(email, display_name, email_verified, is_premium,notify_new_releases,preferred_locale)')
       .eq('following_id', post.author_id)
       .limit(500);
 
@@ -73,6 +73,7 @@ async function run() {
         email_verified: boolean;
         is_premium: boolean;
         notify_new_releases:boolean;
+        preferred_locale:string;
       } | null;
 
       if (
@@ -83,15 +84,17 @@ async function run() {
       ) continue;
 
       const { subject, html, text } = buildNewReleaseEmail(
-        user.display_name ?? 'Reader',
+        user.display_name ?? '',
         author.display_name ?? author.username,
         book.title,
-        bookUrl
+        bookUrl,
+        user.preferred_locale
       );
 
       const result = await sendEmail({
         to: user.email,
         type: 'new_release_alert',
+        locale:user.preferred_locale,
         isPaidUser: true,
         subject,
         html,

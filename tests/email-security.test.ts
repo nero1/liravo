@@ -117,3 +117,11 @@ it('rejects expired, foreign and unverified Google claims and distinguishes prov
   expect(rpc).not.toHaveBeenCalled();transport.mockRejectedValueOnce(new Error('isolated provider outage'));expect((await googleLogin(request({idToken:'fixture-token'}))).status).toBe(503);
   transport.mockResolvedValueOnce({ok:false,status:429});expect((await googleLogin(request({idToken:'fixture-token'}))).status).toBe(503);
 });
+
+it('uses the stored recipient locale for verification and recovery without trusting caller language headers',async()=>{
+  lookup={...profile,preferred_locale:'fr'};
+  expect((await sendVerification(request({email:'new@example.test',pin:'2468'},'send-verification',{'X-Liravo-Locale':'de'}))).status).toBe(200);
+  expect(vi.mocked(sendEmail).mock.calls[0][0]).toMatchObject({locale:'fr',subject:'Vérifiez votre adresse e-mail — Liravo'});
+  rpc.mockResolvedValueOnce({data:profile,error:null});expect((await requestRecovery(request({email:profile.email},'account-recovery',{'X-Liravo-Locale':'de'}))).status).toBe(202);expect(vi.mocked(sendEmail).mock.calls[1][0]).toMatchObject({locale:'fr',subject:'Récupération du compte — Liravo'});
+  vi.mocked(sendEmail).mockClear();lookupError={code:'08006'};rpc.mockResolvedValueOnce({data:profile,error:null});expect((await requestRecovery(request({email:profile.email}))).status).toBe(202);expect(sendEmail).not.toHaveBeenCalled();expect(remove).toHaveBeenCalledWith('token_hash',expect.stringMatching(/^[a-f0-9]{64}$/));
+});

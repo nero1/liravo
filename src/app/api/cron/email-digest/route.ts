@@ -22,7 +22,7 @@ async function run() {
   // Only send digests to paid subscribers who have a verified email and have opted in
   const query = supabase
     .from('users')
-    .select('id, email, display_name, username')
+    .select('id, email, display_name, username, preferred_locale')
     .eq('email_verified', true)
     .eq('is_premium', true)
     .eq('email_digest_enabled', true)
@@ -97,12 +97,14 @@ async function run() {
       const { subject, html, text } = buildWeeklyDigestEmail(
         user.display_name ?? user.username,
         user.username,
-        stats
+        stats,
+        user.preferred_locale
       );
 
       const result = await sendEmail({
         to: user.email,
         type: 'weekly_digest',
+        locale:user.preferred_locale,
         isPaidUser: true,
         subject,
         html,

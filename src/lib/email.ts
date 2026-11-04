@@ -6,11 +6,15 @@
  *     email verification links, account recovery links, 2FA recovery codes.
  * - Paid tier users: opt-in weekly digest, new release alerts, challenge reminders.
  * - NEVER send marketing email to free users.
- * - Every email includes a one-click unsubscribe link.
+ * - Every email includes notification settings or an unsubscribe link.
  * - Use sparingly — only when the user has opted in or when account safety requires it.
  */
 
 import FormData from 'form-data';
+import {createTranslator} from 'next-intl';
+import en from '../../messages/en.json';
+import fr from '../../messages/fr.json';
+import de from '../../messages/de.json';
 import Mailgun from 'mailgun.js';
 
 const mailgun = new Mailgun(FormData);
@@ -50,8 +54,9 @@ export interface SendEmailOptions {
   subject: string;
   html: string;
   text: string;
-  /** Optional: for digest unsubscribe token */
+  /** Optional recipient opt-out token */
   unsubscribeToken?: string;
+  locale?:string;
 }
 
 export interface SendResult {
@@ -62,7 +67,7 @@ export interface SendResult {
 }
 
 export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
-  const { to, type, isPaidUser, subject, html, text, unsubscribeToken } = opts;
+  const {to,type,isPaidUser,subject,html,text,unsubscribeToken}=opts,locale=emailLocale(opts.locale),t=emailTranslator(locale);
 
   // Tier gate: non-transactional emails only go to paid users
   if (!TRANSACTIONAL_TYPES.has(type) && !isPaidUser) {
@@ -75,14 +80,14 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
   }
 
   const unsubscribeUrl = unsubscribeToken
-    ? `${APP_URL}/api/users/unsubscribe?token=${unsubscribeToken}`
+    ? `${APP_URL}/api/users/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`
     : `${APP_URL}/settings/notifications`;
 
-  const htmlWithFooter = `${html}
+  const footer=t(unsubscribeToken?'footerUnsubscribe':'footerManage');
+  const htmlWithFooter=`<!doctype html><html lang="${locale}"><body>${html}
 <br/><hr style="border:none;border-top:1px solid #e5e5e5;margin:32px 0"/>
-<p style="font-size:12px;color:#888;text-align:center">
-  <a href="${unsubscribeUrl}" style="color:#888">Unsubscribe</a> &middot; Liravo &middot; liravo.org
-</p>`;
+<p style="font-size:12px;color:#888;text-align:center"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#888">${escapeHtml(footer)}</a> &middot; Liravo &middot; liravo.org</p></body></html>`;
+  const textWithFooter=text+'\n\n'+footer+': '+unsubscribeUrl+'\nLiravo';
 
   try {
     const client = getClient();
@@ -91,7 +96,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
       to: [to],
       subject,
       html: htmlWithFooter,
-      text,
+      text:textWithFooter,
     });
     return { ok: true, messageId: response.id };
   } catch (err) {
@@ -102,92 +107,33 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Template helpers
-// ---------------------------------------------------------------------------
-
 const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]!));
+export function emailLocale(value:unknown){return value==='fr'||value==='de'?value:'en';}
+function emailTranslator(locale:string){const selected=emailLocale(locale);return createTranslator({locale:selected,messages:{emails:{en:en.emails,fr:fr.emails,de:de.emails}[selected]},namespace:'emails'});}
+const paragraph=(text:string)=>'<p>'+escapeHtml(text)+'</p>';
+const button=(url:string,label:string)=>`<p><a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">${escapeHtml(label)}</a></p>`;
 
-export function buildVerificationEmail(displayName: string, verificationUrl: string) {
-  return {
-    subject: 'Verify your email — Liravo',
-    html: `<p>Hi ${escapeHtml(displayName)},</p>
-<p>Click the button below to verify your email address. This link expires in 24 hours.</p>
-<p><a href="${escapeHtml(verificationUrl)}" style="display:inline-block;padding:12px 24px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Verify email</a></p>
-<p>If you didn't add this email to your Liravo account, you can safely ignore this message.</p>`,
-    text: `Hi ${displayName},\n\nVerify your email address:\n${verificationUrl}\n\nThis link expires in 24 hours.\n\nIf you didn't add this email to Liravo, ignore this message.`,
-  };
+export function buildVerificationEmail(displayName:string,verificationUrl:string,language='en'){
+  const locale=emailLocale(language),t=emailTranslator(locale),greeting=t('greeting',{name:displayName.trim()?displayName:t('reader')});
+  return{locale,subject:t('verifySubject'),html:paragraph(greeting)+paragraph(t('verifyBody'))+button(verificationUrl,t('verifyAction'))+paragraph(t('verifyIgnore')),text:[greeting,t('verifyBody'),t('verifyAction')+':\n'+verificationUrl,t('verifyIgnore')].join('\n\n')};
 }
-
-export function buildRecoveryEmail(displayName: string, recoveryUrl: string) {
-  return {
-    subject: 'Account recovery — Liravo',
-    html: `<p>Hi ${escapeHtml(displayName)},</p>
-<p>We received a request to recover access to your Liravo account. Click the button below to continue. This link expires in 1 hour.</p>
-<p><a href="${escapeHtml(recoveryUrl)}" style="display:inline-block;padding:12px 24px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Recover my account</a></p>
-<p>If you didn't request this, you can safely ignore it.</p>`,
-    text: `Hi ${displayName},\n\nRecover your Liravo account:\n${recoveryUrl}\n\nThis link expires in 1 hour.\n\nIf you didn't request this, ignore this message.`,
-  };
+export function buildRecoveryEmail(displayName:string,recoveryUrl:string,language='en'){
+  const locale=emailLocale(language),t=emailTranslator(locale),greeting=t('greeting',{name:displayName.trim()?displayName:t('reader')});
+  return{locale,subject:t('recoverySubject'),html:paragraph(greeting)+paragraph(t('recoveryBody'))+button(recoveryUrl,t('recoveryAction'))+paragraph(t('recoveryIgnore')),text:[greeting,t('recoveryBody'),t('recoveryAction')+':\n'+recoveryUrl,t('recoveryIgnore')].join('\n\n')};
 }
-
-export function buildTwoFARecoveryCodesEmail(displayName: string, codes: string[]) {
-  const codeList = codes.map((c) => `  ${c}`).join('\n');
-  return {
-    subject: 'Your 2FA recovery codes — Liravo',
-    html: `<p>Hi ${escapeHtml(displayName)},</p>
-<p>Here are your single-use 2FA recovery codes. Store them somewhere safe. Each code can only be used once.</p>
-<pre style="background:#f5f5f5;padding:16px;border-radius:8px;font-family:monospace;font-size:14px">${codes.map(escapeHtml).join('\n')}</pre>
-<p><strong>Do not share these codes with anyone.</strong></p>`,
-    text: `Hi ${displayName},\n\nYour 2FA recovery codes (each is single-use):\n\n${codeList}\n\nDo not share these codes.`,
-  };
+export function buildTwoFARecoveryCodesEmail(displayName:string,codes:string[],language='en'){
+  const locale=emailLocale(language),t=emailTranslator(locale),greeting=t('greeting',{name:displayName.trim()?displayName:t('reader')});
+  return{locale,subject:t('codesSubject'),html:paragraph(greeting)+paragraph(t('codesBody'))+`<pre style="background:#f5f5f5;padding:16px;border-radius:8px;font-family:monospace;font-size:14px">${codes.map(escapeHtml).join('\n')}</pre>`+paragraph(t('codesWarning')),text:[greeting,t('codesBody'),codes.join('\n'),t('codesWarning')].join('\n\n')};
 }
-
-export function buildWeeklyDigestEmail(
-  displayName: string,
-  username: string,
-  stats: { newFollowers: number; newNotifications: number; booksThisWeek: number }
-) {
-  return {
-    subject: `Your Liravo week, ${displayName}`,
-    html: `<p>Hi ${escapeHtml(displayName)},</p>
-<p>Here's what happened on your Liravo account this week:</p>
-<ul>
-  <li><strong>${stats.newFollowers}</strong> new follower${stats.newFollowers !== 1 ? 's' : ''}</li>
-  <li><strong>${stats.newNotifications}</strong> new notification${stats.newNotifications !== 1 ? 's' : ''}</li>
-  <li><strong>${stats.booksThisWeek}</strong> book${stats.booksThisWeek !== 1 ? 's' : ''} tracked this week</li>
-</ul>
-<p><a href="${APP_URL}/feed" style="display:inline-block;padding:10px 20px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">View your feed</a></p>`,
-    text: `Hi ${displayName},\n\nYour Liravo week:\n- ${stats.newFollowers} new followers\n- ${stats.newNotifications} new notifications\n- ${stats.booksThisWeek} books tracked\n\nView your feed: ${APP_URL}/feed\n\nProfile: ${APP_URL}/user/${username}`,
-  };
+export function buildWeeklyDigestEmail(displayName:string,username:string,stats:{newFollowers:number;newNotifications:number;booksThisWeek:number},language='en'){
+  const locale=emailLocale(language),t=emailTranslator(locale),greeting=t('greeting',{name:displayName.trim()?displayName:t('reader')}),items=[t('digestFollowers',{count:stats.newFollowers}),t('digestNotifications',{count:stats.newNotifications}),t('digestBooks',{count:stats.booksThisWeek})],url=APP_URL+'/feed';
+  return{locale,subject:t('digestSubject',{name:displayName.trim()?displayName:t('reader')}),html:paragraph(greeting)+paragraph(t('digestBody'))+'<ul>'+items.map(item=>'<li>'+escapeHtml(item)+'</li>').join('')+'</ul>'+button(url,t('digestAction')),text:[greeting,t('digestBody'),items.map(item=>'- '+item).join('\n'),t('digestAction')+': '+url,t('profile')+': '+APP_URL+'/user/'+encodeURIComponent(username)].join('\n\n')};
 }
-
-export function buildNewReleaseEmail(
-  displayName: string,
-  authorName: string,
-  bookTitle: string,
-  bookUrl: string
-) {
-  return {
-    subject: `New release from ${authorName} — Liravo`,
-    html: `<p>Hi ${escapeHtml(displayName)},</p>
-<p><strong>${escapeHtml(authorName)}</strong>, an author you follow on Liravo, just announced a new release:</p>
-<p style="font-size:18px;font-weight:600">${escapeHtml(bookTitle)}</p>
-<p><a href="${escapeHtml(bookUrl)}" style="display:inline-block;padding:10px 20px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">View on Liravo</a></p>`,
-    text: `Hi ${displayName},\n\n${authorName} has a new release: ${bookTitle}\n\nView it: ${bookUrl}`,
-  };
+export function buildNewReleaseEmail(displayName:string,authorName:string,bookTitle:string,bookUrl:string,language='en'){
+  const locale=emailLocale(language),t=emailTranslator(locale),greeting=t('greeting',{name:displayName.trim()?displayName:t('reader')});
+  return{locale,subject:t('releaseSubject',{author:authorName}),html:paragraph(greeting)+paragraph(t('releaseBody',{author:authorName}))+paragraph(bookTitle)+button(bookUrl,t('releaseAction')),text:[greeting,t('releaseBody',{author:authorName}),bookTitle,t('releaseAction')+': '+bookUrl].join('\n\n')};
 }
-
-export function buildChallengeReminderEmail(
-  displayName: string,
-  challengeName: string,
-  daysLeft: number,
-  challengeUrl: string
-) {
-  return {
-    subject: `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left in "${challengeName}" — Liravo`,
-    html: `<p>Hi ${escapeHtml(displayName)},</p>
-<p>You have <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''} left</strong> to complete <strong>${escapeHtml(challengeName)}</strong>.</p>
-<p><a href="${escapeHtml(challengeUrl)}" style="display:inline-block;padding:10px 20px;background:#d97706;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Continue challenge</a></p>`,
-    text: `Hi ${displayName},\n\n${daysLeft} day${daysLeft !== 1 ? 's' : ''} left in "${challengeName}".\n\nContinue: ${challengeUrl}`,
-  };
+export function buildChallengeReminderEmail(displayName:string,challengeName:string,daysLeft:number,challengeUrl:string,language='en'){
+  const locale=emailLocale(language),t=emailTranslator(locale),greeting=t('greeting',{name:displayName.trim()?displayName:t('reader')});
+  return{locale,subject:t('challengeSubject',{days:daysLeft,challenge:challengeName}),html:paragraph(greeting)+paragraph(t('challengeBody',{days:daysLeft,challenge:challengeName}))+button(challengeUrl,t('challengeAction')),text:[greeting,t('challengeBody',{days:daysLeft,challenge:challengeName}),t('challengeAction')+': '+challengeUrl].join('\n\n')};
 }

@@ -2313,5 +2313,35 @@
       "author_work_revoked": "Attribution de l’œuvre révoquée"
     },
     "moderatorColumn": "Modérateur"
+  },
+  "emails": {
+    "greeting": "Bonjour {name},",
+    "verifySubject": "Vérifiez votre adresse e-mail — Liravo",
+    "verifyBody": "Vérifiez votre adresse e-mail. Ce lien expire dans 24 heures.",
+    "verifyAction": "Vérifier mon adresse e-mail",
+    "verifyIgnore": "Si vous n’avez pas ajouté cette adresse à votre compte Liravo, vous pouvez ignorer ce message.",
+    "recoverySubject": "Récupération du compte — Liravo",
+    "recoveryBody": "Nous avons reçu une demande de récupération de votre compte Liravo. Utilisez le lien ci-dessous pour continuer. Ce lien expire dans 1 heure.",
+    "recoveryAction": "Récupérer mon compte",
+    "recoveryIgnore": "Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer ce message.",
+    "codesSubject": "Vos codes de récupération 2FA — Liravo",
+    "codesBody": "Voici vos codes de récupération 2FA à usage unique. Conservez-les en lieu sûr. Chaque code ne peut être utilisé qu’une seule fois.",
+    "codesWarning": "Ne partagez ces codes avec personne.",
+    "digestSubject": "Votre semaine sur Liravo, {name}",
+    "digestBody": "Voici l’activité de votre compte Liravo cette semaine :",
+    "digestFollowers": "{count, plural, one {# nouvel abonné} other {# nouveaux abonnés}}",
+    "digestNotifications": "{count, plural, one {# nouvelle notification} other {# nouvelles notifications}}",
+    "digestBooks": "{count, plural, one {# livre suivi cette semaine} other {# livres suivis cette semaine}}",
+    "digestAction": "Voir mon fil",
+    "profile": "Profil",
+    "releaseSubject": "Nouvelle parution de {author} — Liravo",
+    "releaseBody": "{author}, que vous suivez sur Liravo, vient d’annoncer une nouvelle parution :",
+    "releaseAction": "Voir sur Liravo",
+    "challengeSubject": "Encore {days, plural, one {# jour} other {# jours}} pour « {challenge} » — Liravo",
+    "challengeBody": "Il vous reste {days, plural, one {# jour} other {# jours}} pour terminer « {challenge} ».",
+    "challengeAction": "Continuer le défi",
+    "footerManage": "Gérer les préférences de notification",
+    "footerUnsubscribe": "Se désabonner",
+    "reader": "Lecteur"
   }
 }

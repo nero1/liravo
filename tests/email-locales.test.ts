@@ -1,0 +1,26 @@
+import{afterEach,beforeEach,expect,it,vi}from'vitest';
+import en from'../messages/en.json';import fr from'../messages/fr.json';import de from'../messages/de.json';
+const{deliver}=vi.hoisted(()=>({deliver:vi.fn()}));
+vi.mock('mailgun.js',()=>({default:class{client(){return{messages:{create:deliver}};}}}));
+beforeEach(()=>{vi.resetModules();vi.clearAllMocks();vi.stubEnv('MAILGUN_API_KEY','isolated-fixture-key');vi.stubEnv('MAILGUN_DOMAIN','isolated.example.test');vi.stubEnv('NEXT_PUBLIC_APP_URL','https://app.test');deliver.mockResolvedValue({id:'isolated-message'});});afterEach(()=>{vi.unstubAllEnvs();});
+it('renders all six templates in EN/FR/DE and falls back safely for unsupported locales',async()=>{
+ const mail=await import('@/lib/email');for(const[locale,messages]of Object.entries({en,fr,de})){
+  const templates=[mail.buildVerificationEmail('Lecteur','https://app.test/verify',locale),mail.buildRecoveryEmail('Lecteur','https://app.test/recover',locale),mail.buildTwoFARecoveryCodesEmail('Lecteur',['1234-abcd'],locale),mail.buildWeeklyDigestEmail('Lecteur','reader',{newFollowers:1,newNotifications:2,booksThisWeek:3},locale),mail.buildNewReleaseEmail('Lecteur','Auteur','Livre','https://app.test/book',locale),mail.buildChallengeReminderEmail('Lecteur','Défi',1,'https://app.test/challenge',locale)];
+  for(const template of templates){expect(template.locale).toBe(locale);expect(template.subject).not.toMatch(/emails\./);expect(template.html).toContain(messages.emails.greeting.replace('{name}','Lecteur'));expect(template.text).toContain(messages.emails.greeting.replace('{name}','Lecteur'));}
+  expect(templates[0].subject).toBe(messages.emails.verifySubject);expect(templates[1].subject).toBe(messages.emails.recoverySubject);expect(templates[2].subject).toBe(messages.emails.codesSubject);
+ }
+ expect(mail.buildVerificationEmail('Reader','https://app.test','es').subject).toBe(en.emails.verifySubject);
+});
+it('uses correct singular/plural forms and locale number formatting in HTML and text',async()=>{
+ const mail=await import('@/lib/email'),single=mail.buildWeeklyDigestEmail('Reader','reader',{newFollowers:1,newNotifications:1,booksThisWeek:1},'de'),plural=mail.buildWeeklyDigestEmail('Reader','reader',{newFollowers:2,newNotifications:2,booksThisWeek:1024},'de');expect(single.text).toContain('1 neuer Follower');expect(single.text).toContain('1 Buch diese Woche erfasst');expect(plural.text).toContain('2 neue Follower');expect(plural.html).toContain('1.024 Bücher');expect(mail.buildChallengeReminderEmail('Reader','Défi',2,'https://app.test','fr').text).toContain('2 jours');
+});
+it('preserves user prose and recovery codes while escaping every HTML insertion',async()=>{
+ const mail=await import('@/lib/email'),name='<img src=x onerror=alert(1)>',url='https://app.test/confirm?name="unsafe"';for(const template of[mail.buildVerificationEmail(name,url,'fr'),mail.buildRecoveryEmail(name,url,'de'),mail.buildTwoFARecoveryCodesEmail(name,['<code>'], 'fr'),mail.buildWeeklyDigestEmail(name,'username',{newFollowers:1,newNotifications:2,booksThisWeek:3},'fr'),mail.buildNewReleaseEmail(name,name,name,url,'de'),mail.buildChallengeReminderEmail(name,name,1,url,'fr')]){expect(template.html).not.toContain('<img');expect(template.html).toContain('&lt;img');expect(template.text).toContain(name);}
+ expect(mail.buildVerificationEmail(name,url,'fr').html).toContain('&quot;unsafe&quot;');expect(mail.buildTwoFARecoveryCodesEmail(name,['<code>'],'de').html).toContain('&lt;code&gt;');expect(mail.buildNewReleaseEmail('','Autor','Buch',url,'de').text).toContain('Hallo Leser,');
+});
+it('adds localized accessible HTML and plain-text preferences footers to actual transport payloads',async()=>{
+ const mail=await import('@/lib/email');for(const[locale,messages]of Object.entries({en,fr,de})){const message=mail.buildVerificationEmail('Reader','https://app.test/verify',locale);expect(await mail.sendEmail({to:'reader@example.test',type:'email_verification',isPaidUser:false,...message})).toMatchObject({ok:true,messageId:'isolated-message'});const payload=deliver.mock.calls.at(-1)![1];expect(payload.html).toContain('<html lang="'+locale+'">');expect(payload.html).toContain(messages.emails.footerManage);expect(payload.text).toContain(messages.emails.footerManage+': https://app.test/settings/notifications');expect(payload.html).not.toContain('>Unsubscribe</a>');}
+});
+it('localizes supplied unsubscribe links, encodes tokens and retains paid-tier and failure gates',async()=>{
+ const mail=await import('@/lib/email'),message=mail.buildWeeklyDigestEmail('Lecteur','reader',{newFollowers:1,newNotifications:2,booksThisWeek:3},'fr');expect(await mail.sendEmail({to:'reader@example.test',type:'weekly_digest',isPaidUser:false,...message})).toMatchObject({ok:false});expect(deliver).not.toHaveBeenCalled();await mail.sendEmail({to:'reader@example.test',type:'weekly_digest',isPaidUser:true,unsubscribeToken:'a&b',...message});const payload=deliver.mock.calls[0][1];expect(payload.html).toContain(fr.emails.footerUnsubscribe);expect(payload.text).toContain('token=a%26b');deliver.mockRejectedValueOnce(Object.assign(new Error('Isolated timeout'),{status:503}));expect(await mail.sendEmail({to:'reader@example.test',type:'weekly_digest',isPaidUser:true,...message})).toMatchObject({ok:false,ambiguous:true});
+});

@@ -2313,5 +2313,35 @@
       "author_work_revoked": "Author work revoked"
     },
     "moderatorColumn": "Moderator"
+  },
+  "emails": {
+    "greeting": "Hi {name},",
+    "verifySubject": "Verify your email — Liravo",
+    "verifyBody": "Verify your email address. This link expires in 24 hours.",
+    "verifyAction": "Verify email",
+    "verifyIgnore": "If you did not add this email to your Liravo account, you can safely ignore this message.",
+    "recoverySubject": "Account recovery — Liravo",
+    "recoveryBody": "We received a request to recover access to your Liravo account. Continue using the link below. This link expires in 1 hour.",
+    "recoveryAction": "Recover my account",
+    "recoveryIgnore": "If you did not request this, you can safely ignore this message.",
+    "codesSubject": "Your 2FA recovery codes — Liravo",
+    "codesBody": "Here are your single-use 2FA recovery codes. Store them somewhere safe. Each code can only be used once.",
+    "codesWarning": "Do not share these codes with anyone.",
+    "digestSubject": "Your Liravo week, {name}",
+    "digestBody": "Here is what happened on your Liravo account this week:",
+    "digestFollowers": "{count, plural, one {# new follower} other {# new followers}}",
+    "digestNotifications": "{count, plural, one {# new notification} other {# new notifications}}",
+    "digestBooks": "{count, plural, one {# book tracked this week} other {# books tracked this week}}",
+    "digestAction": "View your feed",
+    "profile": "Profile",
+    "releaseSubject": "New release from {author} — Liravo",
+    "releaseBody": "{author}, an author you follow on Liravo, just announced a new release:",
+    "releaseAction": "View on Liravo",
+    "challengeSubject": "{days, plural, one {# day} other {# days}} left in “{challenge}” — Liravo",
+    "challengeBody": "You have {days, plural, one {# day} other {# days}} left to complete “{challenge}”.",
+    "challengeAction": "Continue challenge",
+    "footerManage": "Manage notification preferences",
+    "footerUnsubscribe": "Unsubscribe",
+    "reader": "Reader"
   }
 }

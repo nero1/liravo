@@ -20,7 +20,9 @@ export async function POST(request:Request){
     const user=data as unknown as {id:string;display_name:string|null;username:string}|null;
     if(user){
       try{
-        const sent=await sendEmail({to:parsed.data.email,type:'account_recovery',isPaidUser:false,...buildRecoveryEmail(user.display_name??user.username,emailLink('recover',token))});
+        const {data:profile,error:profileError}=await service.from('users').select('preferred_locale').eq('id',user.id).single();
+        if(profileError||!profile){await discardEmailProof(hash);throw new Error('Profile unavailable');}
+        const sent=await sendEmail({to:parsed.data.email,type:'account_recovery',isPaidUser:false,...buildRecoveryEmail(user.display_name??user.username,emailLink('recover',token),profile.preferred_locale)});
         if(!sent.ok){await discardEmailProof(hash);recordMetric('account_recovery_delivery_failed',{userId:user.id},'error');}
       }catch{recordMetric('account_recovery_delivery_failed',{userId:user.id},'error');}
     }
