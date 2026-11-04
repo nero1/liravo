@@ -79,7 +79,7 @@ export function ReadingGoals({actorId}:{actorId:string}) {
           </div>
 
           {/* Progress bar */}
-          <div className="h-4 rounded-full bg-muted overflow-hidden">
+          <div role="progressbar" aria-label={t('title',{year:progress.year})} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-4 rounded-full bg-muted overflow-hidden">
             <div
               className="h-full bg-accent rounded-full transition-all duration-500"
               style={{ width: `${pct}%` }}

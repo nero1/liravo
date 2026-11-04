@@ -1529,8 +1529,20 @@
     "emptyDescription": "Vos étagères de lecture apparaîtront ici.",
     "emptyShelf": "Cette étagère est vide",
     "addDescription": "Ajoutez des livres pour suivre vos lectures.",
-    "bookCount": "{count, plural, one {# livre chargé} other {# livres chargés}}",
-    "unknownBook": "Livre inconnu"
+    "bookCount": "{count, plural, one {# livre} other {# livres}}",
+    "unknownBook": "Livre inconnu",
+    "public": "Publique",
+    "private": "Privée",
+    "shelfCount": "{count, plural, one {# étagère} other {# étagères}}",
+    "loadFailed": "Impossible de charger vos étagères. Réessayez.",
+    "invalidCursor": "Cette page d’étagère est invalide. Recommencez.",
+    "buyAll": "Tout acheter sur Amazon",
+    "storesFailed": "Impossible de charger les librairies.",
+    "findBooks": "Trouver des livres à ajouter",
+    "added": "Ajouté le {date}",
+    "shareCard": "Carte à partager",
+    "noMoreShelves": "Il n’y a plus d’étagères sur cette page.",
+    "noMoreBooks": "Il n’y a plus de livres sur cette page."
   },
   "accountData": {
     "exportTitle": "Exporter vos données",

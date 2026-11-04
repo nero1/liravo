@@ -368,7 +368,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 
 **Custom shelves:**
 - Unlimited on paid tiers. Free tier: max 10. Access uses current paid periods or manual grants, including when a cached profile flag is stale.
-- Each shelf is public or private.
+- Each shelf is public or private. Web/native catalogs and contents use owned cursor pages and full edition counts; retained aliases display once, separate editions remain, and the latest stored progress is shown without rewriting history. Regional bulk searches use configured stores only for complete ISBN-13 lists up to 10 editions.
 
 **Reading progress tracker:**
 - Log progress by page or percentage.

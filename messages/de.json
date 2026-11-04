@@ -1529,8 +1529,20 @@
     "emptyDescription": "Deine Leseregale erscheinen hier.",
     "emptyShelf": "Dieses Regal ist leer",
     "addDescription": "Füge Bücher hinzu, um deine Lektüre zu verfolgen.",
-    "bookCount": "{count, plural, one {# Buch geladen} other {# Bücher geladen}}",
-    "unknownBook": "Unbekanntes Buch"
+    "bookCount": "{count, plural, one {# Buch} other {# Bücher}}",
+    "unknownBook": "Unbekanntes Buch",
+    "public": "Öffentlich",
+    "private": "Privat",
+    "shelfCount": "{count, plural, one {# Regal} other {# Regale}}",
+    "loadFailed": "Deine Regale konnten nicht geladen werden. Versuche es erneut.",
+    "invalidCursor": "Diese Regalseite ist ungültig. Beginne erneut.",
+    "buyAll": "Alle bei Amazon kaufen",
+    "storesFailed": "Buchhandlungen konnten nicht geladen werden.",
+    "findBooks": "Bücher zum Hinzufügen finden",
+    "added": "Hinzugefügt am {date}",
+    "shareCard": "Karte teilen",
+    "noMoreShelves": "Keine weiteren Regale auf dieser Seite.",
+    "noMoreBooks": "Keine weiteren Bücher auf dieser Seite."
   },
   "accountData": {
     "exportTitle": "Daten exportieren",

@@ -435,3 +435,6 @@ export interface BookPassReceipt {actorId:string;chainId?:string;bookId?:string;
 export interface AuthorQuestion {id:string;author_id:string;asked_by:string|null;question:string;answer:string|null;created_at:string;answered_at:string|null;}
 export interface AuthorQuestionPage {qa:AuthorQuestion[];total:number;authorId:string;nextCursor:string|null;}
 export interface ReadingGoalData {actorId:string;goal:{id:string;user_id:string;year:number;target_books:number}|null;progress:{books_read:number;year:number;percentage:number|null};}
+
+export interface ShelfCatalogPage {shelves:(ShelfRow&{book_count:number;contains_book:boolean})[];addedToShelves:string[];total:number;selectedTotal:number;reading:Omit<ReadingGoalData,'actorId'>;actorId:string;bookId:string|null;nextCursor:string|null}
+export interface ShelfDetailPage {shelf:ShelfRow&{book_count:number};books:(ShelfBookRow&{book:BookRow;source_book_id:string})[];total:number;actorId:string;shelfId:string;nextCursor:string|null}

@@ -15,12 +15,12 @@ const DEFAULT_ICONS: Record<string, string> = {
 };
 
 export default function ShelfScreen() {
-  const {t}=useTranslations('shelves');
+  const {t}=useTranslations('shelves'),{t:common}=useTranslations('common');
   const router = useRouter();
-  const { data, isLoading, refetch,error } = useShelves();
+  const { data, isLoading, refetch,error,hasNextPage,fetchNextPage,isFetchingNextPage } = useShelves();
   const shelves = data?.shelves ?? [];
 
-  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
+  if(error&&!data)return <QueryError error={error} retry={()=>void refetch()} />;
 
   if (isLoading) return <LoadingSpinner />;
 
@@ -37,10 +37,12 @@ export default function ShelfScreen() {
         </TouchableOpacity>
       </View>
 
+      <Text className="px-4 text-sm text-muted-foreground">{t('shelfCount',{count:data?.total??0})}</Text>
       <FlatList
         data={shelves}
         keyExtractor={(s) => s.id}
         renderItem={({ item }) => <ShelfListItem shelf={item} />}
+        ListFooterComponent={<View className="p-4 gap-3">{error&&<QueryError error={error} retry={()=>void fetchNextPage()}/>} {hasNextPage&&<TouchableOpacity accessibilityRole="button" disabled={isFetchingNextPage} onPress={()=>void fetchNextPage()}><Text className="text-accent">{common('loadMore')}</Text></TouchableOpacity>}</View>}
         ListEmptyComponent={
           <EmptyState
             title={t('empty')}
@@ -57,8 +59,8 @@ export default function ShelfScreen() {
   );
 }
 
-function ShelfListItem({ shelf }: { shelf: ShelfRow }) {
-  const router = useRouter(),{t:books}=useTranslations('books');
+function ShelfListItem({ shelf }: { shelf: ShelfRow&{book_count?:number} }) {
+  const router = useRouter(),{t:books}=useTranslations('books'),{t}=useTranslations('shelves');
   const names={currently_reading:'currentlyReading',want_to_read:'wantToRead',have_read:'haveRead'};
   const icon = shelf.default_type ? DEFAULT_ICONS[shelf.default_type] ?? '📚' : '📚';
 
@@ -71,6 +73,7 @@ function ShelfListItem({ shelf }: { shelf: ShelfRow }) {
       <Text className="text-2xl">{icon}</Text>
       <View className="flex-1">
         <Text className="font-semibold text-foreground">{shelf.default_type?books(names[shelf.default_type]):shelf.name}</Text>
+        {typeof shelf.book_count==='number'&&<Text className="text-sm text-muted-foreground">{t('bookCount',{count:shelf.book_count})}</Text>}
         {shelf.description && (
           <Text className="text-sm text-muted-foreground" numberOfLines={1}>{shelf.description}</Text>
         )}

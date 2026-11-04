@@ -7,13 +7,15 @@ import { cn } from '@/lib/utils';
 interface ReadingProgressBarProps {
   shelfBookId: string;
   bookId: string;
+  userId:string;
+  sourceBookId?:string;
   pageCount: number | null;
   progressPages: number | null;
   progressPercent: number | null;
 }
 
 export function ReadingProgressBar(props:ReadingProgressBarProps){return <EntryReadingProgressBar key={props.shelfBookId} {...props}/>;}
-function EntryReadingProgressBar({shelfBookId,pageCount,progressPages,progressPercent}:ReadingProgressBarProps){
+function EntryReadingProgressBar({shelfBookId,bookId,userId,sourceBookId=bookId,pageCount,progressPages,progressPercent}:ReadingProgressBarProps){
   const t=useTranslations('readingProgress'),common=useTranslations('common'),formatter=useFormatter(),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>(),[error,setError]=useState(false);
   useEffect(()=>()=>clearTimeout(timer.current),[]);
   const [isEditing, setIsEditing] = useState(false);
@@ -34,9 +36,9 @@ function EntryReadingProgressBar({shelfBookId,pageCount,progressPages,progressPe
     if(!input.trim()||!Number.isFinite(value)||value<0||value>(pageCount??100)||(pageCount&&!Number.isInteger(value))){setError(true);return;}
     busy.current=true;setLoading(true);setError(false);setSuccess(false);clearTimeout(timer.current);
     try{
-      const res=await fetch(`/api/shelf-books/${shelfBookId}/progress`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(pageCount?{progress_pages:value}:{progress_percent:value})});
+      const res=await fetch(`/api/shelf-books/${shelfBookId}/progress`,{method:'PATCH',headers:{'Content-Type':'application/json','X-Liravo-Actor':userId},body:JSON.stringify(pageCount?{progress_pages:value}:{progress_percent:value})});
       const data=await res.json();
-      if(!res.ok||data.id!==shelfBookId||typeof data.progress_percent!=='number'||!Number.isFinite(data.progress_percent)||data.progress_percent<0||data.progress_percent>100)throw new Error('Invalid progress receipt');
+      if(!res.ok||data.id!==shelfBookId||data.user_id!==userId||data.book_id!==sourceBookId||typeof data.progress_percent!=='number'||!Number.isFinite(data.progress_percent)||data.progress_percent<0||data.progress_percent>100)throw new Error('Invalid progress receipt');
       setCurrentPages(data.progress_pages??null);setCurrentPercent(data.progress_percent);
       setInputPages(data.progress_pages?.toString()??'');setInputPercent(data.progress_percent.toString());
       setSuccess(true);setIsEditing(false);timer.current=setTimeout(()=>setSuccess(false),2000);

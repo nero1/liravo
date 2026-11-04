@@ -20,7 +20,7 @@ const DEFAULT_SHELF_LABELS: Record<string, string> = {
 
 export function AddToShelfModal({ book, visible, onClose }: Props) {
   const {t}=useTranslations('books'),common=useTranslations('common');
-  const {data,isLoading,error,refetch}=useShelves(book.id);
+  const {data,isLoading,error,refetch,hasNextPage,fetchNextPage,isFetchingNextPage}=useShelves(book.id);
   const toggle = useToggleShelf();
 
   async function handleSelect(shelfId: string) {
@@ -44,7 +44,7 @@ export function AddToShelfModal({ book, visible, onClose }: Props) {
 
           {isLoading ? (
             <ActivityIndicator color="#d97706" />
-          ) :error?<View className="gap-3"><Text accessibilityLiveRegion="polite" className="text-destructive">{common.t('error')}</Text><Button onPress={()=>void refetch()}>{common.t('retry')}</Button></View>:(
+          ) :error&&!data?<View className="gap-3"><Text accessibilityLiveRegion="polite" className="text-destructive">{common.t('error')}</Text><Button onPress={()=>void refetch()}>{common.t('retry')}</Button></View>:(
             <ScrollView showsVerticalScrollIndicator={false}>
               {shelves.map((shelf) => (
                 <TouchableOpacity
@@ -64,6 +64,8 @@ export function AddToShelfModal({ book, visible, onClose }: Props) {
                   {data?.addedToShelves.includes(shelf.id)&&<Check size={18} color="#d97706" />}
                 </TouchableOpacity>
               ))}
+              {error&&<View><Text accessibilityRole="alert" className="text-destructive">{common.t('error')}</Text><Button onPress={()=>void fetchNextPage()}>{common.t('retry')}</Button></View>}
+              {hasNextPage&&<Button loading={isFetchingNextPage} onPress={()=>void fetchNextPage()}>{common.t('loadMore')}</Button>}
             </ScrollView>
           )}
         </View>

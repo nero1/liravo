@@ -9,20 +9,20 @@ import { EmptyState,QueryError } from '@/components/ui/EmptyState';
 import type { ShelfBookRow } from '@/types';
 
 export default function ShelfDetailScreen() {
-  const {t}=useTranslations('shelves');
+  const {t}=useTranslations('shelves'),{t:common}=useTranslations('common');
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter(),{t:nav}=useTranslations('nav'),{t:booksText}=useTranslations('books');
 
   const {data,isLoading,error,refetch,hasNextPage,fetchNextPage,isFetchingNextPage}=useShelf(id!);
   const shelf=data?.pages[0].shelf;
   const books=data?.pages.flatMap(page=>page.books)??[];
-  if(error)return <QueryError error={error} retry={()=>void refetch()} />;
+  if(error&&!data)return <QueryError error={error} retry={()=>void refetch()} />;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <View className="px-4 py-3">
         <Text className="text-2xl font-bold text-foreground">{shelf?.default_type?booksText({currently_reading:'currentlyReading',want_to_read:'wantToRead',have_read:'haveRead'}[shelf.default_type]):shelf?.name??nav('shelf')}</Text>
-        <Text className="text-muted-foreground">{t('bookCount',{count:books.length})}</Text>
+        <Text className="text-muted-foreground">{data?t('bookCount',{count:data.pages[0].total}):null}</Text>
       </View>
 
       {isLoading ? (
@@ -32,14 +32,14 @@ export default function ShelfDetailScreen() {
       ) : (
         <FlatList
           data={books}
-          onEndReached={()=>{if(hasNextPage&&!isFetchingNextPage)void fetchNextPage();}}
+          onEndReached={()=>{if(hasNextPage&&!isFetchingNextPage&&!error)void fetchNextPage();}}
           onEndReachedThreshold={0.4}
-          ListFooterComponent={isFetchingNextPage?<ActivityIndicator color="#d97706" />:null}
+          ListFooterComponent={<View className="p-4 gap-3">{error&&<QueryError error={error} retry={()=>void fetchNextPage()}/>} {isFetchingNextPage?<ActivityIndicator color="#d97706"/>:hasNextPage?<TouchableOpacity accessibilityRole="button" onPress={()=>void fetchNextPage()}><Text className="text-accent">{common('loadMore')}</Text></TouchableOpacity>:null}</View>}
           keyExtractor={(b) => b.id}
           renderItem={({ item }) => (
             <ShelfBookItem
               shelfBook={item}
-              onPress={() => router.push(`/book/${item.book_id}`)}
+              onPress={() => router.push(`/book/${item.book?.id??item.book_id}`)}
             />
           )}
           ListEmptyComponent={

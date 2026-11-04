@@ -1529,8 +1529,20 @@
     "emptyDescription": "Your reading shelves will appear here.",
     "emptyShelf": "This shelf is empty",
     "addDescription": "Add books to start tracking your reading.",
-    "bookCount": "{count, plural, one {# book loaded} other {# books loaded}}",
-    "unknownBook": "Unknown book"
+    "bookCount": "{count, plural, one {# book} other {# books}}",
+    "unknownBook": "Unknown book",
+    "public": "Public",
+    "private": "Private",
+    "shelfCount": "{count, plural, one {# shelf} other {# shelves}}",
+    "loadFailed": "Could not load your shelves. Please try again.",
+    "invalidCursor": "This shelf page is invalid. Start again.",
+    "buyAll": "Buy all on Amazon",
+    "storesFailed": "Could not load book stores.",
+    "findBooks": "Find books to add",
+    "added": "Added {date}",
+    "shareCard": "Share card",
+    "noMoreShelves": "No more shelves on this page.",
+    "noMoreBooks": "No more books on this page."
   },
   "accountData": {
     "exportTitle": "Export your data",
