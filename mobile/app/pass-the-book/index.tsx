@@ -1,277 +1,51 @@
+import {useState,useEffect,useRef} from 'react';
+import {View,Text,FlatList,Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useInfiniteQuery,useQuery,useMutation,useQueryClient} from '@tanstack/react-query';
+import {useAuthStore} from '@/stores/auth';
 import {useTranslations} from '@/hooks/useTranslations';
-import { View, Text, FlatList, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Image } from 'expo-image';
-import { api } from '@/lib/api';
-import { Avatar } from '@/components/ui/Avatar';
-
-interface UserProfile {
-  id: string;
-  display_name: string;
-  username: string;
-  avatar_url: string | null;
+import {useRequestIntent} from '@/hooks/useRequestIntent';
+import {api} from '@/lib/api';
+import {BookPicker,type SelectedBook} from '@/components/books/BookPicker';
+import {SelectedEdition} from '@/components/books/SelectedEdition';
+import {Input} from '@/components/ui/Input';
+import {Button} from '@/components/ui/Button';
+import {EmptyState,QueryError} from '@/components/ui/EmptyState';
+import type {BookChain,BookPassEntry,BookChainNode,BookPassReceipt,ModerationPerson} from '@/types';
+type Reader=ModerationPerson&{id:string;is_following:boolean};
+type Action='book_passes'|'chain_create'|'chain_nominate';
+export function validReceipt(data:BookPassReceipt,actorId:string,action:Action,chainId?:string,body?:Record<string,unknown>){
+ if(data?.actorId!==actorId)return false;
+ if(action==='book_passes')return !!data.pass?.id&&data.pass.sender_id===actorId&&(!body||data.pass.book_id===body.book_id&&data.pass.recipient_id===body.recipient_id&&data.pass.message===(body.message??null));
+ if(action==='chain_create')return !!data.chain?.id&&data.chainId===data.chain.id&&data.chain.creator_id===actorId&&data.bookId===data.chain.book_id&&(!body||data.bookId===body.book_id);
+ return data.success===true&&data.chainId===chainId&&!!data.nomineeId&&Number.isInteger(data.position)&&(!body||data.nomineeId===body.nominee_id);
 }
-
-interface ChainNode {
-  id: string;
-  user_id: string;
-  nominee_id: string | null;
-  note: string | null;
-  position: number;
-  reader: UserProfile | null;
+function usePassPage<T>(actorId:string,path:string,field:string,key:string,enabled=true,params:Record<string,string>={}){return useInfiniteQuery({queryKey:['book-passing',actorId,key],enabled,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<Record<string,unknown>&{actorId:string;total:number;nextCursor:string|null}>(path,{...params,...pageParam?{cursor:pageParam}:{}},signal);if(data.actorId!==actorId||!Array.isArray(data[field]))throw Error('Invalid book-passing page');return{items:data[field]as T[],total:data.total,nextCursor:data.nextCursor};},getNextPageParam:page=>page.nextCursor});}
+export function useBookPassingMutation(actorId:string,action:Action,scope:string,chainId?:string){
+ const{t}=useTranslations('passTheBook'),{t:common}=useTranslations('common'),intent=useRequestIntent(actorId),latest=useRef(intent),qc=useQueryClient(),[done,setDone]=useState(false);latest.current=intent;
+ async function recover(key:string){const data=await api.get<BookPassReceipt>('/api/pass-the-book',{action,receipt:key});if(useAuthStore.getState().user?.id!==actorId||!validReceipt(data,actorId,action,chainId))throw Error('Invalid pass receipt');return data;}
+ useEffect(()=>{let active=true;void(async()=>{const headers=await latest.current.pending(scope);if(!headers)return;try{await recover(headers['Idempotency-Key']);if(active){await latest.current.complete(scope,headers['Idempotency-Key']);setDone(true);void qc.invalidateQueries({queryKey:['book-passing']});}}catch{}})();return()=>{active=false;};},[actorId,action,scope,chainId]); // eslint-disable-line react-hooks/exhaustive-deps
+ const mutation=useMutation({mutationFn:async({path,body}:{path:string;body:Record<string,unknown>})=>{setDone(false);const headers=await intent.durableHeaders(body,scope);let data:BookPassReceipt;try{data=await api.post<BookPassReceipt>(path,body,headers);if(!validReceipt(data,actorId,action,chainId,body))throw Error('Invalid pass receipt');}catch{data=await recover(headers['Idempotency-Key']);}if(useAuthStore.getState().user?.id!==actorId||!validReceipt(data,actorId,action,chainId,body))throw Error('Invalid pass receipt');await intent.complete(scope,headers['Idempotency-Key']);return data;},onSuccess:()=>{if(useAuthStore.getState().user?.id===actorId){setDone(true);void qc.invalidateQueries({queryKey:['book-passing']});}},onError:()=>Alert.alert(common('error'),t('failed'))});return{...mutation,done};
 }
-
-interface Chain {
-  id: string;
-  books: { id: string; title: string; author_name: string; cover_url: string | null } | null;
-  nodes: ChainNode[];
+function NativeRecipientPicker({actorId,value,onChange,followOnly=false,disabled=false}:{actorId:string;value:Reader|null;onChange:(reader:Reader|null)=>void;followOnly?:boolean;disabled?:boolean}){
+ const{t}=useTranslations('passTheBook'),{t:common}=useTranslations('common'),[username,setUsername]=useState(''),[term,setTerm]=useState('');
+ useEffect(()=>{const timer=setTimeout(()=>setTerm(username.trim().replace(/^@/,'')),300);return()=>clearTimeout(timer);},[username]);
+ const search=useQuery({queryKey:['book-passing-reader',actorId,term],enabled:!!term&&!value&&!disabled&&term===username.trim().replace(/^@/,''),queryFn:({signal})=>api.get<{user:Reader}>('/api/users/'+encodeURIComponent(term),undefined,signal)}),result=term===username.trim().replace(/^@/,'')?search.data?.user:null;
+ return <View className="gap-2">{value?<><Text className="text-foreground">{value.display_name} (@{value.username})</Text><Button disabled={disabled} variant="outline" onPress={()=>onChange(null)}>{t('changeReader')}</Button></>:<><Input label={t('reader')} value={username} onChangeText={setUsername} maxLength={50} editable={!disabled} autoCapitalize="none"/>{search.isFetching&&<Text>{common('loading')}</Text>}{term===username.trim().replace(/^@/,'')&&search.isError&&<View><Text accessibilityRole="alert" className="text-destructive">{t('readerUnavailable')}</Text><Button onPress={()=>void search.refetch()}>{common('retry')}</Button></View>}{result&&(result.id===actorId?<Text className="text-muted-foreground">{t('chooseAnother')}</Text>:followOnly&&!result.is_following?<Text className="text-muted-foreground">{t('followFirst')}</Text>:<View className="gap-2"><Text className="text-foreground">{result.display_name} (@{result.username})</Text><Button disabled={disabled} variant="outline" onPress={()=>onChange(result)}>{t('chooseReader')}</Button></View>)}</>}</View>;
 }
-
-interface BookPass {
-  id: string;
-  book_id: string;
-  message: string | null;
-  created_at: string;
+function NativePassForm({actorId,direct=false}:{actorId:string;direct?:boolean}){
+ const{t}=useTranslations('passTheBook'),{t:common}=useTranslations('common'),[book,setBook]=useState<SelectedBook|null>(null),[reader,setReader]=useState<Reader|null>(null),[note,setNote]=useState(''),change=useBookPassingMutation(actorId,direct?'book_passes':'chain_create',direct?'book.pass':'chain.start');
+ async function submit(){if(!book||direct&&!reader||change.isPending)return;try{await change.mutateAsync({path:direct?'/api/pass-the-book':'/api/pass-the-book/chains',body:direct?{book_id:book!.id,recipient_id:reader!.id,message:note.trim()||undefined}:{book_id:book!.id,note:note.trim()||undefined}});setBook(null);setReader(null);setNote('');}catch{}}
+ return <View className="border border-border rounded-xl p-4 gap-3"><Text className="font-semibold text-foreground">{t(direct?'send':'startChain')}</Text><BookPicker value={book} onChange={setBook} label={t('book')} disabled={change.isPending}/>{direct&&<NativeRecipientPicker actorId={actorId} value={reader} onChange={setReader} followOnly disabled={change.isPending}/>}<Input label={t(direct?'message':'note')} value={note} onChangeText={setNote} maxLength={500} multiline editable={!change.isPending}/>{change.done&&<Text accessibilityLiveRegion="polite" className="text-green-600">{t(direct?'passed':'started')}</Text>}<Button disabled={!book||direct&&!reader} loading={change.isPending} onPress={()=>void submit()}>{change.isPending?common('submitting'):t(direct?'send':'startChain')}</Button></View>;
 }
-
-export default function PassTheBookScreen() {
-  const {t:ui}=useTranslations('');
-  const qc = useQueryClient();
-  const [tab, setTab] = useState<'chains' | 'passes'>('chains');
-  const [nominateChainId, setNominateChainId] = useState<string | null>(null);
-  const [nomineeId, setNomineeId] = useState('');
-  const [nomineeNote, setNomineeNote] = useState('');
-  const [startBookId, setStartBookId] = useState('');
-  const [startNote, setStartNote] = useState('');
-  const [showStartForm, setShowStartForm] = useState(false);
-
-  const { data: chainsData, isLoading: chainsLoading } = useQuery({
-    queryKey: ['pass-the-book-chains'],
-    queryFn: () => api.get<{ chains: Chain[] }>('/api/pass-the-book/chains'),
-  });
-
-  const { data: passesData, isLoading: passesLoading } = useQuery({
-    queryKey: ['pass-the-book-passes'],
-    queryFn: () => api.get<{ received: BookPass[]; sent: BookPass[] }>('/api/pass-the-book'),
-  });
-
-  const startChainMutation = useMutation({
-    mutationFn: (data: { book_id: string; note?: string }) =>
-      api.post('/api/pass-the-book/chains', data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pass-the-book-chains'] });
-      setStartBookId('');
-      setStartNote('');
-      setShowStartForm(false);
-      Alert.alert('Chain started!');
-    },
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  const nominateMutation = useMutation({
-    mutationFn: ({ chainId, nomineeId, note }: { chainId: string; nomineeId: string; note?: string }) =>
-      api.post(`/api/pass-the-book/chains/${chainId}/nominate`, { nominee_id: nomineeId, note }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pass-the-book-chains'] });
-      setNominateChainId(null);
-      setNomineeId('');
-      setNomineeNote('');
-      Alert.alert('Book passed!');
-    },
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  const chains = chainsData?.chains ?? [];
-  const passes = passesData ?? { received: [], sent: [] };
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <View className="px-4 pt-4 pb-2 flex-row items-center justify-between">
-        <Text className="text-2xl font-bold text-foreground">{ui('passTheBook.title')}</Text>
-        {tab === 'chains' && (
-          <TouchableOpacity onPress={() => setShowStartForm(!showStartForm)} className="bg-accent rounded-lg px-3 py-2">
-            <Text className="text-white text-sm font-medium">+ Start</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Tab bar */}
-      <View className="flex-row gap-1 mx-4 mb-2 border border-border rounded-lg p-1">
-        {(['chains', 'passes'] as const).map((t) => (
-          <TouchableOpacity
-            key={t}
-            onPress={() => setTab(t)}
-            className={`flex-1 py-2 rounded-md items-center ${tab === t ? 'bg-accent' : ''}`}
-          >
-            <Text className={`text-sm font-medium ${tab === t ? 'text-white' : 'text-muted-foreground'}`}>
-              {t === 'chains' ? 'Chains' : 'Direct'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Start chain form */}
-      {tab === 'chains' && showStartForm && (
-        <View className="mx-4 mb-3 border border-dashed border-border rounded-xl p-4 gap-3">
-          <Text className="font-semibold text-sm text-foreground">Start a New Chain</Text>
-          <TextInput
-            value={startBookId}
-            onChangeText={setStartBookId}
-            placeholder="Book ID (UUID)…"
-            placeholderTextColor="#9ca3af"
-            className="border border-border rounded-lg px-3 py-2 text-sm text-foreground bg-background"
-          />
-          <TextInput
-            value={startNote}
-            onChangeText={setStartNote}
-            placeholder="Why start this chain? (optional)"
-            placeholderTextColor="#9ca3af"
-            multiline
-            numberOfLines={2}
-            maxLength={500}
-            className="border border-border rounded-lg px-3 py-2 text-sm text-foreground bg-background"
-          />
-          <View className="flex-row gap-2">
-            <TouchableOpacity onPress={() => setShowStartForm(false)} className="flex-1 border border-border rounded-lg py-2 items-center">
-              <Text className="text-sm text-muted-foreground">{ui('profile.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => { if (startBookId.trim()) startChainMutation.mutate({ book_id: startBookId.trim(), note: startNote || undefined }); }}
-              disabled={startChainMutation.isPending || !startBookId.trim()}
-              className="flex-1 bg-accent rounded-lg py-2 items-center"
-            >
-              <Text className="text-sm text-white font-medium">{startChainMutation.isPending ? 'Starting…' : 'Start Chain'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Nominate form */}
-      {nominateChainId && (
-        <View className="mx-4 mb-3 border border-accent/40 bg-accent/5 rounded-xl p-4 gap-3">
-          <Text className="font-semibold text-sm text-foreground">Pass to the next reader</Text>
-          <TextInput
-            value={nomineeId}
-            onChangeText={setNomineeId}
-            placeholder="Nominee User ID (UUID)…"
-            placeholderTextColor="#9ca3af"
-            className="border border-border rounded-lg px-3 py-2 text-sm text-foreground bg-background"
-          />
-          <TextInput
-            value={nomineeNote}
-            onChangeText={setNomineeNote}
-            placeholder="Note (optional)"
-            placeholderTextColor="#9ca3af"
-            multiline
-            numberOfLines={2}
-            maxLength={500}
-            className="border border-border rounded-lg px-3 py-2 text-sm text-foreground bg-background"
-          />
-          <View className="flex-row gap-2">
-            <TouchableOpacity onPress={() => setNominateChainId(null)} className="flex-1 border border-border rounded-lg py-2 items-center">
-              <Text className="text-sm text-muted-foreground">{ui('profile.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => { if (nomineeId.trim()) nominateMutation.mutate({ chainId: nominateChainId, nomineeId: nomineeId.trim(), note: nomineeNote || undefined }); }}
-              disabled={nominateMutation.isPending || !nomineeId.trim()}
-              className="flex-1 bg-accent rounded-lg py-2 items-center"
-            >
-              <Text className="text-sm text-white font-medium">{nominateMutation.isPending ? 'Passing…' : 'Pass the Book'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {tab === 'chains' && (
-        chainsLoading ? (
-          <View className="flex-1 items-center justify-center"><ActivityIndicator color="#d97706" /></View>
-        ) : (
-          <FlatList
-            data={chains}
-            keyExtractor={(c) => c.id}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 12 }}
-            renderItem={({ item: chain }) => {
-              const sortedNodes = [...chain.nodes].sort((a, b) => a.position - b.position);
-              return (
-                <View className="rounded-xl border border-border bg-card p-4 gap-3">
-                  <View className="flex-row gap-3">
-                    {chain.books?.cover_url ? (
-                      <Image source={{ uri: chain.books.cover_url }} style={{ width: 48, height: 72, borderRadius: 4 }} contentFit="cover" />
-                    ) : (
-                      <View style={{ width: 48, height: 72 }} className="rounded bg-muted" />
-                    )}
-                    <View className="flex-1">
-                      <Text className="font-semibold text-foreground text-sm" numberOfLines={2}>{chain.books?.title ?? 'Unknown'}</Text>
-                      <Text className="text-xs text-muted-foreground">{chain.books?.author_name}</Text>
-                      <Text className="text-xs text-muted-foreground mt-1">{sortedNodes.length}{ui('onboarding.userType.reader')}{sortedNodes.length !== 1 ? 's' : ''}</Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => setNominateChainId(chain.id)}
-                      className="bg-accent/10 rounded-lg px-2 py-1 self-start"
-                    >
-                      <Text className="text-accent text-xs font-medium">{ui('passTheBook.passNext')}</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Chain reader avatars */}
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View className="flex-row items-center gap-1">
-                      {sortedNodes.map((node, i) => (
-                        <View key={node.id} className="flex-row items-center gap-1">
-                          <View className="items-center gap-1">
-                            <Avatar uri={node.reader?.avatar_url ?? null} name={node.reader?.display_name ?? '?'} size={32} />
-                            <Text className="text-[9px] text-muted-foreground max-w-[48px] text-center" numberOfLines={1}>
-                              {node.reader?.display_name ?? '?'}
-                            </Text>
-                          </View>
-                          {i < sortedNodes.length - 1 && <Text className="text-muted-foreground text-sm">→</Text>}
-                        </View>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
-              );
-            }}
-            ListEmptyComponent={
-              <View className="items-center py-12">
-                <Text className="text-muted-foreground text-base">No chains yet</Text>
-                <Text className="text-muted-foreground text-sm mt-1">Start one with a book you loved!</Text>
-              </View>
-            }
-          />
-        )
-      )}
-
-      {tab === 'passes' && (
-        passesLoading ? (
-          <View className="flex-1 items-center justify-center"><ActivityIndicator color="#d97706" /></View>
-        ) : (
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 16 }}>
-            <Text className="font-semibold text-foreground">Received ({passes.received.length})</Text>
-            {passes.received.length === 0 ? (
-              <Text className="text-muted-foreground text-sm">No books passed to you yet.</Text>
-            ) : passes.received.map((p) => (
-              <View key={p.id} className="p-3 rounded-lg border border-border gap-1">
-                <Text className="text-accent text-sm font-medium">Book ID: {p.book_id.slice(0, 8)}…</Text>
-                {p.message && <Text className="text-sm text-muted-foreground italic">&ldquo;{p.message}&rdquo;</Text>}
-                <Text className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</Text>
-              </View>
-            ))}
-            <Text className="font-semibold text-foreground mt-2">Sent ({passes.sent.length})</Text>
-            {passes.sent.length === 0 ? (
-              <Text className="text-muted-foreground text-sm">You haven't passed any books yet.</Text>
-            ) : passes.sent.map((p) => (
-              <View key={p.id} className="p-3 rounded-lg border border-border gap-1">
-                <Text className="text-accent text-sm font-medium">Book ID: {p.book_id.slice(0, 8)}…</Text>
-                {p.message && <Text className="text-sm text-muted-foreground italic">&ldquo;{p.message}&rdquo;</Text>}
-                <Text className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        )
-      )}
-    </SafeAreaView>
-  );
+export function NativeChainCard({actorId,chain}:{actorId:string;chain:BookChain}){
+ const{t}=useTranslations('passTheBook'),{t:common}=useTranslations('common'),[open,setOpen]=useState(false),[reader,setReader]=useState<Reader|null>(null),[note,setNote]=useState(''),roster=usePassPage<BookChainNode>(actorId,'/api/pass-the-book/chains','nodes','roster.'+chain.id,open,{chainId:chain.id}),change=useBookPassingMutation(actorId,'chain_nominate','chain.nominate.'+chain.id,chain.id);
+ async function nominate(){if(!reader||change.isPending)return;try{await change.mutateAsync({path:'/api/pass-the-book/chains/'+chain.id+'/nominate',body:{nominee_id:reader.id,note:note.trim()||undefined}});setReader(null);setNote('');}catch{}}
+ return <View className="border border-border rounded-xl p-4 gap-3">{chain.books?<SelectedEdition book={chain.books}/>:<Text>{t('unknown')}</Text>}<Text className="text-sm text-muted-foreground">{t('readers',{count:chain.reader_count})}</Text><Button variant="outline" accessibilityState={{expanded:open}} onPress={()=>setOpen(value=>!value)}>{t(open?'hideReaders':'showReaders')}</Button>{open&&<View className="gap-3">{roster.data?.pages.flatMap(page=>page.items).map(node=><View key={node.id} className="border-l border-border pl-3"><Text className="text-foreground">{t('position',{position:node.position+1})} · {node.reader?node.reader.display_name+' (@'+node.reader.username+')':t('unknown')}</Text>{!!node.note&&<Text className="text-sm text-muted-foreground">{node.note}</Text>}</View>)}{roster.isLoading&&<Text>{common('loading')}</Text>}{roster.isError&&<QueryError error={roster.error} retry={()=>void roster.refetch()}/>} {roster.hasNextPage&&<Button loading={roster.isFetchingNextPage} onPress={()=>void roster.fetchNextPage()}>{common('loadMore')}</Button>}</View>}{change.done&&<Text accessibilityLiveRegion="polite" className="text-green-600">{t('passed')}</Text>}{chain.can_nominate?<><Text className="font-semibold text-foreground">{t('nominate')}</Text><NativeRecipientPicker actorId={actorId} value={reader} onChange={setReader} disabled={change.isPending}/><Input label={t('note')} value={note} onChangeText={setNote} maxLength={500} multiline editable={!change.isPending}/><Button loading={change.isPending} disabled={!reader} onPress={()=>void nominate()}>{t('passNext')}</Button></>:<Text className="text-sm text-muted-foreground">{t('noNomination')}</Text>}</View>;
+}
+export default function PassTheBookScreen(){const owner=useAuthStore(state=>state.user?.id);return owner?<OwnedBookPassingScreen key={owner} actorId={owner}/>:null;}
+export function OwnedBookPassingScreen({actorId}:{actorId:string}){
+ const{t,locale}=useTranslations('passTheBook'),{t:common}=useTranslations('common'),[tab,setTab]=useState<'chains'|'received'|'sent'>('chains'),chains=usePassPage<BookChain>(actorId,'/api/pass-the-book/chains','chains','chains'),received=usePassPage<BookPassEntry>(actorId,'/api/pass-the-book','items','received',true,{scope:'received'}),sent=usePassPage<BookPassEntry>(actorId,'/api/pass-the-book','items','sent',true,{scope:'sent'}),page=tab==='chains'?chains:tab==='received'?received:sent;
+ const rows:({kind:'chain';chain:BookChain}|{kind:'pass';pass:BookPassEntry})[]=tab==='chains'?chains.data?.pages.flatMap(p=>p.items.map(chain=>({kind:'chain'as const,chain})))??[]:(tab==='received'?received:sent).data?.pages.flatMap(p=>p.items.map(pass=>({kind:'pass'as const,pass})))??[];
+ return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={rows} keyExtractor={row=>row.kind==='chain'?row.chain.id:row.pass.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:16}} ListHeaderComponent={<View className="gap-4 mb-2"><Text accessibilityRole="header" className="text-2xl font-bold text-foreground">{t('title')}</Text><Text className="text-muted-foreground">{t('subtitle')}</Text><View className="flex-row flex-wrap gap-2">{(['chains','received','sent']as const).map(value=><Button key={value} variant={tab===value?'primary':'outline'} accessibilityState={{selected:tab===value}} onPress={()=>setTab(value)}>{t(value)}</Button>)}</View>{tab==='chains'?<NativePassForm key="start" actorId={actorId}/>:<NativePassForm key="direct" actorId={actorId} direct/>}{page.data&&<Text className="text-sm text-muted-foreground">{t('entries',{count:page.data.pages[0].total})}</Text>}</View>} renderItem={({item})=>item.kind==='chain'?<NativeChainCard actorId={actorId} chain={item.chain}/>:<View className="border border-border rounded-xl p-4 gap-2">{item.pass.book?<SelectedEdition book={item.pass.book}/>:<Text>{t('unknown')}</Text>}<Text className="text-foreground">{t(tab==='received'?'fromLabel':'to',{name:(tab==='received'?item.pass.sender:item.pass.recipient)?.display_name??t('unknown')})}</Text>{!!item.pass.message&&<Text className="text-foreground">{item.pass.message}</Text>}<Text className="text-xs text-muted-foreground">{new Date(item.pass.created_at).toLocaleString(locale)}</Text></View>} ListEmptyComponent={page.isLoading?<Text>{common('loading')}</Text>:page.isError?null:<EmptyState title={t(tab==='chains'?'noChains':'emptyPasses')}/>} ListFooterComponent={<View className="gap-3">{page.isError&&<QueryError error={page.error} retry={()=>void page.refetch()}/>} {page.hasNextPage&&<Button loading={page.isFetchingNextPage} onPress={()=>void page.fetchNextPage()}>{common('loadMore')}</Button>}<Button loading={page.isRefetching} variant="outline" onPress={()=>void page.refetch()}>{t('refresh')}</Button></View>}/></SafeAreaView>;
 }

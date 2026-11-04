@@ -881,7 +881,7 @@ Available as 1200×630 standard cards and 1080×1920 Instagram Stories in EN/FR/
 
 **Monthly genre spotlight:** Community focuses on one genre. Genre leaderboard for the month. Featured reading lists and author spotlights.
 
-**Pass the Book chain:** One reader nominates the next publicly. Viral thread where each node links to the book page.
+**Pass the Book chain:** One reader nominates the next publicly. Viral thread where each node links to the book page. EN/FR/DE web/native screens page complete chains, rosters and personal sent/received passes, show selected-edition context and choose readers by username. Only an eligible participant can nominate; direct passes retain the follow requirement. Deleted/banned recipients are rejected, and owned receipts recover committed submissions after response loss or reload.
 
 ### 10.4 Referral System
 

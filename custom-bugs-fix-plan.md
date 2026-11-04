@@ -69,6 +69,7 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Repair native admin catalog pagination/contracts, moderation/configuration receipts, real cron status and EN/FR/DE controls; page web themes.
 - ✅ Page web book/promotion/season/writing administration and retain promotion form positions.
 - ✅ Repair report/audit-log contracts, tied paging, current-role permissions, owned decision recovery and EN/FR/DE web/native screens.
+- ✅ Repair complete book-chain/pass catalogs and rosters, edition/reader selection, deleted-recipient checks, owned retries and EN/FR/DE web/native controls.
 - 🟡 Complete the remaining page/native accessibility sweep.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 

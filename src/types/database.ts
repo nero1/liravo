@@ -425,3 +425,9 @@ export interface ModerationPerson {username:string;display_name:string;}
 export interface ModerationReport extends ContentReportRow {reporter:ModerationPerson;moderator:ModerationPerson|null;target:{owner_id:string|null;username:string|null;display_name:string|null;label:string|null;content:string|null};allowed_actions:ModerationAction[];}
 export interface ModerationLog {id:string;moderator_id:string|null;target_user_id:string|null;report_id:string|null;action:string;reason:string|null;notes:string|null;entity_type:string|null;entity_id:string|null;created_at:string;moderator:ModerationPerson|null;target:ModerationPerson|null;}
 export interface ModerationPage<T> {items:T[];total:number;actorId:string;nextCursor:string|null;page:number;pageSize:number;}
+
+export interface BookChainNode {id:string;chain_id:string;user_id:string;nominee_id:string|null;note:string|null;position:number;created_at:string;reader:(ModerationPerson&{id:string;avatar_url:string|null})|null;}
+export interface BookChain {id:string;book_id:string;creator_id:string;created_at:string;books:BookRow;nodes:BookChainNode[];reader_count:number;can_nominate:boolean;}
+export interface BookPassEntry {id:string;sender_id:string;recipient_id:string;book_id:string;message:string|null;created_at:string;book:BookRow;sender:(ModerationPerson&{id:string})|null;recipient:(ModerationPerson&{id:string})|null;}
+export interface BookPassPage<T> {items:T[];total:number;actorId:string;nextCursor:string|null;}
+export interface BookPassReceipt {actorId:string;chainId?:string;bookId?:string;nomineeId?:string;chain?:{id:string;book_id:string;creator_id:string};success?:boolean;position?:number;pass?:{id:string;sender_id:string;recipient_id:string;book_id:string;message:string|null};}
