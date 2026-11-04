@@ -1,29 +1,17 @@
 import { ImageResponse } from '@vercel/og';
-import { createClient } from '@/lib/supabase/server';
+import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const { data: book } = await supabase
-    .from('books')
-    .select('title, author_name, cover_url')
-    .eq('id', params.id)
-    .single();
-
-  const displayName = user
-    ? (await supabase.from('users').select('display_name').eq('id', user.id).single()).data?.display_name
-    : null;
-
-  const title = book?.title ?? 'A great book';
-  const author = book?.author_name ?? '';
+  try {
+  const {data:book,t}=await getShareCard(request,'book',params.id);
+  const title=book.title,author=book.author_name;
 
   return new ImageResponse(
     (
@@ -54,18 +42,6 @@ export async function GET(
 
         {/* Main content */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {displayName && (
-            <p
-              style={{
-                fontSize: '20px',
-                color: 'rgba(255,255,255,0.85)',
-                margin: 0,
-              }}
-            >
-              {displayName} finished reading
-            </p>
-          )}
-
           <h1
             style={{
               fontSize: title.length > 40 ? '36px' : '48px',
@@ -88,7 +64,7 @@ export async function GET(
                 marginTop: '4px',
               }}
             >
-              by {author}
+              {t('by',{author})}
             </p>
           )}
         </div>
@@ -104,13 +80,15 @@ export async function GET(
             fontSize: '16px',
           }}
         >
-          Discover books on liravo.org
+          {t('discover')}
         </div>
       </div>
     ),
     {
       width: 1200,
       height: 630,
+      headers:SHARE_IMAGE_HEADERS,
     }
   );
+  } catch(error) { return shareCardFailure(error); }
 }

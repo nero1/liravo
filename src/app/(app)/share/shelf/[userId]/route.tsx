@@ -1,62 +1,18 @@
 import { ImageResponse } from '@vercel/og';
-import { createServiceClient } from '@/lib/supabase/server';
+import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { userId: string } }
 ) {
-  const supabase = createServiceClient();
-
-  let displayName = 'A Reader';
-  const covers: string[] = [];
-
   try {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('display_name')
-      .eq('id', params.userId)
-      .single();
-
-    if (profile) displayName = profile.display_name;
-
-    // Get 6 most recently added books from Have Read shelf
-    const { data: shelves } = await supabase
-      .from('shelves')
-      .select('id')
-      .eq('user_id', params.userId)
-      .eq('default_type', 'have_read')
-      .limit(1);
-
-    if (shelves && shelves.length > 0) {
-      const { data: shelfBooks } = await supabase
-        .from('shelf_books')
-        .select('book_id')
-        .eq('shelf_id', shelves[0].id)
-        .order('added_at', { ascending: false })
-        .limit(6);
-
-      if (shelfBooks && shelfBooks.length > 0) {
-        const bookIds = shelfBooks.map((sb) => sb.book_id);
-        const { data: books } = await supabase
-          .from('books')
-          .select('cover_url')
-          .in('id', bookIds);
-
-        for (const b of books ?? []) {
-          if (b.cover_url) covers.push(b.cover_url);
-        }
-      }
-    }
-  } catch {
-    // Use defaults
-  }
-
-  // Pad covers to 6 with nulls
-  while (covers.length < 6) covers.push('');
+  const {data,t}=await getShareCard(request,'shelf',params.userId,params.userId);
+  const displayName=data.reader.display_name,covers=data.books.map(book=>book.cover_url??'');
+  while(covers.length<6)covers.push('');
 
   return new ImageResponse(
     (
@@ -80,7 +36,7 @@ export async function GET(
             Liravo
           </span>
           <h1 style={{ fontSize: '36px', color: '#fff', fontWeight: 900, margin: 0, lineHeight: 1 }}>
-            {displayName}&apos;s Shelf
+            {t('shelf',{name:displayName})}
           </h1>
         </div>
 
@@ -113,10 +69,11 @@ export async function GET(
         </div>
 
         <p style={{ fontSize: '16px', color: '#78716c', margin: 0 }}>
-          Track your reading at liravo.org
+          {t('track')}
         </p>
       </div>
     ),
-    { width: 1200, height: 630 }
+    { width: 1200, height: 630,headers:SHARE_IMAGE_HEADERS }
   );
+  } catch(error) { return shareCardFailure(error); }
 }

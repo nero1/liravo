@@ -2481,5 +2481,22 @@
   "offlinePage": {
     "title": "You’re offline",
     "description": "Check your connection and try again."
+  },
+  "shareCards": {
+    "by": "by {author}",
+    "discover": "Discover books on liravo.org",
+    "finished": "{name} finished reading",
+    "shelf": "The shelf of {name}",
+    "track": "Track your reading at liravo.org",
+    "sharedBy": "Shared by {name}",
+    "reviewBy": "Review by {name}",
+    "challengeCompleted": "Challenge completed",
+    "challengeProgress": "Challenge progress",
+    "readingChallenge": "Reading challenge",
+    "booksRead": "{count, plural, one {# book read} other {# books read}}",
+    "pagesRead": "{count, plural, one {# page read} other {# pages read}}",
+    "writingChallenge": "Writing on Liravo",
+    "writingMessage": "Join the challenge and share your writing.",
+    "submissionCount": "{count, plural, one {# submission} other {# submissions}}"
   }
 }

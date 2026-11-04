@@ -2481,5 +2481,22 @@
   "offlinePage": {
     "title": "Du bist offline",
     "description": "Prüfe deine Verbindung und versuche es erneut."
+  },
+  "shareCards": {
+    "by": "von {author}",
+    "discover": "Entdecke Bücher auf liravo.org",
+    "finished": "{name} hat das Buch gelesen",
+    "shelf": "Das Bücherregal von {name}",
+    "track": "Verfolge deine Lektüre auf liravo.org",
+    "sharedBy": "Geteilt von {name}",
+    "reviewBy": "Rezension von {name}",
+    "challengeCompleted": "Challenge abgeschlossen",
+    "challengeProgress": "Challenge-Fortschritt",
+    "readingChallenge": "Lesechallenge",
+    "booksRead": "{count, plural, one {# Buch gelesen} other {# Bücher gelesen}}",
+    "pagesRead": "{count, plural, one {# Seite gelesen} other {# Seiten gelesen}}",
+    "writingChallenge": "Schreiben auf Liravo",
+    "writingMessage": "Nimm an der Challenge teil und teile deine Texte.",
+    "submissionCount": "{count, plural, one {# Beitrag} other {# Beiträge}}"
   }
 }

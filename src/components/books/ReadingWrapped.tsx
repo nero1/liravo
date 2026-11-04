@@ -1,12 +1,13 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {shareCardPath} from '@/lib/share-card-path';
 import Link from 'next/link';
 import {useTranslations,useLocale,useFormatter} from 'next-intl';
 import type {WrappedData} from '@/types/database';
 export function ReadingWrapped({actorId}:{actorId:string}){
   const t=useTranslations('wrapped'),common=useTranslations('common'),genres=useTranslations('aiProfiles'),moods=useTranslations('moods'),levels=useTranslations('profile'),format=useFormatter(),locale=useLocale(),[data,setData]=useState<WrappedData|null>(null),[loading,setLoading]=useState(true),[failed,setFailed]=useState(false),[copied,setCopied]=useState(false),[copyFailed,setCopyFailed]=useState(false),[generation,setGeneration]=useState(0);
   useEffect(()=>{const request=new AbortController();setLoading(true);setFailed(false);void(async()=>{try{const response=await fetch('/api/wrapped',{signal:request.signal,headers:{'X-Liravo-Actor':actorId}}),snapshot=await response.json();if(!response.ok||snapshot.actorId!==actorId||snapshot.userId!==actorId||!Array.isArray(snapshot.topGenres))throw Error();if(!request.signal.aborted)setData(snapshot);}catch{if(!request.signal.aborted)setFailed(true);}finally{if(!request.signal.aborted)setLoading(false);}})();return()=>request.abort();},[actorId,generation]);
-  const sharePath='/share/wrapped/'+actorId+'?locale='+locale;
+  const sharePath=shareCardPath('wrapped',actorId,locale);
   async function copy(){setCopied(false);setCopyFailed(false);try{await navigator.clipboard.writeText(new URL(sharePath,window.location.origin).toString());setCopied(true);}catch{setCopyFailed(true);}}
   const genre=(value:string)=>genres.has('genreLabels.'+value)?genres('genreLabels.'+value):value;
   const cards=data?[

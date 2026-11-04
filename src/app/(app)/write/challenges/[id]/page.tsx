@@ -4,7 +4,8 @@ import { ChallengeJoinButton } from '@/components/writing/ChallengeJoinButton';
 import { useRequestIntent } from '@/lib/client/useRequestIntent';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useTranslations, useFormatter } from 'next-intl';
+import { useTranslations, useFormatter,useLocale } from 'next-intl';
+import {shareCardPath} from '@/lib/share-card-path';
 import { useParams } from 'next/navigation';
 
 interface Challenge {
@@ -37,6 +38,7 @@ interface CommunitySubmission {
 }
 
 export default function ChallengeDetailPage() {
+  const locale=useLocale();
   const t = useTranslations('writing');
   const formatter = useFormatter();
   const intent = useRequestIntent();
@@ -182,7 +184,7 @@ export default function ChallengeDetailPage() {
         <div className="flex gap-2 mt-4">
           <ChallengeJoinButton challengeId={id} initialJoined={joined} onJoined={count=>{setJoined(true);setChallenge(prev=>prev?{...prev,participant_count:count}:prev);}} />
           <Link
-            href={`/share/writing-challenge/${challenge.id}`}
+            href={shareCardPath('writing-challenge',challenge.id,locale)}
             target="_blank"
             className="rounded-lg border px-4 py-2 text-sm hover:bg-muted transition-colors"
           >{t('shareCard')}</Link>

@@ -590,6 +590,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 - Web/native creation selects an edition and validates 5–200 trimmed characters. Catalogs/detail show complete counts and final votes with owned retry recovery; public share cards use EN/FR/DE.
 - Others vote agree/disagree and add arguments.
 - Debate cards are shareable.
+- Book, shelf, quote, review and challenge images use EN/FR/DE and canonical edition metadata. Personal images enforce current account/profile/shelf access and disable caching; completed-reading cards require actual membership, and challenge cards show real progress before claiming completion.
 
 **Notifications (in-app):**
 - Follows, likes, want-to-reads, replies, mentions, challenge completions, ARC grants, buddy read invites, author Q&A answers.

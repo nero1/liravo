@@ -1,7 +1,8 @@
 import {getBookAuthors} from '@/lib/author-catalog';
 import {getBookReviews,ReviewCursorError} from '@/services/book-reviews';
 import {EditionSelector} from '@/components/books/EditionSelector';
-import { getTranslations,getFormatter } from 'next-intl/server';
+import {shareCardPath} from '@/lib/share-card-path';
+import { getTranslations,getFormatter,getLocale } from 'next-intl/server';
 import { getActivePromotions } from '@/services/promotions';
 import { PromotedBookLink } from '@/components/books/PromotedBookLink';
 import { HelpfulnessButtons } from '@/components/books/HelpfulnessButtons';
@@ -31,7 +32,7 @@ interface BookPageProps {
 }
 
 export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
-  const [book,t]=await Promise.all([getBookById(params.id),getTranslations('book')]);
+  const [book,t,shareLocale]=await Promise.all([getBookById(params.id),getTranslations('book'),getLocale()]);
   if(!book)return {title:t('notFound')};
 
 
@@ -41,7 +42,7 @@ export async function generateMetadata({ params }: BookPageProps): Promise<Metad
     openGraph: {
       title: t('metadataTitle',{title:book.title,author:book.author_name}),
       description: book.description?.slice(0, 200) ?? '',
-      images: book.cover_url ? [{ url: `${APP_URL}/share/book/${params.id}`, width: 1200, height: 630 }] : [],
+      images: [{url:APP_URL+shareCardPath('book',book.id,shareLocale),width:1200,height:630}],
       url: `${APP_URL}/book/${params.id}`,
     },
     alternates: languageAlternates(`/book/${params.id}`),
@@ -91,7 +92,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
     .eq('id', user.id)
     .single();
   const country = userProfile?.country ?? 'US';
-  const locale = userProfile?.preferred_locale ?? 'en';
+  const locale = userProfile?.preferred_locale ?? 'en',shareLocale=await getLocale();
 
   // Affiliate links
   const affiliateLinks = await buildAffiliateLinks(book, country, locale);
@@ -279,7 +280,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
       <div className="flex items-center gap-3 mb-5">
         <ReactionButtons bookId={params.id} userId={user.id} initialWantToRead={initialWantToRead} />
         <AddToShelfButton bookId={params.id} userId={user.id}/>
-        <Link href={`/share/book/${params.id}`} target="_blank" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600 transition-colors">
+        <Link href={shareCardPath('book',book.id,shareLocale)} target="_blank" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600 transition-colors">
           <Share2 size={14} /> {common('share')}
         </Link>
       </div>

@@ -2481,5 +2481,22 @@
   "offlinePage": {
     "title": "Vous êtes hors ligne",
     "description": "Vérifiez votre connexion et réessayez."
+  },
+  "shareCards": {
+    "by": "de {author}",
+    "discover": "Découvrez des livres sur liravo.org",
+    "finished": "{name} a terminé sa lecture",
+    "shelf": "La bibliothèque de {name}",
+    "track": "Suivez vos lectures sur liravo.org",
+    "sharedBy": "Partagé par {name}",
+    "reviewBy": "Critique de {name}",
+    "challengeCompleted": "Défi terminé",
+    "challengeProgress": "Progression du défi",
+    "readingChallenge": "Défi de lecture",
+    "booksRead": "{count, plural, one {# livre lu} other {# livres lus}}",
+    "pagesRead": "{count, plural, one {# page lue} other {# pages lues}}",
+    "writingChallenge": "Écrire sur Liravo",
+    "writingMessage": "Rejoignez le défi et partagez vos écrits.",
+    "submissionCount": "{count, plural, one {# contribution} other {# contributions}}"
   }
 }

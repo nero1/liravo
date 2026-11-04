@@ -1,35 +1,18 @@
 import { ImageResponse } from '@vercel/og';
-import { createServiceClient } from '@/lib/supabase/server';
+import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createServiceClient();
-
-  const { data: quote } = await supabase
-    .from('quotes')
-    .select(`
-      content, page_number,
-      books:book_id (title, author_name, cover_url),
-      users:user_id (display_name, username)
-    `)
-    .eq('id', params.id)
-    .eq('is_hidden', false)
-    .single();
-
-  const book = (quote?.books as unknown) as { title: string; author_name: string; cover_url: string | null } | null;
-  const quoter = (quote?.users as unknown) as { display_name: string; username: string } | null;
-  const content = quote?.content ?? 'A beautiful quote from a great book.';
-  const bookTitle = book?.title ?? 'Unknown Book';
-  const authorName = book?.author_name ?? '';
-  const sharedBy = quoter?.display_name ?? quoter?.username ?? null;
-
-  const truncated = content.length > 280 ? content.slice(0, 280) + '…' : content;
+  try {
+  const {data,t}=await getShareCard(request,'quote',params.id);
+  const content=data.content,bookTitle=data.book.title,authorName=data.book.author_name,sharedBy=data.reader.display_name;
+  const truncated=content.length>280?content.slice(0,280)+'…':content;
 
   return new ImageResponse(
     (
@@ -112,19 +95,20 @@ export async function GET(
               </span>
               {authorName && (
                 <span style={{ fontSize: '16px', color: '#a8a29e', fontFamily: 'sans-serif' }}>
-                  by {authorName}
+                  {t('by',{author:authorName})}
                 </span>
               )}
             </div>
             {sharedBy && (
               <p style={{ fontSize: '14px', color: '#78716c', margin: 0, paddingLeft: '44px', fontFamily: 'sans-serif' }}>
-                shared by {sharedBy} · liravo.org
+                {t('sharedBy',{name:sharedBy})} · liravo.org
               </p>
             )}
           </div>
         </div>
       </div>
     ),
-    { width: 1200, height: 630 }
+    { width: 1200, height: 630,headers:SHARE_IMAGE_HEADERS }
   );
+  } catch(error) { return shareCardFailure(error); }
 }
