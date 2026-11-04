@@ -230,7 +230,8 @@
     "aiFailed": "Empfehlungen konnten nicht geladen werden. Bitte versuche es erneut.",
     "back": "← Zurück zu Entdecken",
     "moodNoBooks": "Noch kein Buch wurde mit dieser Stimmung markiert.",
-    "moodReaderCount": "{count, plural, one {# Person hat diese Stimmung gewählt} other {# Personen haben diese Stimmung gewählt}}"
+    "moodReaderCount": "{count, plural, one {# Person hat diese Stimmung gewählt} other {# Personen haben diese Stimmung gewählt}}",
+    "aiResults": "Buchempfehlungen passend zu deiner Stimmung:"
   },
   "wrapped": {
     "favouriteAuthor": "Lieblingsautor",
@@ -376,7 +377,15 @@
     "answerPlaceholder": "Ihre Antwort…",
     "publishAnswer": "Antwort veröffentlichen",
     "pendingQuestions": "Ausstehende Fragen",
-    "noQuestions": "Keine unbeantworteten Fragen."
+    "noQuestions": "Keine unbeantworteten Fragen.",
+    "back": "← Zurück zu @{username}",
+    "publicAnswer": "Wenn der Autor öffentlich antwortet, erscheint die Antwort auf seinem Profil.",
+    "description": "Stelle @{username} eine Frage. Eine öffentliche Antwort erscheint auf dem Profil.",
+    "question": "Deine Frage",
+    "failed": "Deine Frage konnte nicht gesendet werden. Versuche es erneut.",
+    "loadFailed": "Fragen konnten nicht geladen werden. Versuche es erneut.",
+    "answeredCount": "{count, plural, one {# beantwortete Frage} other {# beantwortete Fragen}}",
+    "empty": "Noch keine öffentlichen Antworten."
   },
   "writingChallenge": {
     "aiFeedbackTitle": "KI-Schreibfeedback",
@@ -1309,7 +1318,9 @@
     "public": "Öffentliches Regal",
     "visible": "In deinem Profil sichtbar",
     "creating": "Wird erstellt…",
-    "create": "Regal erstellen"
+    "create": "Regal erstellen",
+    "title": "Neues Regal",
+    "loadFailed": "Der Zugriff auf Regale konnte nicht geprüft werden. Versuche es erneut."
   },
   "readingProgress": {
     "label": "Lesefortschritt",
@@ -2359,5 +2370,33 @@
     "invalid": "Dieser Link ist ungültig, abgelaufen oder wurde bereits verwendet. Verwende eine aktuelle E-Mail oder verwalte deine Einstellungen.",
     "failed": "Einstellung konnte nicht aktualisiert werden. Bitte erneut versuchen.",
     "settings": "Benachrichtigungseinstellungen verwalten"
+  },
+  "readingGoals": {
+    "title": "Leseziel {year}",
+    "subtitle": "Verfolge dein jährliches Leseziel.",
+    "loadFailed": "Dein Lesefortschritt konnte nicht geladen werden.",
+    "progress": "{count} von {target} Büchern dieses Jahr gelesen",
+    "change": "Ziel ändern",
+    "viewBooks": "Gelesene Bücher ansehen",
+    "updateTitle": "Dein Ziel ändern",
+    "setTitle": "Ein Leseziel setzen",
+    "popular": "Beliebte Ziele",
+    "books": "{count, plural, one {# Buch} other {# Bücher}}",
+    "monthly": "(1/Monat)",
+    "weekly": "(1/Woche)",
+    "update": "Ziel ändern",
+    "set": "Ziel setzen",
+    "complete": "🎉 Ziel erreicht! Du bist ein Lesechampion!",
+    "almost": "📚 Fast geschafft! Lies weiter so!",
+    "half": "🌿 Die Hälfte ist geschafft! Bleib dran!",
+    "start": "🌱 Ein guter Anfang! Du kommst in Schwung.",
+    "remaining": "📖 {count, plural, one {Noch ein Buch bis zu deinem Ziel.} other {Noch # Bücher bis zu deinem Ziel.}} Du schaffst das!"
+  },
+  "errors": {
+    "title": "Ein Fehler ist aufgetreten",
+    "description": "Diese Seite konnte nicht geladen werden. Versuche es erneut.",
+    "notFound": "Seite nicht gefunden",
+    "notFoundDescription": "Diese Seite ist nicht verfügbar.",
+    "home": "Zur Startseite"
   }
 }

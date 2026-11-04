@@ -79,11 +79,11 @@ it('renders every approved native ARC edition and preserves the intent until an 
   view.post.mockResolvedValueOnce({arc:{id:'saved',author_id:'reader'}});await view.mutations[0].mutationFn();expect(view.completions).toHaveBeenCalledExactlyOnceWith('author.arc');
 });
 it('renders native author profile failures instead of a permanent spinner',()=>{
-  const view=mount('mobile/app/author/[username].tsx',{}, {error:new ApiError(404)});expect(view.find(view.render(),'QueryError')).toBeTruthy();
+  const view=mount('mobile/app/author/[username].tsx',{}, {error:new ApiError(404)},'OwnedAuthorProfileScreen');expect(view.find(view.render(),'QueryError')).toBeTruthy();
 });
 it('renders every native author catalog page and the real follower count',()=>{
   const author={id:'writer',username:'writer',display_name:'Writer',is_verified_author:true};
-  const view=mount('mobile/app/author/[username].tsx',{data:{qa:[]}}, {data:{pages:[{author,posts:[],followerCount:7,books:[{id:'first',title:'First catalog edition'}]},{books:[{id:'second',title:'Second catalog edition'}]}]}}),tree=JSON.stringify(view.render());
+  const view=mount('mobile/app/author/[username].tsx',{}, {byKey:{author:{data:{pages:[{author,posts:[],followerCount:7,books:[{id:'first',title:'First catalog edition'}]},{books:[{id:'second',title:'Second catalog edition'}]}]}},'author-qa':{data:{pages:[{qa:[],total:0,nextCursor:null}]}}}},'OwnedAuthorProfileScreen'),tree=JSON.stringify(view.render());
   expect(tree).toContain('First catalog edition');expect(tree).toContain('Second catalog edition');expect(tree).toContain('7 abonnés');expect(tree).toContain(fr.authorProfile.verified);
 });
 

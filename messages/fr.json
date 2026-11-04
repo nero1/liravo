@@ -230,7 +230,8 @@
     "aiFailed": "Impossible d’obtenir des recommandations. Réessayez.",
     "back": "← Retour à Découvrir",
     "moodNoBooks": "Aucun livre ne porte encore cette ambiance.",
-    "moodReaderCount": "{count, plural, one {# lecteur a choisi cette ambiance} other {# lecteurs ont choisi cette ambiance}}"
+    "moodReaderCount": "{count, plural, one {# lecteur a choisi cette ambiance} other {# lecteurs ont choisi cette ambiance}}",
+    "aiResults": "Des livres adaptés à votre humeur :"
   },
   "wrapped": {
     "favouriteAuthor": "Auteur favori",
@@ -376,7 +377,15 @@
     "answerPlaceholder": "Votre réponse…",
     "publishAnswer": "Publier la réponse",
     "pendingQuestions": "Questions en attente",
-    "noQuestions": "Aucune question sans réponse."
+    "noQuestions": "Aucune question sans réponse.",
+    "back": "← Retour à @{username}",
+    "publicAnswer": "Si l’auteur répond publiquement, la réponse apparaîtra sur son profil.",
+    "description": "Posez une question à @{username}. Une réponse publique apparaîtra sur son profil.",
+    "question": "Votre question",
+    "failed": "Impossible d’envoyer votre question. Réessayez.",
+    "loadFailed": "Impossible de charger les questions. Réessayez.",
+    "answeredCount": "{count, plural, one {# question avec réponse} other {# questions avec réponse}}",
+    "empty": "Aucune réponse publique pour le moment."
   },
   "writingChallenge": {
     "aiFeedbackTitle": "Retour IA sur votre écriture",
@@ -1309,7 +1318,9 @@
     "public": "Étagère publique",
     "visible": "Visible sur votre profil",
     "creating": "Création…",
-    "create": "Créer l’étagère"
+    "create": "Créer l’étagère",
+    "title": "Nouvelle étagère",
+    "loadFailed": "Impossible de vérifier l’accès aux étagères. Réessayez."
   },
   "readingProgress": {
     "label": "Progression de lecture",
@@ -2359,5 +2370,33 @@
     "invalid": "Ce lien est invalide, expiré ou déjà utilisé. Utilisez un e-mail récent ou gérez vos préférences.",
     "failed": "Impossible de mettre à jour votre préférence. Réessayez.",
     "settings": "Gérer les préférences de notification"
+  },
+  "readingGoals": {
+    "title": "Objectif de lecture {year}",
+    "subtitle": "Suivez votre objectif annuel de lecture.",
+    "loadFailed": "Impossible de charger votre progression de lecture.",
+    "progress": "{count} livres lus sur {target} cette année",
+    "change": "Modifier l’objectif",
+    "viewBooks": "Voir les livres lus",
+    "updateTitle": "Modifier votre objectif",
+    "setTitle": "Définir un objectif de lecture",
+    "popular": "Objectifs populaires",
+    "books": "{count, plural, one {# livre} other {# livres}}",
+    "monthly": "(1/mois)",
+    "weekly": "(1/semaine)",
+    "update": "Modifier l’objectif",
+    "set": "Définir l’objectif",
+    "complete": "🎉 Objectif atteint ! Vous êtes un champion de la lecture !",
+    "almost": "📚 Vous y êtes presque ! Continuez à lire !",
+    "half": "🌿 Vous êtes à mi-chemin ! Gardez le rythme !",
+    "start": "🌱 Beau début ! Vous prenez votre élan.",
+    "remaining": "📖 {count, plural, one {Encore un livre pour atteindre votre objectif.} other {Encore # livres pour atteindre votre objectif.}} Vous pouvez y arriver !"
+  },
+  "errors": {
+    "title": "Une erreur est survenue",
+    "description": "Impossible de charger cette page. Réessayez.",
+    "notFound": "Page introuvable",
+    "notFoundDescription": "Cette page est indisponible.",
+    "home": "Aller à l’accueil"
   }
 }

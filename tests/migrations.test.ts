@@ -2643,5 +2643,20 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       expect((await sql`select financial_integrity_snapshot()data`)[0].data).toMatchObject({uncertainReleaseEmails:1});
       for(const role of['anon','authenticated'])for(const routine of['consume_email_unsubscribe(text)','cleanup_email_unsubscribe_proofs(integer)','issue_email_unsubscribe(uuid,text)','queue_paid_digest_audience(integer)','claim_paid_digest(uuid,date)','claim_digest_email_batch(integer)','queue_release_email_audience(integer,integer)','claim_release_email_batch(integer)','finish_paid_email(text,uuid,uuid,text,text,date,uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
     }
+    {
+      const author=crypto.randomUUID(),reader=crypto.randomUUID(),other=crypto.randomUUID();for(const[id,name]of[[author,'author'],[reader,'reader'],[other,'other']])await sql`select create_direct_account(${id},${name+'093@example.test'},${name+'093'},${name+'093'})`;
+      await sql`update users set user_types=array['author'] where id=${author}`;
+      await sql`insert into author_qa(author_id,asked_by,question,answer,answered_at,created_at)select ${author},${reader},'Question093 '||n,'Answer093',case when n=45 then null else '2026-11-04T00:00:00.123456Z'::timestamptz end,'2026-11-04T00:00:00.123456Z'::timestamptz from generate_series(1,45)n`;
+      await sql`insert into author_qa(author_id,asked_by,question,answer,is_public)values(${author},${reader},'Private question093','Private answer',false),(${author},${reader},'Pending question093',null,true)`;
+      const page=async(cursor:{cursor_at:string;id:string}|null=null)=>(await sql`select author_question_snapshot(${author},${cursor?.cursor_at??null}::text::timestamptz,${cursor?.id??null}::uuid,20)data`)[0].data;
+      let snapshot=await page(),rows=snapshot.qa.slice(0,20);while(snapshot.qa.length>20){snapshot=await page(snapshot.qa[19]);rows.push(...snapshot.qa.slice(0,20));}expect(snapshot.total).toBe(45);expect(rows).toHaveLength(45);expect(new Set(rows.map((row:{id:string})=>row.id)).size).toBe(45);expect(rows.filter((row:{answered_at:string|null})=>row.answered_at===null)).toHaveLength(1);
+      await expect(sql`select author_question_snapshot(${author},null,${crypto.randomUUID()},20)`).rejects.toMatchObject({code:'P1004'});await expect(sql`select author_question_snapshot(${reader})`).rejects.toMatchObject({code:'P1005'});
+      const key='shelf093-private-receipt',hash='a'.repeat(64),[shelf]=await sql`insert into shelves(user_id,name,idempotency_key,request_hash)values(${reader},'Receipt093',${key},${hash})returning id,slug`;
+      expect((await sql`select content_creation_receipt_snapshot(${reader},'shelves',${key})data`)[0].data).toMatchObject({id:shelf.id,user_id:reader,slug:shelf.slug});await expect(sql`select content_creation_receipt_snapshot(${other},'shelves',${key})`).rejects.toMatchObject({code:'P1005'});await expect(sql`select content_creation_receipt_snapshot(${reader},'users',${key})`).rejects.toMatchObject({code:'P1004'});
+      const questionKey='question093-private-receipt',[question]=await sql`insert into author_qa(author_id,asked_by,question,idempotency_key,request_hash)values(${author},${reader},'Question093 & unchanged',${questionKey},${hash})returning id`;
+      expect((await sql`select content_creation_receipt_snapshot(${reader},'author_qa',${questionKey})data`)[0].data).toMatchObject({id:question.id,author_id:author,asked_by:reader,question:'Question093 & unchanged'});
+      await sql`update users set is_banned=true where id=${reader}`;await expect(sql`select content_creation_receipt_snapshot(${reader},'shelves',${key})`).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])for(const routine of['author_question_snapshot(uuid,timestamptz,uuid,integer)','content_creation_receipt_snapshot(uuid,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);

@@ -1,3 +1,4 @@
+import {getAuthorQuestions,AuthorQuestionError} from '@/lib/author-questions';
 import {getArcs} from '@/lib/arcs';
 import {ArcOfferCard} from '@/components/author/ArcCatalog';
 import {decodeCursor} from '@/lib/pagination';
@@ -64,7 +65,7 @@ interface AuthorPost {
 }
 
 
-export default async function AuthorProfilePage({params,searchParams}:{params:{username:string};searchParams?:{cursor?:string}}) {
+export default async function AuthorProfilePage({params,searchParams}:{params:{username:string};searchParams?:{cursor?:string;qaCursor?:string}}) {
   const common=await getTranslations('common'),t=await getTranslations('authorProfile');
   try{decodeCursor(searchParams?.cursor??null);}catch{notFound();}
   const supabase = createClient();
@@ -101,17 +102,10 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
 
   const posts: AuthorPost[] = postsRaw ?? [];
 
-  // Q&A section
-  const { data: qaRaw } = await supabase
-    .from('author_qa')
-    .select('id, question, answer, asked_by, created_at, answered_at')
-    .eq('author_id', author.id)
-    .eq('is_public', true)
-    .not('answer', 'is', null)
-    .order('answered_at', { ascending: false })
-    .limit(5);
-
-  const qaItems = qaRaw ?? [];
+  let questions:Awaited<ReturnType<typeof getAuthorQuestions>>|null=null;
+  try{questions=await getAuthorQuestions(author.id,searchParams?.qaCursor??null);}catch(error){if(error instanceof AuthorQuestionError&&error.status===400)notFound();}
+  const qaItems=questions?.qa??[],qaText=await getTranslations('authorQA');
+  const questionLink=(cursor?:string|null)=>{const query=new URLSearchParams();if(searchParams?.cursor)query.set('cursor',searchParams.cursor);if(cursor)query.set('qaCursor',cursor);return '/author/'+encodeURIComponent(author.username)+(query.size?'?'+query:'')+'#author-qa';};
 
   // "Books that inspired me" shelf (reading list with list_type = 'inspired_by')
   const { data: inspiredListRaw } = await supabase
@@ -263,7 +257,7 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
         </section>
       )}
 
-      {nextCursor&&<Link href={`/author/${encodeURIComponent(params.username)}?cursor=${encodeURIComponent(nextCursor)}#books`} className="text-sm underline">{common('loadMore')}</Link>}
+      {nextCursor&&<Link href={`/author/${encodeURIComponent(params.username)}?${new URLSearchParams({cursor:nextCursor,...(searchParams?.qaCursor?{qaCursor:searchParams.qaCursor}:{})})}#books`} className="text-sm underline">{common('loadMore')}</Link>}
 
       {arcs.length>0&&<section className="space-y-3"><h2 className="font-display text-xl font-bold">{t('arcs')}</h2>{arcs.map(arc=><ArcOfferCard key={arc.id} arc={arc} actorId={currentUser?.id??null}/>)}<Link href={'/arcs?authorId='+author.id} className="text-sm underline">{common('loadMore')}</Link></section>}
 
@@ -327,45 +321,10 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
         </section>
       )}
 
-      {/* Q&A */}
-      {(qaItems as Array<{
-        id: string;
-        question: string;
-        answer: string | null;
-        answered_at: string | null;
-      }>).length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-xl font-bold">{t('qa')}</h2>
-            {currentUser && currentUser.id !== author.id && (
-              <Link
-                href={`/author/${author.username}/ask`}
-                className="text-sm text-accent hover:underline"
-              >
-                {t('askQuestion')}
-              </Link>
-            )}
-          </div>
-          <div className="space-y-4">
-            {(qaItems as Array<{
-              id: string;
-              question: string;
-              answer: string | null;
-              answered_at: string | null;
-            }>).map((item) => (
-              <div
-                key={item.id}
-                className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-4 space-y-2"
-              >
-                <p className="text-sm font-semibold">{item.question}</p>
-                {item.answer && (
-                  <p className="text-sm text-neutral-700 dark:text-neutral-300">{item.answer}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <section id="author-qa" className="space-y-4">
+        <div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">{t('qa')}</h2>{currentUser&&currentUser.id!==author.id&&<Link href={'/author/'+encodeURIComponent(author.username)+'/ask'} className="text-sm text-accent hover:underline">{t('askQuestion')}</Link>}</div>
+        {!questions?<p role="alert">{qaText('loadFailed')} <Link href={questionLink(searchParams?.qaCursor)} className="underline">{common('retry')}</Link></p>:<><p className="text-sm text-muted-foreground">{qaText('answeredCount',{count:questions.total})}</p>{!qaItems.length&&<p>{qaText('empty')}</p>}{qaItems.map(item=><article key={item.id} className="rounded-xl border border-border bg-card p-4 space-y-2"><p className="text-sm font-semibold whitespace-pre-wrap">{item.question}</p><p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.answer}</p></article>)}{questions.nextCursor&&<Link href={questionLink(questions.nextCursor)} className="text-sm underline">{common('loadMore')}</Link>}{searchParams?.qaCursor&&<Link href={questionLink()} className="block text-sm underline">{common('back')}</Link>}</>}
+      </section>
     </div>
     </>
   );

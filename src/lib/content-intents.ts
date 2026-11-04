@@ -50,3 +50,10 @@ export async function requireReadingRoomAccess(roomId:string,userId:string) {
   if(error)throw new ContentIntentError('Room access unavailable',error.code==='22P02'?400:503);
   if(!data)throw new ContentIntentError('Room unavailable',403);
 }
+
+export async function getContentCreationReceipt(userId:string,action:'shelves'|'author_qa',key:string){
+  if(key.length<8||key.length>200)throw new ContentIntentError('Invalid receipt',400);
+  const{data,error}=await createServiceClient().rpc('content_creation_receipt_snapshot'as never,{p_user:userId,p_action:action,p_key:key}as never);
+  if(error||!data)throw new ContentIntentError('Receipt unavailable',({P1003:403,P1004:400,P1005:404}as Record<string,number>)[error?.code??'']??503);
+  return data as Record<string,unknown>;
+}

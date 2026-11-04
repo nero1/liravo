@@ -1,37 +1,30 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { NewShelfForm } from '@/components/shelf/NewShelfForm';
-import type { Metadata } from 'next';
+import {getTranslations} from 'next-intl/server';
+import {hasPremiumAccess} from '@/lib/premium-access';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'New Shelf' };
+export async function generateMetadata(){const t=await getTranslations('shelfForm');return{title:t('title'),robots:{index:false,follow:false}};}
 
 export default async function NewShelfPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Fetch premium status and shelf count
-  const [{ count }, { data: profile }] = await Promise.all([
-    supabase
-      .from('shelves')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_default', false),
-    supabase
-      .from('users')
-      .select('is_premium')
-      .eq('id', user.id)
-      .single(),
-  ]);
-
-  const isPremium = (profile as { is_premium?: boolean } | null)?.is_premium ?? false;
+  const t=await getTranslations('shelfForm'),common=await getTranslations('common');
+  let customShelfCount:number,isPremium:boolean;
+  try{
+    const [shelves,premium]=await Promise.all([supabase.from('shelves').select('id',{count:'exact',head:true}).eq('user_id',user.id).eq('is_default',false),hasPremiumAccess(user.id)]);
+    if(shelves.error||typeof shelves.count!=='number')throw Error();customShelfCount=shelves.count;isPremium=premium;
+  }catch{return <div className="max-w-lg mx-auto px-4 py-6"><h1 className="font-display text-2xl font-bold">{t('title')}</h1><p role="alert">{t('loadFailed')}</p><Link href="/shelf/new" className="underline">{common('retry')}</Link></div>;}
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
-      <h1 className="font-display text-2xl font-bold mb-6">New Shelf</h1>
-      <NewShelfForm userId={user.id} customShelfCount={count ?? 0} isPremium={isPremium} />
+      <h1 className="font-display text-2xl font-bold mb-6">{t('title')}</h1>
+      <NewShelfForm userId={user.id} customShelfCount={customShelfCount} isPremium={isPremium} />
     </div>
   );
 }

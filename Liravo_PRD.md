@@ -367,7 +367,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 - Want to Read
 
 **Custom shelves:**
-- Unlimited on paid tiers. Free tier: max 10.
+- Unlimited on paid tiers. Free tier: max 10. Access uses current paid periods or manual grants, including when a cached profile flag is stale.
 - Each shelf is public or private.
 
 **Reading progress tracker:**
@@ -376,7 +376,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 - Progress bar on book card within the shelf.
 
 **Annual reading goal:**
-- Set at any time. Goals and profile targets share one current-year value; progress counts distinct books finished that calendar year.
+- Set at any time, from 1 to 10,000 whole books. Goals and profile targets share one current-year value; progress counts distinct works finished that calendar year. Failed progress reads show retry controls.
 - Public progress bar on profile.
 - Feed updates at 25%, 50%, 75%, and 100%.
 
@@ -508,7 +508,7 @@ Authors get an enhanced version of the standard profile.
 - Full book catalog with buy links (affiliate where available)
 - "Books that inspired me" shelf (affiliate-linked — high-value placement)
 - "From the Author" posts (updates, writing process content, book news)
-- Reader Q&A (fans submit, author answers publicly)
+- Reader Q&A (fans submit, author answers publicly). Web/native submissions retain owned retry receipts; public answers have full counts and deterministic cursor pages.
 - ARC distribution (author uploads file, sets eligibility criteria, platform identifies and notifies eligible readers)
 - ARC applications use complete private counts and paginated reader/author views. Authors approve or decline readers; inactive accounts cannot receive new approvals, final decisions are immutable and approved slots are serialized.
 - New release announcements (in-app notification to followers)

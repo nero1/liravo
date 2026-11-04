@@ -5,8 +5,8 @@ import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams,useRouter } from 'expo-router';
-import { useQuery,useInfiniteQuery } from '@tanstack/react-query';
-import { useState,useEffect } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useState,useEffect,useRef } from 'react';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
 import { Avatar } from '@/components/ui/Avatar';
@@ -18,14 +18,16 @@ import { useAuthStore } from '@/stores/auth';
 interface QAItem { id: string; question: string; answer: string | null; answered_at: string | null; }
 interface AuthorPost { id: string; title: string; body: string; type: string; created_at: string; }
 
-export default function AuthorProfileScreen() {
+export default function AuthorProfileScreen(){const {username}=useLocalSearchParams<{username:string}>(),actor=useAuthStore(state=>state.user?.id);return <OwnedAuthorProfileScreen key={(actor??'guest')+username}/>;}
+export function OwnedAuthorProfileScreen() {
   const {t:ui,locale}=useTranslations(''),router=useRouter();
   const { username } = useLocalSearchParams<{ username: string }>();
   const { user: currentUser } = useAuthStore(),intent=useRequestIntent(currentUser?.id);
 
   const [askQuestion, setAskQuestion] = useState('');
   const [askOpen, setAskOpen] = useState(false);
-  const [askSending, setAskSending] = useState(false);
+  const [askSending, setAskSending] = useState(false),[askChecking,setAskChecking]=useState(true),[askFailed,setAskFailed]=useState(false),askLock=useRef(false),alive=useRef(true);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   useEffect(()=>{setAskQuestion('');setAskOpen(false);setAskSending(false);},[currentUser?.id]);
 
   const authorQuery = useInfiniteQuery({
@@ -42,30 +44,26 @@ export default function AuthorProfileScreen() {
   });
 
   const data=authorQuery.data?.pages[0],isLoading=authorQuery.isLoading;
-  const { data: qaData,error:qaError,refetch:retryQa } = useQuery({
-    queryKey: ['author-qa', data?.author?.id],
-    queryFn: () => api.get<{ qa: QAItem[] }>(`/api/author/qa?author_id=${data?.author?.id}`),
-    enabled: !!data?.author?.id,
+  const qaQuery=useInfiniteQuery({
+    queryKey:['author-qa',data?.author?.id,currentUser?.id],initialPageParam:null as string|null,
+    queryFn:async({pageParam})=>{const result=await api.get<{qa:QAItem[];total:number;authorId:string;nextCursor:string|null}>('/api/author/qa',{author_id:data?.author?.id,cursor:pageParam??undefined});if(result.authorId!==data?.author?.id||!Array.isArray(result.qa)||typeof result.total!=='number'||!(result.nextCursor===null||typeof result.nextCursor==='string'))throw Error('Invalid questions');return result;},
+    getNextPageParam:page=>page.nextCursor,enabled:!!data?.author?.id,
   });
-
-  const author = data?.author;
-  const posts = data?.posts ?? [];
-  const qa = qaData?.qa ?? [];
-
-  async function handleAsk() {
-    if (!author || askQuestion.trim().length < 10) return;
-    setAskSending(true);
-    try {
-      const body={author_id:author.id,question:askQuestion.trim()},scope='author.qa.'+author.id,result=await api.post<{qa:{id:string;asked_by:string}}>('/api/author/qa',body,await intent.durableHeaders(body,scope));
-      if(!result.qa?.id||result.qa.asked_by!==currentUser?.id)throw Error('Invalid author question receipt');
-      await intent.complete(scope);
-      if(useAuthStore.getState().user?.id!==currentUser?.id)return;
-      setAskQuestion('');
-      setAskOpen(false);
-      Alert.alert(ui('authorQA.questionSubmitted'));
-    } catch {
-      Alert.alert(ui('common.error'),ui('authorCatalog.saveFailed'));
-    }finally{setAskSending(false);}
+  const author=data?.author,posts=data?.posts??[],qa=qaQuery.data?.pages.flatMap(page=>page.qa)??[];
+  function validReceipt(value:unknown):value is {qa:{id:string}}{const result=value as {actorId?:string;authorId?:string;qa?:{id?:string;author_id?:string;asked_by?:string}}|null;return result?.actorId===currentUser?.id&&result?.authorId===author?.id&&result?.qa?.author_id===author?.id&&result?.qa?.asked_by===currentUser?.id&&typeof result?.qa?.id==='string';}
+  async function receipt(key:string){const result=await api.get<unknown>('/api/author/qa',{receipt:key});if(!validReceipt(result))throw Error('Invalid question receipt');return result;}
+  async function acknowledge(key:string){if(!alive.current||useAuthStore.getState().user?.id!==currentUser?.id)return;await intent.complete('author.qa.'+author?.id,key);if(!alive.current)return;setAskQuestion('');setAskOpen(false);Alert.alert(ui('authorQA.questionSubmitted'));}
+  async function restore(){
+    if(!author?.id)return;setAskChecking(true);setAskFailed(false);
+    try{const headers=await intent.pending('author.qa.'+author.id);if(headers){try{await receipt(headers['Idempotency-Key']);await acknowledge(headers['Idempotency-Key']);}catch(error){if((error as {status?:number}).status!==404)throw error;}}if(alive.current)setAskChecking(false);}catch{if(alive.current)setAskFailed(true);}
+  }
+  useEffect(()=>{void restore();},[author?.id,currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function handleAsk(){
+    if(!author||!currentUser||askChecking||askLock.current||askQuestion.trim().length<10)return;askLock.current=true;setAskSending(true);setAskFailed(false);
+    try{const body={author_id:author.id,question:askQuestion.trim()},scope='author.qa.'+author.id,headers=await intent.durableHeaders(body,scope);
+      try{const result=await api.post<unknown>('/api/author/qa',body,headers);if(!validReceipt(result))throw Error('Invalid question receipt');}catch{await receipt(headers['Idempotency-Key']);}
+      await acknowledge(headers['Idempotency-Key']);
+    }catch{if(alive.current)setAskFailed(true);}finally{askLock.current=false;if(alive.current)setAskSending(false);}
   }
 
   if(authorQuery.error)return <QueryError error={authorQuery.error} retry={()=>void authorQuery.refetch()}/>;
@@ -113,12 +111,13 @@ export default function AuthorProfileScreen() {
           </View>
         )}
 
+        {askFailed&&<View><Text accessibilityRole="alert" className="text-destructive">{ui('authorQA.failed')}</Text>{askChecking&&<Button onPress={()=>void restore()}>{ui('common.retry')}</Button>}</View>}
         {/* Ask form */}
         {askOpen && (
           <Card>
             <Text className="font-semibold text-foreground mb-2">{ui('authorQA.askQuestion')}</Text>
             <TextInput
-              accessibilityLabel={ui('authorQA.askQuestion')} editable={!askSending} value={askQuestion}
+              accessibilityLabel={ui('authorQA.askQuestion')} editable={!askSending&&!askChecking} value={askQuestion}
               onChangeText={setAskQuestion}
               placeholder={ui('authorQA.questionPlaceholder')}
               multiline
@@ -136,7 +135,7 @@ export default function AuthorProfileScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 accessibilityRole="button" onPress={handleAsk}
-                disabled={askSending || askQuestion.trim().length < 10}
+                disabled={askChecking||askSending || askQuestion.trim().length < 10}
                 className="flex-1 bg-accent rounded-lg py-2 items-center opacity-90"
               >
                 <Text className="text-white text-sm font-semibold">
@@ -168,12 +167,13 @@ export default function AuthorProfileScreen() {
           </View>
         )}
 
-        {qaError&&<QueryError error={qaError} retry={()=>void retryQa()}/>}
+        {qaQuery.error&&<QueryError error={qaQuery.error} retry={()=>void(qaQuery.data?qaQuery.fetchNextPage():qaQuery.refetch())}/>}
+        {qaQuery.hasNextPage&&<Button loading={qaQuery.isFetchingNextPage} onPress={()=>void qaQuery.fetchNextPage()}>{ui('common.loadMore')}</Button>}
         {/* Q&A */}
         {qa.length > 0 && (
           <View className="gap-3">
             <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-bold text-foreground">{ui('authorProfile.qa')}</Text>
+              <View><Text className="text-lg font-bold text-foreground">{ui('authorProfile.qa')}</Text><Text className="text-sm text-muted-foreground">{ui('authorQA.answeredCount',{count:qaQuery.data?.pages[0].total??0})}</Text></View>
               {!isOwn && (
                 <TouchableOpacity accessibilityRole="button" onPress={() => setAskOpen(true)}>
                   <Text className="text-sm text-accent">{ui('authorProfile.askQuestion')}</Text>

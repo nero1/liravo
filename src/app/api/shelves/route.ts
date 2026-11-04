@@ -1,6 +1,6 @@
 import {getEditionIds} from '@/services/books';
 import { z } from 'zod';
-import { contentIntent,ContentIntentError } from '@/lib/content-intents';
+import { contentIntent,ContentIntentError,getContentCreationReceipt } from '@/lib/content-intents';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -13,8 +13,10 @@ export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  if(request.headers.has('X-Liravo-Actor')&&request.headers.get('X-Liravo-Actor')!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   const { searchParams } = new URL(request.url);
   const bookId = searchParams.get('bookId');
+  if(searchParams.has('receipt'))try{return NextResponse.json({shelf:await getContentCreationReceipt(user.id,'shelves',searchParams.get('receipt')??''),actorId:user.id},{headers:{'Cache-Control':'private, no-store'}});}catch(error){return NextResponse.json({error:'Shelf receipt unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
 
   const { data: shelves,error } = await supabase
     .from('shelves')
@@ -46,6 +48,6 @@ export async function POST(request:Request){
   try{
     const intent=await contentIntent(request,user.id,'shelves',{...parsed.data,description:parsed.data.description??null});
     const shelf=await intent.insert();
-    return NextResponse.json({shelf},{status:201});
+    return NextResponse.json({shelf,actorId:user.id},{status:201,headers:{'Cache-Control':'private, no-store'}});
   }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Shelf creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
 }

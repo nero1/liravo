@@ -230,7 +230,8 @@
     "aiFailed": "Could not get AI recommendations. Please try again.",
     "back": "← Back to Discover",
     "moodNoBooks": "No books have been tagged with this mood yet.",
-    "moodReaderCount": "{count, plural, one {# reader tagged this mood} other {# readers tagged this mood}}"
+    "moodReaderCount": "{count, plural, one {# reader tagged this mood} other {# readers tagged this mood}}",
+    "aiResults": "Book recommendations for your mood:"
   },
   "wrapped": {
     "favouriteAuthor": "Favourite Author",
@@ -376,7 +377,15 @@
     "answerPlaceholder": "Your answer…",
     "publishAnswer": "Publish Answer",
     "pendingQuestions": "Pending Questions",
-    "noQuestions": "No unanswered questions."
+    "noQuestions": "No unanswered questions.",
+    "back": "← Back to @{username}",
+    "publicAnswer": "If the author answers publicly, the answer will appear on their profile.",
+    "description": "Submit a question to @{username}. A public answer will appear on their profile.",
+    "question": "Your question",
+    "failed": "Could not submit your question. Please try again.",
+    "loadFailed": "Could not load questions. Please try again.",
+    "answeredCount": "{count, plural, one {# answered question} other {# answered questions}}",
+    "empty": "No public answers yet."
   },
   "writingChallenge": {
     "aiFeedbackTitle": "AI Writing Feedback",
@@ -1309,7 +1318,9 @@
     "public": "Public shelf",
     "visible": "Visible on your profile",
     "creating": "Creating…",
-    "create": "Create shelf"
+    "create": "Create shelf",
+    "title": "New shelf",
+    "loadFailed": "Could not check shelf access. Please try again."
   },
   "readingProgress": {
     "label": "Reading progress",
@@ -2359,5 +2370,33 @@
     "invalid": "This link is invalid, expired or already used. Use a recent email or manage your preferences.",
     "failed": "Could not update your preference. Please retry.",
     "settings": "Manage notification preferences"
+  },
+  "readingGoals": {
+    "title": "Reading goal {year}",
+    "subtitle": "Track your annual reading target.",
+    "loadFailed": "Could not load your reading progress.",
+    "progress": "{count} of {target} books read this year",
+    "change": "Change goal",
+    "viewBooks": "View books read",
+    "updateTitle": "Update your goal",
+    "setTitle": "Set a reading goal",
+    "popular": "Popular targets",
+    "books": "{count, plural, one {# book} other {# books}}",
+    "monthly": "(1/month)",
+    "weekly": "(1/week)",
+    "update": "Update goal",
+    "set": "Set goal",
+    "complete": "🎉 You’ve hit your goal! You’re a reading champion!",
+    "almost": "📚 Almost there! Keep up the great reading!",
+    "half": "🌿 You’re halfway! Keep the momentum going!",
+    "start": "🌱 Great start! You’re building momentum.",
+    "remaining": "📖 {count, plural, one {One more book to reach your goal.} other {# more books to reach your goal.}} You can do it!"
+  },
+  "errors": {
+    "title": "Something went wrong",
+    "description": "This page could not be loaded. Please try again.",
+    "notFound": "Page not found",
+    "notFoundDescription": "This page is unavailable.",
+    "home": "Go to home"
   }
 }

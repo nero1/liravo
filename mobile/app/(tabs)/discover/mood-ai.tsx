@@ -7,6 +7,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Sparkles, ArrowLeft } from 'lucide-react-native';
+import {useAuthStore} from '@/stores/auth';
+import {AI_MOOD_MAX_LENGTH} from '../../../../src/constants/ai';
 import { api } from '@/lib/api';
 
 interface AiBook {
@@ -15,8 +17,9 @@ interface AiBook {
   reason: string;
 }
 
-export default function MoodAiScreen() {
-  const router = useRouter(),{t}=useTranslations('discover'),{t:common}=useTranslations('common'),controller=useRef<AbortController|null>(null);
+export default function MoodAiScreen(){const actorId=useAuthStore(state=>state.user?.id),{locale}=useTranslations('discover');return <OwnedMoodAiScreen key={(actorId??'guest')+locale} actorId={actorId}/>;}
+export function OwnedMoodAiScreen({actorId}:{actorId:string|undefined}) {
+  const router = useRouter(),{t,locale}=useTranslations('discover'),{t:common}=useTranslations('common'),controller=useRef<AbortController|null>(null);
   useEffect(()=>()=>{controller.current?.abort();controller.current=null;},[]);
   const [query, setQuery] = useState('');
   const [books, setBooks] = useState<AiBook[]>([]);
@@ -25,17 +28,18 @@ export default function MoodAiScreen() {
   const [error,setError]=useState(false);
 
   async function search() {
-    if(controller.current||query.trim().length<3)return;
+    if(!actorId||controller.current||query.trim().length<3||query.trim().length>AI_MOOD_MAX_LENGTH)return;
     const current=new AbortController();controller.current=current;
     setLoading(true);
     setError(false);
     setSearched(false);
     try {
-      const data = await api.get<{ recommendations?: AiBook[] }>('/api/ai/recommendations', {
-        mood: query.trim(),
+      const data = await api.get<{ recommendations: AiBook[];actorId:string;locale:string }>('/api/ai/recommendations', {
+        mood: query.trim(),userId:actorId,
       },current.signal);
       if(controller.current!==current||current.signal.aborted)return;
-      setBooks(data.recommendations ?? []);
+      if(useAuthStore.getState().user?.id!==actorId||data.actorId!==actorId||data.locale!==locale||!Array.isArray(data.recommendations)||!data.recommendations.every(book=>book&&typeof book.title==='string'&&book.title.length>0&&typeof book.author==='string'&&book.author.length>0&&typeof book.reason==='string'&&book.reason.length>0))throw Error('Invalid recommendations');
+      setBooks(data.recommendations);
       setSearched(true);
     } catch {
       if(controller.current===current&&!current.signal.aborted)setError(true);
@@ -70,7 +74,7 @@ export default function MoodAiScreen() {
             placeholderTextColor="#9ca3af"
             className="flex-1 bg-muted border border-border rounded-xl px-4 py-3 text-foreground text-sm"
             returnKeyType="search"
-            maxLength={80}
+            maxLength={AI_MOOD_MAX_LENGTH}
           />
           <TouchableOpacity
             onPress={search}

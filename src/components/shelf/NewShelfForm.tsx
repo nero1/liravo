@@ -1,8 +1,8 @@
 'use client';
 
-import { useState,useRef } from 'react';
+import { useState } from 'react';
 import {useTranslations} from 'next-intl';
-import {useRequestIntent} from '@/lib/client/useRequestIntent';
+import {useContentCreation} from '@/lib/client/useContentCreation';
 import { useRouter } from 'next/navigation';
 
 const FREE_SHELF_LIMIT = 10;
@@ -15,33 +15,26 @@ interface NewShelfFormProps {
 
 export function NewShelfForm(props:NewShelfFormProps){return <OwnedNewShelfForm key={props.userId} {...props}/>;}
 function OwnedNewShelfForm({userId,customShelfCount,isPremium=false}:NewShelfFormProps){
-  const t=useTranslations('shelfForm'),common=useTranslations('common'),intent=useRequestIntent(userId),busy=useRef(false);
+  const t=useTranslations('shelfForm'),common=useTranslations('common');
   const router = useRouter();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const creation=useContentCreation(userId,'/api/shelves','shelf',(value:unknown):value is {actorId:string;shelf:{id:string;user_id:string;slug:string}}=>{
+    const result=value as {actorId?:string;shelf?:{id?:string;user_id?:string;slug?:string}}|null;
+    return result?.actorId===userId&&result.shelf?.user_id===userId&&typeof result.shelf.id==='string'&&typeof result.shelf.slug==='string'&&/^[a-z0-9_-]+$/.test(result.shelf.slug);
+  },result=>{router.push('/shelf/'+encodeURIComponent(result.shelf.slug));router.refresh();});
+  const saving=creation.saving||creation.checking;
   const [error, setError] = useState<string | null>(null);
 
   // Premium users have unlimited shelves
   const atLimit = !isPremium && customShelfCount >= FREE_SHELF_LIMIT;
 
   const handleSave = async () => {
-    if(busy.current)return;
+    if(saving)return;
     if(!name.trim()){setError(t('nameRequired'));return;}
-    if (atLimit) { setError(t('limit',{count:FREE_SHELF_LIMIT})); return; }
-
-    busy.current=true;setSaving(true);
-    const payload={name:name.trim(),description:description.trim(),is_public:isPublic};
-    setError(null);
-    try{
-      const response=await fetch('/api/shelves',{method:'POST',headers:{'Content-Type':'application/json',...await intent.durableHeaders(payload,'shelf')},body:JSON.stringify(payload)});
-      const result=await response.json();
-      if(!response.ok||typeof result.shelf?.slug!=='string')throw new Error('Shelf creation failed');
-      intent.complete('shelf');
-      router.push(`/shelf/${result.shelf.slug}`);
-    }catch{setError(t('failed'));busy.current=false;setSaving(false);return;}
-    router.refresh();
+    if(atLimit){setError(t('limit',{count:FREE_SHELF_LIMIT}));return;}
+    setError(null);await creation.submit({name:name.trim(),description:description.trim(),is_public:isPublic});
   };
 
   return (
@@ -93,6 +86,7 @@ function OwnedNewShelfForm({userId,customShelfCount,isPremium=false}:NewShelfFor
         </button>
       </div>
 
+      {creation.failed&&<p role="alert" className="text-sm text-destructive">{t('failed')} {creation.checking&&<button type="button" onClick={()=>void creation.recover()} className="underline">{common('retry')}</button>}</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       <div className="flex gap-3 pt-2">
@@ -108,7 +102,7 @@ function OwnedNewShelfForm({userId,customShelfCount,isPremium=false}:NewShelfFor
           disabled={saving || atLimit}
           className="flex-1 py-3 bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent/90 transition-colors text-sm disabled:opacity-60"
         >
-          {saving?t('creating'):t('create')}
+          {creation.checking?common('loading'):saving?t('creating'):t('create')}
         </button>
       </div>
     </div>

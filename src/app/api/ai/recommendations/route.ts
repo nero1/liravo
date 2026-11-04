@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { safeModelText } from '@/lib/ai-safety';
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
-import { AI_MODELS } from '@/constants/ai';
+import { AI_MODELS,AI_MOOD_MAX_LENGTH } from '@/constants/ai';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { fetchWithRetry } from '@/lib/retry';
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 
 const QuerySchema = z.object({
   userId: z.string().uuid().optional(),
-  mood: z.string().max(80).optional(),
+  mood: z.string().trim().min(3).max(AI_MOOD_MAX_LENGTH).optional(),
 });
 
 function containsPromptInjection(text: string): boolean {
@@ -133,6 +133,7 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!await checkRouteRateLimit(user.id, 'ai')) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   if (parsed.data.userId && parsed.data.userId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   const userId = user.id;
   const { mood } = parsed.data;
   if (mood && containsPromptInjection(mood)) {
@@ -155,6 +156,7 @@ export async function GET(request: NextRequest) {
     if(profile.preferred_locale==='fr'||profile.preferred_locale==='de')locale=profile.preferred_locale;
   }
 
+  const json=(recommendations:Recommendation[],cached=false)=>NextResponse.json({recommendations,cached,actorId:userId,locale},{headers:{'Cache-Control':'private, no-store'}});
   // Cache key
   const cacheKey = `ai:recommendations:v4:${userId}:${crypto.createHash('sha256').update(JSON.stringify([AI_MODELS.DEEPSEEK_MODEL, AI_MODELS.GEMINI_MODEL, locale, mood, genres])).digest('hex')}`;
   const redis = getRedisClient();
@@ -168,7 +170,7 @@ export async function GET(request: NextRequest) {
     } catch { return null; }
   };
   const cached = await readCache();
-  if (cached) return NextResponse.json({ recommendations: cached, cached: true });
+  if (cached) return json(cached,true);
 
   const genresStr = genres.length > 0 ? genres.slice(0, 5).join(', ') : 'general fiction';
   const moodStr = mood ? ` The reader is in a "${mood}" mood.` : '';
@@ -197,13 +199,13 @@ Example format:
       if (recommendations.length > 0) {
         await redis.set(cacheKey, JSON.stringify(recommendations), { ex: CACHE_TTL_SECONDS });
       }
-      return NextResponse.json({ recommendations });
+      return json(recommendations);
     });
 
     if (!result) {
       await new Promise((resolve) => setTimeout(resolve, 120));
       const secondRead = await readCache();
-      if (secondRead) return NextResponse.json({ recommendations: secondRead, cached: true });
+      if (secondRead) return json(secondRead,true);
       return NextResponse.json({ error: 'Recommendation generation in progress' }, { status: 409 });
     }
     return result;
