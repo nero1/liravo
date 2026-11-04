@@ -245,7 +245,8 @@
     "seeAll": "Alle ansehen",
     "wantToReads": "{count, plural, one {# Lesewunsch} other {# Lesewünsche}}",
     "recommended": "Für dich empfohlen",
-    "friendsDescription": "Bücher von Lesern, denen du folgst."
+    "friendsDescription": "Bücher von Lesern, denen du folgst.",
+    "searchDescription": "Bücher suchen und entdecken"
   },
   "wrapped": {
     "favouriteAuthor": "Lieblingsautor",
@@ -1556,7 +1557,8 @@
     "added": "Hinzugefügt am {date}",
     "shareCard": "Karte teilen",
     "noMoreShelves": "Keine weiteren Regale auf dieser Seite.",
-    "noMoreBooks": "Keine weiteren Bücher auf dieser Seite."
+    "noMoreBooks": "Keine weiteren Bücher auf dieser Seite.",
+    "viewDescription": "Deine Leseregale ansehen"
   },
   "accountData": {
     "exportTitle": "Daten exportieren",
@@ -2473,6 +2475,11 @@
   "site": {
     "title": "Liravo — Soziales Netzwerk zum Entdecken von Büchern",
     "description": "Entdecke Bücher durch Menschen, deren Geschmack du vertraust. Verfolge deine Lektüre, schreibe Rezensionen und vernetze dich mit Lesern weltweit.",
-    "keywords": "Bücher,Lesen,Buchrezensionen,Bücher entdecken,soziales Lesen"
+    "keywords": "Bücher,Lesen,Buchrezensionen,Bücher entdecken,soziales Lesen",
+    "socialTagline": "Entdecke Bücher durch Menschen, denen du vertraust."
+  },
+  "offlinePage": {
+    "title": "Du bist offline",
+    "description": "Prüfe deine Verbindung und versuche es erneut."
   }
 }

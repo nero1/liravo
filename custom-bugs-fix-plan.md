@@ -3,12 +3,13 @@ Date/Time: May 23, 2026 09:39 PM UTC
 
 Updated 28 October 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
 
-✅ 1. Identity and authorization invariants (Critical)
+🟡 1. Identity and authorization invariants (Critical)
 - ✅ Verify self/admin guards for `/api/users/*` mutations; retain verified cross-user social targets.
 - ✅ Enforce DB-backed `is_admin` verification via service-side query/RPC.
 - ✅ Add regression tests: self access, cross-user denial, admin override.
 - ✅ Enforce real second-factor login, session-bound enrollment, one-time recovery, encrypted secrets and Supabase session policies.
 - ✅ Add private purpose-bound email confirmation/recovery; preserve current email, enforce PINs and retain 2FA.
+- 🔵 Enforce current privacy and verified content on legacy share cards.
 
 🟡 2. Financial correctness and integrity (Critical)
 - ✅ Implement transactional payout reserve RPC (check available balance + reserve + create payout atomically).
@@ -76,6 +77,8 @@ Updated 28 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Share complete shelf catalogs/contents, canonical edition counts, latest progress, current-year summaries, configured bulk stores and native create recovery.
 - ✅ Complete home/discovery/writer pages, private-aware canonical feeds, full public rankings/current ratings, approved native author works and resumable canonical shelf-overlap cohorts.
 - 🟡 Complete the remaining page/native accessibility sweep.
+- ✅ Restrict offline caching to public assets, clear legacy private pages and localize installation/offline metadata.
+- 🔵 Authorize and localize legacy share cards; verify actual completions and private cache policy.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
 ✅ 8. Pagination and scalability cleanup (Medium)

@@ -245,7 +245,8 @@
     "seeAll": "Tout voir",
     "wantToReads": "{count, plural, one {# envie de lire} other {# envies de lire}}",
     "recommended": "Recommandé pour vous",
-    "friendsDescription": "Les lectures des personnes que vous suivez."
+    "friendsDescription": "Les lectures des personnes que vous suivez.",
+    "searchDescription": "Rechercher et découvrir des livres"
   },
   "wrapped": {
     "favouriteAuthor": "Auteur favori",
@@ -1556,7 +1557,8 @@
     "added": "Ajouté le {date}",
     "shareCard": "Carte à partager",
     "noMoreShelves": "Il n’y a plus d’étagères sur cette page.",
-    "noMoreBooks": "Il n’y a plus de livres sur cette page."
+    "noMoreBooks": "Il n’y a plus de livres sur cette page.",
+    "viewDescription": "Voir vos étagères de lecture"
   },
   "accountData": {
     "exportTitle": "Exporter vos données",
@@ -2473,6 +2475,11 @@
   "site": {
     "title": "Liravo — Réseau social de découverte de livres",
     "description": "Découvrez des livres grâce aux personnes dont vous partagez les goûts. Suivez vos lectures, publiez des avis et rencontrez des lecteurs du monde entier.",
-    "keywords": "livres,lecture,avis sur les livres,découverte de livres,lecture sociale"
+    "keywords": "livres,lecture,avis sur les livres,découverte de livres,lecture sociale",
+    "socialTagline": "Découvrez des livres grâce aux personnes en qui vous avez confiance."
+  },
+  "offlinePage": {
+    "title": "Vous êtes hors ligne",
+    "description": "Vérifiez votre connexion et réessayez."
   }
 }

@@ -266,15 +266,15 @@ All layouts designed at 375px width first, scaled to desktop. Fixed bottom navig
 
 ### PWA
 
-- Web app manifest: name, icons, theme colour, `display: standalone`.
-- Service worker for caching app shell, static assets, and recent feed.
+- Web app manifest: EN/FR/DE descriptions/shortcuts, supplied 192/512 px icons, theme colour and `display: standalone`.
+- Service worker caches public offline assets and hashed static files. Upgrades clear legacy page caches and refresh affected windows once.
 - Install prompt: dismissible banner, not intrusive.
 
 ### Offline Behaviour
 
-- App shell and recent cached feed load without network.
-- Network-dependent actions show clear offline state and queue for retry on reconnect.
-- Book metadata and covers cached after first load.
+- A public EN/FR/DE offline screen loads without network and retries the requested page.
+- Authenticated pages and actions use the network; users retry pending actions after reconnecting.
+- Offline assets contain no account, feed, shelf or private-media content.
 
 ### Low-Bandwidth
 
