@@ -43,7 +43,10 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test
+        run: npm test -- --exclude tests/migrations.test.ts --maxWorkers=2
+
+      - name: Rehearse PostgreSQL migrations
+        run: npm test -- tests/migrations.test.ts --maxWorkers=1
 
       - name: Run ESLint
         run: npm run lint

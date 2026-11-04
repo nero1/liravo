@@ -64,7 +64,7 @@ function ShelfBookItem({
   const progress = shelfBook.progress_percent ?? 0;
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="link"
       className="flex-row px-4 py-3 gap-3 border-b border-border"
       onPress={onPress}
       activeOpacity={0.7}

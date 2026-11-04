@@ -24,7 +24,7 @@ export default function WriteTabScreen() {
           <Text className="text-muted-foreground text-sm mt-1">{t('subtitle')}</Text>
         </View>
         {WRITING_SECTIONS.map(({ emoji, label, path, desc }) => (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="link"
             key={path}
             onPress={() => router.push(path as never)}
             className="flex-row items-center bg-card border border-border rounded-xl p-4 gap-3"

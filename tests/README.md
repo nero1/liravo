@@ -128,3 +128,7 @@ PWA rehearsals cover public-only caching, cross-account navigation, legacy clean
 Share-card checks exercise real PostgreSQL anonymous/follower/owner permissions, inactive accounts, hidden content, forged completions, canonical aliases versus physical editions and actual challenge goals. Route checks cover all seven legacy images in EN/FR/DE, private cache headers, missing/storage errors and explicit locale/version links. Visual PNG review verifies rating stars without remote fonts.
 
 Author-management checks cover 55 tied private/public questions, complete status counts, actor/filter-bound cursors, blank rich text, concurrent answer replay, one notification, immutable receipts after later edits, foreign receipt denial and revoked/deleted authors. API/client checks cover stale actors, read failures, visible answer validation and decoded paragraph/entity display.
+
+Social-reader checks cover follow concurrency/replay, current versus committed state, inactive targets, owned receipts and direct-write boundaries. Real native QueryClient checks verify profile/discovery invalidation after follows and shelf changes, account switches and translated follow controls. Regional-tag checks cover GB/UK aliases, global stores, current configuration and storage failures.
+
+CI runs unit/component tests with two workers, then rehearses migrations in a separate single-worker invocation. This preserves the 60-second per-case budget without competing native VM transforms.

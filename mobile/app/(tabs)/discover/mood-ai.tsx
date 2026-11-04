@@ -76,7 +76,7 @@ export function OwnedMoodAiScreen({actorId}:{actorId:string|undefined}) {
             returnKeyType="search"
             maxLength={AI_MOOD_MAX_LENGTH}
           />
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('find')} accessibilityState={{disabled:loading||query.trim().length<3,busy:loading}}
             onPress={search}
             disabled={loading || query.trim().length < 3}
             className="bg-accent rounded-xl px-4 py-3 items-center justify-center"
@@ -106,7 +106,7 @@ export function OwnedMoodAiScreen({actorId}:{actorId:string|undefined}) {
         data={books}
         keyExtractor={(_, i) => String(i)}
         renderItem={({ item }) => (
-          <Pressable
+          <Pressable accessibilityRole="link" accessibilityLabel={item.title}
             onPress={() => router.push(`/discover?q=${encodeURIComponent(item.title)}`)}
             className="mx-4 mb-3 p-4 bg-card border border-border rounded-xl"
           >

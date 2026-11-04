@@ -154,7 +154,7 @@ export default function DiscoverScreen() {
           <View className="px-4 mb-6">
             <View className="flex-row items-center justify-between mb-3">
               <Text className="font-bold text-lg text-foreground">{t('moodTitle')}</Text>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="link"
                 onPress={() => router.push('/discover/mood-ai')}
                 className="flex-row items-center gap-1"
               >
@@ -164,7 +164,7 @@ export default function DiscoverScreen() {
             </View>
             <View className="flex-row flex-wrap gap-2">
               {MOODS.map((mood) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="link"
                   key={mood}
                   onPress={() => router.push(`/discover/mood/${mood}`)}
                   className="bg-muted border border-border rounded-full px-4 py-2"

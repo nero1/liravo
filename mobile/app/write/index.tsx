@@ -21,7 +21,7 @@ export default function WriteScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
         <Text className="text-2xl font-bold text-foreground mb-2">{ui('writingHub.title')}</Text>
         {WRITING_SECTIONS.map(({ emoji,key,path }) => (
-          <TouchableOpacity key={path} onPress={() => router.push(path as any)} className="flex-row items-center bg-card border border-border rounded-xl p-4 gap-3" activeOpacity={0.7}>
+          <TouchableOpacity accessibilityRole="link" key={path} onPress={() => router.push(path as any)} className="flex-row items-center bg-card border border-border rounded-xl p-4 gap-3" activeOpacity={0.7}>
             <Text className="text-3xl">{emoji}</Text>
             <View className="flex-1">
               <Text className="font-semibold text-foreground">{ui('writingHub.'+key)}</Text>

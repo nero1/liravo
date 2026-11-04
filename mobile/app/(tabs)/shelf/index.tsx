@@ -28,8 +28,8 @@ export default function ShelfScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <Text className="text-2xl font-bold text-foreground">{t('title')}</Text>
-        <TouchableOpacity
-          accessibilityRole="button" accessibilityLabel={t('new')} onPress={() => router.push('/shelf/new')}
+        <TouchableOpacity accessibilityRole="link"
+          accessibilityLabel={t('new')} onPress={() => router.push('/shelf/new')}
           className="p-2"
           activeOpacity={0.7}
         >
@@ -65,7 +65,7 @@ function ShelfListItem({ shelf }: { shelf: ShelfRow&{book_count?:number} }) {
   const icon = shelf.default_type ? DEFAULT_ICONS[shelf.default_type] ?? '📚' : '📚';
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="link"
       className="flex-row items-center px-4 py-4 border-b border-border gap-3"
       onPress={() => router.push(`/(tabs)/shelf/${shelf.id}`)}
       activeOpacity={0.7}

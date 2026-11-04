@@ -64,7 +64,7 @@ export default function ProfileScreen() {
 
           {user.bio && <Text className="text-foreground">{user.bio}</Text>}
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="link"
             onPress={() => router.push('/(tabs)/profile/edit')}
             className="border border-border rounded-xl py-2.5 items-center"
             activeOpacity={0.7}
@@ -100,7 +100,7 @@ export default function ProfileScreen() {
               ...(user.is_admin ? [{ label: '📋 '+navigation('moderationLog'), path: '/moderation/log' }] : []),
               ...(user.is_admin ? [{ label: '⚙️ '+navigation('admin'), path: '/admin' }] : []),
             ].map(({ label, path }) => (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="link"
                 key={path}
                 onPress={() => router.push(path as any)}
                 className="flex-row items-center justify-between py-3.5 border-b border-border"

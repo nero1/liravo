@@ -570,7 +570,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 ### 7.11 Social and Community Features
 
-**Following system:** Follow any user or author. Suggested follows on sign-up.
+**Following system:** Follow active users and authors. Suggested follows on sign-up. Web/native controls use EN/FR/DE, owned retry receipts and current relationship state; native profile/discovery caches refresh after follow changes.
 
 **Buddy reads:**
 - Public groups currently support 2–5 readers including the creator, edition search, participant-only paged discussion, replies and chapter updates on web/native in EN/FR/DE. Private invitations and expanded capacity below remain planned.

@@ -45,9 +45,9 @@ Updated 4 November 2026. Section status summarizes its bullets; individual verif
 - ✅ Validate model outputs and stored profiles, enforce paid seven-day Newbie Writer plans, and reject malformed results without fabricated success.
 - ✅ Add prompt-injection filtering and unsafe-output redaction.
 
-🟡 7. SEO, i18n, accessibility, and UX quality (Medium)
+✅ 7. SEO, i18n, accessibility, and UX quality (Medium)
 - ✅ Add metadata/canonical/OG coverage to major dynamic pages.
-- 🟡 Complete English/French/German coverage across web/native screens, system messages and metadata; enforce translated user-visible strings in CI.
+- ✅ Complete active English/French/German screens, system messages and metadata; check locale catalogs and translated controls in CI.
 - ✅ Translate and verify shared web components, named controls, navigation state, native report-dialog focus, failure recovery and notification pagination.
 - ✅ Persist native language selection with device fallback; translate navigation/main tabs, settings and referral screens.
 - ✅ Persist and enforce notification preferences; translate stored messages and push delivery.
@@ -76,7 +76,7 @@ Updated 4 November 2026. Section status summarizes its bullets; individual verif
 - ✅ Repair core author/shelf/goal/mood forms, authoritative shelf access, complete author Q&A paging and translated read/error states.
 - ✅ Share complete shelf catalogs/contents, canonical edition counts, latest progress, current-year summaries, configured bulk stores and native create recovery.
 - ✅ Complete home/discovery/writer pages, private-aware canonical feeds, full public rankings/current ratings, approved native author works and resumable canonical shelf-overlap cohorts.
-- 🟡 Complete the remaining page/native accessibility sweep.
+- ✅ Complete the remaining page/native control sweep, owned translated follows, cache refreshes and regional country fixes.
 - ✅ Restrict offline caching to public assets, clear legacy private pages and localize installation/offline metadata.
 - ✅ Authorize and localize legacy share cards; verify actual completions, canonical editions and private cache policy.
 - ✅ Repair the author-owned question queue, answer recovery, rich-text display and EN/FR/DE controls.

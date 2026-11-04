@@ -39,7 +39,7 @@ export default function SettingsScreen() {
         )}
 
         {ITEMS.map(({ label, path }) => (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="link"
             key={path}
             onPress={() => router.push(path)}
             className="flex-row items-center justify-between px-4 py-4 border-b border-border"
@@ -51,7 +51,7 @@ export default function SettingsScreen() {
         ))}
 
         <View className="px-4 mt-8">
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={confirmLogout}
             className="border border-destructive rounded-xl py-3 items-center"
             activeOpacity={0.7}

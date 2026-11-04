@@ -76,7 +76,7 @@ export default function BookDetailScreen() {
 
           {/* Action row */}
           <View className="flex-row gap-3">
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="link"
               className="flex-1 border border-border rounded-xl py-3 items-center flex-row justify-center gap-2"
               onPress={() => router.push({ pathname: '/review/new', params: { bookId: book.id } })}
               activeOpacity={0.7}
@@ -84,7 +84,7 @@ export default function BookDetailScreen() {
               <MessageSquare size={16} color="#6b7280" />
               <Text className="text-foreground font-medium">{t('review')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="link"
               className="flex-1 border border-border rounded-xl py-3 items-center flex-row justify-center gap-2"
               onPress={() => router.push({ pathname: '/quote/new', params: { bookId: book.id, bookTitle: book.title } })}
               activeOpacity={0.7}

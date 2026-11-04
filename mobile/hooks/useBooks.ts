@@ -54,6 +54,7 @@ export function useToggleShelf() {
       qc.invalidateQueries({queryKey:['book',body.bookId]});
       qc.invalidateQueries({ queryKey: ['shelves'] });
       qc.invalidateQueries({ queryKey: ['feed'] });
+      qc.invalidateQueries({ queryKey: ['discover'] });
       qc.invalidateQueries({ queryKey: ['shelf'] });
       qc.invalidateQueries({ queryKey: ['reading-goals'] });
     },

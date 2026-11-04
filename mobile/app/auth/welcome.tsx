@@ -108,7 +108,7 @@ export default function WelcomeScreen() {
             </View>
 
             <View className="gap-4">
-              {isSupabaseMode?<TouchableOpacity
+              {isSupabaseMode?<TouchableOpacity accessibilityRole="button" accessibilityLabel={t('continueWithGoogle')} accessibilityState={{disabled:loading,busy:loading}}
                 onPress={signInWithGoogleSupabase}
                 disabled={loading}
                 className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm"
@@ -179,7 +179,7 @@ export default function WelcomeScreen() {
                   />
 
                   <TouchableOpacity
-                    onPress={()=>void handleEmailAuth()}
+                    accessibilityLabel={t(tab==='login'?'signIn':'createAccount')} onPress={()=>void handleEmailAuth()}
                     disabled={loading||captchaOpen||authConfig.isPending||authConfig.isError}
                     accessibilityRole="button"
                     accessibilityState={{disabled:loading||captchaOpen||authConfig.isPending||authConfig.isError,busy:loading}}
@@ -225,7 +225,7 @@ function DirectGoogleButton({onLogin,disabled}:{onLogin:(token:string)=>Promise<
       await onLogin(token);
     }catch(error){Alert.alert(t('signIn'),t(error instanceof ApiError&&error.code==='ACCOUNT_LINK_REQUIRED'?'accountLinkRequired':'signInFailed'));}finally{setLoading(false);}
   }
-  return <TouchableOpacity onPress={()=>void login()} disabled={disabled||loading||!request} accessibilityRole="button" className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm">
+  return <TouchableOpacity onPress={()=>void login()} disabled={disabled||loading||!request} accessibilityRole="button" accessibilityLabel={t('continueWithGoogle')} accessibilityState={{disabled:disabled||loading||!request,busy:loading}} className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm">
     {loading?<ActivityIndicator color="#1a1a1a" />:<Text className="font-semibold text-foreground text-base">{t('continueWithGoogle')}</Text>}
   </TouchableOpacity>;
 }
