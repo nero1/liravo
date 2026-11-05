@@ -37,3 +37,24 @@ it('requires administrator authorization and acknowledges an authoritative datab
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({updated:true,changed:false,enabled:false});
 });
+
+it('returns private actor-bound snapshots and rejects unavailable or malformed catalogs',async()=>{
+  const {GET}=await import('@/app/api/admin/feature-flags/route');
+  vi.mocked(getCurrentUser).mockResolvedValue({id:'admin-user',email:''});vi.mocked(isAdmin).mockResolvedValue(true);
+  const order=vi.fn(),select=vi.fn(()=>({order})),from=vi.fn(()=>({select}));
+  vi.mocked(createServiceClient).mockReturnValue({from} as unknown as ReturnType<typeof createServiceClient>);
+  const read=(actor='admin-user')=>GET(new Request('https://app.test/api/admin/feature-flags',{headers:{'X-Liravo-Actor':actor}}));
+  expect((await read('previous-admin')).status).toBe(409);expect(from).not.toHaveBeenCalled();
+  for(const result of[{data:null,error:null},{data:[],error:{message:'private SQL details'}},{data:[{enabled:'true'}],error:null}]){
+    order.mockResolvedValueOnce(result);const response=await read();expect(response.status).toBe(503);expect(response.headers.get('Cache-Control')).toBe('private, no-store');expect(await response.json()).toEqual({error:'Flags unavailable'});
+  }
+  const flags=[{id:'flag',name:'google_auth',enabled:true,description:null,updated_at:'2026-11-05T12:30:00.123456+00:00'}];
+  order.mockResolvedValueOnce({data:flags,error:null});expect(await(await read()).json()).toEqual({actorId:'admin-user',flags});
+  order.mockResolvedValueOnce({data:[],error:null});const response=await read();expect(await response.json()).toEqual({actorId:'admin-user',flags:[]});
+});
+
+it('rejects stale actors before mutation and keeps failure responses private',async()=>{
+  vi.mocked(getCurrentUser).mockResolvedValue({id:'admin-user',email:''});vi.mocked(isAdmin).mockResolvedValue(true);
+  const response=await PATCH(new Request('https://app.test/api/admin/feature-flags',{method:'PATCH',headers:{'X-Liravo-Actor':'previous-admin'},body:JSON.stringify({name:'google_auth',enabled:false})}));
+  expect(response.status).toBe(409);expect(response.headers.get('Cache-Control')).toBe('private, no-store');expect(createServiceClient).not.toHaveBeenCalled();
+});

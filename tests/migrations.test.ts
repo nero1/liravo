@@ -2790,3 +2790,32 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('enforces disabled social pr
  await sql`update feature_flags set enabled=true where name=${flag}`;expect((await sql`select resolve_direct_social_identity(${provider},${subject},${email},'Provider rollback101',null)profile`)[0].profile.id).toBe(created.profile.id);
  }}finally{for(const row of original)await sql`update feature_flags set enabled=${row.enabled} where name=${row.name}`;await sql.end();}
 },60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('enforces active administrators after flag-lock waits and serializes concurrent provider disables',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Flag rehearsal requires isolated loopback PostgreSQL');
+ const sql=postgres(url,{max:4,prepare:false,ssl:false,onnotice:()=>{}}),writer=postgres(url,{max:1,prepare:false,ssl:false,connection:{application_name:'flag-admin103'}});
+ const original=await sql`select name,enabled from feature_flags where name in('google_auth','telegram_auth')`;
+ try{
+  const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},${actor+'@example.test'},${'flag'+actor.replaceAll('-','').slice(0,20)},'Flag administrator103')`;
+  const change=(name:string,enabled:boolean)=>writer`select set_feature_flag_atomic(${actor},${name},${enabled})changed`;
+  await sql`update users set is_admin=true where id=${actor}`;await sql`update feature_flags set enabled=true where name in('google_auth','telegram_auth')`;
+  expect((await change('google_auth',true))[0].changed).toBe(false);
+  for(const state of[{is_admin:false,is_banned:false,deleted_at:null},{is_admin:true,is_banned:true,deleted_at:null},{is_admin:true,is_banned:false,deleted_at:new Date()}]){
+   await sql`update users set ${sql(state)} where id=${actor}`;await expect(change('google_auth',false)).rejects.toMatchObject({code:'P1005'});expect((await sql`select enabled from feature_flags where name='google_auth'`)[0].enabled).toBe(true);
+  }
+  await sql`update users set is_admin=true,is_banned=false,deleted_at=null where id=${actor}`;
+  let locked!:()=>void,release!:()=>void;const ready=new Promise<void>(resolve=>{locked=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
+  const holder=sql.begin(async tx=>{await tx`select 1 from feature_flags where name in('google_auth','telegram_auth') order by name for update`;locked();await gate;});
+  await ready;const pending=change('google_auth',false).then(()=>null,error=>error);
+  try{
+   await vi.waitFor(async()=>expect((await sql`select count(*)::int count from pg_stat_activity where application_name='flag-admin103' and wait_event_type='Lock'`)[0].count).toBe(1),{timeout:3000});
+   await sql.begin(async tx=>{await tx`set local statement_timeout='2s'`;await tx`update users set is_admin=false where id=${actor}`;});
+  }finally{release();await holder;}
+  expect(await pending).toMatchObject({code:'P1005'});
+  await sql`update users set is_admin=true where id=${actor}`;
+  const results=await Promise.allSettled(['google_auth','telegram_auth'].map(name=>sql`select set_feature_flag_atomic(${actor},${name},false)`));
+  expect(results.filter(result=>result.status==='fulfilled')).toHaveLength(1);expect(results.find(result=>result.status==='rejected')).toMatchObject({reason:{code:'P1006'}});
+  expect((await sql`select count(*)::int count from feature_flags where name in('google_auth','telegram_auth') and enabled`)[0].count).toBe(1);
+  expect((await sql`select has_function_privilege('authenticated','set_feature_flag_atomic(uuid,text,boolean)','execute')browser,has_function_privilege('anon','set_feature_flag_atomic(uuid,text,boolean)','execute')anonymous,has_function_privilege('service_role','set_feature_flag_atomic(uuid,text,boolean)','execute')service`)[0]).toMatchObject({browser:false,anonymous:false,service:true});
+ }finally{for(const row of original)await sql`update feature_flags set enabled=${row.enabled} where name=${row.name}`;await writer.end();await sql.end();}
+},60_000);
