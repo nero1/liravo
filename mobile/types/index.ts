@@ -179,7 +179,7 @@ export interface NotificationRow {
   actor?: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url'>;
 }
 
-export type {SocialFeedItem as FeedItem} from '../../src/lib/social-feed-contracts';
+export type {SocialFeedItem as FeedItem} from '../../src/types/database';
 
 export interface BuddyReadRow {
   id:string;title:string|null;book_id:string;created_by:string;created_at:string;

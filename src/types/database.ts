@@ -438,3 +438,8 @@ export interface ReadingGoalData {actorId:string;goal:{id:string;user_id:string;
 
 export interface ShelfCatalogPage {shelves:(ShelfRow&{book_count:number;contains_book:boolean})[];addedToShelves:string[];total:number;selectedTotal:number;reading:Omit<ReadingGoalData,'actorId'>;actorId:string;bookId:string|null;nextCursor:string|null}
 export interface ShelfDetailPage {shelf:ShelfRow&{book_count:number};books:(ShelfBookRow&{book:BookRow;source_book_id:string})[];total:number;actorId:string;shelfId:string;nextCursor:string|null}
+
+export type SocialFeedItem={id:string;timestamp:string;userId:string;user:{id:string;display_name:string|null;username:string;avatar_url:string|null};book:Pick<BookRow,'id'|'title'|'author_name'|'cover_url'>;wantToRead:boolean}&(
+ {type:'shelf_book';shelf:{name:string;default_type:string|null};finishedAt:string|null}|
+ {type:'review';reviewId:string;rating:number;reviewType:string;excerpt:string|null;hasSpoilers:boolean}
+);

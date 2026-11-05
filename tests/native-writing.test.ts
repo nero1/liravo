@@ -6,7 +6,7 @@ import {createTranslator} from 'next-intl';
 import fr from '../messages/fr.json';
 import {readingRoomUnlockDate} from '../src/lib/reading-room-date';
 import {quotePageNumber,validReadDate,validProofUrl} from '../src/lib/content-form-values';
-import {MOOD_TAGS} from '../mobile/types';
+import {MOOD_TAGS} from '@/constants/config';
 
 class ApiError extends Error{constructor(public status:number,public code?:string){super('Isolated failure');}}
 function mount(file:string,query:any,infinite:any={data:undefined},exportName='default'){
