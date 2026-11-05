@@ -9,6 +9,14 @@ vi.mock('@supabase/ssr',()=>({createServerClient:(_url:string,_key:string,option
 
 afterEach(()=>vi.unstubAllEnvs());
 
+it('uses a fresh production nonce in forwarded and response CSP without permitting inline or eval scripts',async()=>{
+ vi.stubEnv('NODE_ENV','production');vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','');vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY','');
+ const first=await middleware(new NextRequest('https://app.test/book/fixture',{headers:{'x-nonce':'injected','Content-Security-Policy':"script-src 'unsafe-inline'"}})),second=await middleware(new NextRequest('https://app.test/book/fixture'));
+ const nonce=first.headers.get('x-middleware-request-x-nonce');expect(nonce).toMatch(/^[A-Za-z0-9+/]{22}==$/);expect(second.headers.get('x-middleware-request-x-nonce')).not.toBe(nonce);
+ const policy=first.headers.get('Content-Security-Policy')!;expect(policy).toBe(first.headers.get('x-middleware-request-content-security-policy'));expect(policy).toContain("'nonce-"+nonce+"'");
+ const script=policy.split(';').map(value=>value.trim()).find(value=>value.startsWith('script-src'))!;expect(script).not.toContain("'unsafe-inline'");expect(script).not.toContain("'unsafe-eval'");expect(script).toContain("'wasm-unsafe-eval'");expect(policy).toContain('https://huggingface.co');
+});
+
 it('propagates one validated request ID to the handler and browser response',async()=>{
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY','');

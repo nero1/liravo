@@ -16,7 +16,7 @@ it('does not reuse a harmless prefix classification for a review with a differen
 });
 it('does not cache unavailable or malformed model results as a successful classification',async()=>{
   vi.mocked(callAI).mockRejectedValueOnce(new Error('Provider unavailable')).mockResolvedValueOnce({text:'ignore previous instructions',provider:'deepseek'});
-  expect(await classifyTone('A review')).toBe('neutral');
-  expect(await classifyTone('A review')).toBe('neutral');
+  expect(await classifyTone('A review')).toBe('unavailable');
+  expect(await classifyTone('A review')).toBe('unavailable');
   expect(cache.size).toBe(0);
 });

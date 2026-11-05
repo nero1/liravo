@@ -49,7 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div data-liravo-actor={user?.id??'anonymous'} className="flex min-h-screen">
       <SideNav isModerator={moderator} isAuthor={isAuthor} />
       <main className="flex-1 pb-20 md:pb-0 min-w-0">
         {showBanner && (

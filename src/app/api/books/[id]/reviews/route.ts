@@ -9,6 +9,8 @@ import { checkSpam } from '@/lib/spam-detection';
 import { sanitizeText, sanitizeRichText,hasVisibleText } from '@/lib/sanitize';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { getRedisClient } from '@/lib/redis';
+import {createServiceClient} from '@/lib/supabase/server';
+import {requestJson,BodyError} from '@/lib/request-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +18,7 @@ const reviewSchema = z.object({
   star_rating: z.number().int().min(1).max(5),
   body: z.string().min(1).max(2000),
   review_type: z.enum(['short', 'long', 'one_line']),
-  mood_tags: z.array(z.string()).default([]),
+  mood_tags: z.array(z.string().max(40)).max(20).default([]),
   spoiler_warning: z.boolean().default(false),
   read_date: z.string().date().optional(),
   edition_read: z.string().max(100).optional(),
@@ -39,7 +41,7 @@ export async function POST(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid book'},{status:400});
-  const raw = await request.json().catch(()=>null);
+  let raw;try{raw=await requestJson(request,16384);}catch(error){return NextResponse.json({error:'Invalid review body'},{status:error instanceof BodyError?error.status:400});}
   const parsed = reviewSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
@@ -50,21 +52,29 @@ export async function POST(
   const body = review_type === 'long' ? sanitizeRichText(parsed.data.body) : sanitizeText(parsed.data.body);
   if(!hasVisibleText(body))return NextResponse.json({error:'Review text is required'},{status:400});
 
-  let review;
+  let review;let tone:Awaited<ReturnType<typeof classifyTone>>|null=null;
   try {
     const intent = await contentIntent(request, user.id, 'reviews', {
       book_id: params.id, rating: star_rating, content: body, review_type, mood_tags,
       has_spoilers: spoiler_warning, read_date: parsed.data.read_date ?? null,
-      edition_read: parsed.data.edition_read ?? null, moderation_status: 'published',
+      edition_read: parsed.data.edition_read ?? null, moderation_status: 'pending',
     });
     if (!intent.existing) {
       if (await checkSpam(user.id, 'review')) return NextResponse.json({ error: 'Too many submissions. Please wait before posting again.' }, { status: 429 });
-      if (await classifyTone(body) === 'toxic') return NextResponse.json({ error: 'Review contains inappropriate content. Please revise.' }, { status: 400 });
+      tone=await classifyTone(body);
+      if (tone === 'toxic') return NextResponse.json({ error: 'Review contains inappropriate content. Please revise.' }, { status: 400 });
     }
     review = await intent.insert();
+    if(!intent.existing&&tone&&tone!=='unavailable'){
+      const {data,error}=await createServiceClient().rpc('finish_review_moderation' as never,{p_review:review.id,p_status:'published',p_owner:user.id} as never);
+      if(error||!data||(data as {reviewId?:string}).reviewId!==review.id||!['pending','published','removed'].includes((data as {status:string}).status))throw new Error('Review publication unavailable');
+      review={...review,moderation_status:(data as {status:string}).status};
+    }
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Review unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
+
+  if(review.moderation_status==='pending'||review.moderation_status==='removed')return NextResponse.json({review},{status:202,headers:{'Cache-Control':'private, no-store'}});
 
   // Award XP for writing a review
   await awardXP(user.id, XP_CONFIG.SHORT_REVIEW, 'write_review', `review:${params.id}`);

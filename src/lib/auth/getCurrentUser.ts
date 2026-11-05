@@ -1,4 +1,5 @@
-import { cookies } from 'next/headers';
+import { cookies,headers } from 'next/headers';
+import {assertSessionProviderAvailable} from '@/lib/auth/session-errors';
 import { readDirectSession } from '@/lib/auth/second-factor';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { SESSION_COOKIE } from '@/lib/db/unified-client';
@@ -19,15 +20,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 }
 
 async function getDoUser(): Promise<SessionUser | null> {
-  // Mobile clients send Bearer token; check it before falling back to cookies.
-  try {
-    const { headers } = await import('next/headers');
-    const authHeader = headers().get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      return readDirectSession(token);
-    }
-  } catch { return null; }
+  const authHeader = headers().get('authorization');
+  if (authHeader?.startsWith('Bearer ')) return readDirectSession(authHeader.slice(7));
 
   const cookieStore = cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
@@ -40,20 +34,10 @@ async function getSupabaseUser(): Promise<SessionUser | null> {
   const { createClient } = await import('@/lib/supabase/server');
   const supabase = createClient();
 
-  // Mobile clients send Bearer token; try it before falling back to cookies.
-  try {
-    const { headers } = await import('next/headers');
-    const authHeader = headers().get('authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      const { data: { user } } = await supabase.auth.getUser(token);
-      return user ? { id: user.id, email: user.email ?? '' } : null;
-    }
-  } catch {
-    return null;
-  }
-
-  const { data: { user } } = await supabase.auth.getUser();
+  const authorization=headers().get('authorization');
+  const bearer=authorization?.startsWith('Bearer ')?authorization.slice(7):undefined;
+  const { data: { user },error } = await supabase.auth.getUser(bearer);
+  assertSessionProviderAvailable(error);
   if (!user) return null;
   return { id: user.id, email: user.email ?? '' };
 }

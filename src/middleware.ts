@@ -1,3 +1,4 @@
+import {contentSecurityPolicy} from '@/lib/security-policy';
 import { CSRF_COOKIE, CSRF_HEADER, validCsrf, sameOrigin, getRequestOrigin, isStatelessNativeAuth } from '@/lib/csrf';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
@@ -21,6 +22,8 @@ async function formCsrf(request:NextRequest){
 
 export async function middleware(request: NextRequest) {
   const correlationId = getRequestCorrelationId(request);
+  const nonce=btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))),policy=contentSecurityPolicy(nonce,!isDirectPostgresMode,process.env.NODE_ENV!=='production');
+  request.headers.set('x-nonce',nonce);request.headers.set('Content-Security-Policy',policy);
   request.headers.set('x-request-id',correlationId);
   const language = request.nextUrl.searchParams.get('lang');
   const preferred = language ?? request.cookies.get('NEXT_LOCALE')?.value;
@@ -37,7 +40,7 @@ export async function middleware(request: NextRequest) {
   const csrfToken = request.cookies.get(CSRF_COOKIE)?.value ?? crypto.randomUUID();
   const finish = (result = response) => {
     if(result!==response)for(const cookie of response.cookies.getAll())result.cookies.set(cookie);
-    result.headers.set('x-request-id',correlationId);
+    result.headers.set('x-request-id',correlationId);result.headers.set('Content-Security-Policy',policy);
     if(!nativeAuth)result.cookies.set(CSRF_COOKIE, csrfToken, { secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
     return result;
   };

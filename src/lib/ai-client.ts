@@ -98,23 +98,31 @@ export async function callAI(
   prompt: string,
   opts: AICallOptions = {}
 ): Promise<{ text: string; provider: 'deepseek' | 'gemini' }> {
-  opts={...opts,signal:opts.signal??AbortSignal.timeout(18000)};
-  const valid=opts.validate??safeModelText;
-  const circuitOpen = AI_MODELS.PRIMARY_PROVIDER==='gemini'||await isCircuitOpen();
+  const signal=AbortSignal.any([AbortSignal.timeout(18000),...(opts.signal?[opts.signal]:[])]);opts={...opts,signal};
+  let cancel!:()=>void;
+  const deadline=new Promise<never>((_,reject)=>{cancel=()=>reject(new Error('AI deadline exceeded'));if(signal.aborted)cancel();else signal.addEventListener('abort',cancel,{once:true});});
+  const run=async():Promise<{text:string;provider:'deepseek'|'gemini'}>=>{
+    if(opts.signal?.aborted)throw new Error('AI deadline exceeded');
+    const valid=opts.validate??safeModelText;
+    const circuitOpen = AI_MODELS.PRIMARY_PROVIDER==='gemini'||await isCircuitOpen();
 
-  if (!circuitOpen) {
-    try {
-      const text = await callDeepSeek(prompt, opts);
-      if(!valid(text))throw new Error('Invalid model output');
-      return { text, provider: 'deepseek' };
-    } catch {
-      if(opts.signal?.aborted)throw new Error('AI deadline exceeded');
-      await recordFailure();
-      // Fall through to Gemini
+    if(opts.signal?.aborted)throw new Error('AI deadline exceeded');
+    if (!circuitOpen) {
+      try {
+        const text = await callDeepSeek(prompt, opts);
+        if(!valid(text))throw new Error('Invalid model output');
+        return { text, provider: 'deepseek' };
+      } catch {
+        if(opts.signal?.aborted)throw new Error('AI deadline exceeded');
+        await recordFailure();
+        // Fall through to Gemini
+      }
     }
-  }
 
-  const text = await callGemini(prompt, opts);
-  if(!valid(text))throw new Error('Invalid model output');
-  return { text, provider: 'gemini' };
+    if(opts.signal?.aborted)throw new Error('AI deadline exceeded');
+    const text = await callGemini(prompt, opts);
+    if(!valid(text))throw new Error('Invalid model output');
+    return { text, provider: 'gemini' };
+  };
+  try{return await Promise.race([deadline,run()]);}finally{signal.removeEventListener('abort',cancel);}
 }

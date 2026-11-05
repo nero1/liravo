@@ -40,6 +40,7 @@ function OwnedReviewForm({bookId,userId,onSubmit}:ReviewFormProps){
   const [error, setError] = useState<string | null>(null);
   const [toneResult, setToneResult] = useState<ClientToneResult | null>(null);
   const [toneChecking, setToneChecking] = useState(false);
+  const [moderation,setModeration]=useState('published');
 
   const checkTone = useCallback(async (text: string) => {
     const version=++toneVersion.current;
@@ -51,7 +52,7 @@ function OwnedReviewForm({bookId,userId,onSubmit}:ReviewFormProps){
       const result = await classifyReviewTone(text);
       if(version===toneVersion.current)setToneResult(result);
     } catch {
-      if(version===toneVersion.current)setToneResult(null);
+      if(version===toneVersion.current)setToneResult('unavailable');
     } finally {
       if(version===toneVersion.current)setToneChecking(false);
     }
@@ -85,7 +86,7 @@ function OwnedReviewForm({bookId,userId,onSubmit}:ReviewFormProps){
       });
       if (res.ok) {
         const result=await res.json();if(typeof result.review?.id!=='string'||result.review.user_id!==userId||result.review.book_id!==bookId)throw new Error('Invalid review receipt');intent.complete(scope);
-        setSuccess(true);
+        setModeration(result.review.moderation_status??'published');setSuccess(true);
         onSubmit?.();
       } else {
         setError(t('failed'));
@@ -101,7 +102,7 @@ function OwnedReviewForm({bookId,userId,onSubmit}:ReviewFormProps){
     return (
       <div role="status" className="p-4 border border-border rounded-xl text-center">
         <p className="text-amber-600 font-medium">{t('submitted')}</p>
-        <p className="text-sm text-muted-foreground mt-1">{t('thanks')}</p>
+        <p className="text-sm text-muted-foreground mt-1">{t(moderation==='pending'?'pending':moderation==='removed'?'notPublished':'thanks')}</p>
       </div>
     );
   }
@@ -184,6 +185,7 @@ function OwnedReviewForm({bookId,userId,onSubmit}:ReviewFormProps){
             {toneChecking && (
               <span className="text-xs text-muted-foreground">{t('checkingTone')}</span>
             )}
+            {!toneChecking&&toneResult==='unavailable'&&<span className="text-xs text-muted-foreground">{t('toneUnavailable')}</span>}
             {!toneChecking && toneResult === 'warning' && (
               <span className="flex items-center gap-1 text-xs text-amber-600">
                 <AlertTriangle size={12} /> {t('harshTone')}

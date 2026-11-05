@@ -1,53 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-import { z } from 'zod';
-import { getCurrentUser } from '@/lib/auth/getCurrentUser';
-
-export const dynamic = 'force-dynamic';
-
-const SubSchema = z.object({
-  endpoint: z.string().url(),
-  keys: z.object({
-    p256dh: z.string(),
-    auth: z.string(),
-  }),
-});
-
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
-
-  const parsed = SubSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid subscription' }, { status: 400 });
-
-  const supabase = createServiceClient();
-  await supabase.from('web_push_subscriptions').upsert(
-    {
-      user_id: user.id,
-      endpoint: parsed.data.endpoint,
-      p256dh: parsed.data.keys.p256dh,
-      auth: parsed.data.keys.auth,
-    },
-    { onConflict: 'endpoint' }
-  );
-
-  return NextResponse.json({ ok: true });
+import {NextResponse} from 'next/server';
+import {z} from 'zod';
+import {getCurrentUser} from '@/lib/auth/getCurrentUser';
+import {PushSubscriptionError,registerPush,unregisterPush,trustedPushEndpoint,validPushKeys} from '@/lib/push-subscriptions';
+import {checkRouteRateLimit} from '@/lib/rate-limit';
+import {BodyError,requestJson} from '@/lib/request-body';
+export const dynamic='force-dynamic';
+const schema=z.object({endpoint:z.string().max(2048).refine(trustedPushEndpoint),keys:z.object({p256dh:z.string().max(100),auth:z.string().max(32)})}).refine(value=>validPushKeys(value.keys.p256dh,value.keys.auth));
+const headers={'Cache-Control':'private, no-store'};
+export async function POST(request:Request){
+ const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401,headers});
+ if(!await checkRouteRateLimit(user.id,'social'))return NextResponse.json({error:'Too many requests'},{status:429,headers});
+ try{
+  const parsed=schema.safeParse(await requestJson(request,4096));if(!parsed.success)return NextResponse.json({error:'Invalid subscription'},{status:400,headers});
+  await registerPush(user.id,'web',parsed.data.endpoint,parsed.data.keys);return NextResponse.json({ok:true,actorId:user.id},{headers});
+ }catch(error){return NextResponse.json({error:'Subscription unavailable'},{status:error instanceof BodyError||error instanceof PushSubscriptionError?error.status:503,headers});}
 }
-
-export async function DELETE(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { endpoint } = await req.json() as { endpoint?: string };
-  if (!endpoint) return NextResponse.json({ error: 'endpoint required' }, { status: 400 });
-
-  const supabase = createServiceClient();
-  await supabase.from('web_push_subscriptions').delete()
-    .eq('user_id', user.id)
-    .eq('endpoint', endpoint);
-
-  return NextResponse.json({ ok: true });
+export async function DELETE(request:Request){
+ const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401,headers});
+ try{const parsed=z.object({endpoint:z.string().max(2048).refine(trustedPushEndpoint)}).safeParse(await requestJson(request,4096));if(!parsed.success)return NextResponse.json({error:'Invalid subscription'},{status:400,headers});await unregisterPush(user.id,parsed.data.endpoint);return NextResponse.json({ok:true,actorId:user.id},{headers});}
+ catch(error){return NextResponse.json({error:'Subscription unavailable'},{status:error instanceof BodyError||error instanceof PushSubscriptionError?error.status:503,headers});}
 }

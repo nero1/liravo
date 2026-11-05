@@ -1,3 +1,4 @@
+import {unregisterDevicePush} from '@/lib/device-push';
 import {useTranslations} from '@/hooks/useTranslations';
 import { useEffect,useRef } from 'react';
 import { isSupabaseMode, supabase } from '@/lib/supabase';
@@ -7,7 +8,8 @@ import type { UserRow } from '@/types';
 
 export function useAuth(initialize=false) {
   const {locale}=useTranslations('auth'),localeRef=useRef(locale);localeRef.current=locale;
-  const { user, token, isLoading, setUser, setToken, setLoading, signOut, loadStoredToken, mfaChallenge, setMfaChallenge } = useAuthStore();
+  const { user, token, isLoading, setUser, setToken, setLoading, signOut, loadStoredToken, mfaChallenge, setMfaChallenge,authUnavailable,authRetry,setAuthUnavailable,retryAuthentication } = useAuthStore();
+  const rejectSession=async(error:unknown)=>{if([401,403].includes(Number((error as {status?:number})?.status)))await signOut();else setAuthUnavailable(true);};
 
   useEffect(()=>{
     if(!initialize)return;
@@ -15,52 +17,58 @@ export function useAuth(initialize=false) {
     const current=(accessToken:string)=>active&&useAuthStore.getState().token===accessToken;
     const authenticate=async(accessToken:string)=>{
       setLoading(true);
-      await setToken(accessToken);
-      if(!current(accessToken))return;
       try{
+        await setToken(accessToken);if(!current(accessToken))return;
         const result=await api.post<{mfaRequired?:boolean;challengeToken?:string;user?:UserRow}>('/api/auth/session',{}, {'X-Liravo-Preferred-Locale':localeRef.current});
         if(!current(accessToken))return;
-        if(result.mfaRequired){setUser(null);setMfaChallenge(result.challengeToken!);}else{setMfaChallenge(null);setUser(result.user??null);}
-      }catch{if(current(accessToken))await signOut();}finally{if(current(accessToken))setLoading(false);}
+        if(result.mfaRequired){setUser(null);setMfaChallenge(result.challengeToken!);}else{setMfaChallenge(null);setUser(result.user??null);}setAuthUnavailable(false);
+      }catch(error){if(current(accessToken))await rejectSession(error);}finally{if(current(accessToken))setLoading(false);}
     };
     if(isSupabaseMode){
-      const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{queueMicrotask(()=>{if(active){if(session)void authenticate(session.access_token);else void signOut();}});});
+      const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{queueMicrotask(()=>{
+        if(!active)return;if(session){void authenticate(session.access_token);return;}
+        if(event==='SIGNED_OUT'){void signOut();return;}
+        const started=useAuthStore.getState().token;
+        void(async()=>{try{const result=await supabase.auth.getSession();if(!active||useAuthStore.getState().token!==started)return;if(result.error)throw result.error;if(result.data.session)await authenticate(result.data.session.access_token);else await signOut();}catch(error){if(active&&useAuthStore.getState().token===started){await rejectSession(error);setLoading(false);}}})();
+      });});
       return()=>{active=false;subscription.unsubscribe();};
     }
     void (async()=>{
-      const stored=await loadStoredToken();
-      if(!active)return;
-      if(!stored){setLoading(false);return;}
+      let stored:string|null=null;
       try{
+        stored=await loadStoredToken();if(!active)return;if(!stored){setLoading(false);return;}
         const result=await api.get<{user:UserRow}>('/api/users/me');
-        if(current(stored))setUser(result.user);
-      }catch{if(current(stored))await signOut();}finally{if(current(stored))setLoading(false);}
+        if(current(stored)){setUser(result.user);setAuthUnavailable(false);}
+      }catch(error){if(active&&(!stored||current(stored)))await rejectSession(error);}finally{if(active&&(!stored||current(stored)))setLoading(false);}
     })();
     return()=>{active=false;};
-  },[initialize,loadStoredToken,setLoading,setMfaChallenge,setToken,setUser,signOut]);
+  },[initialize,loadStoredToken,setLoading,setMfaChallenge,setToken,setUser,signOut,authRetry,setAuthUnavailable]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Shared ───────────────────────────────────────────────────────────────────
   async function fetchProfile() {
     const started=useAuthStore.getState().token;
     try {
       const res = await api.get<{ user: UserRow }>('/api/users/me');
-      if(useAuthStore.getState().token===started)setUser(res.user);
-    } catch {
-      // session may be expired; clear it
-      if(useAuthStore.getState().token===started)await signOut();
+      if(useAuthStore.getState().token===started){setUser(res.user);setAuthUnavailable(false);}
+    } catch(error) {
+      if(useAuthStore.getState().token===started)await rejectSession(error);
     } finally {
       if(useAuthStore.getState().token===started)setLoading(false);
     }
   }
 
   async function logout() {
+    const started=useAuthStore.getState().token;
     try{await api.post('/api/auth/logout',{});}catch{}
-    if(isSupabaseMode)await supabase.auth.signOut();
-    await signOut();
+    if(useAuthStore.getState().token!==started)return;
+    try{await unregisterDevicePush();}catch{}
+    if(useAuthStore.getState().token!==started)return;
+    try{if(isSupabaseMode)await supabase.auth.signOut({scope:'local'});}finally{if(useAuthStore.getState().token===started)await signOut();}
   }
 
   type LoginResult={token?:string;user?:UserRow;mfaRequired?:boolean;challengeToken?:string};
   async function acceptLogin(result:LoginResult){
+    setAuthUnavailable(false);
     if(result.mfaRequired){await setToken(null);setMfaChallenge(result.challengeToken!);setUser(null);return;}
     await setToken(result.token!);setUser(result.user!);setMfaChallenge(null);
   }
@@ -74,5 +82,5 @@ export function useAuth(initialize=false) {
     if(result.token)await setToken(result.token);
     setUser(result.user!);setMfaChallenge(null);
   }
-  return {user,token,isLoading,mfaChallenge,logout,fetchProfile,loginWithEmail,signUpWithEmail,loginWithGoogleToken,verifySecondFactor};
+  return {user,token,isLoading,mfaChallenge,authUnavailable,retryAuthentication,logout,fetchProfile,loginWithEmail,signUpWithEmail,loginWithGoogleToken,verifySecondFactor};
 }

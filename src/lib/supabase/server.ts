@@ -52,7 +52,7 @@ export function createClient(options?:{skipMfa?:boolean}): ReturnType<typeof cre
       const result=await getUser(token??bearer);
       if(!result.data.user)return result;
       const accessToken=token??bearer??(await client.auth.getSession()).data.session?.access_token;
-      if(!await providerFactorAuthorized(result.data.user.id,accessToken))return {data:{user:null},error:new AuthError('Second factor required')};
+      if(!await providerFactorAuthorized(result.data.user.id,accessToken))return {data:{user:null},error:new AuthError('Second factor required',401)};
       return result;
     };
   }

@@ -1,3 +1,4 @@
+import {headers} from 'next/headers';
 import {getAuthorQuestions,AuthorQuestionError} from '@/lib/author-questions';
 import {getArcs} from '@/lib/arcs';
 import {ArcOfferCard} from '@/components/author/ArcCatalog';
@@ -166,7 +167,7 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForHtml(jsonLd) }} />
+      <script nonce={headers().get('x-nonce')??undefined} type="application/ld+json"  dangerouslySetInnerHTML={{ __html: jsonForHtml(jsonLd) }} />
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
       <div className="space-y-4">

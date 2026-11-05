@@ -11,6 +11,14 @@ function storage():Storage {
 const payload={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:'Private draft text'})};
 const key=(transport:ReturnType<typeof vi.fn<typeof fetch>>,index:number)=>new Headers(transport.mock.calls[index][1]?.headers).get('Idempotency-Key');
 
+it('bounds abandoned generic intents, clears permanent failures and preserves explicit financial proofs',async()=>{
+ const saved=storage(),proof='liravo:financial-intent:reader:payout:USD';saved.setItem(proof,JSON.stringify({key:'durable-financial-proof'}));
+ let actor='reader';const transport=vi.fn<typeof fetch>().mockImplementation(async()=>Response.json({error:'Invalid draft'},{status:422})),managed=browserFetch(transport,'https://app.test',()=>'',saved,()=>actor);
+ for(let index=0;index<150;index++)await managed('/api/quotes',{...payload,body:JSON.stringify({content:'Failed draft '+index})});expect(saved.length).toBe(1);expect(saved.getItem(proof)).toContain('durable-financial-proof');
+ transport.mockImplementation(async()=>Response.json({error:'Temporary failure'},{status:503}));for(let index=0;index<150;index++)await managed('/api/quotes',{...payload,body:JSON.stringify({content:'Pending draft '+index})});expect(saved.length).toBeLessThanOrEqual(129);
+ actor='another-reader';await managed('/api/quotes',payload);expect(saved.length).toBe(2);expect(saved.getItem(proof)).toContain('durable-financial-proof');
+});
+
 it('retains keys across dependency failures, unreadable acknowledgements and page reloads',async()=>{
   const transport=vi.fn<typeof fetch>(),saved=storage();
   let managed=browserFetch(transport,'https://app.test',()=>'',saved);

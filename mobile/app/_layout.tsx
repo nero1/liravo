@@ -1,3 +1,5 @@
+import {View,Text} from 'react-native';
+import {Button} from '@/components/ui/Button';
 import {useTranslations} from '@/hooks/useTranslations';
 import '../global.css';
 import { useEffect } from 'react';
@@ -14,7 +16,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isLoading } = useAuth(true);
+  const { isLoading,authUnavailable,retryAuthentication } = useAuth(true);
+  const {t}=useTranslations('auth'),common=useTranslations('common');
   const { user, token, mfaChallenge } = useAuthStore();
   const setLocale=usePreferences(state=>state.setLocale);
   useEffect(()=>{if(supportedLocale(user?.preferred_locale))void setLocale(user.preferred_locale).catch(()=>{});},[user?.preferred_locale,setLocale]);
@@ -23,7 +26,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   usePushNotifications();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading||authUnavailable&&!user) return;
 
     const inAuth = segments[0] === 'auth';
     if(mfaChallenge){if(!inAuth||segments[1]!=='welcome')router.replace('/auth/welcome');return;}
@@ -40,9 +43,10 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     } else if (isAuthenticated && user && !user.onboarding_complete && segments[1] !== 'onboarding') {
       router.replace('/auth/onboarding');
     }
-  }, [isLoading,token,user,mfaChallenge,segments,router]);
+  }, [isLoading,token,user,mfaChallenge,segments,router,authUnavailable]);
 
   if (isLoading) return <LoadingSpinner />;
+  if(authUnavailable&&!user)return <View className="flex-1 justify-center px-6 gap-4"><Text accessibilityRole="alert" className="text-foreground">{t('unavailable')}</Text><Button onPress={retryAuthentication}>{common.t('retry')}</Button></View>;
 
   return <>{children}</>;
 }

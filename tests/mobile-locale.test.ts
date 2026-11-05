@@ -35,11 +35,12 @@ it('ignores unsupported persisted locales and tolerates unavailable preference s
 });
 
 it('sends the selected native language with new email and Google accounts',async()=>{
-  const state:any={user:null,token:null,setUser:(user:unknown)=>{state.user=user;},setToken:async(token:string)=>{state.token=token;},setMfaChallenge:()=>{}};
+  const state:any={user:null,token:null,setUser:(user:unknown)=>{state.user=user;},setToken:async(token:string)=>{state.token=token;},setMfaChallenge:()=>{},setAuthUnavailable:()=>{}};
   const post=vi.fn(async()=>({token:'fixture-token',user:{id:'reader',preferred_locale:'fr'}})),store=Object.assign(()=>state,{getState:()=>state}),exports:any={};
   const code=ts.transpileModule(readFileSync('mobile/hooks/useAuth.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
   runInNewContext(code,{exports,require:(name:string)=>{
     if(name==='react')return {useEffect:()=>{},useRef:(current:unknown)=>({current})};
+    if(name==='@/lib/device-push')return {unregisterDevicePush:async()=>{}};
     if(name==='@/hooks/useTranslations')return {useTranslations:()=>({locale:'fr'})};
     if(name==='@/stores/auth')return {useAuthStore:store};
     if(name==='@/lib/supabase')return {isSupabaseMode:false,supabase:{}};

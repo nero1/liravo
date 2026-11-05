@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import {headers} from 'next/headers';
 import { APP_URL } from '@/constants/config';
 import localFont from 'next/font/local';
 import { NextIntlClientProvider } from 'next-intl';
@@ -7,6 +8,8 @@ import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister';
 import { getDirection } from '@/lib/rtl';
 import './globals.css';
+
+export const dynamic='force-dynamic';
 
 const inter = localFont({
   src: '../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
@@ -65,7 +68,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <NextIntlClientProvider messages={messages}>
-          <ThemeProvider>
+          <ThemeProvider nonce={headers().get('x-nonce')??undefined}>
             <ServiceWorkerRegister />
             {children}
           </ThemeProvider>

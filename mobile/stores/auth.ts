@@ -16,6 +16,10 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   mfaChallenge:string|null;
+  authUnavailable:boolean;
+  authRetry:number;
+  setAuthUnavailable:(unavailable:boolean)=>void;
+  retryAuthentication:()=>void;
   setMfaChallenge:(challenge:string|null)=>void;
   setUser: (user: UserRow | null) => void;
   setToken: (token: string | null) => Promise<void>;
@@ -29,6 +33,10 @@ export const useAuthStore = create<AuthState>((set,get) => ({
   token: null,
   isLoading: true,
   mfaChallenge:null,
+  authUnavailable:false,
+  authRetry:0,
+  setAuthUnavailable:(authUnavailable)=>set({authUnavailable}),
+  retryAuthentication:()=>set({authRetry:get().authRetry+1,authUnavailable:false,isLoading:true}),
   setMfaChallenge:(mfaChallenge)=>set({mfaChallenge}),
   setUser: (user) => {
     if(get().user?.id!==user?.id)queryClient.clear();
@@ -43,7 +51,7 @@ export const useAuthStore = create<AuthState>((set,get) => ({
   signOut: async () => {
     revision++;
     queryClient.clear();
-    set({user:null,token:null,mfaChallenge:null,isLoading:false});
+    set({user:null,token:null,mfaChallenge:null,isLoading:false,authUnavailable:false});
     await persist(null);
   },
   loadStoredToken: async () => {
