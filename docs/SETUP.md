@@ -367,7 +367,7 @@ running migrations (optionally document it as `DATABASE_DIRECT_URL` for your own
 
 Redis is **required in all three provider modes**. It is used for:
 - Rate limiting (all modes)
-- Feature flag caching (all modes)
+- Legacy feature flag cache cleanup (current reads use PostgreSQL)
 - Feed caching (all modes)
 - Session storage (DigitalOcean and Railway modes only)
 
@@ -982,7 +982,7 @@ The `.gitignore` excludes `.env.local`. Never commit `.env` files with real valu
 
 ### Security and financial migration update
 
-Apply migrations 019–096 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+Apply migrations 019–097 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
 
 Payout requests reserve each USD/NGN/EUR balance atomically; failed/cancelled requests release reservations, completed requests remain deducted. Currencies are never implicitly converted; referral commissions retain their transaction currency. Tip referral commissions are 10% of the platform fee; subscription and ticket referrals are 10% of their purchase price. Migration 050 corrects verified historical commissions, preserves proportional refunds and audits exact adjustments; missing attribution evidence still requires staging reconciliation before withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
 
@@ -1006,7 +1006,7 @@ Migrations 032–034 add durable intent snapshots/reward outbox records for prim
 
 Direct PostgreSQL mutation `.select()` now returns selected fields, `.single()` checks cardinality, exact counts retain result rows, and duplicate-ignore upserts honor their option. Regression tests run against PostgreSQL. Native transport/changed payload contracts are covered independently; a full Expo build was not run.
 
-Migrations 035–036 enforce the last-enabled sign-in provider under concurrent admin updates and atomically bind referral identity, its reward and notification. Referral codes/attribution are service-managed; OAuth callbacks accept only app-relative return paths. A 503 `FLAG_CACHE_UNAVAILABLE` means the flag was saved but cache synchronization failed; retrying the same desired state is safe.
+Migrations 035–036 enforce the last-enabled sign-in provider under concurrent admin updates and atomically bind referral identity, its reward and notification. Referral codes/attribution are service-managed; OAuth callbacks accept only app-relative return paths. Migration 097 also rejects disabled Google/Telegram identity exchanges in direct PostgreSQL mode, including existing identities. Flag reads use current PostgreSQL values and default to disabled on missing/failed reads; Redis cleanup is best effort and does not undo a committed admin update. `/api/auth/providers` exposes only uncached Google/Telegram booleans; native Google controls refresh them on mount and hide disabled providers. Existing sessions remain valid. Supabase-managed provider configuration must also be enforced by that provider service.
 
 Admin pages use service reads after DB authorization and catalogs for English/French/German. The direct PostgreSQL adapter resolves FK relationships from schema metadata, including nested/cardinality-aware projections, and supports consumed containment, non-null and case-insensitive filters. Real admin page queries and rejection handling run in the migration rehearsal. Restart app processes after schema changes.
 

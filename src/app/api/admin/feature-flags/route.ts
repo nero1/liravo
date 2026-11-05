@@ -57,9 +57,7 @@ export async function PATCH(req: Request) {
 
   if(typeof changed!=='boolean')return NextResponse.json({error:'Flag update unavailable'},{status:503});
 
-  // Invalidate Redis cache immediately
-  try { await invalidateFeatureFlag(name); }
-  catch { return NextResponse.json({ error: 'Flag saved; retry to synchronize cache', code: 'FLAG_CACHE_UNAVAILABLE' }, { status: 503 }); }
+  await invalidateFeatureFlag(name);
 
   return NextResponse.json({updated:true,changed,actorId:user.id,name,enabled});
 }

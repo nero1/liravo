@@ -1,0 +1,10 @@
+import {afterEach,expect,it,vi} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import ts from 'typescript';
+import {GET} from '@/app/api/auth/providers/route';
+const mocks=vi.hoisted(()=>({flags:vi.fn()}));
+vi.mock('@/lib/feature-flags',()=>({getFeatureFlags:mocks.flags}));
+afterEach(()=>vi.clearAllMocks());
+it('publishes only current provider booleans without caching other feature configuration',async()=>{mocks.flags.mockResolvedValue({google_auth:false,telegram_auth:true,creator_tips:true});const response=await GET();expect(response.headers.get('Cache-Control')).toBe('no-store');expect(await response.json()).toEqual({google:false,telegram:true});mocks.flags.mockResolvedValue({});expect(await(await GET()).json()).toEqual({google:false,telegram:false});});
+it('keeps native provider configuration stale until refreshed and forwards cancellation',async()=>{const queries:any[]=[],get=vi.fn(),exports:any={};runInNewContext(ts.transpileModule(readFileSync('mobile/hooks/useAuthProviders.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports,require:(name:string)=>name==='@tanstack/react-query'?{useQuery:(query:any)=>queries.push(query)}:{api:{get}}});exports.useAuthProviders();expect(queries[0]).toMatchObject({queryKey:['auth-providers'],staleTime:0});const controller=new AbortController();get.mockResolvedValue({google:false,telegram:true});expect(await queries[0].queryFn({signal:controller.signal})).toEqual({google:false,telegram:true});expect(get).toHaveBeenCalledWith('/api/auth/providers',undefined,controller.signal);for(const data of[{}, {google:'true',telegram:false}]){get.mockResolvedValue(data);await expect(queries[0].queryFn({})).rejects.toThrow('unavailable');}});

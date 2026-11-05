@@ -436,6 +436,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     })));
     expect(disabled.filter(result=>result.status==='fulfilled')).toHaveLength(1);
     expect((await sql`select count(*)::int as count from feature_flags where name in ('google_auth','telegram_auth') and enabled`)[0].count).toBe(1);
+    await sql`update feature_flags set enabled=true where name in ('google_auth','telegram_auth')`;
     await expect(sql`select set_feature_flag_atomic(${recipient},'unknown_flag',true)`).rejects.toThrow('Unknown flag');
     const referred='00000000-0000-4000-8000-000000000093';
     await sql`insert into auth.users(id,email,raw_user_meta_data) values(${referred},'referred@example.test','{"username":"audit_referred"}')`;
@@ -2777,4 +2778,15 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('load-tests concurrent payme
  const rows=await sql`select idempotency_key from payout_requests where user_id=${recipient}`;await Promise.all(rows.flatMap(row=>Array.from({length:4},()=>sql`select create_payout_request_atomic(${recipient},5,'manual',${row.idempotency_key},'load-replay')`)));expect((await sql`select count(*)::int count from financial_audit_log where target_user_id=${recipient} and action='payout_requested'`)[0].count).toBe(18);const balance=(await sql`select creator_balance(${recipient},'USD')balance`)[0].balance;expect(Number(balance.available)).toBe(0);expect(Number(balance.reserved)).toBe(90);
  times.sort((a,b)=>a-b);const report=JSON.stringify({rehearsal:'financial-load',connections:16,webhookRequests:64,payoutRequests:64,payoutReplays:72,webhookP95Ms:Math.round(times[Math.floor(times.length*.95)]),durationMs:Math.round(performance.now()-started)});console.log(report);if(process.env.OPERATIONAL_REPORT_PATH)appendFileSync(process.env.OPERATIONAL_REPORT_PATH,report+'\n');
  }finally{await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('enforces disabled social providers for new identities and existing account replays on PostgreSQL',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Provider rollback rehearsal requires isolated loopback PostgreSQL');const sql=postgres(url,{max:2,prepare:false,ssl:false,onnotice:()=>{}});
+ const original=await sql`select name,enabled from feature_flags where name in('google_auth','telegram_auth')`;
+ try{for(const provider of['google','telegram']){const subject=provider==='google'?crypto.randomUUID():String(Date.now()),email=provider==='google'?subject+'@example.test':null,flag=provider+'_auth';await sql`update feature_flags set enabled=true where name=${flag}`;
+ const[created]=await sql`select resolve_localized_social_identity(${provider},${subject},${email},'Provider rollback101',null,'fr')profile`;expect(created.profile.preferred_locale).toBe('fr');await sql`update feature_flags set enabled=false where name=${flag}`;
+ await expect(sql`select resolve_localized_social_identity(${provider},${subject},${email},'Provider rollback101',null,'fr')`).rejects.toMatchObject({code:'P1003'});
+ const next=provider==='google'?crypto.randomUUID():String(Date.now()+10000);await expect(sql`select resolve_direct_social_identity(${provider},${next},${provider==='google'?next+'@example.test':null},'Disabled provider101',null)`).rejects.toMatchObject({code:'P1003'});
+ await sql`update feature_flags set enabled=true where name=${flag}`;expect((await sql`select resolve_direct_social_identity(${provider},${subject},${email},'Provider rollback101',null)profile`)[0].profile.id).toBe(created.profile.id);
+ }}finally{for(const row of original)await sql`update feature_flags set enabled=${row.enabled} where name=${row.name}`;await sql.end();}
 },60_000);

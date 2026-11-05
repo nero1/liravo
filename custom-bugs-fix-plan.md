@@ -7,7 +7,7 @@ Updated 5 November 2026. Section status summarizes its bullets; individual verif
 - ✅ Verify self/admin guards for `/api/users/*` mutations; retain verified cross-user social targets.
 - ✅ Enforce DB-backed `is_admin` verification via service-side query/RPC.
 - ✅ Add regression tests: self access, cross-user denial, admin override.
-- ✅ Enforce real second-factor login, session-bound enrollment, one-time recovery, encrypted secrets and Supabase session policies.
+- ✅ Enforce real second-factor login, session-bound enrollment, one-time recovery, encrypted secrets, Supabase session policies and direct-provider disablement.
 - ✅ Add private purpose-bound email confirmation/recovery; preserve current email, enforce PINs and retain 2FA.
 - ✅ Enforce current privacy and verified content on legacy share cards.
 

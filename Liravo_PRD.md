@@ -292,7 +292,7 @@ All layouts designed at 375px width first, scaled to desktop. Fixed bottom navig
 **Sign-in methods:**
 - Google OAuth
 - Telegram OAuth
-- Admin can toggle which providers are available via the admin panel (e.g. disable Google login, or disable Telegram login independently).
+- Admin can toggle providers independently. Direct PostgreSQL exchanges enforce the current flag for new and existing identities; existing sessions remain valid. Web/native controls read uncached provider state. Supabase deployments must also disable the provider in Supabase.
 
 **Supabase web sign-in uses social auth.** Direct PostgreSQL web/native also supports email/password. OAuth accounts can add an optional verified recovery email after onboarding (see below).
 

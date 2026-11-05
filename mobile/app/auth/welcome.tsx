@@ -12,6 +12,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import { isSupabaseMode, supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import {useAuthProviders} from '@/hooks/useAuthProviders';
 import {useTranslations} from '@/hooks/useTranslations';
 import {LocaleSwitcher} from '@/components/ui/LocaleSwitcher';
 import {API_BASE} from '@/constants/api';
@@ -21,7 +22,7 @@ WebBrowser.maybeCompleteAuthSession();
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID ?? '';
 
 export default function WelcomeScreen() {
-  const {t}=useTranslations('auth'),{t:emailSecurity}=useTranslations('emailSecurity');
+  const {t}=useTranslations('auth'),{t:emailSecurity}=useTranslations('emailSecurity'),{t:common}=useTranslations('common'),providers=useAuthProviders();
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -108,7 +109,8 @@ export default function WelcomeScreen() {
             </View>
 
             <View className="gap-4">
-              {isSupabaseMode?<TouchableOpacity accessibilityRole="button" accessibilityLabel={t('continueWithGoogle')} accessibilityState={{disabled:loading,busy:loading}}
+              {providers.isPending&&<Text accessibilityLiveRegion="polite">{common('loading')}</Text>}{providers.isError&&<View><Text accessibilityLiveRegion="polite">{t('unavailable')}</Text><TouchableOpacity accessibilityRole="button" onPress={()=>void providers.refetch()}><Text>{common('retry')}</Text></TouchableOpacity></View>}{isSupabaseMode&&providers.data&&!providers.data.google&&<Text>{t('unavailable')}</Text>}
+              {providers.data?.google&&(isSupabaseMode?<TouchableOpacity accessibilityRole="button" accessibilityLabel={t('continueWithGoogle')} accessibilityState={{disabled:loading,busy:loading}}
                 onPress={signInWithGoogleSupabase}
                 disabled={loading}
                 className="bg-white border border-border rounded-xl py-4 flex-row items-center justify-center gap-3 shadow-sm"
@@ -122,7 +124,7 @@ export default function WelcomeScreen() {
                     <Text className="font-semibold text-foreground text-base">{t('continueWithGoogle')}</Text>
                   </>
                 )}
-              </TouchableOpacity>:GOOGLE_CLIENT_ID?<DirectGoogleButton onLogin={async token=>{setLoading(true);try{await loginWithGoogleToken(token);}finally{setLoading(false);}}} disabled={loading||captchaOpen}/>:null}
+              </TouchableOpacity>:GOOGLE_CLIENT_ID?<DirectGoogleButton onLogin={async token=>{setLoading(true);try{await loginWithGoogleToken(token);}finally{setLoading(false);}}} disabled={loading||captchaOpen}/>:null)}
 
               {/* Email / password — only in DO mode */}
               {!isSupabaseMode && (
