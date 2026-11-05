@@ -1,6 +1,6 @@
 # Custom Bugs Report
 
-Date/time: 05 November 2026, 03:38 PM WAT (Africa/Lagos)
+Date/time: 05 November 2026, 03:55 PM WAT (Africa/Lagos)
 
 Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed and verified; 🟡 partial; 🔵 pending. Original findings remain below; STATUS records describe the verified changes.
 
@@ -9,13 +9,13 @@ Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed an
 1: 🔵 BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
 2: ✅ BUG-20261105-002: [High] Supabase browser reads bypass profile and shelf privacy
 3: ✅ BUG-20261105-003: [High] Author readers expose profile fields without follower authorization
-4: 🟡 BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
-5: 🟡 BUG-20261105-005: [High] Device push registrations survive logout and can belong to two accounts
-6: 🟡 BUG-20261105-006: [High] Outbox events finish before external push delivery completes
+4: ✅ BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
+5: ✅ BUG-20261105-005: [High] Device push registrations survive logout and can belong to two accounts
+6: ✅ BUG-20261105-006: [High] Outbox events finish before external push delivery completes
 7: ✅ BUG-20261105-007: [High] Supabase middleware drops earlier refreshed authentication cookie chunks
-8: 🟡 BUG-20261105-008: [Medium] Push registration endpoints acknowledge failed database writes
+8: ✅ BUG-20261105-008: [Medium] Push registration endpoints acknowledge failed database writes
 9: ✅ BUG-20261105-009: [Medium] Middleware consumes multipart uploads before enforcing route size limits
-10: 🟡 BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
+10: ✅ BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
 11: ✅ BUG-20261105-011: [Medium] Sensitive administrative SQL routines accept deleted administrators
 12: ✅ BUG-20261105-012: [Medium] Onboarding follow buttons call a nonexistent endpoint
 13: 🔵 BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
@@ -24,10 +24,10 @@ Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed an
 16: 🔵 BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
 17: 🔵 GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
 18: 🔵 BUG-20261105-018: [Medium] Several cron jobs report success after database failures
-19: 🟡 BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
-20: 🟡 BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
-21: 🟡 BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
-22: 🟡 GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
+19: ✅ BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
+20: ✅ BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
+21: ✅ BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
+22: ✅ GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
 23: 🔵 GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
 24: 🔵 GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
 25: 🔵 BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
@@ -38,8 +38,8 @@ Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed an
 30: 🔵 GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
 31: 🔵 BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
 32: ✅ BUG-20261105-032: [Medium] The health endpoint reports HTTP success when all dependencies fail
-33: 🟡 GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
-34: 🟡 GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
+33: ✅ GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
+34: ✅ GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
 35: ✅ BUG-20261105-035: [Medium] Direct PostgreSQL mode hides public book and author pages behind login
 
 ## Detailed findings
@@ -72,7 +72,7 @@ FIX: Share the normal profile visibility decision with author API and page reade
 
 STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
 
-### 4: 🟡 BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
+### 4: ✅ BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
 
 FILES: `src/app/api/users/web-push/route.ts`, `src/lib/push-notifications.ts`
 
@@ -80,9 +80,9 @@ PROBLEM: Subscription validation accepts arbitrary URL hosts and stores them for
 
 FIX: Validate supported HTTPS push-service origins at registration and delivery. Reject credentials, private/link-local/loopback addresses, unsafe DNS resolutions and redirects; enforce network egress restrictions where available. Validate key formats and endpoint lengths, cap subscriptions per account, rate-limit registration and set delivery deadlines. Test address variants and DNS changes without contacting internal services.
 
-STATUS: 🟡 Push service origins, keys, destination DNS and IPv4/IPv6 ranges are validated at registration and connection. Regression checks reject private and transition addresses without contacting internal targets.
+STATUS: ✅ Push service origins, keys, destination DNS and IPv4/IPv6 ranges are validated at registration and connection. Regression checks reject private and transition addresses without contacting internal targets.
 
-### 5: 🟡 BUG-20261105-005: [High] Device push registrations survive logout and can belong to two accounts
+### 5: ✅ BUG-20261105-005: [High] Device push registrations survive logout and can belong to two accounts
 
 FILES: `mobile/hooks/useAuth.ts`, `mobile/hooks/usePushNotifications.ts`, `src/app/api/users/push-token/route.ts`, `supabase/migrations/001_schema.sql`
 
@@ -90,9 +90,9 @@ PROBLEM: Logout removes authentication but never unregisters the device push tok
 
 FIX: Represent subscriptions as owned device/session registrations. Atomically rebind a token when its account changes, revoke the current device registration during logout and handle failed revocation explicitly. Prevent stale asynchronous registration from attaching to a new account. Verify logout, account switching, reinstall/token rotation and notification delivery without deleting other active devices.
 
-STATUS: 🟡 Session-owned registrations rebind atomically and are revoked independently of authentication cleanup. SQL and native regressions cover logout, stale registration and account changes.
+STATUS: ✅ Session-owned registrations rebind atomically and are revoked independently of authentication cleanup. SQL and native regressions cover logout, stale registration and account changes.
 
-### 6: 🟡 BUG-20261105-006: [High] Outbox events finish before external push delivery completes
+### 6: ✅ BUG-20261105-006: [High] Outbox events finish before external push delivery completes
 
 FILES: `src/lib/outbox-worker.ts`, `src/lib/push-notifications.ts`, `supabase/migrations/001_schema.sql:4930`
 
@@ -100,7 +100,7 @@ PROBLEM: process_outbox_event_atomic commits processed status before sendPushToU
 
 FIX: Separate committed database effects from external delivery status. Claim and await bounded delivery attempts, persist success or retry/dead-letter receipts, and retain a stable event identity. Preserve existing once-only database effects when retrying delivery. Explicitly define duplicate-tolerant push semantics and test termination, provider failure and lost acknowledgements.
 
-STATUS: 🟡 Database effects queue durable delivery children; the worker awaits bounded transport and per-device acknowledgements. SQL and worker regressions cover replay, retries and stale claims.
+STATUS: ✅ Database effects queue durable delivery children; the worker awaits bounded transport and per-device acknowledgements. SQL and worker regressions cover replay, retries and stale claims.
 
 ### 7: ✅ BUG-20261105-007: [High] Supabase middleware drops earlier refreshed authentication cookie chunks
 
@@ -112,7 +112,7 @@ FIX: Use the supported batch cookie API or accumulate all cookie mutations on on
 
 STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
 
-### 8: 🟡 BUG-20261105-008: [Medium] Push registration endpoints acknowledge failed database writes
+### 8: ✅ BUG-20261105-008: [Medium] Push registration endpoints acknowledge failed database writes
 
 FILES: `src/app/api/users/web-push/route.ts`, `src/app/api/users/push-token/route.ts`
 
@@ -120,7 +120,7 @@ PROBLEM: Both registration routes and their delete handlers discard mutation err
 
 FIX: Validate each request, inspect mutation errors and confirm the intended account-owned result before acknowledging success. Return a retryable dependency failure when persistence fails. Make register/unregister idempotent and surface recoverable failures to clients; verify rejected writes, missing accounts and malformed deletion requests.
 
-STATUS: 🟡 Registration and deletion validate bounded requests and persistence receipts. Failed writes return retryable errors instead of successful acknowledgements.
+STATUS: ✅ Registration and deletion validate bounded requests and persistence receipts. Failed writes return retryable errors instead of successful acknowledgements.
 
 ### 9: ✅ BUG-20261105-009: [Medium] Middleware consumes multipart uploads before enforcing route size limits
 
@@ -132,7 +132,7 @@ FIX: Require the CSRF header for binary uploads and reject oversized bodies befo
 
 STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
 
-### 10: 🟡 BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
+### 10: ✅ BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
 
 FILES: `mobile/hooks/useAuth.ts`
 
@@ -140,7 +140,7 @@ PROBLEM: Initialization, provider-session exchange and fetchProfile catch every 
 
 FIX: Distinguish confirmed unauthorized/revoked sessions from transport, timeout and server failures. Preserve valid stored credentials during temporary failures, expose a retry/offline state and retry with bounded backoff. Clear authentication only when revocation is established. Verify cold start offline, 503 recovery, expired credentials and account switching during retries.
 
-STATUS: 🟡 Native verification preserves credentials during temporary outages, including initial provider recovery. Server session readers distinguish dependency failures from rejected credentials; retry and account-switch regressions pass.
+STATUS: ✅ Native verification preserves credentials during temporary outages, including initial provider recovery. Server session readers distinguish dependency failures from rejected credentials; retry and account-switch regressions pass.
 
 ### 11: ✅ BUG-20261105-011: [Medium] Sensitive administrative SQL routines accept deleted administrators
 
@@ -214,7 +214,7 @@ PROBLEM: Account-hardening ignores user-query and notification-insert errors; af
 
 FIX: Inspect every database result, count only acknowledged effects and return failure or an explicit partial/retryable result. Persist resumable progress where a batch can partially commit. Make notification/log writes idempotent under retries. Inject read, count and write failures and verify scheduler status, operational alerts and counters.
 
-### 19: 🟡 BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
+### 19: ✅ BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
 
 FILES: `next.config.mjs`, `src/lib/client/tone-classifier.ts`, `src/lib/tone-classifier.ts`, `src/app/api/books/[id]/reviews/route.ts`
 
@@ -222,9 +222,9 @@ PROBLEM: The browser classifier forces remote Hugging Face models, but connect-s
 
 FIX: Represent classification unavailability explicitly. If moderation is required, queue content as pending for retry/review; if advisory, show unavailable rather than safe. Serve vetted model assets from an allowed origin or narrowly configure required origins without weakening the whole CSP. Verify CSP enforcement, model load failure and provider recovery.
 
-STATUS: 🟡 Unavailable classifiers return an explicit unavailable state. Reviews remain private and pending until durable automated or staff moderation publishes them; SQL checks cover permissions, stale claims and once-only XP.
+STATUS: ✅ Unavailable classifiers return an explicit unavailable state. Reviews remain private and pending until durable automated or staff moderation publishes them; SQL checks cover permissions, stale claims and once-only XP.
 
-### 20: 🟡 BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
+### 20: ✅ BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
 
 FILES: `mobile/lib/api.ts`, `src/lib/client/csrf.ts`
 
@@ -232,9 +232,9 @@ PROBLEM: Implicit mutation keys are removed only after a successful acknowledgem
 
 FIX: Scope intents to the authenticated account, avoid retaining sensitive request/token material and bound entries by count and lifetime. Clear definitively rejected or abandoned operations and account-owned state on logout. Preserve keys for ambiguous committed operations and financial replay safety. Verify long sessions, permanent failures, interrupted acknowledgements and account switching.
 
-STATUS: 🟡 Generic retry caches contain bounded, expiring hashes and clear on account changes or logout. Definitive failures are discarded while explicit financial proofs remain independent; stress and account-switch regressions pass.
+STATUS: ✅ Generic retry caches contain bounded, expiring hashes and clear on account changes or logout. Definitive failures are discarded while explicit financial proofs remain independent; stress and account-switch regressions pass.
 
-### 21: 🟡 BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
+### 21: ✅ BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
 
 FILES: `mobile/hooks/usePushNotifications.ts`
 
@@ -242,9 +242,9 @@ PROBLEM: The registered notification-response listener reads data.url but execut
 
 FIX: Route supported internal destinations through Expo Router, handling both response events and cold-start notification responses. Validate destinations against an internal allowlist. Catch registration failures and cancel/ignore stale account work. Verify foreground, background, cold-start, invalid-link and logout-during-registration cases on devices.
 
-STATUS: 🟡 Native cold-start and live notification responses navigate through validated internal destinations with recipient checks, deduplication and listener cleanup. Regression checks pass.
+STATUS: ✅ Native cold-start and live notification responses navigate through validated internal destinations with recipient checks, deduplication and listener cleanup. Regression checks pass.
 
-### 22: 🟡 GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
+### 22: ✅ GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
 
 FILES: `src/app/api/write/ai-feedback/route.ts`, `src/app/api/ai/recommendations/route.ts`
 
@@ -252,7 +252,7 @@ PROBLEM: Unlike the recommendation route, writing feedback never reads the user'
 
 FIX: Resolve the supported account/request locale and include it in the model instruction, cache identity and returned receipt. Localize user-facing failure states through existing message catalogs. Verify English, French and German feedback, locale changes with an existing cache and fallback-provider responses.
 
-STATUS: 🟡 Writing feedback uses the saved English/French/German locale in generation and cache identity. Locale, entitlement and dependency-failure regressions pass.
+STATUS: ✅ Writing feedback uses the saved English/French/German locale in generation and cache identity. Locale, entitlement and dependency-failure regressions pass.
 
 ### 23: 🔵 GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
 
@@ -336,7 +336,7 @@ FIX: Return HTTP 503 for failed readiness dependencies with Cache-Control:no-sto
 
 STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
 
-### 33: 🟡 GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
+### 33: ✅ GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
 
 FILES: `next.config.mjs`
 
@@ -344,9 +344,9 @@ PROBLEM: The production script-src includes both unsafe-inline and unsafe-eval. 
 
 FIX: Adopt per-response nonces or hashes for required scripts and remove broad eval permission after validating actual library requirements. If browser inference needs WebAssembly support, grant only the narrow capability required. Exercise Next.js hydration, Telegram, hCaptcha and inference under report-only CSP before enforcement.
 
-STATUS: 🟡 Production CSP uses per-request nonces and restricted script capabilities. Theme, JSON-LD and offline scripts receive the nonce; final production browser verification is in progress.
+STATUS: ✅ Production responses rotate nonces and reject arbitrary inline scripts without unsafe inline/eval permissions. Chromium verified French hydration, theme initialization, nonce-bearing scripts, blocked parser-injected code and translated offline behavior.
 
-### 34: 🟡 GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
+### 34: ✅ GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
 
 FILES: `src/app/api/write/ai-feedback/route.ts`, `src/app/api/ai/recommendations/route.ts`, `src/lib/retry.ts`, `src/lib/ai-client.ts`
 
@@ -354,7 +354,7 @@ PROBLEM: Feedback and recommendations implement their own provider calls using f
 
 FIX: Route these calls through the shared AI client or give the entire primary/fallback chain one explicit deadline and cancellation signal. Keep retry budgets, token limits, output schemas and locale behavior consistent. Verify slow headers/bodies, transient errors, fallback timing and client cancellation without duplicate expensive work.
 
-STATUS: 🟡 Recommendations and feedback use the shared AI client, with cancellation bounding the entire provider chain even when circuit storage stalls. Deadline and no-late-call regressions pass.
+STATUS: ✅ Recommendations and feedback use the shared AI client, with cancellation bounding the entire provider chain even when circuit storage stalls. Deadline and no-late-call regressions pass.
 
 ### 35: ✅ BUG-20261105-035: [Medium] Direct PostgreSQL mode hides public book and author pages behind login
 
@@ -393,4 +393,4 @@ Engineering assessment, not a benchmark or security certification:
 
 Proposed batches after plan review: first address findings 1–7 and 11 (dependencies, privacy, SSRF, sessions and sensitive authorization); then 8–10, 12–22 and 31–32 (correctness, delivery and failure handling); then 23–30 and 33–35 (portability, scale, typing, CSP and public navigation). Acceptance requires targeted regression checks, existing tests, lint/types, service-backed schema tests, production bundle limits and device/provider/restore/load checks where applicable. Ratings after remediation are estimates until those validations pass.
 
-Report updated: 05 November 2026, 03:38 PM WAT (Africa/Lagos)
+Report updated: 05 November 2026, 03:55 PM WAT (Africa/Lagos)

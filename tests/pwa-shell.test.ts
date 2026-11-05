@@ -1,3 +1,4 @@
+vi.mock('next/headers',()=>({headers:()=>new Headers({'x-nonce':'fixture_nonce_for_offline_page'})}));
 import {expect,it,vi} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
