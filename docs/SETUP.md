@@ -863,6 +863,8 @@ psql "postgresql://postgres:pass@postgres.railway.internal:5432/railway" \
 
 Restore an encrypted backup to an isolated database; never overwrite production for a drill. Target RPO ≤24 hours and RTO ≤4 hours. Verify the backup checksum before restoring, migration version, table counts and foreign keys; sample user ownership, completed tips versus payouts, referral commissions, pending payout reservations and outbox status. Run authentication and financial smoke tests with sandbox credentials. Record backup timestamp, restore duration, discrepancies and operator sign-off in the existing operations log; failed checks block release until reconciled. Delete the drill database after review.
 
+Local rehearsal, 5 November 2026: an AES-256-encrypted PostgreSQL backup restored 121 tables/34,565 rows in 8.93 seconds. Checks matched every table’s row fingerprint and routine ACLs, validated foreign keys and denied browser financial/follow writes; corrupted encrypted input was rejected. This used synthetic isolated data and does not establish production RPO/RTO or provider recovery.
+
 ### Manual Backup (Supabase)
 
 ```bash
@@ -980,7 +982,7 @@ The `.gitignore` excludes `.env.local`. Never commit `.env` files with real valu
 
 ### Security and financial migration update
 
-Apply migrations 019–093 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
+Apply migrations 019–096 after the existing migrations before deploying these routes. Financial and social writes now require service-only RPCs; missing RPCs fail closed. `service_role` must exist and the direct PostgreSQL application role must have EXECUTE privileges on these routines. Never grant them to anonymous or browser roles. Use a staging restore first; the SQL tests exercise isolated fixtures. All migrations also passed a clean PostgreSQL 16 rehearsal with Supabase auth stubs; rehearse your own staging snapshot before production.
 
 Payout requests reserve each USD/NGN/EUR balance atomically; failed/cancelled requests release reservations, completed requests remain deducted. Currencies are never implicitly converted; referral commissions retain their transaction currency. Tip referral commissions are 10% of the platform fee; subscription and ticket referrals are 10% of their purchase price. Migration 050 corrects verified historical commissions, preserves proportional refunds and audits exact adjustments; missing attribution evidence still requires staging reconciliation before withdrawals. Tips and payouts use `Idempotency-Key`; social mutations use `X-Idempotency-Key` (8–200 characters). Webhook event IDs are durably unique per provider; failed transactions retain no replay claim. Provider-native charge/payment identities supply durable webhook event IDs. Paystack HMAC uses SHA-512. Verify provider adapters against real sandbox payloads before accepting payments.
 

@@ -2,7 +2,7 @@ import { createFormatter, createTranslator } from 'next-intl';
 import en from '../messages/en.json';
 import { it, expect, vi } from 'vitest';
 import postgres from 'postgres';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync,appendFileSync } from 'node:fs';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { INTEGRITY_SIGNALS } from '@/constants/cron';
 
@@ -2763,5 +2763,18 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('verifies current follow rec
  const[a,b]=await Promise.all([apply('follow','follow099-first'),apply('follow','follow099-first')]);expect(a).toEqual(b);expect(a).toMatchObject({actorId:actor,targetId:target,following:true,committedFollowing:true});await apply('unfollow','follow099-remove');expect((await sql`select follow_intent_snapshot(${actor},${target},'follow099-first')data`)[0].data).toMatchObject({following:false,committedFollowing:true});await apply('follow','follow099-again');expect((await sql`select count(*)::int count from social_rewards where actor_id=${actor} and target_id=${target} and action='follow'`)[0].count).toBe(1);await expect(apply('unfollow','follow099-first')).rejects.toMatchObject({code:'P1001'});await expect(sql`select follow_intent_snapshot(${other},${target},'follow099-first')`).rejects.toMatchObject({code:'P1005'});
  await sql`update users set deleted_at=now()where id=${target}`;await expect(apply('follow','follow099-deleted')).rejects.toMatchObject({code:'P1005'});expect(await apply('unfollow','follow099-cleanup')).toMatchObject({following:false});await sql`update users set deleted_at=null,is_banned=true where id=${target}`;await expect(apply('follow','follow099-banned')).rejects.toMatchObject({code:'P1005'});await sql`update users set is_banned=false where id=${target}`;await sql`update users set is_banned=true where id=${actor}`;await expect(apply('follow','follow099-actor')).rejects.toMatchObject({code:'P1003'});
  expect((await sql`select has_table_privilege('authenticated','follows','insert')write,has_function_privilege('service_role','apply_social_intent_before096(uuid,uuid,text,text)','execute')bypass`)[0]).toMatchObject({write:false,bypass:false});
+ }finally{await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('load-tests concurrent payment replay and payout reservations on PostgreSQL',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Load rehearsal requires isolated loopback PostgreSQL');const sql=postgres(url,{max:16,prepare:false,ssl:false,onnotice:()=>{}}),times:number[]=[];
+ try{const recipient=crypto.randomUUID(),sender=crypto.randomUUID();for(const[id,name]of[[recipient,'recipient'],[sender,'sender']])await sql`select create_direct_account(${id},${id+'@example.test'},${'load'+id.replaceAll('-','').slice(0,20)},${'Load '+name})`;
+ const[tip]=await sql`insert into tips(user_id,recipient_id,amount,platform_fee,recipient_amount,currency)values(${sender},${recipient},100,10,90,'USD')returning id`,payload={tipId:tip.id,status:'completed',payment_id:'load-'+tip.id,paid_amount_minor:10000,currency:'USD'};
+ const started=performance.now();await Promise.all(Array.from({length:64},async()=>{const at=performance.now();await sql`select process_payment_event('paystack',${'charge:load-'+tip.id},${sql.json(payload)},'load-rehearsal')`;times.push(performance.now()-at);}));
+ await Promise.all(Array.from({length:8},(_,n)=>expect(sql`select process_payment_event('paystack',${'conflicting-'+tip.id+'-'+n},${sql.json(payload)},'load-conflict')`).rejects.toMatchObject({code:'P1001'})));expect((await sql`select count(*)::int count from payment_captures where entity_id=${tip.id}`)[0].count).toBe(1);expect((await sql`select count(*)::int count from payouts where tip_id=${tip.id}`)[0].count).toBe(1);
+ await sql`insert into user_payout_methods(user_id,provider,display_name,account_number,bank_code,currency)values(${recipient},'manual','Load account','1234567890','AUDIT','USD')`;
+ const requests=await Promise.allSettled(Array.from({length:64},(_,n)=>sql`select create_payout_request_atomic(${recipient},5,'manual',${'load-payout-'+n},'load-rehearsal')id`));expect(requests.filter(row=>row.status==='fulfilled')).toHaveLength(18);for(const row of requests)if(row.status==='rejected')expect(String(row.reason)).toContain('Insufficient balance');
+ const rows=await sql`select idempotency_key from payout_requests where user_id=${recipient}`;await Promise.all(rows.flatMap(row=>Array.from({length:4},()=>sql`select create_payout_request_atomic(${recipient},5,'manual',${row.idempotency_key},'load-replay')`)));expect((await sql`select count(*)::int count from financial_audit_log where target_user_id=${recipient} and action='payout_requested'`)[0].count).toBe(18);const balance=(await sql`select creator_balance(${recipient},'USD')balance`)[0].balance;expect(Number(balance.available)).toBe(0);expect(Number(balance.reserved)).toBe(90);
+ times.sort((a,b)=>a-b);const report=JSON.stringify({rehearsal:'financial-load',connections:16,webhookRequests:64,payoutRequests:64,payoutReplays:72,webhookP95Ms:Math.round(times[Math.floor(times.length*.95)]),durationMs:Math.round(performance.now()-started)});console.log(report);if(process.env.OPERATIONAL_REPORT_PATH)appendFileSync(process.env.OPERATIONAL_REPORT_PATH,report+'\n');
  }finally{await sql.end();}
 },60_000);

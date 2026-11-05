@@ -1,7 +1,7 @@
 # Custom Bugs Fix Plan
 Date/Time: May 23, 2026 09:39 PM UTC
 
-Updated 4 November 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
+Updated 5 November 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
 
 ✅ 1. Identity and authorization invariants (Critical)
 - ✅ Verify self/admin guards for `/api/users/*` mutations; retain verified cross-user social targets.
@@ -93,7 +93,7 @@ Updated 4 November 2026. Section status summarizes its bullets; individual verif
 - ✅ Add restore-drill SOP and backup verification checklist.
 
 🟡 10. Validation rollout
-- 🟡 Add concurrency/load tests for payout/webhook/cron paths.
+- ✅ Load-test concurrent payout/webhook replay and real Redis cron lease renewal, overlap and failure recovery.
 - ✅ Add security tests (CSRF, replay, IDOR, abuse throttling).
 - ✅ Keep browser inference out of server functions and enforce the uncompressed bundle budget during builds.
 - ✅ Escape authored text in structured metadata and retain valid JSON values.

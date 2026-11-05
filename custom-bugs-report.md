@@ -1,7 +1,7 @@
 # Custom Bugs Report
 Date/Time: May 23, 2026 09:39 PM UTC
 
-Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 not fixed. Current evidence and remaining work: `custom-bugs-verification.md`.
+Verification updated 5 November 2026: ✅ resolved/verified; 🟡 partial; 🔵 not fixed. Current evidence and remaining work: `custom-bugs-verification.md`.
 
 ## Critical (one-line list)
 ✅ 1: BUG-001: IDOR risk in user-specific mutation endpoints because route `id` is not consistently enforced against authenticated user identity.
@@ -25,7 +25,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
 ✅ 15: BUG-015: Observability is incomplete for security/finance paths (limited correlation IDs and error taxonomies).
 ✅ 16: BUG-016: JSDoc/documentation coverage for critical utility modules is inconsistent, raising maintenance and misuse risk.
 ✅ 17: BUG-017: Large cron fan-out loops are sequential in places and may time out on Hobby compute windows.
-🟡 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
+✅ 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
 
 ## Low (one-line list)
 ✅ 19: BUG-019: Setup guidance includes endpoint names not present in repository (operational drift).
@@ -104,7 +104,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
     FILES: src/app/api/cron/email-digest/route.ts
     FIX: Process in bounded batches with concurrency limit + retry budget + checkpoint cursor/state; continue next run from saved cursor.
 
-🟡 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
+✅ 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
     FILES: messages/en.json, messages/fr.json, messages/de.json, src/app/(app)/admin/**, src/components/**
     FIX: Enforce translation key usage in UI, add missing locale keys, and create CI check for untranslated literals in user-facing components.
     ✅ Search, quote and review forms: EN/FR/DE, accessible labels/states, recoverable search and owned reload-safe submissions. All 45 shared components now pass locale/field checks; room, notification, goal, progress, language and modal recovery pass Chromium. Wider web/native and stored-message coverage remains 🟡.

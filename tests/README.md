@@ -132,3 +132,5 @@ Author-management checks cover 55 tied private/public questions, complete status
 Social-reader checks cover follow concurrency/replay, current versus committed state, inactive targets, owned receipts and direct-write boundaries. Real native QueryClient checks verify profile/discovery invalidation after follows and shelf changes, account switches and translated follow controls. Regional-tag checks cover GB/UK aliases, global stores, current configuration and storage failures.
 
 CI runs unit/component tests with two workers, then rehearses migrations in a separate single-worker invocation. This preserves the 60-second per-case budget without competing native VM transforms.
+
+Operational load checks exercise 64 concurrent canonical webhook replays, eight conflicting identities, 64 competing payout requests and 72 reservation retries on PostgreSQL. Redis database 14 on loopback is required through `CRON_TEST_REDIS_URL`; CI supplies Redis 7 and checks 128 overlapping starts, lease renewal beyond expiry and failure release. Financial metrics can be written to `OPERATIONAL_REPORT_PATH`. These bounded local checks do not establish production capacity.
