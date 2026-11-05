@@ -6,6 +6,31 @@ import {expect,it} from 'vitest';
 const schema=readFileSync('supabase/migrations/001_schema.sql','utf8');
 const create=()=>new PGlite();
 
+it('enforces profile and shelf privacy for real browser roles, followers and inactive accounts',async()=>{
+ const db=create(),owner=crypto.randomUUID(),viewer=crypto.randomUUID();try{
+  await db.exec(schema);
+  for(const [id,name]of[[owner,'owner'],[viewer,'viewer']])await db.query('select create_direct_account($1,$2,$3,$3)',[id,name+'@example.test','privacy_'+name]);
+  await db.query("update users set profile_visibility='followers_only',shelf_visibility='private',bio='Private biography'where id=$1",[owner]);
+  const shelf=(await db.query<{id:string}>('select id from shelves where user_id=$1 limit 1',[owner])).rows[0].id;
+  const book=(await db.query<{id:string}>("insert into books(title,author_name)values('Privacy fixture','Fixture')returning id")).rows[0].id;
+  await db.query('select set_shelf_membership($1,$2,$3,true)',[owner,shelf,book]);
+  const visible=async()=>({profiles:(await db.query('select bio from users where id=$1',[owner])).rows.length,shelves:(await db.query('select id from shelves where id=$1',[shelf])).rows.length,books:(await db.query('select book_id from shelf_books where shelf_id=$1',[shelf])).rows.length});
+  await db.exec('set role anon');expect(await visible()).toEqual({profiles:0,shelves:0,books:0});
+  await db.exec('reset role');await db.exec('set role authenticated');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[viewer]);expect(await visible()).toEqual({profiles:0,shelves:0,books:0});
+  await db.exec('reset role');await db.query('insert into follows(follower_id,following_id)values($1,$2)',[viewer,owner]);
+  await db.exec('set role authenticated');expect(await visible()).toEqual({profiles:1,shelves:0,books:0});
+  await db.exec('reset role');await db.query("update users set shelf_visibility='followers_only'where id=$1",[owner]);await db.exec('set role authenticated');expect(await visible()).toEqual({profiles:1,shelves:1,books:1});
+  await db.exec('reset role');await db.query('update users set is_banned=true where id=$1',[viewer]);await db.exec('set role authenticated');expect(await visible()).toEqual({profiles:0,shelves:0,books:0});
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[owner]);expect(await visible()).toEqual({profiles:1,shelves:1,books:1});
+  await db.exec('reset role');await db.query('update users set deleted_at=now()where id=$1',[owner]);await db.exec('set role authenticated');expect(await visible()).toEqual({profiles:0,shelves:0,books:0});
+  await db.exec('reset role');await db.query('update users set is_admin=true,is_banned=false,deleted_at=now()where id=$1',[viewer]);
+  await expect(db.query('select set_premium_override_atomic($1,$2,true,$3)',[viewer,owner,'deleted-admin'])).rejects.toMatchObject({code:'P1003'});
+  await expect(db.query('select claim_payout_request($1,$2,$3)',[viewer,crypto.randomUUID(),'deleted-admin'])).rejects.toMatchObject({code:'P1003'});
+  await expect(db.query("select settle_payout_request($1,$2,'completed','receipt',1,'USD',null,'deleted-admin')",[viewer,crypto.randomUUID()])).rejects.toMatchObject({code:'P1003'});
+  await expect(db.query("select release_legacy_payout_request($1,$2,'receipt',1,'USD','deleted-admin')",[viewer,crypto.randomUUID()])).rejects.toMatchObject({code:'P1003'});
+ }finally{await db.close();}
+},30_000);
+
 it('creates a usable plain PostgreSQL database without Supabase tables and rejects accidental reruns',async()=>{
  const db=create();try{
   await db.exec(schema);

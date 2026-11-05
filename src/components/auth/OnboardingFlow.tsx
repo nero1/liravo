@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import {useTranslations} from 'next-intl';
 import { GENRES, USER_TYPES } from '@/constants/config';
 import { cn } from '@/lib/utils';
-import { Check, Upload, UserPlus } from 'lucide-react';
+import { Check, Upload } from 'lucide-react';
 import Image from 'next/image';
+import {FollowButton} from '@/components/profile/FollowButton';
 
 interface OnboardingFlowProps {
   actorId:string;
@@ -43,7 +44,7 @@ export function OnboardingFlow({ actorId,initialUsername, initialDisplayName }: 
   // Suggested follows step state
   interface SuggestedUser { id: string; display_name: string; username: string; avatar_url: string | null; is_verified_author: boolean; }
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
-  const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+  const [followedIds,setFollowedIds]=useState<Set<string>>(new Set());
   const [loadingSuggested, setLoadingSuggested] = useState(false);
 
   // Honeypot: bots fill this, humans don't see it
@@ -85,16 +86,6 @@ export function OnboardingFlow({ actorId,initialUsername, initialDisplayName }: 
       }
     } catch { /* non-critical */ }
     setLoadingSuggested(false);
-  };
-
-  const handleFollowToggle=async(targetId:string)=>{
-    if(saving)return;setSaving(true);setError(null);
-    const isFollowing=followedIds.has(targetId);
-    try{
-      const response=await fetch('/api/follows',{method:isFollowing?'DELETE':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target_user_id:targetId})});
-      if(!response.ok)throw new Error('Follow unavailable');await response.json();
-      setFollowedIds(previous=>{const next=new Set(previous);if(isFollowing)next.delete(targetId);else next.add(targetId);return next;});
-    }catch{setError(t('followFailed'));}finally{setSaving(false);}
   };
 
   const handleImport = async () => {
@@ -391,20 +382,7 @@ export function OnboardingFlow({ actorId,initialUsername, initialDisplayName }: 
                     <p className="font-medium text-sm truncate">{su.display_name}</p>
                     <p className="text-xs text-muted-foreground">@{su.username}{su.is_verified_author ? ' · '+t('verifiedAuthor') : ''}</p>
                   </div>
-                  <button
-                    onClick={() => handleFollowToggle(su.id)}
-                    disabled={saving}
-                    aria-pressed={followedIds.has(su.id)}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex-shrink-0',
-                      followedIds.has(su.id)
-                        ? 'border-accent bg-accent/10 text-accent'
-                        : 'border-border hover:border-accent text-muted-foreground hover:text-accent'
-                    )}
-                  >
-                    <UserPlus size={12} />
-                    {followedIds.has(su.id) ? t('following') : t('follow')}
-                  </button>
+                  <FollowButton targetUserId={su.id} currentUserId={actorId} initialFollowing={followedIds.has(su.id)} onChange={following=>setFollowedIds(previous=>{const next=new Set(previous);if(following)next.add(su.id);else next.delete(su.id);return next;})}/>
                 </div>
               ))}
             </div>

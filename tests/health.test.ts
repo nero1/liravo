@@ -22,10 +22,15 @@ it('checks the real schema without an unavailable RPC or adapter-specific chaini
 
 it('reports database and Redis failures independently without treating unknown RPCs as healthy',async()=>{
   limit.mockResolvedValue({data:null,error:{code:'42501'}});
-  expect(await (await GET()).json()).toMatchObject({status:'degraded',services:{database:'error',redis:'ok'}});
+  const failed=await GET();expect(failed.status).toBe(503);expect(failed.headers.get('Cache-Control')).toBe('no-store');
+  expect(await failed.json()).toMatchObject({status:'degraded',services:{database:'error',redis:'ok'}});
   limit.mockResolvedValue({data:[],error:null});
   vi.mocked(getRedisClient).mockImplementation(()=>{throw new Error('unavailable');});
   expect(await (await GET()).json()).toMatchObject({status:'degraded',services:{database:'ok',redis:'error'}});
+});
+
+it('bounds a stalled readiness dependency',async()=>{
+ vi.useFakeTimers();try{limit.mockReturnValue(new Promise(()=>{}));const pending=GET();await vi.advanceTimersByTimeAsync(3001);expect((await pending).status).toBe(503);}finally{vi.useRealTimers();}
 });
 
 it('uses independent Redis probes during concurrent health requests',async()=>{

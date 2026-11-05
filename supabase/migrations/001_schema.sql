@@ -3146,7 +3146,7 @@ declare payout payout_requests; owner uuid;
 begin
   select user_id into owner from payout_requests where id=p_payout_id;
   perform 1 from users where id in (owner,p_actor_id) order by id for update;
-  if p_actor_id is not null and not exists(select 1 from users where id=p_actor_id and is_admin and not is_banned) then raise exception 'Forbidden' using errcode='P1003'; end if;
+  if p_actor_id is not null and not exists(select 1 from users where id=p_actor_id and is_admin and not is_banned and deleted_at is null) then raise exception 'Forbidden' using errcode='P1003'; end if;
   select * into payout from payout_requests where id=p_payout_id for update;
   if not found then raise exception 'Unknown payout' using errcode='P1005'; end if;
   if payout.status in ('completed','failed','cancelled') then return jsonb_build_object('status',payout.status,'claimed',false); end if;
@@ -5632,7 +5632,7 @@ CREATE FUNCTION public.reading_author_visible(p_user uuid, p_author uuid) RETURN
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-  select exists(select 1 from users u where u.id=p_author and not u.is_banned and u.deleted_at is null and(u.profile_visibility='public' or u.id=p_user or exists(select 1 from follows where follower_id=p_user and following_id=u.id)));
+  select exists(select 1 from users u where u.id=p_author and not u.is_banned and u.deleted_at is null and(u.profile_visibility='public' or u.id=p_user or exists(select 1 from follows f join users viewer on viewer.id=f.follower_id where f.follower_id=p_user and f.following_id=u.id and not viewer.is_banned and viewer.deleted_at is null)));
 $$;
 
 CREATE FUNCTION public.reading_challenge_catalog_snapshot(p_user uuid, p_scope text DEFAULT 'active'::text, p_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 20) RETURNS jsonb
@@ -6192,7 +6192,7 @@ declare payout payout_requests; owner uuid;
 begin
   select user_id into owner from payout_requests where id=p_payout_id;
   perform 1 from users where id in (owner,p_actor_id) order by id for update;
-  if p_actor_id is null or not exists(select 1 from users where id=p_actor_id and is_admin and not is_banned) then raise exception 'Forbidden' using errcode='P1003'; end if;
+  if p_actor_id is null or not exists(select 1 from users where id=p_actor_id and is_admin and not is_banned and deleted_at is null) then raise exception 'Forbidden' using errcode='P1003'; end if;
   select * into payout from payout_requests where id=p_payout_id for update;
   if not found then raise exception 'Unknown payout' using errcode='P1005'; end if;
   if payout.idempotency_key not like 'legacy_tip_payout:%' or p_reference is null or length(p_reference) not between 4 and 200
@@ -6633,7 +6633,7 @@ CREATE FUNCTION public.set_premium_override_atomic(p_actor_id uuid, p_user_id uu
 declare previous boolean;
 begin
   perform 1 from users where id in (p_actor_id,p_user_id) order by id for update;
-  if not exists(select 1 from users where id=p_actor_id and is_admin and not is_banned) then raise exception 'Forbidden' using errcode='P1003'; end if;
+  if not exists(select 1 from users where id=p_actor_id and is_admin and not is_banned and deleted_at is null) then raise exception 'Forbidden' using errcode='P1003'; end if;
   select premium_override into previous from users where id=p_user_id;
   if not found or p_enabled is null then raise exception 'Unknown user' using errcode='P1005'; end if;
   if previous is distinct from p_enabled then
@@ -6733,7 +6733,7 @@ declare payout payout_requests; owner uuid;
 begin
   select user_id into owner from payout_requests where id=p_payout_id;
   perform 1 from users where id in (owner,p_actor_id) order by id for update;
-  if p_actor_id is not null and not exists(select 1 from users where id=p_actor_id and is_admin and not is_banned) then raise exception 'Forbidden' using errcode='P1003'; end if;
+  if p_actor_id is not null and not exists(select 1 from users where id=p_actor_id and is_admin and not is_banned and deleted_at is null) then raise exception 'Forbidden' using errcode='P1003'; end if;
   select * into payout from payout_requests where id=p_payout_id for update;
   if not found then raise exception 'Unknown payout' using errcode='P1005'; end if;
   if p_status is null or p_status not in ('completed','failed','reversed') or p_reference is null or length(p_reference) not between 4 and 200
@@ -6826,6 +6826,15 @@ begin
   select count(distinct s.id)from shelves s join shelf_books sb on sb.shelf_id=s.id and sb.user_id=p_user join books b on b.id=sb.book_id where s.user_id=p_user and coalesce(b.canonical_edition_id,b.id)=target
  ),'reading',reading_goal_snapshot(p_user,p_year));
 end $$;
+
+CREATE FUNCTION public.reading_shelf_visible(p_user uuid, p_shelf uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+ select exists(select 1 from shelves s join users u on u.id=s.user_id where s.id=p_shelf and not u.is_banned and u.deleted_at is null
+  and(u.id=p_user or(s.is_public and u.shelf_visibility<>'private' and reading_author_visible(p_user,u.id)
+   and(u.shelf_visibility='public'or exists(select 1 from follows f join users viewer on viewer.id=f.follower_id where f.follower_id=p_user and f.following_id=u.id and not viewer.is_banned and viewer.deleted_at is null)))));
+$$;
 
 CREATE FUNCTION public.shelf_detail_snapshot(p_user uuid, p_shelf uuid, p_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 50) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -8458,13 +8467,11 @@ CREATE POLICY "Participants read notes" ON public.buddy_read_notes FOR SELECT US
    FROM public.buddy_read_members p
   WHERE ((p.buddy_read_id = buddy_read_notes.buddy_read_id) AND (p.user_id = auth.uid())))));
 
-CREATE POLICY "Public profiles readable" ON public.users FOR SELECT USING (true);
+CREATE POLICY "Public profiles readable" ON public.users FOR SELECT USING (public.reading_author_visible(auth.uid(),id));
 
-CREATE POLICY "Public shelf books readable" ON public.shelf_books FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.shelves s
-  WHERE ((s.id = shelf_books.shelf_id) AND (s.is_public = true)))));
+CREATE POLICY "Public shelf books readable" ON public.shelf_books FOR SELECT USING (public.reading_shelf_visible(auth.uid(),shelf_id));
 
-CREATE POLICY "Public shelves readable" ON public.shelves FOR SELECT USING ((is_public = true));
+CREATE POLICY "Public shelves readable" ON public.shelves FOR SELECT USING (public.reading_shelf_visible(auth.uid(),id));
 
 CREATE POLICY "Published reviews readable" ON public.reviews FOR SELECT USING (((moderation_status = 'published'::text) AND (NOT is_hidden)));
 
@@ -9760,6 +9767,8 @@ GRANT EXECUTE ON FUNCTION read_factor_session(text) TO service_role;
 GRANT EXECUTE ON FUNCTION read_payment_recovery(uuid,text,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION read_room_posts(uuid,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION read_social_feed(uuid,timestamp with time zone,uuid,text,integer) TO service_role;
+GRANT EXECUTE ON FUNCTION reading_author_visible(uuid,uuid) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION reading_shelf_visible(uuid,uuid) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION reading_author_visible(uuid,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION reading_challenge_catalog_snapshot(uuid,text,timestamp with time zone,uuid,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION reading_challenge_detail_snapshot(uuid,uuid,timestamp with time zone,uuid,integer) TO service_role;

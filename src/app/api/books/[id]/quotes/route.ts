@@ -1,6 +1,7 @@
 import {getEditionIds} from '@/services/books';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import {cursorFilter,decodeCursor,encodeCursor} from '@/lib/pagination';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export async function GET(
   let editionIds:string[];try{editionIds=await getEditionIds(params.id);}catch{return NextResponse.json({error:'Edition identities unavailable'},{status:503});}
 
   const { searchParams } = new URL(request.url);
-  const cursor = searchParams.get('cursor');
+  let cursor;try{cursor=decodeCursor(searchParams.get('cursor'));}catch{return NextResponse.json({error:'Invalid cursor'},{status:400});}
   const limit = 20;
 
   let query = supabase
@@ -24,10 +25,11 @@ export async function GET(
     .in('book_id',editionIds)
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
+    .order('id',{ascending:false})
     .limit(limit + 1);
 
   if (cursor) {
-    query = query.lt('created_at', cursor);
+    query = query.or(cursorFilter('created_at',cursor));
   }
 
   const { data: quotes, error } = await query;
@@ -38,7 +40,7 @@ export async function GET(
 
   const hasMore = (quotes?.length ?? 0) > limit;
   const results = hasMore ? quotes!.slice(0, limit) : (quotes ?? []);
-  const nextCursor = hasMore ? results[results.length - 1]?.created_at ?? null : null;
+  const last=results.at(-1),nextCursor=hasMore&&last?encodeCursor({at:last.created_at,id:last.id}):null;
 
-  return NextResponse.json({ quotes: results, nextCursor });
+  return NextResponse.json({ quotes: results, nextCursor },{headers:{'Cache-Control':'private, no-store'}});
 }

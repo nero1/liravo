@@ -1,50 +1,50 @@
 # Custom Bugs Report
 
-Date/time: 05 November 2026, 11:36 AM WAT (Africa/Lagos)
+Date/time: 05 November 2026, 01:41 PM WAT (Africa/Lagos)
 
-Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. All findings are 🔵 awaiting review; application code, schema and configuration remain unchanged.
+Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed and verified; 🟡 partial; 🔵 pending. Original findings remain below; STATUS records describe the verified changes.
 
 ## One-line findings
 
-1: BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
-2: BUG-20261105-002: [High] Supabase browser reads bypass profile and shelf privacy
-3: BUG-20261105-003: [High] Author readers expose profile fields without follower authorization
-4: BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
-5: BUG-20261105-005: [High] Device push registrations survive logout and can belong to two accounts
-6: BUG-20261105-006: [High] Outbox events finish before external push delivery completes
-7: BUG-20261105-007: [High] Supabase middleware drops earlier refreshed authentication cookie chunks
-8: BUG-20261105-008: [Medium] Push registration endpoints acknowledge failed database writes
-9: BUG-20261105-009: [Medium] Middleware consumes multipart uploads before enforcing route size limits
-10: BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
-11: BUG-20261105-011: [Medium] Sensitive administrative SQL routines accept deleted administrators
-12: BUG-20261105-012: [Medium] Onboarding follow buttons call a nonexistent endpoint
-13: BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
-14: BUG-20261105-014: [Medium] Author inspiration shelves query a nonexistent reading-list title
-15: BUG-20261105-015: [Medium] Quote pagination loses records with matching timestamps
-16: BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
-17: GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
-18: BUG-20261105-018: [Medium] Several cron jobs report success after database failures
-19: BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
-20: BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
-21: BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
-22: GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
-23: GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
-24: GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
-25: BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
-26: BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
-27: GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
-28: GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
-29: GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
-30: GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
-31: BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
-32: BUG-20261105-032: [Medium] The health endpoint reports HTTP success when all dependencies fail
-33: GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
-34: GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
-35: BUG-20261105-035: [Medium] Direct PostgreSQL mode hides public book and author pages behind login
+1: 🔵 BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
+2: ✅ BUG-20261105-002: [High] Supabase browser reads bypass profile and shelf privacy
+3: ✅ BUG-20261105-003: [High] Author readers expose profile fields without follower authorization
+4: 🔵 BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
+5: 🔵 BUG-20261105-005: [High] Device push registrations survive logout and can belong to two accounts
+6: 🔵 BUG-20261105-006: [High] Outbox events finish before external push delivery completes
+7: ✅ BUG-20261105-007: [High] Supabase middleware drops earlier refreshed authentication cookie chunks
+8: 🔵 BUG-20261105-008: [Medium] Push registration endpoints acknowledge failed database writes
+9: ✅ BUG-20261105-009: [Medium] Middleware consumes multipart uploads before enforcing route size limits
+10: 🔵 BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
+11: ✅ BUG-20261105-011: [Medium] Sensitive administrative SQL routines accept deleted administrators
+12: ✅ BUG-20261105-012: [Medium] Onboarding follow buttons call a nonexistent endpoint
+13: 🔵 BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
+14: ✅ BUG-20261105-014: [Medium] Author inspiration shelves query a nonexistent reading-list title
+15: ✅ BUG-20261105-015: [Medium] Quote pagination loses records with matching timestamps
+16: 🔵 BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
+17: 🔵 GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
+18: 🔵 BUG-20261105-018: [Medium] Several cron jobs report success after database failures
+19: 🔵 BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
+20: 🔵 BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
+21: 🔵 BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
+22: 🔵 GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
+23: 🔵 GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
+24: 🔵 GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
+25: 🔵 BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
+26: 🔵 BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
+27: 🔵 GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
+28: 🔵 GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
+29: 🔵 GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
+30: 🔵 GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
+31: 🔵 BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
+32: ✅ BUG-20261105-032: [Medium] The health endpoint reports HTTP success when all dependencies fail
+33: 🔵 GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
+34: 🔵 GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
+35: ✅ BUG-20261105-035: [Medium] Direct PostgreSQL mode hides public book and author pages behind login
 
 ## Detailed findings
 
-### 1: BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
+### 1: 🔵 BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
 
 FILES: `package.json`, `package-lock.json`, `mobile/package.json`, `mobile/package-lock.json`
 
@@ -52,7 +52,7 @@ PROBLEM: Fresh production dependency audits report 20 affected web packages (1 c
 
 FIX: Upgrade affected direct dependencies and their dependency trees to supported patched releases. Review advisory applicability individually, including Next.js App Router and image processing, rather than forcing incompatible upgrades. Rebuild web and native bundles and exercise authentication, sanitization, uploads and navigation. Add dependency review to CI with an explicit process for time-limited exceptions.
 
-### 2: BUG-20261105-002: [High] Supabase browser reads bypass profile and shelf privacy
+### 2: ✅ BUG-20261105-002: [High] Supabase browser reads bypass profile and shelf privacy
 
 FILES: `supabase/migrations/001_schema.sql:8461`, `supabase/migrations/001_schema.sql:9538`, `src/app/user/[username]/page.tsx`
 
@@ -60,7 +60,9 @@ PROBLEM: The users SELECT policy allows every row; shelf policies consider shelf
 
 FIX: Define consistent visibility rules for owner, followers and anonymous readers, including inactive owners. Apply them to RLS and privileged snapshot readers without recursive policies. Keep explicit least-privilege grants in the creating migration; do not grant blanket browser CRUD. Verify anonymous, unrelated, follower, owner and deactivated-account reads directly under database roles and through the Data API.
 
-### 3: BUG-20261105-003: [High] Author readers expose profile fields without follower authorization
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 3: ✅ BUG-20261105-003: [High] Author readers expose profile fields without follower authorization
 
 FILES: `src/app/api/author/[username]/route.ts`, `src/app/(app)/author/[username]/page.tsx`, `src/lib/author-catalog.ts`
 
@@ -68,7 +70,9 @@ PROBLEM: The author API uses service credentials to return biography, banner and
 
 FIX: Share the normal profile visibility decision with author API and page readers before selecting private profile fields. Define any deliberately public author catalog fields separately from the private profile document. Return the same unavailable/private behavior across providers and verify anonymous, unrelated, follower and owner requests.
 
-### 4: BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 4: 🔵 BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
 
 FILES: `src/app/api/users/web-push/route.ts`, `src/lib/push-notifications.ts`
 
@@ -76,7 +80,7 @@ PROBLEM: Subscription validation accepts arbitrary URL hosts and stores them for
 
 FIX: Validate supported HTTPS push-service origins at registration and delivery. Reject credentials, private/link-local/loopback addresses, unsafe DNS resolutions and redirects; enforce network egress restrictions where available. Validate key formats and endpoint lengths, cap subscriptions per account, rate-limit registration and set delivery deadlines. Test address variants and DNS changes without contacting internal services.
 
-### 5: BUG-20261105-005: [High] Device push registrations survive logout and can belong to two accounts
+### 5: 🔵 BUG-20261105-005: [High] Device push registrations survive logout and can belong to two accounts
 
 FILES: `mobile/hooks/useAuth.ts`, `mobile/hooks/usePushNotifications.ts`, `src/app/api/users/push-token/route.ts`, `supabase/migrations/001_schema.sql`
 
@@ -84,7 +88,7 @@ PROBLEM: Logout removes authentication but never unregisters the device push tok
 
 FIX: Represent subscriptions as owned device/session registrations. Atomically rebind a token when its account changes, revoke the current device registration during logout and handle failed revocation explicitly. Prevent stale asynchronous registration from attaching to a new account. Verify logout, account switching, reinstall/token rotation and notification delivery without deleting other active devices.
 
-### 6: BUG-20261105-006: [High] Outbox events finish before external push delivery completes
+### 6: 🔵 BUG-20261105-006: [High] Outbox events finish before external push delivery completes
 
 FILES: `src/lib/outbox-worker.ts`, `src/lib/push-notifications.ts`, `supabase/migrations/001_schema.sql:4930`
 
@@ -92,7 +96,7 @@ PROBLEM: process_outbox_event_atomic commits processed status before sendPushToU
 
 FIX: Separate committed database effects from external delivery status. Claim and await bounded delivery attempts, persist success or retry/dead-letter receipts, and retain a stable event identity. Preserve existing once-only database effects when retrying delivery. Explicitly define duplicate-tolerant push semantics and test termination, provider failure and lost acknowledgements.
 
-### 7: BUG-20261105-007: [High] Supabase middleware drops earlier refreshed authentication cookie chunks
+### 7: ✅ BUG-20261105-007: [High] Supabase middleware drops earlier refreshed authentication cookie chunks
 
 FILES: `src/middleware.ts:93`, `src/lib/supabase/server.ts`
 
@@ -100,7 +104,9 @@ PROBLEM: Every cookie set/remove callback replaces NextResponse.next, discarding
 
 FIX: Use the supported batch cookie API or accumulate all cookie mutations on one response, including deletions and redirect responses. Forward the refreshed request cookies consistently. Verify two or more chunks, old-chunk deletion, refresh followed by redirect, and the next request using the returned cookie jar.
 
-### 8: BUG-20261105-008: [Medium] Push registration endpoints acknowledge failed database writes
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 8: 🔵 BUG-20261105-008: [Medium] Push registration endpoints acknowledge failed database writes
 
 FILES: `src/app/api/users/web-push/route.ts`, `src/app/api/users/push-token/route.ts`
 
@@ -108,15 +114,17 @@ PROBLEM: Both registration routes and their delete handlers discard mutation err
 
 FIX: Validate each request, inspect mutation errors and confirm the intended account-owned result before acknowledging success. Return a retryable dependency failure when persistence fails. Make register/unregister idempotent and surface recoverable failures to clients; verify rejected writes, missing accounts and malformed deletion requests.
 
-### 9: BUG-20261105-009: [Medium] Middleware consumes multipart uploads before enforcing route size limits
+### 9: ✅ BUG-20261105-009: [Medium] Middleware consumes multipart uploads before enforcing route size limits
 
 FILES: `src/middleware.ts:49`, `src/lib/profile-avatars.ts:11`, `src/app/api/users/avatar/route.ts`
 
-PROBLEM: When the CSRF header is absent, middleware calls request.clone().formData() before route authentication and bounded avatar parsing. A valid-CSRF fixture caused middleware to consume 3,146,037 bytes, exceeding the avatar limit before the bounded reader ran. Vercel ingress limits reduce the maximum exposure but do not enforce the application limit; self-hosted deployments depend on their proxy limits.
+PROBLEM: When the CSRF header is absent, middleware calls request.clone().formData() before route authentication and bounded avatar parsing. Rechecking against the actual 3 MB avatar limit, a 4 MB fixture caused the old middleware to consume 4,194,613 bytes before the bounded reader ran. Vercel ingress limits reduce the maximum exposure but do not enforce the application limit; self-hosted deployments depend on their proxy limits.
 
 FIX: Require the CSRF header for binary uploads and reject oversized bodies before parsing them. Keep streamed byte limits and deadlines in upload handlers. If ordinary forms need a token fallback, use a tightly bounded parser. Verify absent/spoofed Content-Length, oversized multipart fields and slow uploads at middleware and route boundaries.
 
-### 10: BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 10: 🔵 BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
 
 FILES: `mobile/hooks/useAuth.ts`
 
@@ -124,7 +132,7 @@ PROBLEM: Initialization, provider-session exchange and fetchProfile catch every 
 
 FIX: Distinguish confirmed unauthorized/revoked sessions from transport, timeout and server failures. Preserve valid stored credentials during temporary failures, expose a retry/offline state and retry with bounded backoff. Clear authentication only when revocation is established. Verify cold start offline, 503 recovery, expired credentials and account switching during retries.
 
-### 11: BUG-20261105-011: [Medium] Sensitive administrative SQL routines accept deleted administrators
+### 11: ✅ BUG-20261105-011: [Medium] Sensitive administrative SQL routines accept deleted administrators
 
 FILES: `supabase/migrations/001_schema.sql:3141`, `supabase/migrations/001_schema.sql:6629`, `supabase/migrations/001_schema.sql:6728`
 
@@ -132,7 +140,9 @@ PROBLEM: claim_payout_request, set_premium_override_atomic and settle_payout_req
 
 FIX: Recheck the complete active-administrator predicate while holding the existing actor lock inside every sensitive routine. Keep automated provider settlement authorization separate from human administration. Verify deletion, banning and role revocation between request authentication and SQL execution, including both claim and settlement paths.
 
-### 12: BUG-20261105-012: [Medium] Onboarding follow buttons call a nonexistent endpoint
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 12: ✅ BUG-20261105-012: [Medium] Onboarding follow buttons call a nonexistent endpoint
 
 FILES: `src/components/auth/OnboardingFlow.tsx:90`, `src/app/api/users/[id]/follow/route.ts`
 
@@ -140,7 +150,9 @@ PROBLEM: The active onboarding follow handler sends POST/DELETE to /api/follows,
 
 FIX: Use the existing target-specific follow route and its expected method and acknowledgement contract. Keep the pending state and intended follow direction consistent during retries. Verify follow, unfollow, failed requests and completion of onboarding with persisted relationships.
 
-### 13: BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 13: 🔵 BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
 
 FILES: `src/app/api/cron/similar-books/route.ts:55`, `src/app/(app)/book/[id]/page.tsx:170`, `supabase/migrations/001_schema.sql:1317`
 
@@ -148,7 +160,7 @@ PROBLEM: similar_books_computed defines similar_ids, while the cron writes and b
 
 FIX: Align writer, reader and typed schema on one field and canonical edition/work identity. Select one deterministic recommendation record or deliberately aggregate the family. Propagate persistence errors and verify the cron-to-page round trip, including aliases, merged editions, multiple records and empty results.
 
-### 14: BUG-20261105-014: [Medium] Author inspiration shelves query a nonexistent reading-list title
+### 14: ✅ BUG-20261105-014: [Medium] Author inspiration shelves query a nonexistent reading-list title
 
 FILES: `src/app/(app)/author/[username]/page.tsx:109`, `supabase/migrations/001_schema.sql`
 
@@ -156,7 +168,9 @@ PROBLEM: The author page selects id,title from reading_lists, whose display fiel
 
 FIX: Select the actual name field or omit the unused display field. Distinguish a missing inspiration list from a failed query and retain the appropriate privacy checks. Verify an author with a populated public inspiration list, an empty list and a database failure.
 
-### 15: BUG-20261105-015: [Medium] Quote pagination loses records with matching timestamps
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 15: ✅ BUG-20261105-015: [Medium] Quote pagination loses records with matching timestamps
 
 FILES: `src/app/api/books/[id]/quotes/route.ts`
 
@@ -164,7 +178,9 @@ PROBLEM: The endpoint orders only by created_at and uses a strict timestamp-only
 
 FIX: Use a validated composite created_at/id cursor and matching deterministic ordering and index. Preserve the cursor across canonical edition-family reads. Verify tied timestamps, adjacent pages, inserts between requests, invalid cursors and an empty final page without omissions or duplicates.
 
-### 16: BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 16: 🔵 BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
 
 FILES: `src/app/api/write/prompts/leaderboard/route.ts`, `src/app/api/write/challenges/[id]/route.ts`
 
@@ -172,7 +188,7 @@ PROBLEM: Both routes retrieve individual submissions and aggregate them in JavaS
 
 FIX: Aggregate and rank in SQL with indexed period/challenge predicates and bounded output. Apply account visibility and inactive-user rules before ranking, validate period inputs and distinguish dependency errors from an empty leaderboard. Verify datasets above the configured Data API cap and equivalent results across providers.
 
-### 17: GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
+### 17: 🔵 GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
 
 FILES: `src/app/api/cron/similar-books/route.ts`
 
@@ -180,7 +196,7 @@ PROBLEM: The cron compares every selected book against every other book, sorts e
 
 FIX: Generate bounded candidates using indexed genre/language/author or similarity queries and compute top results per canonical work. Process stable cursor batches with a persisted checkpoint and deadline. Verify coverage above 5,000 books, partial-run recovery and measured cost within the configured hosting budget.
 
-### 18: BUG-20261105-018: [Medium] Several cron jobs report success after database failures
+### 18: 🔵 BUG-20261105-018: [Medium] Several cron jobs report success after database failures
 
 FILES: `src/app/api/cron/account-hardening/route.ts`, `src/app/api/cron/affiliate-health/route.ts`, `src/app/api/cron/similar-books/route.ts`, `src/lib/cron.ts`
 
@@ -188,7 +204,7 @@ PROBLEM: Account-hardening ignores user-query and notification-insert errors; af
 
 FIX: Inspect every database result, count only acknowledged effects and return failure or an explicit partial/retryable result. Persist resumable progress where a batch can partially commit. Make notification/log writes idempotent under retries. Inject read, count and write failures and verify scheduler status, operational alerts and counters.
 
-### 19: BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
+### 19: 🔵 BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
 
 FILES: `next.config.mjs`, `src/lib/client/tone-classifier.ts`, `src/lib/tone-classifier.ts`, `src/app/api/books/[id]/reviews/route.ts`
 
@@ -196,7 +212,7 @@ PROBLEM: The browser classifier forces remote Hugging Face models, but connect-s
 
 FIX: Represent classification unavailability explicitly. If moderation is required, queue content as pending for retry/review; if advisory, show unavailable rather than safe. Serve vetted model assets from an allowed origin or narrowly configure required origins without weakening the whole CSP. Verify CSP enforcement, model load failure and provider recovery.
 
-### 20: BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
+### 20: 🔵 BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
 
 FILES: `mobile/lib/api.ts`, `src/lib/client/csrf.ts`
 
@@ -204,7 +220,7 @@ PROBLEM: Implicit mutation keys are removed only after a successful acknowledgem
 
 FIX: Scope intents to the authenticated account, avoid retaining sensitive request/token material and bound entries by count and lifetime. Clear definitively rejected or abandoned operations and account-owned state on logout. Preserve keys for ambiguous committed operations and financial replay safety. Verify long sessions, permanent failures, interrupted acknowledgements and account switching.
 
-### 21: BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
+### 21: 🔵 BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
 
 FILES: `mobile/hooks/usePushNotifications.ts`
 
@@ -212,7 +228,7 @@ PROBLEM: The registered notification-response listener reads data.url but execut
 
 FIX: Route supported internal destinations through Expo Router, handling both response events and cold-start notification responses. Validate destinations against an internal allowlist. Catch registration failures and cancel/ignore stale account work. Verify foreground, background, cold-start, invalid-link and logout-during-registration cases on devices.
 
-### 22: GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
+### 22: 🔵 GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
 
 FILES: `src/app/api/write/ai-feedback/route.ts`, `src/app/api/ai/recommendations/route.ts`
 
@@ -220,7 +236,7 @@ PROBLEM: Unlike the recommendation route, writing feedback never reads the user'
 
 FIX: Resolve the supported account/request locale and include it in the model instruction, cache identity and returned receipt. Localize user-facing failure states through existing message catalogs. Verify English, French and German feedback, locale changes with an existing cache and fallback-provider responses.
 
-### 23: GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
+### 23: 🔵 GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
 
 FILES: `supabase/migrations/001_schema.sql:1678`, `src/app/api/users/export/route.ts`
 
@@ -228,7 +244,7 @@ PROBLEM: The account export includes reading history, reviews, quotes, reading s
 
 FIX: Define the complete portable account-data contract and include all owned authored records and relevant financial history with stable identifiers and relationships. Exclude credentials, moderation secrets and other users' private data. Verify a fixture containing each supported content category and make the UI state any deliberate exclusions clearly.
 
-### 24: GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
+### 24: 🔵 GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
 
 FILES: `supabase/migrations/001_schema.sql:1678`, `src/app/api/users/export/route.ts`, `mobile/lib/account-export.ts`
 
@@ -236,7 +252,7 @@ PROBLEM: The export RPC performs unrestricted JSON aggregation of the account's 
 
 FIX: Produce exports in bounded, consistent-snapshot chunks or an asynchronous export job with a signed, expiring download. Stream file generation where supported and download directly to native storage. Retain ownership checks and cleanup. Verify large histories above hosting response limits, interrupted downloads and account changes during export.
 
-### 25: BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
+### 25: 🔵 BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
 
 FILES: `src/app/sitemap.ts`, `src/app/(app)/book/[id]/page.tsx`, `src/app/user/[username]/page.tsx`
 
@@ -244,7 +260,7 @@ PROBLEM: Sitemap queries cap books at 5,000 and authors/lists at 2,000 without p
 
 FIX: Generate indexed sitemap partitions using stable keyset pagination and explicit canonical/public visibility rules shared with readers. Exclude redirects, private/inactive owners and authentication-only pages. Surface generation failures, use actual modification dates and verify a catalog larger than every page/provider cap.
 
-### 26: BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
+### 26: 🔵 BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
 
 FILES: `public/robots.txt`, `src/app/layout.tsx`, `src/constants/config.ts`
 
@@ -252,7 +268,7 @@ PROBLEM: robots.txt always advertises the liravo.org sitemap, and root Open Grap
 
 FIX: Generate robots metadata and root social URLs from the validated application origin already used for canonical URLs. Verify a custom-domain deployment and production separately, including sitemap discovery and absolute image/canonical URLs.
 
-### 27: GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
+### 27: 🔵 GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
 
 FILES: `src/app/api/author/posts/route.ts`, `src/app/api/reading-sessions/route.ts`, `src/app/(app)/author/[username]/page.tsx`
 
@@ -260,7 +276,7 @@ PROBLEM: The author-post API returns only 20 records, the author page returns 10
 
 FIX: Keep bounded previews and add explicit history readers with composite timestamp/id cursors and load-more controls. Preserve owner and profile-visibility rules. Verify more records than each limit, tied timestamps, loading failures and access after account changes.
 
-### 28: GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
+### 28: 🔵 GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
 
 FILES: `src/app/api/cron/affiliate-health/route.ts`, `src/lib/outbox-worker.ts`, `supabase/migrations/001_schema.sql`
 
@@ -268,7 +284,7 @@ PROBLEM: Processed outbox payloads, notifications and affiliate health logs have
 
 FIX: Define retention by record type, deduplicate repeated health findings and archive/purge eligible nonfinancial payloads in indexed batches. Monitor row counts and storage growth. Preserve immutable financial records and sufficient replay-prevention tombstones; verify that cleanup cannot re-enable duplicate payments or rewards.
 
-### 29: GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
+### 29: 🔵 GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
 
 FILES: `src/lib/db/pg.ts`, `src/lib/db/query-builder.ts`, `.env.local.example`
 
@@ -276,7 +292,7 @@ PROBLEM: The direct driver configures connection and idle timeouts but no query/
 
 FIX: Validate pool settings and enforce request-aware statement/lock deadlines, bounded queueing and dependency-failure handling. Size per-instance pools against the external pooler's total capacity and deployment concurrency. Avoid automatic retries of ambiguous writes. Verify lock contention, slow queries, pool exhaustion and recovery with measured concurrent traffic.
 
-### 30: GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
+### 30: 🔵 GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
 
 FILES: `package.json`, `src/lib/db/query-builder.ts`, `src/lib/db/unified-client.ts`, `src/types/database.ts`
 
@@ -284,7 +300,7 @@ PROBLEM: No Drizzle dependency or import exists. The custom query builder accept
 
 FIX: Generate accurate table and RPC contracts from the canonical schema and remove unchecked casts. Introduce typed Drizzle schema/query coverage for direct database access in measured stages, retaining transactional SQL routines for financial invariants. Track coverage explicitly and exercise contract queries against both direct PostgreSQL and Supabase.
 
-### 31: BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
+### 31: 🔵 BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
 
 FILES: `src/lib/locks.ts`, `src/lib/cron.ts`, `src/app/api/ai/recommendations/route.ts`
 
@@ -292,7 +308,7 @@ PROBLEM: The heartbeat ignores compareExpire returning zero and suppresses renew
 
 FIX: Propagate lease loss through an abort signal and require fencing tokens or durable database claims for effects that must exclude stale workers. Make remaining effects idempotent and report renewal failures. Verify ownership replacement, prolonged Redis loss, overlapping invocations and cancellation before the next irreversible effect.
 
-### 32: BUG-20261105-032: [Medium] The health endpoint reports HTTP success when all dependencies fail
+### 32: ✅ BUG-20261105-032: [Medium] The health endpoint reports HTTP success when all dependencies fail
 
 FILES: `src/app/api/health/route.ts`
 
@@ -300,7 +316,9 @@ PROBLEM: The endpoint always returns HTTP 200. With both database and Redis fail
 
 FIX: Return HTTP 503 for failed readiness dependencies with Cache-Control:no-store, while keeping a separate lightweight liveness response if needed. Bound each probe and expose only minimal diagnostics. Verify healthy, single-dependency failure, total failure and recovery using ordinary HTTP status monitoring.
 
-### 33: GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
+
+### 33: 🔵 GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
 
 FILES: `next.config.mjs`
 
@@ -308,7 +326,7 @@ PROBLEM: The production script-src includes both unsafe-inline and unsafe-eval. 
 
 FIX: Adopt per-response nonces or hashes for required scripts and remove broad eval permission after validating actual library requirements. If browser inference needs WebAssembly support, grant only the narrow capability required. Exercise Next.js hydration, Telegram, hCaptcha and inference under report-only CSP before enforcement.
 
-### 34: GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
+### 34: 🔵 GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
 
 FILES: `src/app/api/write/ai-feedback/route.ts`, `src/app/api/ai/recommendations/route.ts`, `src/lib/retry.ts`, `src/lib/ai-client.ts`
 
@@ -316,13 +334,15 @@ PROBLEM: Feedback and recommendations implement their own provider calls using f
 
 FIX: Route these calls through the shared AI client or give the entire primary/fallback chain one explicit deadline and cancellation signal. Keep retry budgets, token limits, output schemas and locale behavior consistent. Verify slow headers/bodies, transient errors, fallback timing and client cancellation without duplicate expensive work.
 
-### 35: BUG-20261105-035: [Medium] Direct PostgreSQL mode hides public book and author pages behind login
+### 35: ✅ BUG-20261105-035: [Medium] Direct PostgreSQL mode hides public book and author pages behind login
 
 FILES: `src/app/(app)/layout.tsx`, `src/app/(app)/book/[id]/page.tsx`, `src/app/(app)/author/[username]/page.tsx`
 
-PROBLEM: The shared app layout unconditionally redirects anonymous direct-PostgreSQL visitors to /login. Book and author pages live under that layout, although they contain public metadata and optional-viewer behavior and are advertised by sitemaps. An isolated execution confirmed the redirect. Supabase mode allows anonymous layout rendering, so public links and crawler access differ by database provider.
+PROBLEM: The shared app layout unconditionally redirects anonymous direct-PostgreSQL visitors to /login. Book and author pages live under that layout, although they contain public metadata and optional-viewer behavior and are advertised by sitemaps. An isolated execution confirmed the layout redirect; a production smoke check also found an inner book-page login guard affecting both providers. Anonymous public content requires fixing both boundaries.
 
 FIX: Separate public content layouts from authentication-required areas or apply authentication only to private pages and actions. Retain authorization at every mutation and private reader. Verify anonymous book, author and public-list access across providers, plus protected shelf/write/admin redirects and canonical alias behavior.
+
+STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
 
 ## Verification
 
@@ -351,4 +371,4 @@ Engineering assessment, not a benchmark or security certification:
 
 Proposed batches after plan review: first address findings 1–7 and 11 (dependencies, privacy, SSRF, sessions and sensitive authorization); then 8–10, 12–22 and 31–32 (correctness, delivery and failure handling); then 23–30 and 33–35 (portability, scale, typing, CSP and public navigation). Acceptance requires targeted regression checks, existing tests, lint/types, service-backed schema tests, production bundle limits and device/provider/restore/load checks where applicable. Ratings after remediation are estimates until those validations pass.
 
-Report completed: 05 November 2026, 11:36 AM WAT (Africa/Lagos)
+Report updated: 05 November 2026, 01:41 PM WAT (Africa/Lagos)

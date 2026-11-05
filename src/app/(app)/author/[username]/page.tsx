@@ -15,6 +15,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { FollowButton } from '@/components/profile/FollowButton';
 import { AuthorPostCard } from '@/components/author/AuthorPostCard';
+import {profileVisibleTo} from '@/lib/profile-visibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,6 +90,7 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
     author.is_verified_author || (author.user_types ?? []).includes('author');
 
   if (!isAuthorProfile) notFound();
+  if(!await profileVisibleTo(author.id,currentUser?.id??null))notFound();
 
   const {books:bookDetails,nextCursor}=await getAuthorCatalog(author.id,searchParams?.cursor??null);
 
@@ -108,23 +110,29 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
   const questionLink=(cursor?:string|null)=>{const query=new URLSearchParams();if(searchParams?.cursor)query.set('cursor',searchParams.cursor);if(cursor)query.set('qaCursor',cursor);return '/author/'+encodeURIComponent(author.username)+(query.size?'?'+query:'')+'#author-qa';};
 
   // "Books that inspired me" shelf (reading list with list_type = 'inspired_by')
-  const { data: inspiredListRaw } = await supabase
+  const { data: inspiredListRaw,error:inspiredError } = await supabase
     .from('reading_lists')
-    .select('id, title')
+    .select('id')
     .eq('user_id', author.id)
     .eq('list_type', 'inspired_by')
     .eq('is_public', true)
+    .order('created_at',{ascending:false})
+    .order('id',{ascending:false})
     .limit(1)
-    .single();
+    .maybeSingle();
+
+  if(inspiredError)throw new Error('Inspiration list unavailable');
 
   let inspiredBooks: Array<{ id: string; title: string; cover_url: string | null }> = [];
   if (inspiredListRaw) {
-    const { data: listBooks } = await supabase
+    const { data: listBooks,error:listBooksError } = await supabase
       .from('reading_list_books')
       .select('books:book_id(id, title, cover_url)')
       .eq('list_id', inspiredListRaw.id)
       .order('position')
+      .order('book_id')
       .limit(10);
+    if(listBooksError)throw new Error('Inspiration books unavailable');
     inspiredBooks = (listBooks ?? [])
       .map((lb) => singleRelation(lb.books))
       .filter(Boolean) as Array<{ id: string; title: string; cover_url: string | null }>;

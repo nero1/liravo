@@ -8,6 +8,17 @@ import { getRequestCorrelationId } from '@/lib/utils';
 
 const isDirectPostgresMode = isDirectPostgres();
 
+async function formCsrf(request:NextRequest){
+  const reader=request.clone().body?.getReader();if(!reader)return '';
+  let timer:ReturnType<typeof setTimeout>|undefined,size=0;const chunks:Uint8Array[]=[];
+  const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('Form deadline exceeded')),2000);});
+  try{
+    for(;;){const {done,value}=await Promise.race([reader.read(),deadline]);if(done)break;size+=value.byteLength;if(size>8192)throw new Error('Form too large');chunks.push(value);}
+    const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+    return new URLSearchParams(new TextDecoder().decode(bytes)).get('_csrf')??'';
+  }finally{clearTimeout(timer);void reader.cancel().catch(()=>{});reader.releaseLock();}
+}
+
 export async function middleware(request: NextRequest) {
   const correlationId = getRequestCorrelationId(request);
   request.headers.set('x-request-id',correlationId);
@@ -15,6 +26,7 @@ export async function middleware(request: NextRequest) {
   const preferred = language ?? request.cookies.get('NEXT_LOCALE')?.value;
   const locale = LOCALES.find(value => value === preferred) ?? 'en';
   request.headers.set('x-liravo-locale', locale);
+  request.headers.set('x-liravo-pathname',request.nextUrl.pathname);
   let response = NextResponse.next({ request: { headers: request.headers } });
   const { pathname } = request.nextUrl;
   const origin = getRequestOrigin(request);
@@ -24,6 +36,7 @@ export async function middleware(request: NextRequest) {
   const nativeAuth=isStatelessNativeAuth(request);
   const csrfToken = request.cookies.get(CSRF_COOKIE)?.value ?? crypto.randomUUID();
   const finish = (result = response) => {
+    if(result!==response)for(const cookie of response.cookies.getAll())result.cookies.set(cookie);
     result.headers.set('x-request-id',correlationId);
     if(!nativeAuth)result.cookies.set(CSRF_COOKIE, csrfToken, { secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
     return result;
@@ -44,8 +57,8 @@ export async function middleware(request: NextRequest) {
     const cookie = request.cookies.get(CSRF_COOKIE)?.value;
     if (!cookie) return finish(NextResponse.json({ error: 'Invalid CSRF token', code: 'CSRF_REJECTED', correlationId }, { status: 403 }));
     let token = request.headers.get(CSRF_HEADER);
-    if (!token && request.headers.get('content-type')?.includes('form')) {
-      try { token = String((await request.clone().formData()).get('_csrf') ?? ''); }
+    if (!token && request.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded')) {
+      try { token = await formCsrf(request); }
       catch { return finish(NextResponse.json({ error: 'Invalid form data', code: 'INVALID_FORM', correlationId }, { status: 400 })); }
     }
     if (!validCsrf(cookie, token)) {
@@ -83,12 +96,14 @@ export async function middleware(request: NextRequest) {
         },
         set(name: string, value: string, options: CookieOptions) {
           request.cookies.set({ name, value, ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
+          const previous=response.cookies.getAll();response = NextResponse.next({ request: { headers: request.headers } });
+          for(const cookie of previous)response.cookies.set(cookie);
           response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
           request.cookies.set({ name, value: '', ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
+          const previous=response.cookies.getAll();response = NextResponse.next({ request: { headers: request.headers } });
+          for(const cookie of previous)response.cookies.set(cookie);
           response.cookies.set({ name, value: '', ...options });
         },
       },
