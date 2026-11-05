@@ -13,7 +13,7 @@ vi.mock('next-intl/server',()=>({
   getFormatter:async()=>createFormatter({locale:'en'}),
 }));
 
-it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, outbox replay and concurrent payouts on local PostgreSQL', async () => {
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses the complete schema, outbox replay and concurrent payouts on local PostgreSQL', async () => {
   const url = process.env.MIGRATION_TEST_DATABASE_URL!;
   if (!['localhost','127.0.0.1'].includes(new URL(url).hostname)) throw new Error('Migration rehearsal requires an isolated loopback database');
   const sql = postgres(url, { max: 4, prepare: false, ssl: false, onnotice: () => {} });
@@ -25,211 +25,52 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       do $$ begin if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role; end if; end $$;
       do $$ begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon; end if; end $$;
       do $$ begin if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated; end if; end $$;
-      alter default privileges in schema public grant select on tables to anon, authenticated, service_role;
+      alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
       alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
       create schema auth;
       create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');
       create function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
       create function auth.role() returns text language sql as $$select coalesce(current_setting('request.jwt.claim.role',true),'service_role')::text$$;
     `).simple();
-    const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
-    const legacyUser='00000000-0000-4000-8000-000000009991';
-    let legacyAuthor:{owner:string;book:string;arc:string;post:string}|undefined;
-    let legacyWorkshop:{id:string;owner:string}|undefined;
-    let legacyRating:string|undefined;
-    let legacyNotification:{owner:string;badge:string;goal:string}|undefined;
-    let legacyEditions:{owner:string;ids:string[];reviewId:string}|undefined;
-    let legacyImport:{owner:string;rows:unknown[];response:unknown}|undefined;
-    let legacyBlankAnswer:string|undefined;
-    for (const file of migrations) {
-      if(file.startsWith('095_')){const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy095@example.test','legacy095','Legacy095')`;await sql`update users set is_verified_author=true where id=${owner}`;legacyBlankAnswer=(await sql`insert into author_qa(author_id,asked_by,question,answer,answered_at)values(${owner},${owner},'A legacy blank answer question','<p></p>',now())returning id`)[0].id;}
-      if(file.startsWith('074_')){
-        const owner=legacyNotification!.owner,book=(await sql`insert into books(title,author_name) values('Unverified legacy author book','Other author') returning id`)[0].id;
-        await sql`insert into author_books(author_id,book_id) values(${owner},${book})`;
-        const arc=(await sql`insert into arcs(author_id,book_id,description,is_active) values(${owner},${book},'Legacy offer',true) returning id`)[0].id;
-        const post=(await sql`insert into author_posts(author_id,title,body,type,book_id) values(${owner},'Legacy post','A linked post','announcement',${book}) returning id`)[0].id;
-        legacyAuthor={owner,book,arc,post};
-      }
-      if(file.startsWith('072_')){
-        const owner=legacyNotification!.owner,id=(await sql`insert into workshop_rooms(name,facilitator_id,max_members,member_count) values('Legacy workshop 072',${owner},8,1) returning id`)[0].id;
-        expect((await sql`select member_count from workshop_rooms where id=${id}`)[0].member_count).toBe(2);legacyWorkshop={id,owner};
-      }
-      if(file.startsWith('071_')){
-        const owner=legacyNotification!.owner;legacyRating=(await sql`insert into books(title,author_name,average_rating,ratings_count) values('Legacy mixed ratings 071','Author',4.6,100) returning id`)[0].id;
-        await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status) values(${owner},${legacyRating!},5,'Legacy cached review','short','published')`;
-      }
-      if(file.startsWith('069_')){
-        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'notifications-069@example.test','notifications_069','Notification reader')`;
-        await sql`select award_badge_atomic(${owner},'first_book',50,'First Book','📖')`;
-        const badge=(await sql`select id from notifications where user_id=${owner} and type='badge_earned'`)[0].id;
-        const goal=(await sql`insert into notifications(user_id,type,message) values(${owner},'reading_goal_milestone','You have read 2 of 8 books and reached 25% of your 2026 reading goal.') returning id`)[0].id;
-        legacyNotification={owner,badge,goal};
-      }
-      if(file.startsWith('066_')){
-        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-import-066@example.test','legacy_import_066','Legacy import')`;
-        const {parseGoodreadsImport}=await import('@/lib/goodreads-import');
-        const rows=parseGoodreadsImport('Book Id,Title,Author,Language,Publisher,Number of Pages,Exclusive Shelf\n966001,Legacy import,Author,fr,Éditeur,320,read').rows.map(row=>({...row,book:{...row.book,publisher:null,page_count:null,published_year:null,language:'en'}}));
-        const response=(await sql`select import_goodreads_library(${owner},'legacy-parser-receipt',${sql.json(rows)},0) as result`)[0].result;
-        legacyImport={owner,rows,response};
-      }
-      if(file.startsWith('065_')){
-        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-editions@example.test','legacy_editions_reader','Legacy edition reader')`;
-        const rows=await sql`insert into books(title,author_name,isbn_10,isbn_13,open_library_id,page_count) values('Legacy C book','Legacy author','0-13-110362-8',null,'/works/OL980001W',200),('Legacy C edition','Legacy author',null,'9780131103627',null,300) returning id`;
-        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='have_read'`)[0].id;await sql`select set_shelf_membership(${owner},${shelf},${rows[1].id},true)`;
-        const entry=(await sql`select id from shelf_books where user_id=${owner} and book_id=${rows[1].id}`)[0].id;await sql`select update_shelf_progress(${owner},${entry},100,null)`;
-        const review=(await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,idempotency_key,request_hash) values(${owner},${rows[1].id},4,'Legacy edition history','short','published','legacy-edition-review',${'e'.repeat(64)}) returning id`)[0].id;
-        await sql`insert into books(title,author_name,isbn_13,google_books_id) values('Legacy corrupt ISBN','Legacy author','9780306406158','legacy-corrupt-edition')`;
-        await sql`select award_xp_once(${owner},20,'write_review',${'review:'+rows[1].id})`;
-        legacyEditions={owner,ids:rows.map(row=>row.id),reviewId:review};
-      }
-      if(file.startsWith('063_')){
-        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-completion@example.test','legacy_completion_owner','Legacy completion')`;
-        const book=(await sql`insert into books(title,author_name) values('Legacy completion','Fixture') returning id`)[0].id;
-        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='have_read'`)[0].id;await sql`select set_shelf_membership(${owner},${shelf},${book},true)`;
-      }
-      if(file.startsWith('060_')){
-        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-conversion@example.test','legacy_conversion_owner','Legacy conversion')`;
-        const books=await sql`insert into books(title,author_name) values('Legacy shelved conversion','Fixture'),('Legacy removed conversion','Fixture') returning id`;
-        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='want_to_read'`)[0].id;
-        await sql`select set_shelf_membership(${owner},${shelf},${books[0].id},true)`;
-        await sql`select apply_book_interaction(${owner},${books[1].id},'reaction','legacy-conversion-add')`;
-        await sql`select apply_book_interaction(${owner},${books[1].id},'reaction','legacy-conversion-remove')`;
-      }
-      if(file.startsWith('058_'))await sql.unsafe(`
-        create schema storage;
-        create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null);
-        alter table storage.objects enable row level security;
-        grant usage on schema storage to anon,authenticated;
-        grant select,insert,update,delete on storage.objects to anon,authenticated;
-        create policy fixture_storage_access on storage.objects for all to anon,authenticated using(true) with check(true);
-        insert into storage.objects(bucket_id) values('avatars');
-      `).simple();
-      const legacy=file.startsWith('040_');
-      if(legacy)await sql.unsafe(`
-        insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
-        insert into tips(id,user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status) values('${legacyUser}','${legacyUser}','${legacyUser}',100,10,90,'USD','completed');
-        insert into payouts(tip_id,recipient_id,amount,currency,status,provider) values('${legacyUser}','${legacyUser}',90,'USD','failed','paystack');
-      `).simple();
-      const legacyRefund=file.startsWith('041_');
-      const legacyTicket=file.startsWith('048_');
-      if(legacyTicket)await sql.unsafe(`
-        insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
-        insert into events(id,organizer_id,title,event_date,is_paid,ticket_price,currency) values('${legacyUser}','${legacyUser}','Legacy event',now()+interval '2 days',true,10,'USD');
-        insert into event_tickets(id,event_id,user_id,amount_paid,currency,status) values('${legacyUser}','${legacyUser}','${legacyUser}',10,'USD','confirmed');
-        insert into event_revenue(event_id,organizer_id,amount,currency) values('${legacyUser}','${legacyUser}',9,'USD');
-      `).simple();
-      if(legacyRefund)await sql.unsafe(`
-        insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
-        insert into tips(id,user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status) values('${legacyUser}','${legacyUser}','${legacyUser}',100,10,90,'USD','refunded');
-        insert into payment_events(provider,event_id,payload) values('paystack','charge:legacy-paid-refund','{"tipId":"${legacyUser}","status":"completed","payment_id":"legacy-paid-refund","paid_amount_minor":10000,"currency":"USD"}');
-        insert into subscriptions(id,user_id,provider,status,amount,currency,provider_event_id,provider_subscription_id) values('${legacyUser}','${legacyUser}','dodopayments','active',4.99,'USD','sub_${legacyUser}','sub_legacy_period');
-        insert into payment_events(provider,event_id,payload) values('dodopayments','payment:legacy-sub-paid','{"event":"subscription.activated","subscription_id":"${legacyUser}","user_id":"${legacyUser}","paid_amount_minor":499,"currency":"USD","provider_reference":"sub_${legacyUser}"}');
-      `).simple();
-      if(file.startsWith('050_')){
-        const rolledBack=new Error('verified referral migration rollback');
-        try{await sql.begin(async tx=>{
-          const buyer=crypto.randomUUID(),referrer=crypto.randomUUID(),late=crypto.randomUUID();
-          for(const [index,id] of [buyer,referrer,late].entries())await tx`insert into auth.users(id,email,raw_user_meta_data) values(${id},${'legacy-referral'+index+'@example.test'},${tx.json({username:'legacy_referral_'+index})})`;
-          await tx`update users set referred_by=${referrer} where id in (${buyer},${late})`;
-          await tx`insert into referrals(referrer_id,referred_id,created_at) values(${referrer},${buyer},now()-interval '1 day'),(${referrer},${late},now()+interval '1 day')`;
-          const [sub]=await tx`select create_subscription_intent(${buyer},'dodopayments','USD',4.99,'legacy-referral-sub','referral-test') as subscription`;
-          const charge={event:'subscription.activated',subscription_id:sub.subscription.id,user_id:buyer,provider_event_at:new Date().toISOString(),provider_subscription_id:'sub_legacy_referral',payment_id:'pay_legacy_referral',paid_amount_minor:499,tax_minor:0,currency:'USD',provider_reference:'sub_'+sub.subscription.id,period_end:new Date(Date.now()+30*86400000).toISOString()};
-          await tx`select process_payment_event('dodopayments','payment:pay_legacy_referral',${tx.json(charge)},'referral-test')`;
-          await tx`select process_refund_event('dodopayments','ref_legacy_referral','pay_legacy_referral',100,'USD','referral-test')`;
-          expect((await tx`select commission_amount from referral_commissions where idempotency_key='dodopayments:payment:pay_legacy_referral'`)[0].commission_amount).toBe('0.0399');
-          for(const [id,payment] of [[buyer,'pay_legacy_ngn'],[late,'pay_late_referral']]){
-            const [intent]=await tx`select create_tip_transaction(${id},${referrer},100,10,90,'NGN',${payment},'referral-test') as tip`;
-            await tx`select process_payment_event('paystack',${'charge:'+payment},${tx.json({tipId:intent.tip.id,status:'completed',payment_id:payment,providerReference:payment,paid_amount_minor:10000,tax_minor:0,currency:'NGN'})},'referral-test')`;
-          }
-          const migration=readFileSync(`supabase/migrations/${file}`,'utf8');
-          await tx.unsafe(migration).simple();
-          expect((await tx`select original_commission_amount,commission_amount,currency from referral_commissions where idempotency_key='dodopayments:payment:pay_legacy_referral'`)[0]).toMatchObject({original_commission_amount:'0.4990',commission_amount:'0.3990',currency:'USD'});
-          expect((await tx`select original_commission_amount,commission_amount,currency from referral_commissions where idempotency_key='paystack:charge:pay_legacy_ngn'`)[0]).toMatchObject({original_commission_amount:'1.0000',commission_amount:'1.0000',currency:'NGN'});
-          expect((await tx`select count(*)::int as count from referral_commissions where idempotency_key='paystack:charge:pay_late_referral'`)[0].count).toBe(0);
-          expect((await tx`select amount from financial_audit_log where action='referral_commission_reconciled' and provider_event_id='payment:pay_legacy_referral'`)[0].amount).toBe('0.3591');
-          await tx.unsafe(migration).simple();
-          expect((await tx`select count(*)::int as count from financial_audit_log where action='referral_commission_reconciled'`)[0].count).toBe(2);
-          throw rolledBack;
-        });}catch(error){if(error!==rolledBack)throw error;}
-      }
-      if(file.startsWith('051_')){
-        const rolledBack=new Error('verified legacy buddy rollback');
-        try{await sql.begin(async tx=>{
-          const user=crypto.randomUUID();await tx`insert into auth.users(id,email,raw_user_meta_data) values(${user},'legacy-buddy@example.test','{"username":"legacy_buddy_scope"}')`;
-          const [book]=await tx`insert into books(title,author_name) values('Legacy buddy','Author') returning id`;
-          const rooms=await tx`insert into buddy_reads(created_by,book_id,max_participants) values(${user},${book.id},3),(${user},${book.id},3) returning id`;
-          for(const room of rooms)await tx`insert into buddy_read_members(buddy_read_id,user_id) values(${room.id},${user})`;
-          const [parent]=await tx`insert into buddy_read_notes(buddy_read_id,user_id,content) values(${rooms[0].id},${user},'Legacy parent') returning id`;
-          const [reply]=await tx`insert into buddy_read_notes(buddy_read_id,user_id,content,reply_to_id) values(${rooms[1].id},${user},'Legacy cross-group reply',${parent.id}) returning id`;
-          await tx.unsafe(readFileSync(`supabase/migrations/${file}`,'utf8')).simple();
-          expect((await tx`select reply_to_id,content from buddy_read_notes where id=${reply.id}`)[0]).toMatchObject({reply_to_id:null,content:'Legacy cross-group reply'});
-          throw rolledBack;
-        });}catch(error){if(error!==rolledBack)throw error;}
-      }
-      if(file.startsWith('053_')){
-        const rolledBack=new Error('verified legacy theme rollback');
-        try{await sql.begin(async tx=>{
-          await tx`insert into custom_themes(name,is_active,updated_at) values('Legacy old',true,now()-interval '1 day'),('Legacy recent',true,now())`;
-          await tx.unsafe(readFileSync(`supabase/migrations/${file}`,'utf8')).simple();
-          expect((await tx`select name from custom_themes where is_active`).map(row=>row.name)).toEqual(['Legacy recent']);
-          expect((await tx`select count(*)::int as count from financial_audit_log where action='theme_activation_reconciled'`)[0].count).toBe(1);
-          throw rolledBack;
-        });}catch(error){if(error!==rolledBack)throw error;}
-      }
-      if(file.startsWith('054_')){
-        const rolledBack=new Error('verified legacy catalog rollback');
-        try{await sql.begin(async tx=>{
-          const [old]=await tx`insert into books(title,author_name,isbn_13,cover_url) values('A Gentleman in Moscow','Amor Towles','9780670026190','https://covers.openlibrary.org/b/isbn/9780670026190-L.jpg') returning id`;
-          const [duplicate]=await tx`insert into books(title,author_name,isbn_13) values('Klara and the Sun','Kazuo Ishiguro','9780593311043') returning id`;
-          await tx`insert into books(title,author_name,isbn_13) values('Klara and the Sun','Kazuo Ishiguro','9780593318171')`;
-          await tx.unsafe(readFileSync(`supabase/migrations/${file}`,'utf8')).simple();
-          expect((await tx`select isbn_13,cover_url from books where id=${old.id}`)[0]).toMatchObject({isbn_13:'9780670026197',cover_url:'https://covers.openlibrary.org/b/isbn/9780670026197-L.jpg'});
-          expect((await tx`select isbn_13 from books where id=${duplicate.id}`)[0].isbn_13).toBeNull();
-          expect((await tx`select count(*)::int as count from financial_audit_log where action='catalog_identity_reconciliation_required'`)[0].count).toBe(1);
-          throw rolledBack;
-        });}catch(error){if(error!==rolledBack)throw error;}
-      }
-      await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
-      if(file.startsWith('095_'))expect((await sql`select answer,answered_at from author_qa where id=${legacyBlankAnswer!}`)[0]).toMatchObject({answer:null,answered_at:null});
-      if(legacyTicket){
-        expect((await sql`select status from event_tickets where id=${legacyUser}`)[0].status).toBe('legacy_hold');
-        expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.events)).toBe(0);
-        expect((await sql`select count(*)::int as count from financial_audit_log where target_user_id=${legacyUser} and action='legacy_event_revenue_held'`)[0].count).toBe(1);
-        await sql`delete from events where id=${legacyUser}`;
-        await sql`delete from auth.users where id=${legacyUser}`;
-      }
-      if(legacyRefund){
-        expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.available)).toBe(0);
-        expect((await sql`select credited from payment_captures where payment_id='legacy-paid-refund'`)[0].credited).toBe(false);
-        expect((await sql`select process_payment_event('paystack','charge:legacy-paid-refund',${sql.json({tipId:legacyUser,status:'completed',payment_id:'legacy-paid-refund',paid_amount_minor:10000,tax_minor:0,currency:'USD',providerReference:'legacy-paid-refund'})},'migration-rehearsal') as applied`)[0].applied).toBe(false);
-        expect((await sql`select has_premium_access(${legacyUser}) as active`)[0].active).toBe(false);
-        const reconciledPeriod={event:'subscription.activated',subscription_id:legacyUser,user_id:legacyUser,payment_id:'legacy-sub-paid',paid_amount_minor:499,tax_minor:0,currency:'USD',provider_reference:'sub_'+legacyUser,provider_subscription_id:'sub_legacy_period',provider_event_at:new Date().toISOString(),period_end:new Date(Date.now()+30*86400000).toISOString()};
-        for(let replay=0;replay<2;replay++)expect((await sql`select process_payment_event('dodopayments','payment:legacy-sub-paid',${sql.json(reconciledPeriod)},'migration-rehearsal') as applied`)[0].applied).toBe(false);
-        expect((await sql`select has_premium_access(${legacyUser}) as active`)[0].active).toBe(true);
-        expect((await sql`select count(*)::int as count from financial_audit_log where action='billing_period_reconciled' and target_user_id=${legacyUser}`)[0].count).toBe(1);
-
-        await sql`select process_refund_event('paystack','legacy-native-refund','legacy-paid-refund',10000,'USD','migration-rehearsal')`;
-        expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.available)).toBe(0);
-        await sql`delete from refund_inbox where payment_id='legacy-paid-refund'`;
-        await sql`delete from payment_refunds where payment_id='legacy-paid-refund'`;
-        await sql`delete from payment_captures where user_id=${legacyUser}`;
-        await sql`delete from subscriptions where id=${legacyUser}`;
-        await sql`delete from payment_events where event_id in ('charge:legacy-paid-refund','payment:legacy-sub-paid')`;
-        await sql`delete from financial_audit_log where target_user_id=${legacyUser}`;
-        await sql`delete from tips where id=${legacyUser}`;
-        await sql`delete from auth.users where id=${legacyUser}`;
-      }
-      if(legacy){
-        const [hold]=await sql`select method,status,amount,last_error from payout_requests where user_id=${legacyUser}`;
-        expect(hold).toMatchObject({method:'manual',status:'processing',amount:'90.00',last_error:'Legacy transfer requires reconciliation'});
-        expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.available)).toBe(0);
-        await sql`delete from financial_audit_log where target_user_id=${legacyUser}`;
-        await sql`delete from payout_requests where user_id=${legacyUser}`;
-        await sql`delete from payouts where recipient_id=${legacyUser}`;
-        await sql`delete from tips where recipient_id=${legacyUser}`;
-        await sql`delete from auth.users where id=${legacyUser}`;
-      }
-    }
+    const migrations = readdirSync('supabase/migrations').filter(file => file.endsWith('.sql')).sort();
+    expect(migrations).toEqual(['001_schema.sql']);
+    await sql.unsafe(`
+      create schema storage;
+      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null);
+      alter table storage.objects enable row level security;
+      grant usage on schema storage to anon,authenticated;
+      grant select,insert,update,delete on storage.objects to anon,authenticated;
+      create policy fixture_storage_access on storage.objects for all to anon,authenticated using(true) with check(true);
+      insert into storage.objects(bucket_id) values('avatars');
+    `).simple();
+    const bootstrap = await sql.reserve();
+    try { await bootstrap.unsafe(readFileSync('supabase/migrations/001_schema.sql', 'utf8')).simple(); }
+    finally { bootstrap.release(); }
+    const {legacyNotification,legacyWorkshop,legacyEditions,legacyImport}=await(async()=>{
+    const owner = crypto.randomUUID();
+    await sql`select create_direct_account(${owner},'notifications-069@example.test','notifications_069','Notification reader')`;
+    await sql`select initialize_account_locale(${owner},'en')`;
+    await sql`select award_badge_atomic(${owner},'first_book',50,'First Book','📖')`;
+    const badge=(await sql`select id from notifications where user_id=${owner} and type='badge_earned'`)[0].id;
+    const goal=(await sql`insert into notifications(user_id,type,message,message_key,message_values)values(${owner},'reading_goal_milestone','Reading goal','readingGoal',${sql.json({count:2,target:8,percent:25,year:'2026'})})returning id`)[0].id;
+    const legacyNotification={owner,badge,goal};
+    const legacyWorkshop={owner,id:(await sql`insert into workshop_rooms(name,facilitator_id,max_members)values('Workshop fixture',${owner},8)returning id`)[0].id};
+    const reader=crypto.randomUUID();await sql`select create_direct_account(${reader},'retained-editions@example.test','retained_editions','Edition reader')`;
+    const book=(await sql`select store_catalog_book(${sql.json({title:'C book',author_name:'Fixture author',isbn_13:'9780131103627',open_library_work_id:'/works/OL980001W',page_count:200})})book`)[0].book;
+    const alias=(await sql`insert into books(title,author_name,work_id,canonical_edition_id,page_count)values('C edition alias','Fixture author',${book.work_id},${book.id},300)returning id`)[0].id;
+    const shelf=(await sql`select id from shelves where user_id=${reader} and default_type='have_read'`)[0].id;
+    await sql`select set_shelf_membership(${reader},${shelf},${book.id},true)`;
+    await sql`update shelf_books set book_id=${alias},progress_pages=200,progress_percent=100,finished_at=now()where user_id=${reader} and book_id=${book.id}`;
+    const reviewId=(await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,idempotency_key,request_hash)values(${reader},${alias},4,'Retained edition history','short','published','retained-edition-review',${'e'.repeat(64)})returning id`)[0].id;
+    await sql`select award_xp_once(${reader},20,'write_review',${'review:'+book.id})`;
+    const legacyEditions={owner:reader,ids:[book.id,alias],reviewId};
+    const importer=crypto.randomUUID();await sql`select create_direct_account(${importer},'legacy-import-066@example.test','legacy_import_066','Import reader')`;
+    const {parseGoodreadsImport:parseFixtureImport}=await import('@/lib/goodreads-import');
+    const rows=parseFixtureImport('Book Id,Title,Author,Language,Publisher,Number of Pages,Exclusive Shelf\n966001,Legacy import,Author,fr,Éditeur,320,read').rows.map(row=>({...row,book:{...row.book,publisher:null,page_count:null,published_year:null,language:'en'}}));
+    const response=(await sql`select import_goodreads_library(${importer},'legacy-parser-receipt',${sql.json(rows)},0)result`)[0].result;
+    const legacyImport={owner:importer,rows,response};
+    return {legacyNotification,legacyWorkshop,legacyEditions,legacyImport};
+    })();
     const [functions] = await sql`select count(*) as count from pg_proc where proname in ('create_payout_request_atomic','process_payment_event','apply_social_intent','award_xp_once','process_outbox_event_atomic','create_subscription_intent')`;
     expect(Number(functions.count)).toBe(6);
     for (const role of ['anon', 'authenticated']) {
@@ -1688,8 +1529,6 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     }
     {
     const actor=crypto.randomUUID(),reviewer=crypto.randomUUID(),other=crypto.randomUUID(),generic=crypto.randomUUID();
-    const legacy=await sql`select c.reviewer_id from review_conversions c join users u on u.id=c.actor_id where u.username='legacy_conversion_owner'`;
-    expect(legacy).toHaveLength(2);expect(legacy.every(row=>row.reviewer_id===null)).toBe(true);
     for(const [index,id] of [actor,reviewer,other,generic].entries())await sql`select create_direct_account(${id},${'conversion'+index+'@example.test'},${'conversion_fixture_'+index},'Conversion fixture')`;
     await sql`update users set is_creator=true where id in (${reviewer},${other})`;
     const books=await sql`insert into books(title,author_name) values('Conversion book','Fixture'),('Generic conversion','Fixture'),('Rollback conversion','Fixture') returning id`;
@@ -1813,7 +1652,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     await sql`update shelf_books set finished_at=null where user_id=${actor} and shelf_id=${shelf} and book_id=${books[1].id}`;
     expect((await sql`select set_shelf_membership(${actor},${shelf},${books[1].id},true) as receipt`)[0].receipt.xp_awarded).toBe(0);
     expect((await sql`select books_read_count from users where id=${actor}`)[0].books_read_count).toBe(2);
-    const legacy=(await sql`select u.id,sb.book_id,sb.shelf_id from users u join shelf_books sb on sb.user_id=u.id where u.username='legacy_completion_owner'`)[0];
+    const legacy=(await sql`select u.id,sb.book_id,sb.shelf_id from users u join shelf_books sb on sb.user_id=u.id where u.username='retained_editions'`)[0];
     expect((await sql`select set_shelf_membership(${legacy.id},${legacy.shelf_id},${legacy.book_id},true) as receipt`)[0].receipt.xp_awarded).toBe(0);
     const daily=await Promise.all(Array.from({length:3},()=>sql`select claim_reading_reward(${actor},'daily_login',null) as reward`));expect(daily.reduce((sum,rows)=>sum+rows[0].reward.awarded,0)).toBe(3);
     await expect(sql`select claim_reading_reward(${actor},'add_book',${books[0].id})`).rejects.toThrow('Invalid reading reward');
@@ -1908,8 +1747,6 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await sql`select book_id from reviews where id=${legacy.reviewId}`)[0].book_id).toBe(legacy.ids[1]);
     expect((await sql`select book_id from shelf_books where user_id=${legacy.owner}`)[0].book_id).toBe(legacy.ids[1]);
     expect((await sql`select book_work_snapshot(${canonical.work_id}) as result`)[0].result.work.open_library_id).toBe('/works/OL980001W');
-    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id in (${legacy.ids[0]},${legacy.ids[1]})`)[0].count).toBeGreaterThanOrEqual(1);
-    expect((await sql`select isbn_13 from books where google_books_id='legacy-corrupt-edition'`)[0].isbn_13).toBeNull();
     const {getBookById,getEditionIds}=await import('@/services/books');expect((await getBookById(alias.id))?.id).toBe(canonical.id);expect((await getEditionIds(canonical.id)).sort()).toEqual([...legacy.ids].sort());
     const shelf=(await sql`select id from shelves where user_id=${legacy.owner} and default_type='have_read'`)[0].id;
     const before=(await sql`select xp from users where id=${legacy.owner}`)[0].xp;
@@ -2112,8 +1949,6 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     }
     }
     {
-    expect((await sql`select average_rating,ratings_count from books where id=${legacyRating!}`)[0]).toEqual({average_rating:null,ratings_count:0});
-    expect((await sql`select previous_data,resolution from book_catalog_audit where book_id=${legacyRating!} and reason='legacy_review_rating_cache'`)[0]).toEqual({previous_data:{average_rating:4.6,ratings_count:100},resolution:{average_rating:null,ratings_count:0}});
     const actor=crypto.randomUUID(),banned=crypto.randomUUID(),deleted=crypto.randomUUID();
     for(const [id,name] of [[actor,'review_reader_071'],[banned,'review_banned_071'],[deleted,'review_deleted_071']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},'Review reader')`;
     const book=(await sql`insert into books(title,author_name,average_rating,ratings_count) values('Review snapshot fixture 071','Author',4.6,100) returning id,work_id`)[0];
@@ -2211,10 +2046,6 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);expect((await readProgress(new Request('https://app.test/progress'))).status).toBe(503);
     }
     {
-    expect((await sql`select is_active from arcs where id=${legacyAuthor!.arc}`)[0].is_active).toBe(false);
-    expect((await sql`select book_id from author_posts where id=${legacyAuthor!.post}`)[0].book_id).toBeNull();
-    expect((await sql`select author_owns_book(${legacyAuthor!.owner},${legacyAuthor!.book}) as owned`)[0].owned).toBe(false);
-    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${legacyAuthor!.book} and reason in('unverified_author_arc','unverified_author_post')`)[0].count).toBe(2);
     const admin=crypto.randomUUID(),author=crypto.randomUUID(),coauthor=crypto.randomUUID(),impostor=crypto.randomUUID();
     for(const [n,id] of [admin,author,coauthor,impostor].entries())await sql`select create_direct_account(${id},${'author074_'+n+'@example.test'},${'author074_'+n},'Identical editable name')`;
     await sql`update users set is_admin=true where id=${admin}`;await sql`update users set is_verified_author=true,user_types=array['author'] where id in(${author},${coauthor},${impostor})`;
@@ -2818,4 +2649,22 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('enforces active administrat
   expect((await sql`select count(*)::int count from feature_flags where name in('google_auth','telegram_auth') and enabled`)[0].count).toBe(1);
   expect((await sql`select has_function_privilege('authenticated','set_feature_flag_atomic(uuid,text,boolean)','execute')browser,has_function_privilege('anon','set_feature_flag_atomic(uuid,text,boolean)','execute')anonymous,has_function_privilege('service_role','set_feature_flag_atomic(uuid,text,boolean)','execute')service`)[0]).toMatchObject({browser:false,anonymous:false,service:true});
  }finally{for(const row of original)await sql`update feature_flags set enabled=${row.enabled} where name=${row.name}`;await writer.end();await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('serializes review likes and preserves counts, privacy and browser write boundaries',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Review like rehearsal requires isolated loopback PostgreSQL');const sql=postgres(url,{max:4,prepare:false,ssl:false,onnotice:()=>{}});
+ try{
+  const author=crypto.randomUUID(),reader=crypto.randomUUID(),other=crypto.randomUUID(),removed=crypto.randomUUID();
+  for(const id of[author,reader,other,removed])await sql`select create_direct_account(${id},${id+'@example.test'},${'like'+id.replaceAll('-','').slice(0,20)},'Review liker')`;
+  const book=(await sql`insert into books(title,author_name)values('Like integrity','Writer')returning id`)[0].id,review=(await sql`insert into reviews(user_id,book_id,rating,content)values(${author},${book},4,'Review like fixture')returning id`)[0].id;
+  const apply=(actor:string,key:string)=>sql`select apply_social_intent(${actor},${review},'like',${key})active`;
+  const results=await Promise.all(Array.from({length:4},()=>apply(reader,'same-review-like-key')));expect(results.every(rows=>rows[0].active)).toBe(true);
+  await apply(other,'other-review-like-key');expect((await sql`select likes_count from reviews where id=${review}`)[0].likes_count).toBe(2);
+  expect((await sql`select toggle_review_like_atomic(${review},${other})active`)[0].active).toBe(false);expect((await sql`select likes_count from reviews where id=${review}`)[0].likes_count).toBe(1);
+  await sql`insert into review_likes(review_id,user_id)values(${review},${removed})`;await sql`delete from users where id=${removed}`;expect((await sql`select likes_count from reviews where id=${review}`)[0].likes_count).toBe(1);
+  await sql`update reviews set is_hidden=true where id=${review}`;await expect(apply(other,'hidden-review-like-key')).rejects.toMatchObject({code:'P1005'});await sql`update reviews set is_hidden=false where id=${review}`;
+  await sql`update users set profile_visibility='followers_only'where id=${author}`;await expect(apply(other,'private-review-like-key')).rejects.toMatchObject({code:'P1005'});await sql`select apply_social_intent(${other},${author},'follow','review-owner-follow-key')`;await apply(other,'followed-review-like-key');
+  await sql.begin(async tx=>{await tx`set local role authenticated`;await tx`select set_config('request.jwt.claim.sub',${other},true)`;expect((await tx`select user_id from review_likes where review_id=${review}`).map(row=>row.user_id)).toEqual([other]);});
+  expect((await sql`select has_table_privilege('authenticated','review_likes','insert')browser,has_function_privilege('authenticated','toggle_review_like_atomic(uuid,uuid)','execute')rpc`)[0]).toMatchObject({browser:false,rpc:false});
+ }finally{await sql.end();}
 },60_000);
