@@ -2,9 +2,10 @@
 
 import {useRequestIntent} from './useRequestIntent';
 
-export function useBookLinkClick(bookId:string,userId:string){
+export function useBookLinkClick(bookId:string,userId?:string){
   const intent=useRequestIntent(userId);
   return async(linkId:string)=>{
+    if(!userId)return;
     const body={bookId,linkId},scope='book-link:'+bookId+':'+linkId;
     const response=await fetch('/api/books/click',{method:'POST',headers:{'Content-Type':'application/json',...await intent.durableHeaders(body,scope)},body:JSON.stringify(body),keepalive:true});
     if(!response.ok)throw new Error('Click recording unavailable');

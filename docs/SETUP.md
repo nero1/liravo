@@ -199,7 +199,7 @@ Use the provider's sandbox to verify checkout, payment, cancellation, and refund
 
 ## 11. Verify and protect the deployment
 
-1. Open `https://YOUR-DOMAIN/api/health`. Confirm the response reports healthy database and Redis checks; HTTP 200 alone is not enough.
+1. Open `https://YOUR-DOMAIN/api/health`. Confirm HTTP 200 and healthy database/Redis checks. HTTP 503 means a dependency is unavailable.
 2. Sign in, search for a book, add it to a shelf, upload an avatar, and save a reading update.
 3. Switch between English, French, and German and check that pages load.
 4. Open **Admin → Cron Status** and the **Admin Dashboard** and check job errors, payout requests, and payment returns.

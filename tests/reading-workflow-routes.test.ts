@@ -1,6 +1,9 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 import {getCurrentUser} from '@/lib/auth/getCurrentUser';
-import {createServiceClient} from '@/lib/supabase/server';
+import {createClient,createServiceClient} from '@/lib/supabase/server';
+import {GET as bookQuotes} from '@/app/api/books/[id]/quotes/route';
+import {decodeCursor} from '@/lib/pagination';
+import {NextRequest} from 'next/server';
 import {POST} from '@/app/api/import/goodreads/route';
 import {POST as writeQuote} from '@/app/api/quotes/route';
 import {POST as writeReview} from '@/app/api/books/[id]/reviews/route';
@@ -10,10 +13,20 @@ import {hasVisibleText} from '@/lib/sanitize';
 import {readingRoomUnlockDate} from '@/lib/reading-room-date';
 import {PATCH} from '@/app/api/buddy-reads/[id]/update/route';
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
-vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
+vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn(),createClient:vi.fn()}));
+vi.mock('@/services/books',async original=>({...await original<typeof import('@/services/books')>(),getEditionIds:async(id:string)=>[id]}));
 vi.mock('@/lib/rate-limit',()=>({checkRouteRateLimit:vi.fn(async()=>true)}));
 const rpc=vi.fn();const user='00000000-0000-4000-8000-000000001001',room='00000000-0000-4000-8000-000000001002';
 const csv='Book Id,Title,Author,Exclusive Shelf\n92001,One,Author,to-read';
+
+it('carries both quote cursor fields across tied timestamp pages and rejects invalid cursors',async()=>{
+ const at='2026-11-05T00:00:00.123456+00:00',rows=Array.from({length:21},(_,index)=>({id:'00000000-0000-4000-8000-'+String(100-index).padStart(12,'0'),created_at:at,content:'Quote '+index}));let page=rows;
+ const chain={select:()=>chain,in:()=>chain,eq:()=>chain,order:vi.fn(()=>chain),limit:()=>chain,or:vi.fn(()=>chain),then:(resolve:(value:unknown)=>unknown)=>Promise.resolve({data:page,error:null}).then(resolve)};
+ vi.mocked(createClient).mockReturnValue({from:()=>chain}as never);
+ const first=await(await bookQuotes(new NextRequest('https://app.test/api/books/'+room+'/quotes'),{params:{id:room}})).json();expect(first.quotes).toHaveLength(20);expect(decodeCursor(first.nextCursor)).toEqual({at,id:rows[19].id});
+ page=rows.slice(20);const second=await(await bookQuotes(new NextRequest('https://app.test/api/books/'+room+'/quotes?cursor='+first.nextCursor),{params:{id:room}})).json();expect(second.quotes).toEqual(page);expect(second.nextCursor).toBeNull();expect(chain.or).toHaveBeenCalledWith(`created_at.lt.${at},and(created_at.eq.${at},id.lt.${rows[19].id})`);expect(chain.order).toHaveBeenCalledWith('id',{ascending:false});
+ expect((await bookQuotes(new NextRequest('https://app.test/quotes?cursor=invalid'),{params:{id:room}})).status).toBe(400);
+});
 beforeEach(()=>{vi.resetAllMocks();vi.mocked(getCurrentUser).mockResolvedValue({id:user} as never);vi.mocked(createServiceClient).mockReturnValue({rpc} as never);rpc.mockResolvedValue({data:{imported:1,skipped:0},error:null});});
 it('accepts native JSON and web multipart imports with the same durable file identity',async()=>{
   const native=await POST(new Request('https://app.test/api/import/goodreads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csv})}));

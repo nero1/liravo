@@ -75,22 +75,21 @@ function RatingBar({ star, count, total,label }: { star: number; count: number; 
 }
 
 export default async function BookPage({ params,searchParams }: BookPageProps) {
-  const [t,books,common,reviewText,moods,communityText,format,debateText]=await Promise.all([getTranslations('book'),getTranslations('books'),getTranslations('common'),getTranslations('reviewForm'),getTranslations('moods'),getTranslations('communityNotes'),getFormatter(),getTranslations('bookDebates')]);
+  const [t,books,common,reviewText,moods,communityText,format,debateText,authText]=await Promise.all([getTranslations('book'),getTranslations('books'),getTranslations('common'),getTranslations('reviewForm'),getTranslations('moods'),getTranslations('communityNotes'),getFormatter(),getTranslations('bookDebates'),getTranslations('auth')]);
   const supabase = createClient();
   const serviceSupabase = createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
 
   const book=await getBookById(params.id);if(!book)notFound();
   if(book.id!==params.id)redirect('/book/'+book.id);
   const [workCatalog,editionIds]=await Promise.all([getWorkCatalog(book.work_id),getEditionIds(book.id)]);
 
   // User country for affiliate links
-  const { data: userProfile } = await supabase
+  const { data: userProfile } = user ? await supabase
     .from('users')
     .select('country, preferred_locale')
     .eq('id', user.id)
-    .single();
+    .single():{data:null};
   const country = userProfile?.country ?? 'US';
   const locale = userProfile?.preferred_locale ?? 'en',shareLocale=await getLocale();
 
@@ -100,9 +99,9 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
   const promotionText=await getTranslations('promotions');
 
   // Check want-to-read status
-  const { data: wantShelf } = await supabase.from('shelves').select('id').eq('user_id', user.id).eq('default_type', 'want_to_read').single();
+  const { data: wantShelf } = user ? await supabase.from('shelves').select('id').eq('user_id', user.id).eq('default_type', 'want_to_read').single():{data:null};
   let initialWantToRead = false;
-  if (wantShelf) {
+  if (user&&wantShelf) {
     const { data: wantEntry } = await supabase.from('shelf_books').select('id').in('book_id',editionIds).eq('shelf_id', wantShelf.id).eq('user_id',user.id).limit(1).maybeSingle();
     initialWantToRead = !!wantEntry;
   }
@@ -111,7 +110,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
   try{reviewPage=await getBookReviews(book.id,searchParams?.reviewCursor??null,20);}catch(error){if(error instanceof ReviewCursorError)notFound();throw error;}
   if(!reviewPage)notFound();
   const reviews=reviewPage.reviews;
-  const { data: helpfulnessVotes } = reviews?.length ? await supabase.from('review_helpfulness_votes')
+  const { data: helpfulnessVotes } = user&&reviews?.length ? await supabase.from('review_helpfulness_votes')
     .select('review_id,is_helpful').eq('user_id', user.id).in('review_id', reviews.map(review => review.id)) : { data: [] };
   const votesByReview = new Map((helpfulnessVotes ?? []).map(vote => [vote.review_id, vote.is_helpful]));
 
@@ -278,8 +277,8 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
 
       {/* Action buttons */}
       <div className="flex items-center gap-3 mb-5">
-        <ReactionButtons bookId={params.id} userId={user.id} initialWantToRead={initialWantToRead} />
-        <AddToShelfButton bookId={params.id} userId={user.id}/>
+        {user&&<ReactionButtons bookId={params.id} userId={user.id} initialWantToRead={initialWantToRead} />}
+        {user?<AddToShelfButton bookId={params.id} userId={user?.id}/>:<Link href="/login" className="text-sm underline">{authText('signIn')}</Link>}
         <Link href={shareCardPath('book',book.id,shareLocale)} target="_blank" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600 transition-colors">
           <Share2 size={14} /> {common('share')}
         </Link>
@@ -288,14 +287,14 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
       {/* Affiliate buy links */}
       {affiliateLinks.length > 0 && (
         <div id="buy-links" className="mb-5">
-          <AffiliateLinkButtons links={affiliateLinks} bookId={params.id} userId={user.id}/>
+          <AffiliateLinkButtons links={affiliateLinks} bookId={params.id} userId={user?.id}/>
         </div>
       )}
 
       {/* Audible CTA */}
       {book.has_audiobook && (
         <div className="mb-5">
-          <AudibleCTA link={getAudibleLink(book,locale,country)!} bookId={params.id} userId={user.id}/>
+          <AudibleCTA link={getAudibleLink(book,locale,country)!} bookId={params.id} userId={user?.id}/>
         </div>
       )}
 
@@ -450,8 +449,8 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
 
                   {/* Helpfulness + replies */}
                   <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-border/50">
-                    {review.user_id!==user.id&&<ReactionButtons bookId={review.book_id} userId={user.id} reviewId={review.id} initialWantToRead={initialWantToRead}/>}
-                    <HelpfulnessButtons bookId={review.book_id} reviewId={review.id} initialVote={votesByReview.get(review.id) ?? null} helpful={review.helpful_votes ?? 0} unhelpful={review.unhelpful_votes ?? 0} />
+                    {user&&review.user_id!==user.id&&<ReactionButtons bookId={review.book_id} userId={user.id} reviewId={review.id} initialWantToRead={initialWantToRead}/>}
+                    {user&&<HelpfulnessButtons bookId={review.book_id} reviewId={review.id} initialVote={votesByReview.get(review.id) ?? null} helpful={review.helpful_votes ?? 0} unhelpful={review.unhelpful_votes ?? 0} />}
                     {replyCount > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground ml-auto">
                         <MessageSquare size={12} /> {t('replyCount',{count:replyCount})}
@@ -474,6 +473,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
 
       <Link href={'/debates/new?bookId='+book.id} className="block mb-8 text-sm underline">{debateText('create')}</Link>
 
+      {user&&<>
       {/* Save a quote */}
       <section className="mb-8">
         <h2 className="font-display font-bold text-lg mb-4">{books('saveQuote')}</h2>
@@ -485,6 +485,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
         <h2 className="font-display font-bold text-lg mb-4">{t('writeReview')}</h2>
         <ReviewForm bookId={params.id} userId={user.id} />
       </section>
+      </>}
     </div>
   );
 }

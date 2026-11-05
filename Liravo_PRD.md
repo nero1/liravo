@@ -356,6 +356,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 - Public (default)
 - Followers-only (shelf and activity visible to followers only)
 - Shelf visibility can be toggled independently of overall profile visibility.
+- The same privacy rules apply to author profiles and direct Data API reads. Public book, author and reading-list pages remain accessible without signing in on every database provider.
 
 ---
 

@@ -3,6 +3,10 @@ import { NextRequest } from 'next/server';
 import { middleware } from '@/middleware';
 import { CSRF_COOKIE, CSRF_HEADER } from '@/lib/csrf';
 
+const session=vi.hoisted(()=>({refresh:vi.fn()}));
+type CookieAdapter={set:(name:string,value:string,options:Record<string,unknown>)=>void;remove:(name:string,options:Record<string,unknown>)=>void};
+vi.mock('@supabase/ssr',()=>({createServerClient:(_url:string,_key:string,options:{cookies:CookieAdapter})=>({auth:{getUser:async()=>{session.refresh(options.cookies);return {data:{user:null}};}}})}));
+
 afterEach(()=>vi.unstubAllEnvs());
 
 it('propagates one validated request ID to the handler and browser response',async()=>{
@@ -13,6 +17,21 @@ it('propagates one validated request ID to the handler and browser response',asy
   expect(response.headers.get('x-middleware-request-x-request-id')).toBe('request-integration-123');
   const generated=await middleware(new NextRequest('https://app.test/login',{headers:{'x-request-id':'bad id'}}));
   expect(generated.headers.get('x-request-id')).toMatch(/^[a-f0-9-]{36}$/);
+});
+
+it('retains every refreshed and deleted cookie on normal and redirect responses',async()=>{
+ vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','https://fixture.supabase.co');vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY','fixture');
+ session.refresh.mockImplementation((cookies:CookieAdapter)=>{cookies.set('sb-token.0','first',{path:'/'});cookies.set('sb-token.1','second',{path:'/'});cookies.remove('sb-token.2',{path:'/',maxAge:0});});
+ for(const path of['/book/fixture','/shelf']){const result=await middleware(new NextRequest('https://app.test'+path));expect(result.cookies.get('sb-token.0')?.value).toBe('first');expect(result.cookies.get('sb-token.1')?.value).toBe('second');expect(result.cookies.get('sb-token.2')?.maxAge).toBe(0);}
+ session.refresh.mockReset();
+});
+
+it('requires the CSRF header for multipart without consuming the upload and bounds ordinary form tokens',async()=>{
+ vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','');vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY','');const token=crypto.randomUUID();
+ let consumed=0;const body=new ReadableStream({pull(controller){if(consumed===4){controller.close();return;}consumed++;controller.enqueue(new Uint8Array(1024*1024));}});
+ const request=new NextRequest('https://app.test/api/users/avatar',{method:'POST',headers:{origin:'https://app.test',cookie:`${CSRF_COOKIE}=${token}`,'Content-Type':'multipart/form-data; boundary=fixture'},body,duplex:'half'}as ConstructorParameters<typeof NextRequest>[1]);
+ expect((await middleware(request)).status).toBe(403);expect(consumed).toBeLessThanOrEqual(1);await request.body?.cancel();
+ for(const [form,status]of[['_csrf='+token,200],['_csrf='+token+'&junk='+'x'.repeat(9000),400]]as const){const result=await middleware(new NextRequest('https://app.test/api/users/profile',{method:'POST',headers:{origin:'https://app.test',cookie:`${CSRF_COOKIE}=${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:form}));expect(result.status).toBe(status);}
 });
 
 it('includes the same correlation and a stable code on CSRF rejection',async()=>{

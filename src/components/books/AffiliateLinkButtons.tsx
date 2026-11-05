@@ -15,7 +15,7 @@ interface AffiliateLink {
 interface AffiliateLinkButtonsProps {
   links: AffiliateLink[];
   bookId: string;
-  userId:string;
+  userId?:string;
 }
 
 export function AffiliateLinkButtons({ links, bookId,userId }: AffiliateLinkButtonsProps) {
