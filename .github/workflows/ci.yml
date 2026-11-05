@@ -55,7 +55,7 @@ jobs:
       - name: Run tests
         run: npm test -- --exclude tests/migrations.test.ts --maxWorkers=2
 
-      - name: Rehearse PostgreSQL migrations
+      - name: Rehearse PostgreSQL schema
         run: npm test -- tests/migrations.test.ts --maxWorkers=1
 
       - name: Run ESLint

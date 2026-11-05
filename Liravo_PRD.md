@@ -1546,7 +1546,7 @@ Assume a developer who has not deployed a Next.js app before. Cover in full:
 - Complete environment variable reference: every variable, what it does, where to get the value, required vs optional.
 - Where to place env vars: `.env.local` for local dev, Vercel dashboard for production.
 - **Database provider selection:** how to choose between Supabase, DigitalOcean, and Railway; the `DATABASE_PROVIDER` env var; which other env vars are required for each provider.
-- **Supabase setup:** create project, run migrations, configure RLS, configure Google and Telegram auth providers, Supabase Storage setup.
+- **Supabase setup:** create project, run `supabase/migrations/001_schema.sql`, configure RLS, configure Google and Telegram auth providers, Supabase Storage setup.
 - **DigitalOcean setup:** create managed PostgreSQL cluster, configure PgBouncer connection pooling, set `DATABASE_URL` with SSL, run migrations via `DATABASE_DIRECT_URL`, configure S3-compatible storage bucket.
 - **Railway setup:** provision PostgreSQL service, obtain `DATABASE_URL` (PgBouncer) and `DATABASE_DIRECT_URL` (direct), run migrations, configure S3-compatible storage.
 - **Adding a new database provider:** walkthrough of the five-step process in Section 5 (provider.ts → pg.ts → server.ts → getCurrentUser.ts → storage/provider.ts).
