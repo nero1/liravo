@@ -160,8 +160,9 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses the complete sche
       await expect(contentIntent(request,sender,'quotes',{ ...payload, content: 'Different quote' })).rejects.toMatchObject({status:409});
       const [before] = await sql`select xp from users where id=${sender}`;
       await sql`select award_xp_once(${sender},10,'post_quote',${`quote:${records[0].id}`})`;
-      const rewards = await sql`select * from claim_outbox_events(20)`;
-      for(const event of rewards) await sql`select process_outbox_event_atomic(${event.id})`;
+      const {drainOutbox}=await import('@/lib/outbox-worker');
+      expect(await drainOutbox(20)).toMatchObject({failed:0});
+      expect((await sql`select count(*)::int as count from outbox_events where event_type='deliver_push' and status='processed'`)[0].count).toBeGreaterThan(0);
       expect((await sql`select xp from users where id=${sender}`)[0].xp).toBe(before.xp+10);
       await sql`delete from quotes where id=${records[0].id}`;
       expect((await (await contentIntent(request,sender,'quotes',payload)).insert()).id).toBe(records[0].id);

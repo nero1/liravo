@@ -1290,7 +1290,10 @@
       "long": "Partagez votre avis détaillé sur ce livre…"
     },
     "like": "Aimer cet avis",
-    "unlike": "Ne plus aimer cet avis"
+    "unlike": "Ne plus aimer cet avis",
+    "toneUnavailable": "La vérification du ton est indisponible. Vous pouvez soumettre votre avis à la modération.",
+    "pending": "Votre avis est en attente de modération.",
+    "notPublished": "Votre avis n’a pas été publié. Consultez les règles de contenu."
   },
   "moods": {
     "Dark": "Sombre",
@@ -1677,7 +1680,9 @@
       "activity": "Nouvelle notification"
     },
     "writerAnswer": "{name} a répondu à votre question d’écriture : {content}",
-    "writerBestAnswer": "{name} a choisi votre réponse comme meilleure réponse : {content}"
+    "writerBestAnswer": "{name} a choisi votre réponse comme meilleure réponse : {content}",
+    "reviewPublished": "Votre avis a été publié.",
+    "reviewRemoved": "Votre avis n’a pas été publié. Consultez les règles de contenu."
   },
   "badgeNames": {
     "first_book": "Premier livre",
@@ -2370,9 +2375,16 @@
       "author_approved": "Auteur vérifié",
       "author_rejected": "Vérification d’auteur rejetée",
       "author_work_granted": "Œuvre attribuée à l’auteur",
-      "author_work_revoked": "Attribution de l’œuvre révoquée"
+      "author_work_revoked": "Attribution de l’œuvre révoquée",
+      "review_published": "Avis publié",
+      "review_removed": "Avis retiré"
     },
-    "moderatorColumn": "Modérateur"
+    "moderatorColumn": "Modérateur",
+    "pendingReviews": "Avis en attente",
+    "pendingReviewDescription": "Avis en attente de vérification automatique ou de modération.",
+    "approveReview": "Publier l’avis",
+    "rejectReview": "Retirer l’avis",
+    "reviewsEmpty": "Aucun avis en attente de modération."
   },
   "emails": {
     "greeting": "Bonjour {name},",

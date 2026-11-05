@@ -135,10 +135,11 @@ export async function createDoSession(user: DoUser): Promise<string> {
 }
 
 export async function destroySession(token: string): Promise<void> {
-  if(!/^mfa_[a-f0-9]{64}$/.test(token))await getRedisClient().del(`do:session:${token}`);
-  const {createServiceClient}=await import('@/lib/supabase/server');
-  const {error}=await createServiceClient().from('auth_factor_grants').delete().eq('session_hash',factorHash(token));
-  if(error)throw new Error('Session revocation unavailable');
+  const outcomes=await Promise.allSettled([
+    Promise.resolve().then(async()=>{if(!/^mfa_[a-f0-9]{64}$/.test(token))await getRedisClient().del('do:session:'+token);}),
+    Promise.resolve().then(async()=>{const {createServiceClient}=await import('@/lib/supabase/server');const {error}=await createServiceClient().from('auth_factor_grants').delete().eq('session_hash',factorHash(token));if(error)throw new Error('Session revocation unavailable');}),
+  ]);
+  if(outcomes.some(result=>result.status==='rejected'))throw new Error('Session revocation unavailable');
 }
 
 export { SESSION_COOKIE, SESSION_TTL };

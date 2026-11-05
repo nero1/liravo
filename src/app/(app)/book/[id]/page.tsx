@@ -1,3 +1,4 @@
+import {headers} from 'next/headers';
 import {getBookAuthors} from '@/lib/author-catalog';
 import {getBookReviews,ReviewCursorError} from '@/services/book-reviews';
 import {EditionSelector} from '@/components/books/EditionSelector';
@@ -205,7 +206,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForHtml({
+      <script nonce={headers().get('x-nonce')??undefined} type="application/ld+json"  dangerouslySetInnerHTML={{ __html: jsonForHtml({
         '@context': 'https://schema.org', '@type': 'Book', name: book.title,
         author: { '@type': 'Person', name: book.author_name }, isbn: book.isbn_13 ?? undefined,
         ...(totalRatings&&reviewPage.statistics.average_rating!==null?{aggregateRating:{'@type':'AggregateRating',ratingValue:reviewPage.statistics.average_rating,ratingCount:totalRatings,bestRating:5,worstRating:1}}:{}),

@@ -192,7 +192,7 @@ Use the provider's sandbox to verify checkout, payment, cancellation, and refund
 
 1. In Vercel, confirm `CRON_SECRET` is saved for Production and redeploy.
 2. Open **Project → Cron Jobs**. The schedules in `vercel.json` are installed automatically and run in UTC.
-3. Open the application's **Admin → Cron Status** to check results and run a job manually.
+3. Open the application's **Admin → Cron Status** to check results and run a job manually. The outbox retries pending review checks and push delivery; staff can review pending submissions at `/moderation/reviews`.
 4. For more frequent outbox delivery or affiliate checks, sign in at [cron-job.org](https://cron-job.org), choose **Create cronjob**, and enter the matching `/api/cron/...` URL.
 5. Under its advanced settings, use **POST** and add the header `Authorization: Bearer YOUR_CRON_SECRET`.
 6. Choose the schedule, save, and run its test. Avoid scheduling the same job simultaneously in both services.

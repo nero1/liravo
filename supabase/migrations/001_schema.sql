@@ -1492,7 +1492,6 @@ CREATE TABLE public.users (
     notify_new_releases boolean DEFAULT true NOT NULL,
     notify_challenge_completions boolean DEFAULT true NOT NULL,
     notify_arc_grants boolean DEFAULT true NOT NULL,
-    push_token text,
     preferred_locale text DEFAULT 'en'::text NOT NULL,
     premium_override boolean DEFAULT false NOT NULL,
     deleted_at timestamp with time zone,
@@ -1512,15 +1511,27 @@ CREATE TABLE public.users (
     CONSTRAINT users_username_key UNIQUE (username)
 );
 
-CREATE TABLE public.web_push_subscriptions (
+CREATE TABLE public.revoked_push_sessions (
+    session_hash text PRIMARY KEY CHECK (session_hash ~ '^[a-f0-9]{64}$'),
+    revoked_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.push_subscriptions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
+    channel text NOT NULL,
     endpoint text NOT NULL,
-    p256dh text NOT NULL,
-    auth text NOT NULL,
+    session_hash text NOT NULL,
+    p256dh text,
+    auth text,
+    platform text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT web_push_subscriptions_endpoint_key UNIQUE (endpoint),
-    CONSTRAINT web_push_subscriptions_pkey PRIMARY KEY (id)
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone DEFAULT (now()+interval '30 days') NOT NULL,
+    CONSTRAINT push_subscriptions_endpoint_key UNIQUE (endpoint),
+    CONSTRAINT push_subscriptions_pkey PRIMARY KEY (id),
+    CONSTRAINT push_subscriptions_session_check CHECK (session_hash ~ '^[a-f0-9]{64}$'),
+    CONSTRAINT push_subscriptions_channel_check CHECK ((channel='web' AND platform='web' AND p256dh IS NOT NULL AND auth IS NOT NULL) OR (channel='expo' AND platform IN ('ios','android') AND p256dh IS NULL AND auth IS NULL))
 );
 
 CREATE TABLE public.workshop_feedback (
@@ -4925,12 +4936,19 @@ CREATE FUNCTION public.process_outbox_event_atomic(p_event_id uuid) RETURNS bool
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-declare context jsonb;old_context text:=coalesce(current_setting('liravo.notification_context',true),'');result boolean;
+declare context jsonb;old_context text:=coalesce(current_setting('liravo.notification_context',true),'');result boolean;event outbox_events;
 begin
+  select * into event from outbox_events where id=p_event_id for update;
+  if not found then raise exception 'Unknown outbox event';end if;
   select payload into context from outbox_events where id=p_event_id and event_type='notify_recipient';
   perform set_config('liravo.notification_context',coalesce(context::text,''),true);
   result:=process_outbox_event_atomic_064(p_event_id);
   perform set_config('liravo.notification_context',old_context,true);
+  if result and event.event_type in('push_notification','notify_recipient')then
+    insert into outbox_events(aggregate_type,aggregate_id,event_type,payload)
+    values('push_delivery',event.id::text,'deliver_push',event.payload||jsonb_build_object('sourceEventType',event.event_type,'sourceAggregateType',event.aggregate_type))
+    on conflict(aggregate_id)where event_type='deliver_push'do nothing;
+  end if;
   return result;
 end $$;
 
@@ -6183,6 +6201,110 @@ begin
   if owner<>p_user_id then raise exception 'Account binding conflict' using errcode='P1003'; end if;
   return p_account_id;
 end $_$;
+
+CREATE FUNCTION public.queue_review_moderation() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+begin
+ if new.moderation_status='pending'then insert into outbox_events(aggregate_type,aggregate_id,event_type,payload)values('review',new.id::text,'moderate_review',jsonb_build_object('userId',new.user_id,'reviewId',new.id));end if;
+ return new;
+end $$;
+
+CREATE FUNCTION public.pending_review_snapshot(p_actor uuid,p_at timestamp with time zone DEFAULT NULL,p_id uuid DEFAULT NULL,p_limit integer DEFAULT 20) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+begin
+ if not exists(select 1 from users where id=p_actor and(is_admin or is_moderator)and not is_banned and deleted_at is null)then raise exception 'Moderation access required' using errcode='P1003';end if;
+ if p_limit is null or p_limit not between 1 and 50 or(p_at is null)<>(p_id is null)then raise exception 'Invalid page' using errcode='P1004';end if;
+ return coalesce((select jsonb_agg(to_jsonb(page)order by created_at desc,id desc)from(
+  select r.id,r.user_id,r.book_id,r.content,r.rating,r.created_at,u.username,b.title from reviews r join users u on u.id=r.user_id join books b on b.id=r.book_id
+  where r.moderation_status='pending'and not r.is_hidden and(p_at is null or(r.created_at,r.id)<(p_at,p_id))order by r.created_at desc,r.id desc limit p_limit+1
+ )page),'[]'::jsonb);
+end $$;
+
+CREATE FUNCTION public.finish_review_moderation(p_review uuid,p_status text,p_actor uuid DEFAULT NULL,p_event uuid DEFAULT NULL,p_attempt integer DEFAULT NULL,p_owner uuid DEFAULT NULL) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare item reviews;owner_id uuid;changed boolean:=false;
+begin
+ if p_status is null or p_status not in('published','removed')or num_nonnulls(p_actor,p_event,p_owner)<>1 then raise exception 'Invalid moderation decision' using errcode='P1004';end if;
+ select user_id into owner_id from reviews where id=p_review;if not found then raise exception 'Review unavailable' using errcode='P1005';end if;
+ perform 1 from users where id in(owner_id,p_actor,p_owner)order by id for update;
+ if p_actor is not null and not exists(select 1 from users where id=p_actor and(is_admin or is_moderator)and not is_banned and deleted_at is null)then raise exception 'Moderation access required' using errcode='P1003';end if;
+ if p_owner is not null and(p_owner<>owner_id or p_status<>'published'or not exists(select 1 from users where id=p_owner and not is_banned and deleted_at is null))then raise exception 'Review access required' using errcode='P1003';end if;
+ if p_event is not null then
+  perform 1 from outbox_events where id=p_event and event_type='moderate_review'and aggregate_id=p_review::text and status='processing'and attempts=p_attempt for update;
+  if not found then raise exception 'Moderation claim expired' using errcode='P1001';end if;
+ end if;
+ select * into item from reviews where id=p_review for update;
+ if item.moderation_status='pending'and not item.is_hidden and exists(select 1 from users where id=owner_id and not is_banned and deleted_at is null)then
+  update reviews set moderation_status=p_status where id=p_review;item.moderation_status:=p_status;changed:=true;
+  if p_status='published'then perform award_xp_once(owner_id,20,'write_review','review:'||item.book_id);end if;
+  insert into moderation_log(moderator_id,target_user_id,action,entity_type,entity_id)values(p_actor,owner_id,'review_'||p_status,'review',item.id);
+  update content_intents set response=jsonb_set(response,'{moderation_status}',to_jsonb(p_status))where actor_id=owner_id and action='reviews'and intent_key=item.idempotency_key;
+  if p_owner is null then insert into notifications(user_id,type,entity_type,entity_id,message,message_key)values(owner_id,'review_moderation','book',item.book_id,'Your review has been checked.',case when p_status='published'then 'reviewPublished'else 'reviewRemoved'end);end if;
+ end if;
+ if p_event is not null then update outbox_events set status='processed',processed_at=now(),last_error=null where id=p_event and attempts=p_attempt;end if;
+ return jsonb_build_object('reviewId',item.id,'userId',owner_id,'status',item.moderation_status,'changed',changed);
+end $$;
+
+CREATE FUNCTION public.register_push_subscription(p_user uuid, p_session text, p_channel text, p_endpoint text, p_p256dh text DEFAULT NULL, p_auth text DEFAULT NULL, p_platform text DEFAULT 'web') RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare target uuid;
+begin
+ if p_session is null or p_session!~'^[a-f0-9]{64}$' or p_endpoint is null or length(p_endpoint)not between 10 and 2048 or p_channel is null or p_channel not in('web','expo')then raise exception 'Invalid subscription' using errcode='P1004';end if;
+ if p_channel='web'and(p_endpoint!~'^https://'or p_p256dh is null or p_auth is null or p_platform<>'web')or p_channel='expo'and(p_endpoint!~'^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$'or p_platform not in('ios','android')or p_p256dh is not null or p_auth is not null)then raise exception 'Invalid subscription' using errcode='P1004';end if;
+ perform pg_advisory_xact_lock(hashtextextended('push:session:'||p_session,0));
+ if exists(select 1 from revoked_push_sessions where session_hash=p_session)then raise exception 'Session revoked' using errcode='P1003';end if;
+ perform 1 from users where id=p_user and not is_banned and deleted_at is null for update;if not found then raise exception 'Account unavailable' using errcode='P1003';end if;
+ perform pg_advisory_xact_lock(hashtextextended('push:endpoint:'||p_endpoint,0));
+ delete from push_subscriptions where user_id=p_user and expires_at<=now();
+ if(select count(*)from push_subscriptions where user_id=p_user and endpoint<>p_endpoint)>=10 then raise exception 'Subscription limit reached' using errcode='P1004';end if;
+ insert into push_subscriptions(user_id,session_hash,channel,endpoint,p256dh,auth,platform)
+ values(p_user,p_session,p_channel,p_endpoint,p_p256dh,p_auth,p_platform)
+ on conflict(endpoint)do update set user_id=excluded.user_id,session_hash=excluded.session_hash,channel=excluded.channel,p256dh=excluded.p256dh,auth=excluded.auth,platform=excluded.platform,updated_at=now(),expires_at=now()+interval '30 days' returning id into target;
+ return target;
+end $$;
+
+CREATE FUNCTION public.revoke_push_session(p_session text,p_known boolean DEFAULT false) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare removed integer;
+begin
+ if p_session is null or p_session!~'^[a-f0-9]{64}$'then raise exception 'Invalid session' using errcode='P1004';end if;
+ perform pg_advisory_xact_lock(hashtextextended('push:session:'||p_session,0));
+ insert into revoked_push_sessions(session_hash)select p_session where p_known or exists(select 1 from push_subscriptions where session_hash=p_session)on conflict do nothing;
+ delete from push_subscriptions where session_hash=p_session;get diagnostics removed=row_count;return removed;
+end $$;
+
+CREATE FUNCTION public.unregister_push_subscription(p_user uuid,p_session text,p_endpoint text DEFAULT NULL) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare removed integer;
+begin
+ if p_session is null or p_session!~'^[a-f0-9]{64}$'or length(p_endpoint)>2048 then raise exception 'Invalid subscription' using errcode='P1004';end if;
+ delete from push_subscriptions where user_id=p_user and session_hash=p_session and(p_endpoint is null or endpoint=p_endpoint);
+ get diagnostics removed=row_count;return removed;
+end $$;
+
+CREATE FUNCTION public.ack_push_delivery(p_event uuid,p_attempt integer,p_subscription uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+begin
+ update outbox_events set payload=jsonb_set(payload,'{deliveryReceipts}',coalesce(payload->'deliveryReceipts','[]'::jsonb)||jsonb_build_array(p_subscription::text))
+ where id=p_event and event_type='deliver_push'and status='processing'and attempts=p_attempt
+ and not coalesce(payload->'deliveryReceipts','[]'::jsonb)?p_subscription::text
+ and exists(select 1 from push_subscriptions where id=p_subscription and user_id=(payload->>'userId')::uuid);
+ return found;
+end $$;
 
 CREATE FUNCTION public.release_legacy_payout_request(p_actor_id uuid, p_payout_id uuid, p_reference text, p_amount numeric, p_currency text, p_correlation_id text) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
@@ -7571,6 +7693,14 @@ CREATE UNIQUE INDEX provider_subscription_binding ON public.subscriptions USING 
 
 CREATE INDEX public_lists_cursor ON public.reading_lists USING btree (created_at DESC, id DESC) WHERE is_public;
 
+CREATE INDEX push_subscriptions_owner ON public.push_subscriptions(user_id,expires_at,id);
+CREATE INDEX push_subscriptions_session ON public.push_subscriptions(session_hash);
+CREATE INDEX push_subscriptions_expiry ON public.push_subscriptions(expires_at,id);
+CREATE UNIQUE INDEX outbox_push_delivery_once ON public.outbox_events(aggregate_id) WHERE event_type='deliver_push';
+
+CREATE INDEX reviews_pending_moderation ON public.reviews(created_at DESC,id DESC)WHERE moderation_status='pending'AND NOT is_hidden;
+CREATE UNIQUE INDEX outbox_review_moderation_once ON public.outbox_events(aggregate_id)WHERE event_type='moderate_review';
+
 CREATE INDEX quote_book_cursor ON public.quotes USING btree (book_id, created_at DESC, id DESC) WHERE (NOT is_hidden);
 
 CREATE INDEX quote_owner_cursor ON public.quotes USING btree (user_id, created_at DESC, id DESC) WHERE (NOT is_hidden);
@@ -8392,8 +8522,8 @@ ALTER TABLE ONLY public.user_payout_methods
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_referred_by_fkey FOREIGN KEY (referred_by) REFERENCES public.users(id);
 
-ALTER TABLE ONLY public.web_push_subscriptions
-    ADD CONSTRAINT web_push_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.push_subscriptions
+    ADD CONSTRAINT push_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.writing_challenge_participants
     ADD CONSTRAINT writing_challenge_participants_challenge_id_fkey FOREIGN KEY (challenge_id) REFERENCES public.writing_challenges(id) ON DELETE CASCADE;
@@ -8449,6 +8579,8 @@ ALTER TABLE ONLY public.xp_ledger
 ALTER TABLE ONLY public.xp_reversals
     ADD CONSTRAINT xp_reversals_user_id_event_key_fkey FOREIGN KEY (user_id, event_key) REFERENCES public.xp_ledger(user_id, event_key);
 
+CREATE TRIGGER review_moderation_queue AFTER INSERT ON public.reviews FOR EACH ROW EXECUTE FUNCTION public.queue_review_moderation();
+
 CREATE POLICY "Affiliate stores readable" ON public.affiliate_stores FOR SELECT USING ((is_active = true));
 
 CREATE POLICY "Books readable by all" ON public.books FOR SELECT USING (true);
@@ -8493,7 +8625,7 @@ CREATE POLICY "Users can view their own payout requests" ON public.payout_reques
 
 CREATE POLICY "Users manage own follows" ON public.follows USING ((auth.uid() = follower_id));
 
-CREATE POLICY "Users manage own push subs" ON public.web_push_subscriptions USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+CREATE POLICY "Users manage own push subs" ON public.push_subscriptions USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
 
 CREATE POLICY "Users manage own quotes" ON public.quotes USING ((auth.uid() = user_id));
 
@@ -8741,7 +8873,7 @@ CREATE POLICY authenticated_factor_session ON public.user_payout_methods AS REST
 
 CREATE POLICY authenticated_factor_session ON public.users AS RESTRICTIVE TO authenticated USING (public.factor_session_authorized()) WITH CHECK (public.factor_session_authorized());
 
-CREATE POLICY authenticated_factor_session ON public.web_push_subscriptions AS RESTRICTIVE TO authenticated USING (public.factor_session_authorized()) WITH CHECK (public.factor_session_authorized());
+CREATE POLICY authenticated_factor_session ON public.push_subscriptions AS RESTRICTIVE TO authenticated USING (public.factor_session_authorized()) WITH CHECK (public.factor_session_authorized());
 
 CREATE POLICY authenticated_factor_session ON public.workshop_feedback AS RESTRICTIVE TO authenticated USING (public.factor_session_authorized()) WITH CHECK (public.factor_session_authorized());
 
@@ -9187,7 +9319,7 @@ CREATE POLICY wcv_insert_own ON public.writing_challenge_votes FOR INSERT WITH C
 
 CREATE POLICY wcv_select_all ON public.writing_challenge_votes FOR SELECT USING (true);
 
-ALTER TABLE public.web_push_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.workshop_feedback ENABLE ROW LEVEL SECURITY;
 
@@ -9503,9 +9635,7 @@ GRANT SELECT ON TABLE user_payout_methods TO anon;
 GRANT SELECT ON TABLE user_payout_methods TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_payout_methods TO service_role;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE users TO service_role;
-GRANT SELECT ON TABLE web_push_subscriptions TO anon;
-GRANT SELECT ON TABLE web_push_subscriptions TO authenticated;
-GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE web_push_subscriptions TO service_role;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE push_subscriptions TO service_role;
 GRANT SELECT ON TABLE workshop_feedback TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE workshop_feedback TO service_role;
 GRANT SELECT ON TABLE workshop_members TO authenticated;
@@ -9767,6 +9897,14 @@ GRANT EXECUTE ON FUNCTION read_factor_session(text) TO service_role;
 GRANT EXECUTE ON FUNCTION read_payment_recovery(uuid,text,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION read_room_posts(uuid,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION read_social_feed(uuid,timestamp with time zone,uuid,text,integer) TO service_role;
+ALTER TABLE public.revoked_push_sessions ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.revoked_push_sessions TO service_role;
+GRANT EXECUTE ON FUNCTION pending_review_snapshot(uuid,timestamp with time zone,uuid,integer) TO service_role;
+GRANT EXECUTE ON FUNCTION finish_review_moderation(uuid,text,uuid,uuid,integer,uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION register_push_subscription(uuid,text,text,text,text,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION revoke_push_session(text,boolean) TO service_role;
+GRANT EXECUTE ON FUNCTION unregister_push_subscription(uuid,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION ack_push_delivery(uuid,integer,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION reading_author_visible(uuid,uuid) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION reading_shelf_visible(uuid,uuid) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION reading_author_visible(uuid,uuid) TO service_role;

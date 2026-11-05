@@ -596,7 +596,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 **Notifications (in-app):**
 - Follows, likes, want-to-reads, replies, mentions, challenge completions, ARC grants, buddy read invites, author Q&A answers.
 - Notification preferences configurable per type on web/native; saved opt-outs suppress matching in-app and push notifications. Weekly digest and new-release email preferences are independent.
-- Stored notification facts render in the current English/French/German locale, preserving authored content; financial/security notices remain available. Push uses the recipient’s saved locale and remains best effort.
+- Stored notification facts render in the current English/French/German locale, preserving authored content; financial/security notices remain available. Push uses the recipient’s saved locale, session-owned device registrations, bounded retries and per-device acknowledgements; provider acceptance can still produce duplicate delivery. Logout revokes the current session’s registrations.
 
 **Email notifications (paid tiers only):**
 - Free tier: no email notifications. Account-critical transactional emails only (e.g. email verification link, recovery link if email added, 2FA recovery code delivery).
@@ -913,10 +913,10 @@ AI is used sparingly. Every AI call must have a clear user value justification a
 | Platform-wide daily challenge generation | Nightly cron, batch generate 7 days of prompts | Platform | Server-side |
 | Personalised daily writing challenge | Nightly cron, paid Newbie Writer users only | Paid | Server-side |
 | Personalised weekly writing plan | Weekly cron, paid Newbie Writer users only | Paid | Server-side |
-| AI writing feedback on challenge submission | On submit, paid Newbie Writer users only | Paid | Server-side |
+| AI writing feedback on challenge submission | On submit, paid Newbie Writer users only | Paid | Server-side, saved EN/FR/DE locale |
 | AI taste profile | On demand or annually | Paid | Server-side |
 | Shelf-overlap recommendations | Nightly cron batch pre-compute | Free | Database query + light ranking |
-| Review tone / moderation pre-screen | On review submit | Platform | On-device (Transformers.js) |
+| Review tone / moderation pre-screen | On review submit | Platform | Browser pre-screen + server verification |
 | Similar books computation | Nightly cron | Free | Server-side embedding similarity |
 
 No AI feature is triggered on every page load. All AI outputs that can be pre-computed are pre-computed and stored in the database.
@@ -969,7 +969,7 @@ The goal is a self-moderating community with minimal admin involvement in day-to
 
 ### 12.3 Automated Moderation
 
-- Review tone classifier (on-device, Transformers.js) runs on every review submission. If the classifier returns a high confidence score for abusive content, the review is automatically held and added to the moderation queue (not published) pending human review.
+- Browser tone checks are advisory; server verification rejects toxic submissions. If verification is unavailable, the review stays private and pending, with durable retries and a staff queue at `/moderation/reviews`. Publication grants review XP once; staff decisions notify the author.
 - Spam detection: reviews or posts that are identical or near-identical to content already submitted by the same user in the past 24 hours are rejected with a message.
 - Link spam: user-submitted external links are checked against a blocklist of known spam and malware domains.
 

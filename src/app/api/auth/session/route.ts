@@ -1,4 +1,5 @@
 import {accountLocale} from '@/lib/auth/locale';
+import {assertSessionProviderAvailable} from '@/lib/auth/session-errors';
 import { NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { isDirectPostgres } from '@/lib/db/provider';
@@ -16,7 +17,8 @@ export async function POST(request:Request) {
     const raw=createClient({skipMfa:true});
     const authorization=request.headers.get('authorization');
     const bearer=authorization?.startsWith('Bearer ')?authorization.slice(7):undefined;
-    const {data:{user}}=await raw.auth.getUser(bearer);
+    const {data:{user},error:authError}=await raw.auth.getUser(bearer);
+    assertSessionProviderAvailable(authError);
     if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
     const {error:localeError}=await createServiceClient().rpc('initialize_account_locale' as never,{p_user_id:user.id,p_locale:accountLocale(request)} as never);if(localeError)throw new Error('Locale initialization unavailable');
     const profile=await factorProfile(user.id);if(!profile||profile.is_banned||profile.deleted_at)return NextResponse.json({error:'Account unavailable'},{status:403});

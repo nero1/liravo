@@ -105,6 +105,16 @@ describe('profile privilege boundary', () => {
 
 
 describe('durable rewards and outbox recovery', () => {
+  it('rebinds one device atomically and prevents a late registration after logout',async()=>{
+    const first='a'.repeat(64),second='b'.repeat(64),endpoint='ExponentPushToken[owned_device]';
+    const register=(actor:string,session:string)=>db.query('select register_push_subscription($1,$2,\'expo\',$3,null,null,\'android\')',[actor,session,endpoint]);
+    await register(user,first);await register(other,second);
+    expect((await db.query('select user_id from push_subscriptions where endpoint=$1',[endpoint])).rows).toEqual([{user_id:other}]);
+    await db.query('select revoke_push_session($1,true)',[first]);await expect(register(user,first)).rejects.toMatchObject({code:'P1003'});
+    expect((await db.query('select user_id from push_subscriptions where endpoint=$1',[endpoint])).rows).toEqual([{user_id:other}]);
+    await db.query('select revoke_push_session($1,true)',[second]);expect((await db.query('select id from push_subscriptions where endpoint=$1',[endpoint])).rows).toHaveLength(0);
+    expect((await db.query("select has_table_privilege('anon','push_subscriptions','select')anon,has_table_privilege('authenticated','revoked_push_sessions','select')browser,has_table_privilege('service_role','revoked_push_sessions','insert')service")).rows).toEqual([{anon:false,browser:false,service:true}]);
+  });
   it('awards a business reward once', async () => {
     const award=()=>db.query<{reward:{awarded:number}}>('select award_xp_once($1,3,$2,$3) as reward',[user,'daily_login','login:2026-10-26']);
     const first=await award(); const replay=await award();
@@ -113,12 +123,19 @@ describe('durable rewards and outbox recovery', () => {
   });
   it('recovers stale claims and commits notification plus acknowledgement once', async () => {
     await db.exec("update outbox_events set status='processing',claimed_at=now()-interval '6 minutes'");
-    const claims=await db.query<{id:string}>('select * from claim_outbox_events(100)');
+    const claims=await db.query<{id:string;event_type:string}>('select * from claim_outbox_events(100)');
     expect(claims.rows.length).toBeGreaterThan(0);
     const before=(await db.query('select * from notifications')).rows.length;
     for (const claim of claims.rows) for (let i=0;i<2;i++) await db.query('select process_outbox_event_atomic($1)',[claim.id]);
     expect((await db.query('select * from notifications')).rows).toHaveLength(before+1);
     expect((await db.query("select * from outbox_events where status='processed'")).rows).toHaveLength(claims.rows.length);
+    const deliveries=(await db.query<{id:string;payload:{userId:string;sourceEventType:string}}>("select id,payload from outbox_events where event_type='deliver_push'")).rows;expect(deliveries).toHaveLength(claims.rows.filter(row=>['push_notification','notify_recipient'].includes(row.event_type)).length);
+    const delivery=deliveries.find(row=>row.payload.sourceEventType==='notify_recipient')!;expect(delivery.payload.userId).toBe(user);
+    const session='c'.repeat(64),subscription=(await db.query<{id:string}>("select register_push_subscription($1,$2,'expo','ExpoPushToken[receipt_device]',null,null,'ios')id",[user,session])).rows[0].id;
+    await db.query("update outbox_events set status='processing',attempts=2 where id=$1",[delivery.id]);
+    expect((await db.query('select ack_push_delivery($1,1,$2)ok',[delivery.id,subscription])).rows).toEqual([{ok:false}]);
+    expect((await db.query('select ack_push_delivery($1,2,$2)ok',[delivery.id,subscription])).rows).toEqual([{ok:true}]);
+    expect((await db.query('select ack_push_delivery($1,2,$2)ok',[delivery.id,subscription])).rows).toEqual([{ok:false}]);
   });
 });
 
@@ -166,4 +183,19 @@ describe('payment amount and event ordering', () => {
     expect((await db.query<{status:string;renewal_cancelled:boolean}>('select status,renewal_cancelled from subscriptions where id=$1',[id])).rows[0]).toEqual({status:'active',renewal_cancelled:true});
     expect((await db.query<{is_premium:boolean}>('select is_premium from users where id=$1',[user])).rows[0].is_premium).toBe(true);
   });
+});
+
+it('keeps unavailable review moderation private and publishes with one reward and a durable decision',async()=>{
+ const book=(await db.query<{id:string}>('select book_id id from reviews limit 1')).rows[0].id;
+ const review=(await db.query<{id:string}>("insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,idempotency_key,request_hash)values($1,$2,4,'A review awaiting checks','short','pending','moderation-test-key',$3)returning id",[other,book,'d'.repeat(64)])).rows[0].id;
+ const event=(await db.query<{id:string}>("select id from outbox_events where event_type='moderate_review'and aggregate_id=$1",[review])).rows[0].id;
+ await expect(db.query("select finish_review_moderation($1,'published',p_actor=>$2)",[review,other])).rejects.toMatchObject({code:'P1003'});
+ await db.exec('set role anon');expect((await db.query('select id from reviews where id=$1',[review])).rows).toHaveLength(0);await db.exec('reset role');
+ const first=(await db.query<{decision:{status:string;changed:boolean}}>("select finish_review_moderation($1,'published',p_owner=>$2)decision",[review,other])).rows[0].decision;expect(first).toMatchObject({status:'published',changed:true});
+ expect((await db.query<{response:{moderation_status:string}}>("select response from content_intents where actor_id=$1 and action='reviews'and intent_key='moderation-test-key'",[other])).rows[0].response.moderation_status).toBe('published');
+ await db.query("update outbox_events set status='processing',attempts=2 where id=$1",[event]);
+ await expect(db.query("select finish_review_moderation($1,'published',p_event=>$2,p_attempt=>1)",[review,event])).rejects.toMatchObject({code:'P1001'});
+ await db.query("select finish_review_moderation($1,'published',p_event=>$2,p_attempt=>2)",[review,event]);
+ expect((await db.query("select count(*)::int count from xp_ledger where user_id=$1 and event_key=$2",[other,'review:'+book])).rows).toEqual([{count:1}]);
+ expect((await db.query('select status from outbox_events where id=$1',[event])).rows).toEqual([{status:'processed'}]);
 });

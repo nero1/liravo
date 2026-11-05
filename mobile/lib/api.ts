@@ -1,3 +1,4 @@
+import {digestStringAsync,CryptoDigestAlgorithm,randomUUID} from 'expo-crypto';
 import { API_BASE } from '@/constants/api';
 import { useAuthStore } from '@/stores/auth';
 
@@ -8,7 +9,9 @@ interface ApiResponse<T = unknown> {
   ok: boolean;
 }
 
-const pendingIntents = new Map<string, string>();
+const pendingIntents=new Map<string,{key:string;at:number}>();
+let intentOwner:string|undefined;
+useAuthStore.subscribe?.((state,previous)=>{if(!state.token&&previous.token||state.user?.id!==previous.user?.id)pendingIntents.clear();});
 
 class ApiError extends Error {
   constructor(
@@ -35,13 +38,18 @@ async function request<T>(
   const multipart=typeof FormData!=='undefined'&&body instanceof FormData;
   const primaryAuth=/^\/api\/(auth\/(login|signup|google|telegram|2fa\/verify)|users\/(account-recovery|verify-recovery|verify-email))$/.test(path);
   const secret=primaryAuth||multipart||!!body&&typeof body==='object'&&Object.keys(body).some(key=>/^(pin|currentPin|current_pin|newPin|password)$/i.test(key));
-  const signature = secret?'':JSON.stringify([user?.id ?? token, method, path, body]);
-  const trackIntent=mutating&&!secret;
+  const owner=user?.id??(token?await digestStringAsync(CryptoDigestAlgorithm.SHA256,token):'anonymous');
+  if(intentOwner!==owner){pendingIntents.clear();intentOwner=owner;}
+  for(const [key,value]of pendingIntents)if(Date.now()-value.at>86400000)pendingIntents.delete(key);
+  const financial=/^\/api\/(tips|earnings|subscriptions|payments|billing)(\/|$)/.test(path);
+  const signature=!mutating||secret||financial?'':await digestStringAsync(CryptoDigestAlgorithm.SHA256,JSON.stringify([owner,method,path,body]));
+  const trackIntent=mutating&&!secret&&!financial;
   const suppliedKey = Object.entries(extraHeaders ?? {}).find(([name]) => /^(x-)?idempotency-key$/i.test(name))?.[1];
-  let intentKey = suppliedKey ?? pendingIntents.get(signature);
+  let intentKey = suppliedKey ?? pendingIntents.get(signature)?.key;
   if (trackIntent && !intentKey) {
-    intentKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-    pendingIntents.set(signature, intentKey);
+    intentKey=randomUUID();
+    while(pendingIntents.size>=128)pendingIntents.delete(pendingIntents.keys().next().value!);
+    pendingIntents.set(signature,{key:intentKey,at:Date.now()});
   }
 
   const headers: Record<string, string> = {
@@ -86,6 +94,7 @@ async function request<T>(
       if(typeof json.code==='string')code=json.code;
       requireCaptcha=json.requireCaptcha===true;
     } catch {}
+    if(trackIntent&&!suppliedKey&&[400,401,403,404,405,410,413,415,422].includes(res.status))pendingIntents.delete(signature);
     throw new ApiError(res.status,message,code,requireCaptcha);
   }
 

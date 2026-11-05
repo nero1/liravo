@@ -1,14 +1,16 @@
 import {PGlite} from '@electric-sql/pglite';
 import {pg_trgm} from '@electric-sql/pglite/contrib/pg_trgm';
 import {readFileSync} from 'node:fs';
-import {expect,it} from 'vitest';
+import {afterAll,beforeAll,expect,it} from 'vitest';
 
 const schema=readFileSync('supabase/migrations/001_schema.sql','utf8');
 const create=()=>new PGlite();
+const plain=create();
+beforeAll(async()=>{await plain.exec(schema);},60_000);
+afterAll(async()=>{await plain.close();});
 
 it('enforces profile and shelf privacy for real browser roles, followers and inactive accounts',async()=>{
- const db=create(),owner=crypto.randomUUID(),viewer=crypto.randomUUID();try{
-  await db.exec(schema);
+ const db=plain,owner=crypto.randomUUID(),viewer=crypto.randomUUID();try{
   for(const [id,name]of[[owner,'owner'],[viewer,'viewer']])await db.query('select create_direct_account($1,$2,$3,$3)',[id,name+'@example.test','privacy_'+name]);
   await db.query("update users set profile_visibility='followers_only',shelf_visibility='private',bio='Private biography'where id=$1",[owner]);
   const shelf=(await db.query<{id:string}>('select id from shelves where user_id=$1 limit 1',[owner])).rows[0].id;
@@ -28,21 +30,20 @@ it('enforces profile and shelf privacy for real browser roles, followers and ina
   await expect(db.query('select claim_payout_request($1,$2,$3)',[viewer,crypto.randomUUID(),'deleted-admin'])).rejects.toMatchObject({code:'P1003'});
   await expect(db.query("select settle_payout_request($1,$2,'completed','receipt',1,'USD',null,'deleted-admin')",[viewer,crypto.randomUUID()])).rejects.toMatchObject({code:'P1003'});
   await expect(db.query("select release_legacy_payout_request($1,$2,'receipt',1,'USD','deleted-admin')",[viewer,crypto.randomUUID()])).rejects.toMatchObject({code:'P1003'});
- }finally{await db.close();}
+ }finally{await db.exec('reset role');}
 },30_000);
 
 it('creates a usable plain PostgreSQL database without Supabase tables and rejects accidental reruns',async()=>{
- const db=create();try{
-  await db.exec(schema);
+ const db=plain;try{
   expect((await db.query("select count(*)::int count from pg_extension where extname<>'plpgsql'")).rows).toEqual([{count:0}]);
   expect((await db.query("select to_regclass('auth.users')auth_users,to_regclass('storage.objects')storage_objects")).rows).toEqual([{auth_users:null,storage_objects:null}]);
   const id='00000000-0000-4000-8000-000000001104';
   const profile=(await db.query<{profile:{id:string}}>("select create_direct_account($1,'plain@example.test','plain_reader','Plain reader')profile",[id])).rows[0].profile;
   expect(profile.id).toBe(id);expect((await db.query('select count(*)::int count from shelves where user_id=$1',[id])).rows).toEqual([{count:3}]);
-  expect((await db.query("select count(*)::int count from pg_tables where schemaname='public'")).rows).toEqual([{count:121}]);
+  expect((await db.query("select count(*)::int count from pg_tables where schemaname='public'")).rows).toEqual([{count:122}]);
   await expect(db.exec(schema)).rejects.toThrow('Use a new database with an empty public schema');await db.exec('ROLLBACK');
   expect((await db.query('select id from users where id=$1',[id])).rows).toEqual([{id}]);
- }finally{await db.close();}
+ }finally{await db.exec('reset role');}
 },30_000);
 
 it('overrides inherited Supabase browser grants while retaining managed auth and storage boundaries',async()=>{

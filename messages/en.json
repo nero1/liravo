@@ -1290,7 +1290,10 @@
       "long": "Share your detailed thoughts about this book…"
     },
     "like": "Like this review",
-    "unlike": "Unlike this review"
+    "unlike": "Unlike this review",
+    "toneUnavailable": "Tone check is unavailable. You can still submit your review for moderation.",
+    "pending": "Your review is awaiting moderation.",
+    "notPublished": "Your review was not published. Please review the content guidelines."
   },
   "moods": {
     "Dark": "Dark",
@@ -1677,7 +1680,9 @@
       "activity": "New notification"
     },
     "writerAnswer": "{name} answered your writing question: {content}",
-    "writerBestAnswer": "{name} selected your answer as the best answer: {content}"
+    "writerBestAnswer": "{name} selected your answer as the best answer: {content}",
+    "reviewPublished": "Your review has been published.",
+    "reviewRemoved": "Your review was not published. Please review the content guidelines."
   },
   "badgeNames": {
     "first_book": "First Book",
@@ -2370,9 +2375,16 @@
       "author_approved": "Author verified",
       "author_rejected": "Author verification rejected",
       "author_work_granted": "Author work granted",
-      "author_work_revoked": "Author work revoked"
+      "author_work_revoked": "Author work revoked",
+      "review_published": "Review published",
+      "review_removed": "Review removed"
     },
-    "moderatorColumn": "Moderator"
+    "moderatorColumn": "Moderator",
+    "pendingReviews": "Pending reviews",
+    "pendingReviewDescription": "Review submissions awaiting automated or moderator checks.",
+    "approveReview": "Publish review",
+    "rejectReview": "Remove review",
+    "reviewsEmpty": "No reviews await moderation."
   },
   "emails": {
     "greeting": "Hi {name},",

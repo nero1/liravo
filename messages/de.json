@@ -1290,7 +1290,10 @@
       "long": "Teile deine ausführlichen Gedanken zu diesem Buch…"
     },
     "like": "Diese Rezension liken",
-    "unlike": "Like für diese Rezension entfernen"
+    "unlike": "Like für diese Rezension entfernen",
+    "toneUnavailable": "Die Tonprüfung ist nicht verfügbar. Du kannst deine Rezension zur Moderation einreichen.",
+    "pending": "Deine Rezension wartet auf die Moderation.",
+    "notPublished": "Deine Rezension wurde nicht veröffentlicht. Bitte prüfe die Inhaltsrichtlinien."
   },
   "moods": {
     "Dark": "Düster",
@@ -1677,7 +1680,9 @@
       "activity": "Neue Benachrichtigung"
     },
     "writerAnswer": "{name} hat deine Frage zum Schreiben beantwortet: {content}",
-    "writerBestAnswer": "{name} hat deine Antwort als beste Antwort ausgewählt: {content}"
+    "writerBestAnswer": "{name} hat deine Antwort als beste Antwort ausgewählt: {content}",
+    "reviewPublished": "Deine Rezension wurde veröffentlicht.",
+    "reviewRemoved": "Deine Rezension wurde nicht veröffentlicht. Bitte prüfe die Inhaltsrichtlinien."
   },
   "badgeNames": {
     "first_book": "Erstes Buch",
@@ -2370,9 +2375,16 @@
       "author_approved": "Autor verifiziert",
       "author_rejected": "Autorenverifizierung abgelehnt",
       "author_work_granted": "Autorenwerk zugeordnet",
-      "author_work_revoked": "Zuordnung des Autorenwerks aufgehoben"
+      "author_work_revoked": "Zuordnung des Autorenwerks aufgehoben",
+      "review_published": "Rezension veröffentlicht",
+      "review_removed": "Rezension entfernt"
     },
-    "moderatorColumn": "Moderator"
+    "moderatorColumn": "Moderator",
+    "pendingReviews": "Ausstehende Rezensionen",
+    "pendingReviewDescription": "Rezensionen, die auf eine automatische Prüfung oder Moderation warten.",
+    "approveReview": "Rezension veröffentlichen",
+    "rejectReview": "Rezension entfernen",
+    "reviewsEmpty": "Keine Rezensionen warten auf die Moderation."
   },
   "emails": {
     "greeting": "Hallo {name},",

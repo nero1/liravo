@@ -6,7 +6,7 @@ import {useEffect,useState} from 'react';
 import {normalizeThemeCss} from '@/lib/theme-css';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ children,nonce }: { children: React.ReactNode;nonce?:string }) {
   const [css,setCss]=useState('');
   useEffect(()=>{
     let controller:AbortController|undefined;
@@ -18,7 +18,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return()=>{controller?.abort();window.removeEventListener('liravo:theme-changed',load);};
   },[]);
   return (
-    <NextThemesProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <NextThemesProvider nonce={nonce} attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       {css&&<style data-liravo-theme>{css}</style>}
       {children}
     </NextThemesProvider>

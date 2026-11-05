@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -10,6 +10,7 @@ it('keeps mobile mutation keys across ambiguous failures, isolates accounts, and
   const exports: { api?: { post(path:string,body:unknown,headers?:Record<string,string>):Promise<unknown> } } = {};
   const code = ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
   runInNewContext(code, { exports, fetch:transport,AbortController,setTimeout,clearTimeout, require:(name:string) => {
+    if(name==='expo-crypto')return {CryptoDigestAlgorithm:{SHA256:'sha256'},digestStringAsync:async(_algorithm:string,text:string)=>createHash('sha256').update(text).digest('hex'),randomUUID};
     if(name==='@/constants/api') return {API_BASE:'https://app.test'};
     if(name==='@/stores/auth') return {useAuthStore:{getState:()=>state}};
     throw new Error(`Unexpected mobile dependency: ${name}`);
@@ -29,7 +30,7 @@ it('keeps mobile mutation keys across ambiguous failures, isolates accounts, and
   expect(transport.mock.calls[2][1].headers['Idempotency-Key']).not.toBe(first);
   state.user.id='reader-a'; state.token='new-token-a';
   await api.post('/api/quotes',{content:'Quote'});
-  expect(transport.mock.calls[3][1].headers['Idempotency-Key']).toBe(first);
+  expect(transport.mock.calls[3][1].headers['Idempotency-Key']).not.toBe(first);
   await api.post('/api/quotes',{content:'Quote'});
   expect(transport.mock.calls[4][1].headers['Idempotency-Key']).not.toBe(first);
   await api.post('/api/quotes',{content:'Quote'},{'idempotency-key':'explicit-intent-key'});
@@ -41,7 +42,7 @@ it('keeps primary authentication stateless without retaining password mutation i
   const state={user:{id:'previous-reader'},token:'old-token'},transport=vi.fn().mockResolvedValue({ok:true,json:async()=>({token:'new-token'})});
   const exports:{api?:{post(path:string,body:unknown):Promise<unknown>}}={};
   const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
-  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='expo-crypto'?{CryptoDigestAlgorithm:{SHA256:'sha256'},digestStringAsync:async(_algorithm:string,text:string)=>createHash('sha256').update(text).digest('hex'),randomUUID}:name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
   await exports.api!.post('/api/auth/login',{email:'reader@example.test',password:'test-password'});
   await exports.api!.post('/api/users/verify-recovery',{token:'one-time-email-proof'});
   expect(transport.mock.calls[1][1].headers).not.toHaveProperty('Authorization');expect(transport.mock.calls[1][1].headers).not.toHaveProperty('Idempotency-Key');
@@ -85,8 +86,9 @@ it('times out an ambiguous mobile request and preserves its mutation key for ret
     transport.mockImplementationOnce((_url,options)=>new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('Request timed out')))));
     const exports:{api?:{post(path:string,body:unknown):Promise<unknown>}}={};
     const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
-    runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
+    runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='expo-crypto'?{CryptoDigestAlgorithm:{SHA256:'sha256'},digestStringAsync:async(_algorithm:string,text:string)=>createHash('sha256').update(text).digest('hex'),randomUUID}:name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
     const pending=expect(exports.api!.post('/api/quotes',{content:'Quote'})).rejects.toThrow('timed out');
+    await vi.waitFor(()=>expect(transport).toHaveBeenCalledOnce());
     const first=transport.mock.calls[0][1].headers['Idempotency-Key'];
     await vi.advanceTimersByTimeAsync(25000);await pending;
     transport.mockResolvedValueOnce({ok:true,status:204});
@@ -125,6 +127,7 @@ it('does not cache PIN-bearing mutation signatures and preserves explicit payout
   const exports:{api?:{post(path:string,body:unknown,headers?:Record<string,string>):Promise<unknown>}}={};
   const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
   runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>{
+    if(name==='expo-crypto')return {CryptoDigestAlgorithm:{SHA256:'sha256'},digestStringAsync:async(_algorithm:string,text:string)=>createHash('sha256').update(text).digest('hex'),randomUUID};
     if(name==='@/constants/api')return {API_BASE:'https://app.test'};
     if(name==='@/stores/auth')return {useAuthStore:{getState:()=>({user:{id:'pin-reader'},token:'pin-token'})}};
     throw new Error('Unexpected dependency');
@@ -159,7 +162,7 @@ it('sends native file uploads as multipart without inventing a JSON body or cach
   const state={user:{id:'reader-a'},token:'token-a'},transport=vi.fn().mockResolvedValue({ok:true,json:async()=>({uploadId:'owned-upload'})});
   const exports:{api?:{upload(path:string,body:FormData,headers:Record<string,string>):Promise<unknown>}}={};
   const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
-  runInNewContext(code,{exports,fetch:transport,FormData,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
+  runInNewContext(code,{exports,fetch:transport,FormData,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='expo-crypto'?{CryptoDigestAlgorithm:{SHA256:'sha256'},digestStringAsync:async(_algorithm:string,text:string)=>createHash('sha256').update(text).digest('hex'),randomUUID}:name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
   const body=new FormData();body.set('file',new File(['fixture'],'photo.jpg',{type:'image/jpeg'}));
   await exports.api!.upload('/api/users/avatar',body,{'X-Liravo-Actor':'reader-a'});const options=transport.mock.calls[0][1];
   expect(options.body).toBe(body);expect(options.headers).not.toHaveProperty('Content-Type');expect(options.headers).not.toHaveProperty('Idempotency-Key');expect(options.headers.Authorization).toBe('Bearer token-a');expect(options.headers['X-Liravo-Actor']).toBe('reader-a');
@@ -169,7 +172,7 @@ it('preserves structured challenge failures without retaining primary credential
   const state={user:null,token:null},transport=vi.fn().mockResolvedValue({ok:false,status:400,json:async()=>({error:'CAPTCHA_REQUIRED',code:'CAPTCHA_REQUIRED',requireCaptcha:true})});
   const exports:{api?:{post(path:string,body:unknown):Promise<unknown>}}={};
   const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
-  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='expo-crypto'?{CryptoDigestAlgorithm:{SHA256:'sha256'},digestStringAsync:async(_algorithm:string,text:string)=>createHash('sha256').update(text).digest('hex'),randomUUID}:name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
   await expect(exports.api!.post('/api/auth/login',{email:'fixture@example.test',password:'fixture-password'})).rejects.toMatchObject({status:400,code:'CAPTCHA_REQUIRED',requireCaptcha:true});
   expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Idempotency-Key');expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Authorization');
 });
@@ -177,13 +180,13 @@ it('preserves structured challenge failures without retaining primary credential
 it('cancels obsolete native search transport without leaving the timeout active',async()=>{
   const transport=vi.fn((_url,options)=>new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Error('Cancelled'))))),exports:any={};
   const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
-  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>({token:'isolated-token',user:{id:'reader'}})}}});
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='expo-crypto'?{CryptoDigestAlgorithm:{SHA256:'sha256'},digestStringAsync:async(_algorithm:string,text:string)=>createHash('sha256').update(text).digest('hex'),randomUUID}:name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>({token:'isolated-token',user:{id:'reader'}})}}});
   const controller=new AbortController(),pending=expect(exports.api.get('/api/books/search',{q:'obsolete'},controller.signal)).rejects.toThrow('Cancelled');
   controller.abort();await pending;expect(transport.mock.calls[0][1].signal.aborted).toBe(true);
 });
 
 it('sends explicit actor metadata on native deletions',async()=>{
   const transport=vi.fn().mockResolvedValue({ok:true,json:async()=>({deleted:true})}),exports:{api?:{delete(path:string,headers:Record<string,string>):Promise<unknown>}}={},code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
-  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>{if(name==='@/constants/api')return {API_BASE:'https://app.test'};if(name==='@/stores/auth')return {useAuthStore:{getState:()=>({user:{id:'reader'},token:'token'})}};throw Error(name);}});
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>{if(name==='expo-crypto')return {CryptoDigestAlgorithm:{SHA256:'sha256'},digestStringAsync:async(_algorithm:string,text:string)=>createHash('sha256').update(text).digest('hex'),randomUUID};if(name==='@/constants/api')return {API_BASE:'https://app.test'};if(name==='@/stores/auth')return {useAuthStore:{getState:()=>({user:{id:'reader'},token:'token'})}};throw Error(name);}});
   await exports.api!.delete('/api/reading-rooms/room/milestones?milestone_id=chapter',{'X-Liravo-Actor':'reader'});expect(transport.mock.calls[0][1]).toMatchObject({method:'DELETE',headers:{'X-Liravo-Actor':'reader',Authorization:'Bearer token'}});
 });
