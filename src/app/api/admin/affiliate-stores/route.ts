@@ -7,7 +7,7 @@ import { ContentIntentError } from '@/lib/content-intents';
 
 export const dynamic = 'force-dynamic';
 const storeSchema=z.object({
-  name:z.string().trim().min(1).max(100),countries:z.array(z.string().regex(/^[A-Z]{2}$/)).max(100),
+  name:z.string().trim().min(1).max(100),countries:z.array(z.string().regex(/^[A-Z]{2}$/)).max(100).transform(values=>[...new Set(values.map(value=>value==='UK'?'GB':value))]),
   url_template:z.string().max(2000).refine(value=>{
     try{if(/\{(?!isbn\}|tag\}|title\})|[<>\s]/.test(value))return false;const url=new URL(value.replace(/\{(?:isbn|tag|title)\}/g,'example'));return url.protocol==='https:'&&!url.username&&!url.password&&!/[{}]/.test(url.hostname);}catch{return false;}
   }),

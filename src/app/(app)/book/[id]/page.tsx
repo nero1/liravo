@@ -1,9 +1,12 @@
-import { clientBook } from '@/lib/catalog-book';
-import { getTranslations } from 'next-intl/server';
+import {getBookAuthors} from '@/lib/author-catalog';
+import {getBookReviews,ReviewCursorError} from '@/services/book-reviews';
+import {EditionSelector} from '@/components/books/EditionSelector';
+import {shareCardPath} from '@/lib/share-card-path';
+import { getTranslations,getFormatter,getLocale } from 'next-intl/server';
 import { getActivePromotions } from '@/services/promotions';
 import { PromotedBookLink } from '@/components/books/PromotedBookLink';
 import { HelpfulnessButtons } from '@/components/books/HelpfulnessButtons';
-import { languageAlternates } from '@/lib/metadata';
+import { languageAlternates,jsonForHtml } from '@/lib/metadata';
 import { singleRelation } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -12,11 +15,12 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Star, BookOpen, Share2, BookMarked, MessageSquare } from 'lucide-react';
 import { ReviewForm } from '@/components/books/ReviewForm';
+import {AddToShelfButton} from '@/components/shelf/AddToShelfButton';
 import { ReactionButtons } from '@/components/books/ReactionButtons';
 import { AudibleCTA } from '@/components/books/AudibleCTA';
 import { AffiliateLinkButtons } from '@/components/books/AffiliateLinkButtons';
 import { QuoteForm } from '@/components/books/QuoteForm';
-import { buildAffiliateLinks } from '@/services/books';
+import { getBookById,getEditionIds,getWorkCatalog,buildAffiliateLinks,getAudibleLink } from '@/services/books';
 import type { Metadata } from 'next';
 import { APP_URL } from '@/constants/config';
 
@@ -24,26 +28,21 @@ export const dynamic = 'force-dynamic';
 
 interface BookPageProps {
   params: { id: string };
+  searchParams?:{reviewCursor?:string};
 }
 
 export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
-  const supabase = createServiceClient();
-  const { data: book } = await supabase
-    .from('books')
-    .select('title, author_name, description, cover_url, isbn_13, published_year, average_rating')
-    .eq('id', params.id)
-    .single();
-
-  if (!book) return { title: 'Book not found' };
+  const [book,t,shareLocale]=await Promise.all([getBookById(params.id),getTranslations('book'),getLocale()]);
+  if(!book)return {title:t('notFound')};
 
 
   return {
-    title: `${book.title} by ${book.author_name} — Liravo`,
-    description: book.description ? book.description.slice(0, 160) : `Read reviews and discover ${book.title} on Liravo`,
+    title: t('metadataTitle',{title:book.title,author:book.author_name}),
+    description: book.description ? book.description.slice(0, 160) : t('metadataDescription',{title:book.title}),
     openGraph: {
-      title: `${book.title} by ${book.author_name}`,
+      title: t('metadataTitle',{title:book.title,author:book.author_name}),
       description: book.description?.slice(0, 200) ?? '',
-      images: book.cover_url ? [{ url: `${APP_URL}/share/book/${params.id}`, width: 1200, height: 630 }] : [],
+      images: [{url:APP_URL+shareCardPath('book',book.id,shareLocale),width:1200,height:630}],
       url: `${APP_URL}/book/${params.id}`,
     },
     alternates: languageAlternates(`/book/${params.id}`),
@@ -61,7 +60,7 @@ function StarDisplay({ rating }: { rating: number }) {
   );
 }
 
-function RatingBar({ star, count, total }: { star: number; count: number; total: number }) {
+function RatingBar({ star, count, total,label }: { star: number; count: number; total: number;label:string }) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
   return (
     <div className="flex items-center gap-2 text-xs">
@@ -70,20 +69,21 @@ function RatingBar({ star, count, total }: { star: number; count: number; total:
       <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
         <div className="h-full bg-amber-400 rounded-full" style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-6 text-right text-muted-foreground">{count}</span>
+      <span className="w-6 text-right text-muted-foreground">{label}</span>
     </div>
   );
 }
 
-export default async function BookPage({ params }: BookPageProps) {
+export default async function BookPage({ params,searchParams }: BookPageProps) {
+  const [t,books,common,reviewText,moods,communityText,format,debateText]=await Promise.all([getTranslations('book'),getTranslations('books'),getTranslations('common'),getTranslations('reviewForm'),getTranslations('moods'),getTranslations('communityNotes'),getFormatter(),getTranslations('bookDebates')]);
   const supabase = createClient();
   const serviceSupabase = createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: rawBook, error } = await supabase.from('books').select('*').eq('id', params.id).single();
-  if (error || !rawBook) notFound();
-  const book=clientBook(rawBook);
+  const book=await getBookById(params.id);if(!book)notFound();
+  if(book.id!==params.id)redirect('/book/'+book.id);
+  const [workCatalog,editionIds]=await Promise.all([getWorkCatalog(book.work_id),getEditionIds(book.id)]);
 
   // User country for affiliate links
   const { data: userProfile } = await supabase
@@ -92,7 +92,7 @@ export default async function BookPage({ params }: BookPageProps) {
     .eq('id', user.id)
     .single();
   const country = userProfile?.country ?? 'US';
-  const locale = userProfile?.preferred_locale ?? 'en';
+  const locale = userProfile?.preferred_locale ?? 'en',shareLocale=await getLocale();
 
   // Affiliate links
   const affiliateLinks = await buildAffiliateLinks(book, country, locale);
@@ -103,34 +103,24 @@ export default async function BookPage({ params }: BookPageProps) {
   const { data: wantShelf } = await supabase.from('shelves').select('id').eq('user_id', user.id).eq('default_type', 'want_to_read').single();
   let initialWantToRead = false;
   if (wantShelf) {
-    const { data: wantEntry } = await supabase.from('shelf_books').select('id').eq('book_id', params.id).eq('shelf_id', wantShelf.id).eq('user_id', user.id).maybeSingle();
+    const { data: wantEntry } = await supabase.from('shelf_books').select('id').in('book_id',editionIds).eq('shelf_id', wantShelf.id).eq('user_id',user.id).limit(1).maybeSingle();
     initialWantToRead = !!wantEntry;
   }
 
-  // Fetch reviews with helpfulness counts
-  const { data: reviews } = await supabase
-    .from('reviews')
-    .select('id, rating, content, review_type, mood_tags, has_spoilers, likes_count, helpful_votes, unhelpful_votes, created_at, users:user_id(display_name, avatar_url, username)')
-    .eq('book_id', params.id)
-    .eq('moderation_status', 'published')
-    .eq('is_hidden', false)
-    .order('helpful_votes', { ascending: false })
-    .limit(20);
-
+  let reviewPage;
+  try{reviewPage=await getBookReviews(book.id,searchParams?.reviewCursor??null,20);}catch(error){if(error instanceof ReviewCursorError)notFound();throw error;}
+  if(!reviewPage)notFound();
+  const reviews=reviewPage.reviews;
   const { data: helpfulnessVotes } = reviews?.length ? await supabase.from('review_helpfulness_votes')
     .select('review_id,is_helpful').eq('user_id', user.id).in('review_id', reviews.map(review => review.id)) : { data: [] };
   const votesByReview = new Map((helpfulnessVotes ?? []).map(vote => [vote.review_id, vote.is_helpful]));
 
-  // Rating distribution
-  const dist: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  for (const r of reviews ?? []) dist[r.rating] = (dist[r.rating] ?? 0) + 1;
-  const totalRatings = Object.values(dist).reduce((a, b) => a + b, 0);
-
+  const dist=reviewPage.statistics.distribution,totalRatings=reviewPage.statistics.ratings_count;
   // Quotes
   const { data: quotes } = await supabase
     .from('quotes')
     .select('id, content, users:user_id(display_name, username)')
-    .eq('book_id', params.id)
+    .in('book_id',editionIds)
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(5);
@@ -145,7 +135,7 @@ export default async function BookPage({ params }: BookPageProps) {
   const { data: communityNotes } = communityNotesEnabled
     ? await serviceSupabase
         .from('community_notes')
-        .select('id, note, content_id, created_at')
+        .select('id, note:note_text, content_id, created_at')
         .eq('content_type', 'review')
         .in('content_id', (reviews ?? []).map((r) => r.id))
         .eq('status', 'approved')
@@ -159,7 +149,7 @@ export default async function BookPage({ params }: BookPageProps) {
   const { data: listBooks } = await serviceSupabase
     .from('reading_list_books')
     .select('list_id')
-    .eq('book_id', params.id)
+    .in('book_id',editionIds)
     .limit(20);
   const listIds = (listBooks ?? []).map((l: { list_id: string }) => l.list_id);
   let readingLists: Array<{ id: string; name: string; user_id: string; users: { display_name: string; username: string } | null }> = [];
@@ -173,20 +163,14 @@ export default async function BookPage({ params }: BookPageProps) {
     readingLists = (data ?? []).map(row => ({ ...row, users: singleRelation(row.users) }));
   }
 
-  // Author's Liravo profile
-  const { data: authorProfile } = await serviceSupabase
-    .from('users')
-    .select('username, display_name, avatar_url, is_verified_author')
-    .ilike('display_name', book.author_name)
-    .eq('is_verified_author', true)
-    .maybeSingle();
+  const authorProfiles=await getBookAuthors(book.id);
 
   // Similar books: check computed table first, then fall back to book.similar_book_ids, then genre
   let similarBooks: Array<{ id: string; title: string; author_name: string; cover_url: string | null }> = [];
   const { data: computedSimilar } = await serviceSupabase
     .from('similar_books_computed')
     .select('similar_book_ids')
-    .eq('book_id', params.id)
+    .in('book_id',editionIds)
     .maybeSingle();
   const simIds: string[] = (computedSimilar?.similar_book_ids as string[] | null) ?? (book.similar_book_ids as string[] | null) ?? [];
   if (simIds.length > 0) {
@@ -222,10 +206,11 @@ export default async function BookPage({ params }: BookPageProps) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonForHtml({
         '@context': 'https://schema.org', '@type': 'Book', name: book.title,
         author: { '@type': 'Person', name: book.author_name }, isbn: book.isbn_13 ?? undefined,
-      }).replace(/</g, '\\u003c') }} />
+        ...(totalRatings&&reviewPage.statistics.average_rating!==null?{aggregateRating:{'@type':'AggregateRating',ratingValue:reviewPage.statistics.average_rating,ratingCount:totalRatings,bestRating:5,worstRating:1}}:{}),
+      }) }} />
       {/* Book header */}
       <div className="flex gap-5 mb-6">
         <div className="shrink-0">
@@ -245,36 +230,37 @@ export default async function BookPage({ params }: BookPageProps) {
             {(book.author_names as string[]).join(', ') || book.author_name}
           </p>
 
-          {book.average_rating && (
+          {reviewPage.statistics.average_rating!==null&&<p className="text-sm text-muted-foreground">{t('communityRatings',{count:totalRatings})} · {format.number(reviewPage.statistics.average_rating,{maximumFractionDigits:2})}/5</p>}
+          {book.average_rating!==null && (
             <div className="flex items-center gap-2 mt-2">
               <StarDisplay rating={Math.round(book.average_rating)} />
-              <span className="text-sm text-muted-foreground">{book.average_rating.toFixed(1)} · {book.ratings_count} ratings</span>
+              <span className="text-sm text-muted-foreground">{format.number(book.average_rating,{minimumFractionDigits:1,maximumFractionDigits:1})} · {books('ratings',{count:book.ratings_count})} · {t('catalogRating')}</span>
             </div>
           )}
 
           <div className="flex flex-wrap gap-2 mt-2">
             {book.currently_reading_count > 0 && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                <BookOpen size={10} /> {book.currently_reading_count} reading
+                <BookOpen size={10} /> {t('readingCount',{count:book.currently_reading_count})}
               </span>
             )}
             {book.want_to_read_count > 0 && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                <BookMarked size={10} /> {book.want_to_read_count} want to read
+                <BookMarked size={10} /> {t('wantedCount',{count:book.want_to_read_count})}
               </span>
             )}
           </div>
 
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {book.page_count && <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{book.page_count} pages</span>}
+            {book.page_count && <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{t('pageCount',{count:book.page_count})}</span>}
             {book.published_year && <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{book.published_year}</span>}
           </div>
         </div>
       </div>
 
       {/* Author Liravo profile */}
-      {authorProfile && (
-        <Link href={`/user/${authorProfile.username}`} className="flex items-center gap-3 mb-4 p-3 border border-amber-200 dark:border-amber-800 rounded-xl bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors">
+      {authorProfiles.map(authorProfile=>(
+        <Link key={authorProfile.id} href={`/author/${authorProfile.username}`} className="flex items-center gap-3 mb-4 p-3 border border-amber-200 dark:border-amber-800 rounded-xl bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40 transition-colors">
           {authorProfile.avatar_url ? (
             <Image src={authorProfile.avatar_url} alt={authorProfile.display_name} width={36} height={36} className="w-9 h-9 rounded-full object-cover" />
           ) : (
@@ -283,32 +269,33 @@ export default async function BookPage({ params }: BookPageProps) {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">{authorProfile.display_name} is on Liravo</p>
-            <p className="text-xs text-muted-foreground">@{authorProfile.username} · Verified Author</p>
+            <p className="text-sm font-medium">{t('authorOnLiravo',{author:authorProfile.display_name})}</p>
+            <p className="text-xs text-muted-foreground">@{authorProfile.username} · {t('verifiedAuthor')}</p>
           </div>
-          <span className="text-xs text-accent font-medium shrink-0">Follow →</span>
+          <span className="text-xs text-accent font-medium shrink-0">{t('followAuthor')}</span>
         </Link>
-      )}
+      ))}
 
       {/* Action buttons */}
       <div className="flex items-center gap-3 mb-5">
         <ReactionButtons bookId={params.id} userId={user.id} initialWantToRead={initialWantToRead} />
-        <Link href={`/share/book/${params.id}`} target="_blank" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600 transition-colors">
-          <Share2 size={14} /> Share
+        <AddToShelfButton bookId={params.id} userId={user.id}/>
+        <Link href={shareCardPath('book',book.id,shareLocale)} target="_blank" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600 transition-colors">
+          <Share2 size={14} /> {common('share')}
         </Link>
       </div>
 
       {/* Affiliate buy links */}
       {affiliateLinks.length > 0 && (
-        <div className="mb-5">
-          <AffiliateLinkButtons links={affiliateLinks} bookId={params.id} />
+        <div id="buy-links" className="mb-5">
+          <AffiliateLinkButtons links={affiliateLinks} bookId={params.id} userId={user.id}/>
         </div>
       )}
 
       {/* Audible CTA */}
       {book.has_audiobook && (
         <div className="mb-5">
-          <AudibleCTA locale={locale} bookTitle={book.title} />
+          <AudibleCTA link={getAudibleLink(book,locale,country)!} bookId={params.id} userId={user.id}/>
         </div>
       )}
 
@@ -319,7 +306,7 @@ export default async function BookPage({ params }: BookPageProps) {
       {/* Description */}
       {book.description && (
         <div className="mb-6">
-          <h2 className="font-semibold mb-2">About this book</h2>
+          <h2 className="font-semibold mb-2">{t('about')}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">{book.description}</p>
         </div>
       )}
@@ -336,10 +323,10 @@ export default async function BookPage({ params }: BookPageProps) {
       {/* Rating distribution */}
       {totalRatings > 0 && (
         <div className="mb-6 p-4 border border-border rounded-xl">
-          <h2 className="font-semibold mb-3 text-sm">Rating Breakdown</h2>
+          <h2 className="font-semibold mb-3 text-sm">{t('ratingDistribution')}</h2>
           <div className="space-y-1.5">
-            {[5, 4, 3, 2, 1].map((s) => (
-              <RatingBar key={s} star={s} count={dist[s] ?? 0} total={totalRatings} />
+            {([5, 4, 3, 2, 1] as const).map((s) => (
+              <RatingBar key={s} star={s} count={dist[s] ?? 0} total={totalRatings} label={format.number(dist[s]??0)}/>
             ))}
           </div>
         </div>
@@ -348,14 +335,14 @@ export default async function BookPage({ params }: BookPageProps) {
       {/* Reading lists that include this book */}
       {readingLists.length > 0 && (
         <div className="mb-6">
-          <h2 className="font-display font-bold text-lg mb-3">In Reading Lists</h2>
+          <h2 className="font-display font-bold text-lg mb-3">{t('readingLists')}</h2>
           <div className="space-y-2">
             {readingLists.map((list) => (
               <Link key={list.id} href={`/lists/${list.id}`} className="flex items-center gap-3 p-3 border border-border rounded-xl hover:bg-muted transition-colors">
                 <BookMarked size={16} className="text-accent shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{list.name}</p>
-                  {list.users && <p className="text-xs text-muted-foreground">by {list.users.display_name}</p>}
+                  {list.users && <p className="text-xs text-muted-foreground">{books('writtenBy',{author:list.users.display_name})}</p>}
                 </div>
               </Link>
             ))}
@@ -366,7 +353,7 @@ export default async function BookPage({ params }: BookPageProps) {
       {/* Similar books */}
       {similarBooks.length > 0 && (
         <section className="mb-8">
-          <h2 className="font-display font-bold text-lg mb-4">Readers Also Loved</h2>
+          <h2 className="font-display font-bold text-lg mb-4">{t('similarBooks')}</h2>
           <div className="grid grid-cols-3 gap-3">
             {similarBooks.map((b) => (
               <Link key={b.id} href={`/book/${b.id}`} className="group">
@@ -388,13 +375,13 @@ export default async function BookPage({ params }: BookPageProps) {
       {/* Community quotes */}
       {(quotes ?? []).length > 0 && (
         <section className="mb-8">
-          <h2 className="font-display font-bold text-lg mb-4">Quotes</h2>
+          <h2 className="font-display font-bold text-lg mb-4">{books('quotes')}</h2>
           <div className="space-y-3">
             {(quotes ?? []).map((q) => {
               const quoter = q.users as unknown as { display_name: string; username: string } | null;
               return (
                 <div key={q.id} className="border-l-4 border-amber-400 pl-4 py-2">
-                  <p className="text-sm italic text-muted-foreground leading-relaxed">&ldquo;{q.content}&rdquo;</p>
+                  <p className="text-sm italic text-muted-foreground leading-relaxed">“{q.content}”</p>
                   {quoter && (
                     <Link href={`/user/${quoter.username}`} className="text-xs text-muted-foreground/60 mt-1 inline-block hover:underline">
                       — {quoter.display_name}
@@ -408,18 +395,18 @@ export default async function BookPage({ params }: BookPageProps) {
       )}
 
       {/* Reviews */}
-      <section className="mb-8">
+      <section id="reviews" className="mb-8">
         <h2 className="font-display font-bold text-lg mb-4">
-          Reviews
-          {(reviews?.length ?? 0) > 0 && <span className="text-muted-foreground font-normal text-base ml-2">({reviews?.length})</span>}
+          {books('reviews')}
+          {totalRatings > 0 && <span className="text-muted-foreground font-normal text-base ml-2">({format.number(totalRatings)})</span>}
         </h2>
 
         {(reviews?.length ?? 0) === 0 ? (
-          <p className="text-muted-foreground text-sm">No reviews yet. Be the first!</p>
+          <p className="text-muted-foreground text-sm">{t(totalRatings?'noMoreReviews':'noReviews')}</p>
         ) : (
           <div className="space-y-4">
             {reviews?.map((review) => {
-              const reviewer = review.users as unknown as { display_name: string; avatar_url: string | null; username: string } | null;
+              const reviewer = review.user as unknown as { display_name: string; avatar_url: string | null; username: string } | null;
               const replyCount = replyCounts[review.id] ?? 0;
               return (
                 <div key={review.id} className="border border-border rounded-xl p-4">
@@ -437,18 +424,18 @@ export default async function BookPage({ params }: BookPageProps) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <Link href={`/user/${reviewer?.username}`} className="font-medium text-sm hover:text-amber-600 transition-colors">{reviewer?.display_name}</Link>
                         <StarDisplay rating={review.rating} />
-                        <span className="text-xs text-muted-foreground/60 capitalize">{review.review_type?.replace('_', ' ')}</span>
+                        <span className="text-xs text-muted-foreground/60 capitalize">{reviewText.has('types.'+review.review_type)?reviewText('types.'+review.review_type):''}</span>
                       </div>
                     </div>
                   </div>
 
-                  {review.has_spoilers && <p className="text-xs text-amber-600 font-medium mb-1.5">Contains spoilers</p>}
+                  {review.has_spoilers && <p className="text-xs text-amber-600 font-medium mb-1.5">{t('spoilers')}</p>}
                   {review.content && <p className="text-sm text-muted-foreground leading-relaxed mb-2">{review.content}</p>}
 
                   {Array.isArray(review.mood_tags) && review.mood_tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-3">
                       {review.mood_tags.map((tag: string) => (
-                        <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300">{tag}</span>
+                        <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300">{moods.has(tag)?moods(tag):tag}</span>
                       ))}
                     </div>
                   )}
@@ -456,17 +443,18 @@ export default async function BookPage({ params }: BookPageProps) {
                   {/* Community note */}
                   {communityNotesEnabled && notesByReviewId[review.id] && (
                     <div className="mt-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Community Note</p>
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">{communityText('title')}</p>
                       <p className="text-xs text-amber-800 dark:text-amber-300">{notesByReviewId[review.id].note}</p>
                     </div>
                   )}
 
                   {/* Helpfulness + replies */}
-                  <div className="flex items-center gap-4 pt-2 border-t border-border/50">
-                    <HelpfulnessButtons bookId={params.id} reviewId={review.id} initialVote={votesByReview.get(review.id) ?? null} helpful={review.helpful_votes ?? 0} unhelpful={review.unhelpful_votes ?? 0} />
+                  <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-border/50">
+                    {review.user_id!==user.id&&<ReactionButtons bookId={review.book_id} userId={user.id} reviewId={review.id} initialWantToRead={initialWantToRead}/>}
+                    <HelpfulnessButtons bookId={review.book_id} reviewId={review.id} initialVote={votesByReview.get(review.id) ?? null} helpful={review.helpful_votes ?? 0} unhelpful={review.unhelpful_votes ?? 0} />
                     {replyCount > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground ml-auto">
-                        <MessageSquare size={12} /> {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+                        <MessageSquare size={12} /> {t('replyCount',{count:replyCount})}
                       </span>
                     )}
                   </div>
@@ -477,15 +465,24 @@ export default async function BookPage({ params }: BookPageProps) {
         )}
       </section>
 
+      {(reviewPage.nextCursor||searchParams?.reviewCursor)&&<nav aria-label={t('reviewPages')} className="flex gap-4 mb-8">
+        {searchParams?.reviewCursor&&<Link href={`/book/${book.id}#reviews`} className="text-sm text-accent">{t('firstReviews')}</Link>}
+        {reviewPage.nextCursor&&<Link href={`/book/${book.id}?reviewCursor=${encodeURIComponent(reviewPage.nextCursor)}#reviews`} className="text-sm text-accent">{common('loadMore')}</Link>}
+      </nav>}
+
+      {workCatalog&&<div className="mb-8"><EditionSelector catalog={workCatalog} book={book}/></div>}
+
+      <Link href={'/debates/new?bookId='+book.id} className="block mb-8 text-sm underline">{debateText('create')}</Link>
+
       {/* Save a quote */}
       <section className="mb-8">
-        <h2 className="font-display font-bold text-lg mb-4">Save a Quote</h2>
-        <QuoteForm bookId={params.id} />
+        <h2 className="font-display font-bold text-lg mb-4">{books('saveQuote')}</h2>
+        <QuoteForm bookId={params.id} userId={user.id}/>
       </section>
 
       {/* Write a review */}
       <section>
-        <h2 className="font-display font-bold text-lg mb-4">Write a Review</h2>
+        <h2 className="font-display font-bold text-lg mb-4">{t('writeReview')}</h2>
         <ReviewForm bookId={params.id} userId={user.id} />
       </section>
     </div>

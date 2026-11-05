@@ -1,3 +1,4 @@
+import {accountLocale} from '@/lib/auth/locale';
 import { safeReturnPath, getRequestCorrelationId } from '@/lib/utils';
 import { recordMetric } from '@/lib/metrics';
 import { NextResponse } from 'next/server';
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       const {data:{user:primaryUser}}=await createClient({skipMfa:true}).auth.getUser();
+      if(primaryUser){const {error:localeError}=await createServiceClient().rpc('initialize_account_locale' as never,{p_user_id:primaryUser.id,p_locale:accountLocale(request)} as never);if(localeError)return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);}
       if(primaryUser&&(await factorProfile(primaryUser.id))?.totp_enabled)return NextResponse.redirect(`${origin}/login?mfa=required&next=${encodeURIComponent(next)}`);
       const user = await getCurrentUser();
       if (user) {

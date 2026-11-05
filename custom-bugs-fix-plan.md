@@ -1,14 +1,15 @@
 # Custom Bugs Fix Plan
 Date/Time: May 23, 2026 09:39 PM UTC
 
-Updated 27 October 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
+Updated 5 November 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
 
 ✅ 1. Identity and authorization invariants (Critical)
 - ✅ Verify self/admin guards for `/api/users/*` mutations; retain verified cross-user social targets.
 - ✅ Enforce DB-backed `is_admin` verification via service-side query/RPC.
 - ✅ Add regression tests: self access, cross-user denial, admin override.
-- ✅ Enforce real second-factor login, session-bound enrollment, one-time recovery, encrypted secrets and Supabase session policies.
+- ✅ Enforce real second-factor login, session-bound enrollment, one-time recovery, encrypted secrets, Supabase session policies and direct-provider disablement.
 - ✅ Add private purpose-bound email confirmation/recovery; preserve current email, enforce PINs and retain 2FA.
+- ✅ Enforce current privacy and verified content on legacy share cards.
 
 🟡 2. Financial correctness and integrity (Critical)
 - ✅ Implement transactional payout reserve RPC (check available balance + reserve + create payout atomically).
@@ -44,10 +45,41 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Validate model outputs and stored profiles, enforce paid seven-day Newbie Writer plans, and reject malformed results without fabricated success.
 - ✅ Add prompt-injection filtering and unsafe-output redaction.
 
-🟡 7. SEO, i18n, accessibility, and UX quality (Medium)
+✅ 7. SEO, i18n, accessibility, and UX quality (Medium)
 - ✅ Add metadata/canonical/OG coverage to major dynamic pages.
-- 🟡 Complete translation keys and enforce no hardcoded user-visible strings.
-- 🟡 Add accessibility sweep for forms/navigation/ARIA labels.
+- ✅ Complete active English/French/German screens, system messages and metadata; check locale catalogs and translated controls in CI.
+- ✅ Translate and verify shared web components, named controls, navigation state, native report-dialog focus, failure recovery and notification pagination.
+- ✅ Persist native language selection with device fallback; translate navigation/main tabs, settings and referral screens.
+- ✅ Persist and enforce notification preferences; translate stored messages and push delivery.
+- ✅ Preserve the selected language when creating email/social accounts.
+- ✅ Show earned badges consistently on owned and public profiles.
+- ✅ Translate native writing and workshop screens; repair workshop contracts, counters, pagination and retry handling.
+- ✅ Repair and translate web writing progress/resources, complete weekly totals and exact-ISBN catalog links.
+- ✅ Complete translated web/native writer question threads and answer selection.
+- ✅ Repair ARC catalog/review pagination, complete private counts, inactive-reader decisions and web/native translations.
+- ✅ Repair buddy-read catalogs/detail contracts, edition selection, discussion pagination, native chapter/notes/replies and web/native translations.
+- ✅ Align stats/Wrapped with canonical annual reading, authoritative Premium access, private/public summaries and translated native goals.
+- ✅ Complete reading-room catalogs, rosters, scoped discussions, milestone controls, owned retries and web/native translations.
+- ✅ Repair native review/quote/shelf and author-verification forms, selected-edition context, owned recovery and EN/FR/DE labels.
+- ✅ Repair web/native list creation, catalogs, detail paging, edition management and follow/fork controls against verified API contracts.
+- ✅ Expose owned moderation actions/history and general appeals, translate web/native appeal queues and recover owned submission/decision receipts.
+- ✅ Correct XP/helpfulness leaderboard periods, privacy, country isolation, vote cast times, UTC archives and web/native translations.
+- ✅ Repair quote/debate/challenge catalogs, privacy, complete rosters, final votes, debate creation/share cards and web/native translations.
+- ✅ Translate taste-profile controls and known genre/mood labels while preserving provider prose/categories.
+- ✅ Repair native Premium access, complete Play restoration, account-bound acknowledgements, store retry and EN/FR/DE billing controls.
+- ✅ Repair native admin catalog pagination/contracts, moderation/configuration receipts, real cron status and EN/FR/DE controls; page web themes.
+- ✅ Page web book/promotion/season/writing administration and retain promotion form positions.
+- ✅ Repair report/audit-log contracts, tied paging, current-role permissions, owned decision recovery and EN/FR/DE web/native screens.
+- ✅ Repair complete book-chain/pass catalogs and rosters, edition/reader selection, deleted-recipient checks, owned retries and EN/FR/DE web/native controls.
+- ✅ Localize all six email templates, HTML/text footers and stored-recipient language dispatch.
+- ✅ Complete durable paid-email audiences/receipts, retry cooldowns, canonical weekly counts and anonymous recoverable opt-out links.
+- ✅ Repair core author/shelf/goal/mood forms, authoritative shelf access, complete author Q&A paging and translated read/error states.
+- ✅ Share complete shelf catalogs/contents, canonical edition counts, latest progress, current-year summaries, configured bulk stores and native create recovery.
+- ✅ Complete home/discovery/writer pages, private-aware canonical feeds, full public rankings/current ratings, approved native author works and resumable canonical shelf-overlap cohorts.
+- ✅ Complete the remaining page/native control sweep, owned translated follows, cache refreshes and regional country fixes.
+- ✅ Restrict offline caching to public assets, clear legacy private pages and localize installation/offline metadata.
+- ✅ Authorize and localize legacy share cards; verify actual completions, canonical editions and private cache policy.
+- ✅ Repair the author-owned question queue, answer recovery, rich-text display and EN/FR/DE controls.
 - ✅ Repair native SDK/build dependencies, stateless authentication, account-cache isolation, verified reading/AI API contracts, atomic onboarding and role/genre editing.
 
 ✅ 8. Pagination and scalability cleanup (Medium)
@@ -61,14 +93,35 @@ Updated 27 October 2026. Section status summarizes its bullets; individual verif
 - ✅ Add restore-drill SOP and backup verification checklist.
 
 🟡 10. Validation rollout
-- 🟡 Add concurrency/load tests for payout/webhook/cron paths.
+- ✅ Load-test concurrent payout/webhook replay and real Redis cron lease renewal, overlap and failure recovery.
 - ✅ Add security tests (CSRF, replay, IDOR, abuse throttling).
 - ✅ Keep browser inference out of server functions and enforce the uncompressed bundle budget during builds.
+- ✅ Escape authored text in structured metadata and retain valid JSON values.
 - ✅ Verify remaining content tables, durable creates, group capacity, private discussions, badge rewards and paged author notifications.
 - ✅ Make admin theme/store/seasonal configuration atomic and repair partial/repeated content seeds through shared API/CLI routines.
 - ✅ Unify profile/onboarding API validation across providers and commit optional PINs with onboarding.
+- ✅ Validate and stage avatar uploads; commit owned media with profiles and clean abandoned objects.
+- ✅ Verify Telegram signatures, resolve social identities atomically and enforce configured CAPTCHA on web/native authentication.
+- ✅ Attribute review-driven want-to-reads once, award influence badges and share accurate creator statistics across web/native.
+- ✅ Enforce feed privacy before stable pagination and share authenticated web/native feed contracts.
+- ✅ Validate book-link identities and record clicks atomically with replay-safe receipts.
+- ✅ Commit owned live completion rewards once, exclude imported history and deliver reviewer-conversion XP through the outbox.
+- ✅ Bind reading-session XP and streaks to recorded dates, including delayed deliveries and reload-safe retries.
 - ✅ Make buddy chapter/notes atomic and verify bounded, replay-safe Goodreads imports on web/native.
 - ✅ Make author/ARC/moderation/role/book-chain decisions atomic; verify private-list access, follow counters and appeal restoration.
+- ✅ Repair authenticated native account exports and the shared export ISBN/tip queries; reject incomplete exports.
+- ✅ Align native referral statistics, currency totals and commission wording with the verified API/ledger.
 - 🔵 Deploy behind feature flags and canary with rollback criteria.
+
+✅ 11. Work and edition catalog integrity
+- ✅ Separate canonical works from editions while preserving existing book links and reading history.
+- ✅ Resolve edition-specific ISBN/provider identities without combining unrelated editions; expose edition selection on web/native.
+- ✅ Verify imports, seeds, search, reviews, shelves and purchase links against the edition model.
+- ✅ Aggregate complete visible review statistics, page reviews and preserve catalog rating sources.
+- ✅ Preserve selected editions in quotes/debates and count challenge pages from the latest completed edition per canonical work.
+- ✅ Omit ISBN-required purchase links for ISBN-less editions; derive taste eligibility/recent reading from canonical works and latest editions.
+- ✅ Apply owned audiobook edits to canonical editions, exclude retained aliases from editable catalogs and count complete affiliate/shelf activity per edition.
+- ✅ Share bounded, ranked mood discovery across web/native with canonical edition aliases and visible-review filtering.
+- ✅ Require staff-approved work ownership for author catalogs, ARC offers and post book links; cover coauthors, edition aliases, work merges, complete analytics and revocation.
 
 Footer/Signature: Generated on May 23, 2026 09:39 PM UTC

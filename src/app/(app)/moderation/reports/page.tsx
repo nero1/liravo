@@ -1,148 +1,17 @@
-import { redirect } from 'next/navigation';
+import {redirect} from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
-import { isModerator } from '@/lib/moderation';
-import { createServiceClient } from '@/lib/supabase/server';
-import { ReportActionForm } from '@/components/moderation/ReportActionForm';
-import type { ContentReportRow } from '@/types/database';
-
-export const dynamic = 'force-dynamic';
-
-const PAGE_SIZE = 20;
-
-interface Props {
-  searchParams: { status?: string; page?: string };
-}
-
-const STATUS_TABS = [
-  { label: 'Pending', value: 'pending' },
-  { label: 'Escalated', value: 'escalated' },
-  { label: 'Resolved', value: 'approved' },
-];
-
-export default async function ModerationReportsPage({ searchParams }: Props) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/');
-
-  const mod = await isModerator(user.id);
-  if (!mod) redirect('/');
-
-  const status = searchParams.status ?? 'pending';
-  const page = Math.max(1, parseInt(searchParams.page ?? '1', 10));
-
-  const serviceSupabase = createServiceClient();
-  const { data: reports, count } = await serviceSupabase
-    .from('content_reports')
-    .select('*', { count: 'exact' })
-    .eq('status', status)
-    .order('created_at', { ascending: false })
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-
-  const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
-
-  return (
-    <div className="max-w-5xl mx-auto p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/moderation" className="text-sm text-muted-foreground hover:underline">
-          Moderation
-        </Link>
-        <span className="text-muted-foreground">/</span>
-        <h1 className="text-xl font-bold">Report Queue</h1>
-      </div>
-
-      {/* Status Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-border">
-        {STATUS_TABS.map((tab) => (
-          <Link
-            key={tab.value}
-            href={`/moderation/reports?status=${tab.value}`}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              status === tab.value
-                ? 'border-accent text-accent'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Report List */}
-      {!reports || reports.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No reports with status &quot;{status}&quot;.</p>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {reports.map((report: ContentReportRow) => (
-            <div
-              key={report.id}
-              className="bg-card border border-border rounded-xl p-4"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mb-1">
-                    <span className="font-mono bg-muted px-1.5 py-0.5 rounded">
-                      {report.entity_type}
-                    </span>
-                    <span>reported by {report.reporter_id.slice(0, 8)}...</span>
-                    <span>{new Date(report.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <p className="text-sm font-medium truncate">
-                    Content ID: {report.entity_id}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    Reason: {report.reason}
-                  </p>
-                  {report.moderator_note && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Note: {report.moderator_note}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {status === 'pending' || status === 'escalated' ? (
-                <ReportActionForm
-                  reportId={report.id}
-                  reportedUserId={report.entity_type === 'user' ? report.entity_id : undefined}
-                />
-              ) : (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Status: <span className="font-medium">{report.status}</span>
-                  {report.resolved_at && (
-                    <> &mdash; resolved {new Date(report.resolved_at).toLocaleDateString()}</>
-                  )}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex gap-2 mt-6">
-          {page > 1 && (
-            <Link
-              href={`/moderation/reports?status=${status}&page=${page - 1}`}
-              className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-muted transition-colors"
-            >
-              Previous
-            </Link>
-          )}
-          <span className="px-3 py-1.5 text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          {page < totalPages && (
-            <Link
-              href={`/moderation/reports?status=${status}&page=${page + 1}`}
-              className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-muted transition-colors"
-            >
-              Next
-            </Link>
-          )}
-        </div>
-      )}
-    </div>
-  );
+import {getTranslations,getLocale} from 'next-intl/server';
+import {getCurrentUser} from '@/lib/auth/getCurrentUser';
+import {isModerator} from '@/lib/moderation';
+import {readModeration,reportStatuses} from '@/lib/moderation-reader';
+import {ReportActionForm} from '@/components/moderation/ReportActionForm';
+import type {ModerationReport} from '@/types/database';
+export const dynamic='force-dynamic';
+export default async function ModerationReportsPage({searchParams}:{searchParams:{status?:string;cursor?:string;page?:string}}){
+  const user=await getCurrentUser();if(!user||!await isModerator(user.id))redirect('/');
+  const t=await getTranslations('moderation'),locale=await getLocale(),status=searchParams.status??'pending',url=(cursor?:string)=>'/moderation/reports?'+new URLSearchParams({status,...cursor?{cursor}:{}});
+  let data;try{data=await readModeration<ModerationReport>(user.id,'reports',{status,cursor:searchParams.cursor??null,page:Number(searchParams.page??'1')});}catch{}
+  return <div className="max-w-5xl mx-auto p-6"><Link href="/moderation" className="text-accent hover:underline">{t('title')}</Link><h1 className="text-xl font-bold my-6">{t('reports')}</h1><nav className="flex flex-wrap gap-3 mb-6">{reportStatuses.map(value=><Link key={value} href={'/moderation/reports?status='+value} aria-current={status===value?'page':undefined} className="text-sm text-accent hover:underline">{t('statuses.'+value)}</Link>)}</nav>
+    {!data?<p role="alert">{t('unavailable')} <Link href="/moderation/reports" className="text-accent">{t('retry')}</Link></p>:<><p className="mb-4 text-sm text-muted-foreground">{t('entries',{count:data.total})}</p>{data.items.length===0?<p>{t('emptyReports')}</p>:<div className="flex flex-col gap-4">{data.items.map(report=><article key={report.id} className="bg-card border border-border rounded-xl p-4 space-y-2"><p className="text-sm text-muted-foreground">{t('entities.'+report.entity_type)} · {t('statuses.'+report.status)} · {new Date(report.created_at).toLocaleString(locale)}</p><p className="text-sm">{t('reporter',{name:report.reporter.display_name+' (@'+report.reporter.username+')'})}</p><h2 className="font-semibold">{report.target.label??t('unknown')}</h2>{report.target.username&&<p className="text-sm text-muted-foreground">@{report.target.username}</p>}{report.target.content&&<p className="text-sm whitespace-pre-wrap break-words">{report.target.content}</p>}<p className="text-sm break-words">{t('reason')}: {report.reason}</p>{report.moderator_note&&<p className="text-sm break-words">{t('note')}: {report.moderator_note}</p>}{report.moderator&&<p className="text-xs text-muted-foreground">{t('moderator',{name:report.moderator.display_name})}</p>}<ReportActionForm reportId={report.id} userId={user.id} allowedActions={report.allowed_actions} entityType={report.entity_type}/></article>)}</div>}<nav className="mt-6 flex gap-4">{(searchParams.cursor||Number(searchParams.page)>1)&&<Link href={url()} className="text-accent">{t('first')}</Link>}{data.nextCursor&&<Link href={url(data.nextCursor)} className="text-accent">{t('next')}</Link>}</nav></>}
+  </div>;
 }

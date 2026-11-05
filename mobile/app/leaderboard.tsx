@@ -1,132 +1,17 @@
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { api } from '@/lib/api';
-import { Avatar } from '@/components/ui/Avatar';
-
-interface LeaderboardEntry {
-  rank: number;
-  id: string;
-  username: string;
-  display_name: string;
-  avatar_url: string | null;
-  xp: number;
-  level_title: string;
-  helpful_votes?: number;
-  review_count?: number;
-}
-
-type LBType = 'global' | 'national' | 'friends' | 'reviewers';
-type LBPeriod = 'weekly' | 'monthly' | 'alltime';
-
-const TYPE_LABELS: Record<LBType, string> = {
-  global: 'Global',
-  national: 'National',
-  friends: 'Friends',
-  reviewers: 'Top Reviewers',
-};
-
-const PERIOD_LABELS: Record<LBPeriod, string> = {
-  weekly: 'Weekly',
-  monthly: 'Monthly',
-  alltime: 'All Time',
-};
-
-export default function LeaderboardScreen() {
-  const [type, setType] = useState<LBType>('global');
-  const [period, setPeriod] = useState<LBPeriod>('weekly');
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['leaderboard', type, period],
-    queryFn: () => api.get<{ leaderboard: LeaderboardEntry[] }>(`/api/leaderboards?type=${type}&period=${period}`),
-  });
-
-  const entries = data?.leaderboard ?? [];
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <View className="px-4 pt-4 pb-2">
-        <Text className="text-2xl font-bold text-foreground mb-3">Leaderboard</Text>
-
-        {/* Type selector */}
-        <View className="flex-row gap-1.5 flex-wrap">
-          {(Object.keys(TYPE_LABELS) as LBType[]).map((t) => (
-            <TouchableOpacity
-              key={t}
-              onPress={() => setType(t)}
-              className={`px-3 py-1.5 rounded-full ${type === t ? 'bg-accent' : 'bg-muted'}`}
-            >
-              <Text className={`text-xs font-medium ${type === t ? 'text-white' : 'text-muted-foreground'}`}>
-                {TYPE_LABELS[t]}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Period selector — hidden for reviewers */}
-        {type !== 'reviewers' && (
-          <View className="flex-row gap-1.5 mt-2">
-            {(Object.keys(PERIOD_LABELS) as LBPeriod[]).map((p) => (
-              <TouchableOpacity
-                key={p}
-                onPress={() => setPeriod(p)}
-                className={`px-3 py-1 rounded-full border ${period === p ? 'border-accent bg-accent/10' : 'border-border'}`}
-              >
-                <Text className={`text-xs ${period === p ? 'text-accent font-medium' : 'text-muted-foreground'}`}>
-                  {PERIOD_LABELS[p]}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </View>
-
-      {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#d97706" size="large" />
-        </View>
-      ) : (
-        <FlatList
-          data={entries}
-          keyExtractor={(e) => e.id}
-          contentContainerStyle={{ paddingBottom: 24 }}
-          renderItem={({ item: entry }) => (
-            <View className="flex-row items-center px-4 py-3 border-b border-border gap-3">
-              <View className={`w-8 h-8 rounded-full items-center justify-center flex-shrink-0 ${
-                entry.rank === 1 ? 'bg-yellow-400' : entry.rank === 2 ? 'bg-gray-300' : entry.rank === 3 ? 'bg-amber-600' : 'bg-muted'
-              }`}>
-                <Text className={`font-bold text-sm ${entry.rank <= 3 ? 'text-white' : 'text-muted-foreground'}`}>
-                  {entry.rank <= 3 ? (entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : '🥉') : entry.rank}
-                </Text>
-              </View>
-              <Avatar uri={entry.avatar_url} name={entry.display_name} size={40} />
-              <View className="flex-1">
-                <Text className="font-semibold text-foreground text-sm">{entry.display_name}</Text>
-                <Text className="text-xs text-muted-foreground">{entry.level_title}</Text>
-              </View>
-              <View className="items-end">
-                {type === 'reviewers' ? (
-                  <>
-                    <Text className="font-bold text-accent text-sm">{(entry.helpful_votes ?? 0).toLocaleString()}</Text>
-                    <Text className="text-xs text-muted-foreground">{entry.review_count ?? 0} reviews</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text className="font-bold text-accent text-sm">{entry.xp.toLocaleString()}</Text>
-                    <Text className="text-xs text-muted-foreground">XP</Text>
-                  </>
-                )}
-              </View>
-            </View>
-          )}
-          ListEmptyComponent={
-            <View className="py-16 items-center">
-              <Text className="text-muted-foreground">No rankings yet. Start {type === 'reviewers' ? 'reviewing' : 'reading'}!</Text>
-            </View>
-          }
-        />
-      )}
-    </SafeAreaView>
-  );
+import {useState} from 'react';
+import {View,Text,FlatList,TouchableOpacity} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useQuery} from '@tanstack/react-query';
+import {useRouter} from 'expo-router';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useTranslations} from '@/hooks/useTranslations';
+import {Avatar} from '@/components/ui/Avatar';
+import {Button} from '@/components/ui/Button';
+import {QueryError,EmptyState} from '@/components/ui/EmptyState';
+import type {LeaderboardPage,LeaderboardType,LeaderboardPeriod} from '@/types';
+export default function LeaderboardScreen(){
+  const owner=useAuthStore(state=>state.user?.id),countryPreference=useAuthStore(state=>state.user?.country),{t,locale}=useTranslations('leaderboard'),{t:profile}=useTranslations('profile'),{t:common}=useTranslations('common'),router=useRouter(),[type,setType]=useState<LeaderboardType>('global'),[period,setPeriod]=useState<LeaderboardPeriod>('weekly');
+  const query=useQuery({queryKey:['leaderboard',owner,type,period,type==='national'?countryPreference:null],enabled:!!owner,queryFn:async({signal})=>{const data=await api.get<LeaderboardPage>('/api/leaderboards',{type,period},signal);if(data.actorId!==owner||data.type!==type||data.period!==period||!Array.isArray(data.leaderboard))throw Error('Invalid leaderboard');return data;}});let country=query.data?.country;try{if(country)country=new Intl.DisplayNames([locale],{type:'region'}).of(country)??country;}catch{}
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={query.data?.leaderboard??[]} keyExtractor={entry=>entry.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:12}} ListHeaderComponent={<View className="gap-3 mb-2"><Text accessibilityRole="header" className="text-2xl font-bold text-foreground">{t('title')}</Text><Text className="text-sm text-muted-foreground">{t('topLimit',{count:50})}</Text><View className="flex-row flex-wrap gap-2">{(['global','national','friends','reviewers'] as const).map(value=><Button key={value} variant={type===value?'primary':'outline'} accessibilityState={{selected:type===value}} onPress={()=>setType(value)}>{t(value==='reviewers'?'topReviewers':value)}</Button>)}</View><View className="flex-row flex-wrap gap-2">{(['weekly','monthly','alltime'] as const).map(value=><Button key={value} variant={period===value?'primary':'outline'} accessibilityState={{selected:period===value}} onPress={()=>setPeriod(value)}>{t(value==='alltime'?'allTime':value)}</Button>)}</View><Text className="text-xs text-muted-foreground">{t(type==='reviewers'?'reviewerHelp':'periodHelp')}</Text>{query.data?.periodStart&&<Text className="text-sm text-muted-foreground">{t('since',{date:new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeZone:'UTC'}).format(new Date(query.data.periodStart))})}</Text>}{type==='national'&&query.data&&(country?<Text className="font-medium text-foreground">{country}</Text>:<><Text className="text-muted-foreground">{t('countryRequired')}</Text><Button variant="outline" onPress={()=>router.push('/(tabs)/profile/edit')}>{t('setCountry')}</Button></>)}</View>} renderItem={({item:entry})=><TouchableOpacity accessibilityRole="link" onPress={()=>router.push('/user/'+entry.username)} className={`flex-row items-center gap-3 rounded-xl border p-3 ${entry.id===owner?'border-accent':'border-border'}`}><Text className="w-8 text-center font-bold text-foreground">{new Intl.NumberFormat(locale).format(entry.rank)}</Text><Avatar uri={entry.avatar_url} name={entry.display_name} size={40}/><View className="flex-1"><Text className="font-semibold text-foreground">{entry.display_name}</Text><Text className="text-xs text-muted-foreground">{profile('levels.'+entry.level_min)}</Text></View><View className="items-end">{type==='reviewers'?<><Text className="font-semibold text-accent">{t('helpfulVotes',{count:entry.helpful_votes})}</Text><Text className="text-xs text-muted-foreground">{t('ratedReviews',{count:entry.review_count})}</Text></>:<Text className="font-semibold text-accent">{profile('xp',{count:entry.xp})}</Text>}</View></TouchableOpacity>} ListEmptyComponent={query.isLoading?<Text className="text-muted-foreground">{common('loading')}</Text>:query.isError?null:<EmptyState title={t('empty')}/>} ListFooterComponent={<View className="gap-3">{query.isError&&<QueryError error={query.error} retry={()=>void query.refetch()}/>}<Button variant="outline" loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></View>}/></SafeAreaView>;
 }

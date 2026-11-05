@@ -2,7 +2,6 @@ import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { awardXP, incrementStreak } from '@/services/xp';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
@@ -57,11 +56,6 @@ export async function POST(req: Request) {
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Content creation unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
-
-  await incrementStreak(user.id);
-
-  // Award 5 XP for logging a session
-  await awardXP(user.id, 5, 'reading_session', `reading-session:${session.id}`);
 
   return NextResponse.json({ session }, { status: 201 });
 }

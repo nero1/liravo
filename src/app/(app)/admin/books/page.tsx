@@ -1,8 +1,10 @@
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { isAdmin } from '@/lib/moderation';
-import { getTranslations } from 'next-intl/server';
-import { CsrfInput } from '@/components/layout/CsrfInput';
-import { createServiceClient } from '@/lib/supabase/server';
+import { getTranslations,getFormatter } from 'next-intl/server';
+import {readAdminCatalog} from '@/lib/admin-catalog';
+import {CatalogPager} from '@/components/admin/CatalogPager';
+import Link from 'next/link';
+import type {BookRow} from '@/types/database';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { AudiobookToggle } from './AudiobookToggle';
@@ -14,38 +16,17 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('bookManagement') };
 }
 
-export default async function AdminBooksPage() {
-  const t = await getTranslations('admin');
+export default async function AdminBooksPage({searchParams={}}:{searchParams?:{cursor?:string;search?:string}}) {
+  const t = await getTranslations('admin'),common=await getTranslations('common'),formatter=await getFormatter(),bookText=await getTranslations('books'),editionText=await getTranslations('editions');
   const user = await getCurrentUser();
   if (!user) redirect('/login');
   if (!await isAdmin(user.id)) redirect('/');
-  const supabase = createServiceClient();
-
-  const { data: books } = await supabase
-    .from('books')
-    .select('id, title, author_name, cover_url, google_books_id, have_read_count, has_audiobook')
-    .order('have_read_count', { ascending: false })
-    .limit(100);
-
-  // Count affiliate links per book
-  const bookIds = (books ?? []).map((b) => b.id);
-  const affiliateCounts: Record<string, number> = {};
-
-  if (bookIds.length > 0) {
-    const { data: clicks } = await supabase
-      .from('affiliate_link_clicks')
-      .select('book_id')
-      .in('book_id', bookIds)
-      .eq('is_affiliate', true);
-
-    for (const click of clicks ?? []) {
-      affiliateCounts[click.book_id] = (affiliateCounts[click.book_id] ?? 0) + 1;
-    }
-  }
+  const catalog=await readAdminCatalog<BookRow&{affiliate_click_count:number}>(user.id,'books',{cursor:searchParams.cursor,search:searchParams.search}),books=catalog.items;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <h1 className="font-display text-2xl font-bold mb-6">{t('bookManagement')}</h1>
+      <form method="GET" role="search" className="mb-4 flex gap-2"><input type="search" name="search" aria-label={bookText('search')} placeholder={bookText('search')} defaultValue={searchParams.search??''} maxLength={200} className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"/><button className="rounded-lg bg-accent px-4 py-2 text-sm text-accent-foreground">{common('search')}</button></form>
       <p className="text-sm text-muted-foreground mb-4">{t('bookManagementDescription')}</p>
 
       <div className="rounded-xl border border-border overflow-x-auto">
@@ -73,7 +54,7 @@ export default async function AdminBooksPage() {
                         className="w-8 h-12 object-cover rounded"
                       />
                     )}
-                    <span className="font-medium line-clamp-1">{book.title}</span>
+                    <div><span className="font-medium line-clamp-1">{book.title}</span><span id={'edition-'+book.id} className="block text-xs text-muted-foreground">{[book.isbn_13??book.isbn_10,book.language,book.format?editionText('formats.'+book.format):null,book.publisher].filter(Boolean).join(' · ')}</span></div>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{book.author_name}</td>
@@ -81,25 +62,20 @@ export default async function AdminBooksPage() {
                   {book.google_books_id ? `GB: ${book.google_books_id.slice(0, 8)}...` : t('manual')}
                 </td>
                 <td className="px-4 py-3 text-center">
-                  {affiliateCounts[book.id] ?? 0}
+                  {formatter.number(book.affiliate_click_count)}
                 </td>
                 <td className="px-4 py-3 text-center">
-                  <AudiobookToggle bookId={book.id} initial={book.has_audiobook ?? false} />
+                  <AudiobookToggle bookId={book.id} userId={user.id} title={book.title} initial={book.has_audiobook} />
                 </td>
                 <td className="px-4 py-3">
-                  <form action="/api/books/refresh-affiliate" method="POST"><CsrfInput />
-                    <input type="hidden" name="bookId" value={book.id} />
-                    <button
-                      type="submit"
-                      className="px-2 py-1 text-xs border border-border rounded hover:bg-muted transition-colors"
-                    >{t('refreshLinks')}</button>
-                  </form>
+                  <Link href={'/book/'+book.id} className="px-2 py-1 text-xs border border-border rounded hover:bg-muted">{t('viewPurchaseLinks')}</Link>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <CatalogPager base="/admin/books" total={catalog.total} cursor={searchParams.cursor} nextCursor={catalog.nextCursor} search={searchParams.search}/>
     </div>
   );
 }

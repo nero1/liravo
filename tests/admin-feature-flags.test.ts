@@ -25,15 +25,15 @@ it('rejects legacy malformed payloads and forwards the authenticated administrat
   expect((await PATCH(request({name:'telegram_auth',enabled:false}))).status).toBe(409);
 });
 
-it('requires administrator authorization and reports a retryable cache-sync failure after a committed update',async()=>{
+it('requires administrator authorization and acknowledges an authoritative database update',async()=>{
   vi.mocked(getCurrentUser).mockResolvedValue({id:'reader',email:''});
   vi.mocked(isAdmin).mockResolvedValue(false);
   expect((await PATCH(request({name:'google_auth',enabled:false}))).status).toBe(403);
   expect(createServiceClient).not.toHaveBeenCalled();
   vi.mocked(isAdmin).mockResolvedValue(true);
   vi.mocked(createServiceClient).mockReturnValue({rpc:vi.fn().mockResolvedValue({data:false,error:null})} as unknown as ReturnType<typeof createServiceClient>);
-  vi.mocked(invalidateFeatureFlag).mockRejectedValueOnce(new Error('Redis unavailable'));
+  vi.mocked(invalidateFeatureFlag).mockResolvedValueOnce(undefined);
   const response=await PATCH(request({name:'google_auth',enabled:false}));
-  expect(response.status).toBe(503);
-  expect(await response.json()).toMatchObject({code:'FLAG_CACHE_UNAVAILABLE'});
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({updated:true,changed:false,enabled:false});
 });

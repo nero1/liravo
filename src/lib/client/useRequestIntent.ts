@@ -25,7 +25,12 @@ export function useRequestIntent(ownerId?:string){
         const result=headers(payload,scope);sessionStorage.setItem(storageKey(scope),JSON.stringify({fingerprint,key:result['Idempotency-Key']}));return {...result,'X-Liravo-Actor':ownerId};
       }catch{return {...headers(payload,scope),'X-Liravo-Actor':ownerId};}
     },
-    complete(scope='default'){
+    async pending(scope='default'){
+      if(!ownerId)return null;
+      try{const saved=JSON.parse(sessionStorage.getItem(storageKey(scope))??'null'),entry=current.current.get(scope);if(!entry&&(typeof saved?.key!=='string'||saved.key.length<8||saved.key.length>200))return null;const key=entry?.key??saved.key;if(!entry)current.current.set(scope,{payload:'',key});return {'Idempotency-Key':key,'X-Liravo-Actor':ownerId};}catch{return null;}
+    },
+    complete(scope='default',acknowledgedKey?:string){
+      if(acknowledgedKey&&current.current.get(scope)?.key!==acknowledgedKey)return;
       if(ownerId)try{const saved=JSON.parse(sessionStorage.getItem(storageKey(scope))??'null');if(saved?.key===current.current.get(scope)?.key)sessionStorage.removeItem(storageKey(scope));}catch{}
       current.current.delete(scope);
     },

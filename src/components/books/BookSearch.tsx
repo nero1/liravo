@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState,useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import {useTranslations,useLocale} from 'next-intl';
 import { Search } from 'lucide-react';
 
 interface BookResult {
@@ -12,33 +13,26 @@ interface BookResult {
   author_name: string;
   cover_url?: string;
   published_year?: number;
-  _external?: boolean;
+  _external?:boolean;
+  isbn_10?:string;isbn_13?:string;publisher?:string;language?:string;format?:string;edition_name?:string;
 }
 
-export function BookSearch() {
-  const [query, setQuery] = useState('');
+export function BookSearch({initialQuery=''}:{initialQuery?:string}) {
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<BookResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  const search = useCallback(async (q: string) => {
-    if (q.length < 2) { setResults([]); return; }
+  const t=useTranslations('books'),common=useTranslations('common'),editionText=useTranslations('editions'),locale=useLocale(),[error,setError]=useState(false),[generation,setGeneration]=useState(0);
+  useEffect(()=>{
+    const controller=new AbortController(),term=query.trim();setResults([]);setError(false);
+    if(term.length<2){setLoading(false);return()=>controller.abort();}
     setLoading(true);
-    try {
-      const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      setResults(data.books ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setQuery(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(val), 400);
-  };
+    const timer=setTimeout(()=>{
+      void fetch('/api/books/search?q='+encodeURIComponent(term),{signal:controller.signal}).then(async response=>{
+        if(!response.ok)throw new Error('Search unavailable');const data=await response.json();if(!Array.isArray(data.books))throw new Error('Invalid search results');if(!controller.signal.aborted)setResults(data.books);
+      }).catch(()=>{if(!controller.signal.aborted)setError(true);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+    },400);
+    return()=>{clearTimeout(timer);controller.abort();};
+  },[query,generation]);
 
   return (
     <div className="space-y-4">
@@ -47,22 +41,24 @@ export function BookSearch() {
         <input
           type="search"
           value={query}
-          onChange={handleChange}
-          placeholder="Search books, authors, ISBNs..."
+          onChange={event=>setQuery(event.target.value)}
+          placeholder={t('searchPlaceholder')} aria-label={t('search')} maxLength={200}
           className="w-full pl-10 pr-4 py-3 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-accent/50 text-sm"
         />
       </div>
 
       {loading && (
-        <div className="text-center py-8 text-muted-foreground text-sm">Searching...</div>
+        <div role="status" className="text-center py-8 text-muted-foreground text-sm">{t('searching')}</div>
       )}
 
       {!loading && results.length > 0 && (
         <div className="space-y-2">
-          {results.map((book, i) => {
+          {results.map((book,i)=>{
+            let language=book.language;try{if(language)language=new Intl.DisplayNames([locale],{type:'language'}).of(language)??language;}catch{}
+            const details=[language,book.format?editionText('formats.'+book.format):null,book.edition_name,book.publisher,book.published_year].filter(Boolean).join(' · ');
             const href = book.id
               ? `/book/${book.id}`
-              : `/book/lookup?gid=${book.google_books_id}`;
+              : `/book/lookup?gid=${encodeURIComponent(book.google_books_id??'')}`;
 
             return (
               <Link
@@ -88,9 +84,8 @@ export function BookSearch() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{book.title}</p>
                   <p className="text-xs text-muted-foreground truncate">{book.author_name}</p>
-                  {book.published_year && (
-                    <p className="text-xs text-muted-foreground">{book.published_year}</p>
-                  )}
+                  {details&&<p className="text-xs text-muted-foreground">{details}</p>}
+                  {(book.isbn_13||book.isbn_10)&&<p className="text-xs text-muted-foreground">{editionText('isbn',{value:book.isbn_13??book.isbn_10!})}</p>}
                 </div>
               </Link>
             );
@@ -98,8 +93,9 @@ export function BookSearch() {
         </div>
       )}
 
-      {!loading && query.length >= 2 && results.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground text-sm">No books found for &quot;{query}&quot;</div>
+      {error&&<div role="alert" className="text-sm text-destructive"><p>{t('searchUnavailable')}</p><button type="button" onClick={()=>setGeneration(value=>value+1)} className="underline">{common('retry')}</button></div>}
+      {!loading&&!error&&query.trim().length>=2&&results.length===0 && (
+        <div className="text-center py-8 text-muted-foreground text-sm">{t('noBooksFor',{query})}</div>
       )}
     </div>
   );

@@ -1,34 +1,19 @@
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import {getReadingDebates,readingCatalogFailure} from '@/lib/reading-discovery';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
-// book_debates table not in generated types — using any cast
-// Expected columns: id, book_id, user_id, question, yes_count, no_count, is_active, created_at
-
 const CreateDebateSchema = z.object({
   book_id: z.string().uuid(),
-  question: z.string().min(5).max(200),
+  question: z.string().trim().min(5).max(200),
 });
 
-export async function GET() {
-  const supabase = createClient();
-
-  const { data: debates, error } = await supabase
-    .from('book_debates')
-    .select('id, book_id, user_id, question, yes_count, no_count, is_active, created_at')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (error) {
-    return NextResponse.json({error:'Debates unavailable'},{status:503});
-  }
-
-  return NextResponse.json({ debates: debates ?? [] });
+export async function GET(request:Request){
+  const user=await getCurrentUser(),query=new URL(request.url).searchParams,scope=query.get('scope')??'active';if(!['active','mine'].includes(scope))return NextResponse.json({error:'Invalid catalog'},{status:400});
+  try{return NextResponse.json(await getReadingDebates(user?.id??null,scope as 'active'|'mine',query.get('cursor')),{headers:{'Cache-Control':'private, no-store'}});}catch(error){const result=readingCatalogFailure(error);return NextResponse.json({error:result.error},{status:result.status});}
 }
 
 export async function POST(request: NextRequest) {
@@ -65,5 +50,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
-  return NextResponse.json({ debate }, { status: 201 });
+  return NextResponse.json({ debate,actorId:user.id }, { status: 201 });
 }

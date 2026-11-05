@@ -2,14 +2,14 @@ import { createFormatter, createTranslator } from 'next-intl';
 import en from '../messages/en.json';
 import { it, expect, vi } from 'vitest';
 import postgres from 'postgres';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync,appendFileSync } from 'node:fs';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { INTEGRITY_SIGNALS } from '@/constants/cron';
 
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:vi.fn()}));
 vi.mock('@/lib/rate-limit',async original=>({...await original<typeof import('@/lib/rate-limit')>(),checkRouteRateLimit:vi.fn(async()=>true)}));
 vi.mock('next-intl/server',()=>({
-  getTranslations:async()=>createTranslator({locale:'en',messages:en,namespace:'admin'}),
+  getTranslations:async(config:string|{namespace?:string}='admin')=>createTranslator({locale:'en',messages:en,namespace:(typeof config==='string'?config:config.namespace??'admin')as never}),
   getFormatter:async()=>createFormatter({locale:'en'}),
 }));
 
@@ -34,7 +34,76 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     `).simple();
     const migrations = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     const legacyUser='00000000-0000-4000-8000-000000009991';
+    let legacyAuthor:{owner:string;book:string;arc:string;post:string}|undefined;
+    let legacyWorkshop:{id:string;owner:string}|undefined;
+    let legacyRating:string|undefined;
+    let legacyNotification:{owner:string;badge:string;goal:string}|undefined;
+    let legacyEditions:{owner:string;ids:string[];reviewId:string}|undefined;
+    let legacyImport:{owner:string;rows:unknown[];response:unknown}|undefined;
+    let legacyBlankAnswer:string|undefined;
     for (const file of migrations) {
+      if(file.startsWith('095_')){const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy095@example.test','legacy095','Legacy095')`;await sql`update users set is_verified_author=true where id=${owner}`;legacyBlankAnswer=(await sql`insert into author_qa(author_id,asked_by,question,answer,answered_at)values(${owner},${owner},'A legacy blank answer question','<p></p>',now())returning id`)[0].id;}
+      if(file.startsWith('074_')){
+        const owner=legacyNotification!.owner,book=(await sql`insert into books(title,author_name) values('Unverified legacy author book','Other author') returning id`)[0].id;
+        await sql`insert into author_books(author_id,book_id) values(${owner},${book})`;
+        const arc=(await sql`insert into arcs(author_id,book_id,description,is_active) values(${owner},${book},'Legacy offer',true) returning id`)[0].id;
+        const post=(await sql`insert into author_posts(author_id,title,body,type,book_id) values(${owner},'Legacy post','A linked post','announcement',${book}) returning id`)[0].id;
+        legacyAuthor={owner,book,arc,post};
+      }
+      if(file.startsWith('072_')){
+        const owner=legacyNotification!.owner,id=(await sql`insert into workshop_rooms(name,facilitator_id,max_members,member_count) values('Legacy workshop 072',${owner},8,1) returning id`)[0].id;
+        expect((await sql`select member_count from workshop_rooms where id=${id}`)[0].member_count).toBe(2);legacyWorkshop={id,owner};
+      }
+      if(file.startsWith('071_')){
+        const owner=legacyNotification!.owner;legacyRating=(await sql`insert into books(title,author_name,average_rating,ratings_count) values('Legacy mixed ratings 071','Author',4.6,100) returning id`)[0].id;
+        await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status) values(${owner},${legacyRating!},5,'Legacy cached review','short','published')`;
+      }
+      if(file.startsWith('069_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'notifications-069@example.test','notifications_069','Notification reader')`;
+        await sql`select award_badge_atomic(${owner},'first_book',50,'First Book','📖')`;
+        const badge=(await sql`select id from notifications where user_id=${owner} and type='badge_earned'`)[0].id;
+        const goal=(await sql`insert into notifications(user_id,type,message) values(${owner},'reading_goal_milestone','You have read 2 of 8 books and reached 25% of your 2026 reading goal.') returning id`)[0].id;
+        legacyNotification={owner,badge,goal};
+      }
+      if(file.startsWith('066_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-import-066@example.test','legacy_import_066','Legacy import')`;
+        const {parseGoodreadsImport}=await import('@/lib/goodreads-import');
+        const rows=parseGoodreadsImport('Book Id,Title,Author,Language,Publisher,Number of Pages,Exclusive Shelf\n966001,Legacy import,Author,fr,Éditeur,320,read').rows.map(row=>({...row,book:{...row.book,publisher:null,page_count:null,published_year:null,language:'en'}}));
+        const response=(await sql`select import_goodreads_library(${owner},'legacy-parser-receipt',${sql.json(rows)},0) as result`)[0].result;
+        legacyImport={owner,rows,response};
+      }
+      if(file.startsWith('065_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-editions@example.test','legacy_editions_reader','Legacy edition reader')`;
+        const rows=await sql`insert into books(title,author_name,isbn_10,isbn_13,open_library_id,page_count) values('Legacy C book','Legacy author','0-13-110362-8',null,'/works/OL980001W',200),('Legacy C edition','Legacy author',null,'9780131103627',null,300) returning id`;
+        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='have_read'`)[0].id;await sql`select set_shelf_membership(${owner},${shelf},${rows[1].id},true)`;
+        const entry=(await sql`select id from shelf_books where user_id=${owner} and book_id=${rows[1].id}`)[0].id;await sql`select update_shelf_progress(${owner},${entry},100,null)`;
+        const review=(await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,idempotency_key,request_hash) values(${owner},${rows[1].id},4,'Legacy edition history','short','published','legacy-edition-review',${'e'.repeat(64)}) returning id`)[0].id;
+        await sql`insert into books(title,author_name,isbn_13,google_books_id) values('Legacy corrupt ISBN','Legacy author','9780306406158','legacy-corrupt-edition')`;
+        await sql`select award_xp_once(${owner},20,'write_review',${'review:'+rows[1].id})`;
+        legacyEditions={owner,ids:rows.map(row=>row.id),reviewId:review};
+      }
+      if(file.startsWith('063_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-completion@example.test','legacy_completion_owner','Legacy completion')`;
+        const book=(await sql`insert into books(title,author_name) values('Legacy completion','Fixture') returning id`)[0].id;
+        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='have_read'`)[0].id;await sql`select set_shelf_membership(${owner},${shelf},${book},true)`;
+      }
+      if(file.startsWith('060_')){
+        const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'legacy-conversion@example.test','legacy_conversion_owner','Legacy conversion')`;
+        const books=await sql`insert into books(title,author_name) values('Legacy shelved conversion','Fixture'),('Legacy removed conversion','Fixture') returning id`;
+        const shelf=(await sql`select id from shelves where user_id=${owner} and default_type='want_to_read'`)[0].id;
+        await sql`select set_shelf_membership(${owner},${shelf},${books[0].id},true)`;
+        await sql`select apply_book_interaction(${owner},${books[1].id},'reaction','legacy-conversion-add')`;
+        await sql`select apply_book_interaction(${owner},${books[1].id},'reaction','legacy-conversion-remove')`;
+      }
+      if(file.startsWith('058_'))await sql.unsafe(`
+        create schema storage;
+        create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null);
+        alter table storage.objects enable row level security;
+        grant usage on schema storage to anon,authenticated;
+        grant select,insert,update,delete on storage.objects to anon,authenticated;
+        create policy fixture_storage_access on storage.objects for all to anon,authenticated using(true) with check(true);
+        insert into storage.objects(bucket_id) values('avatars');
+      `).simple();
       const legacy=file.startsWith('040_');
       if(legacy)await sql.unsafe(`
         insert into auth.users(id,email,raw_user_meta_data) values('${legacyUser}','legacy@example.test','{"username":"legacy_audit"}');
@@ -121,6 +190,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         });}catch(error){if(error!==rolledBack)throw error;}
       }
       await sql.unsafe(readFileSync(`supabase/migrations/${file}`, 'utf8')).simple();
+      if(file.startsWith('095_'))expect((await sql`select answer,answered_at from author_qa where id=${legacyBlankAnswer!}`)[0]).toMatchObject({answer:null,answered_at:null});
       if(legacyTicket){
         expect((await sql`select status from event_tickets where id=${legacyUser}`)[0].status).toBe('legacy_hold');
         expect(Number((await sql`select creator_balance(${legacyUser},'USD') as balance`)[0].balance.events)).toBe(0);
@@ -194,7 +264,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     for(let i=0;i<2;i++) await sql.unsafe('select * from process_payment_event(p_provider => $1,p_event_id => $2,p_payload => $3,p_correlation_id => $4)', ['paystack','rehearsal-event',payload,'rehearsal']);
     const claims=await sql`select * from claim_outbox_events(10)`;
     for(const event of claims) await Promise.all([sql`select process_outbox_event_atomic(${event.id})`,sql`select process_outbox_event_atomic(${event.id})`]);
-    const [notifications]=await sql`select count(*) as count from notifications`;
+    const [notifications]=await sql`select count(*) as count from notifications where user_id=${recipient} and type='tip'`;
     const [reward]=await sql`select xp from users where id=${sender}`;
     expect(Number(notifications.count)).toBe(1); expect(reward.xp).toBe(5);
     await sql`insert into user_payout_methods(user_id,provider,display_name,account_number,bank_code,currency) values(${recipient},'manual','Audit account','1234567890','AUDIT','USD')`;
@@ -322,6 +392,12 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
       await sql`update users set user_types=array['reader','author'],email='sender.contact@example.test' where id=${sender}`;
       const authorFilter=await factory.from<Array<{id:string}>>('users').select('id').contains('user_types',['author']).not('email','is',null).ilike('username','AUDIT_SENDER');
       expect(authorFilter.error).toBeNull(); expect(authorFilter.data).toEqual([{id:sender}]);
+      const overlap=await factory.from<Array<{id:string}>>('users').select('id').eq('id',sender).overlaps('user_types',['author','creator']);
+      expect(overlap.error).toBeNull();expect(overlap.data).toEqual([{id:sender}]);
+      for(const values of [[],["author'});drop table books;--"]]){
+        const result=await factory.from<Array<{id:string}>>('users').select('id').eq('id',sender).overlaps('user_types',values);
+        expect(result.error).toBeNull();expect(result.data).toEqual([]);
+      }
       const injection=await factory.from<Array<{id:string}>>('users').select('id').ilike('username',"%' OR true --");
       expect(injection.error).toBeNull(); expect(injection.data).toEqual([]);
       const { PgQueryBuilder } = await import('@/lib/db/query-builder');
@@ -341,11 +417,13 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
         ];
         for(const page of pages) expect(await page.default({searchParams:{}})).toBeTruthy();
       } finally { queryGuard.mockRestore(); }
+      const originalWriter=(await sql`select is_verified_author from users where id=${recipient}`)[0].is_verified_author;await sql`update users set is_verified_author=true where id=${recipient}`;
       const answerRequest = new Request('https://app.test/api/content',{headers:{'Idempotency-Key':'answer-intent-key'}});
       const answerPayload = {question_id:questionId,answer:'A sufficiently detailed answer.'};
       await (await contentIntent(answerRequest,recipient,'ask_writer_answers',answerPayload)).insert();
       await (await contentIntent(answerRequest,recipient,'ask_writer_answers',answerPayload)).insert();
       expect((await sql`select answer_count from ask_writer_questions where id=${questionId}`)[0].answer_count).toBe(1);
+      await sql`update users set is_verified_author=${originalWriter} where id=${recipient}`;
     } finally {
       vi.unstubAllEnvs();
     }
@@ -358,6 +436,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     })));
     expect(disabled.filter(result=>result.status==='fulfilled')).toHaveLength(1);
     expect((await sql`select count(*)::int as count from feature_flags where name in ('google_auth','telegram_auth') and enabled`)[0].count).toBe(1);
+    await sql`update feature_flags set enabled=true where name in ('google_auth','telegram_auth')`;
     await expect(sql`select set_feature_flag_atomic(${recipient},'unknown_flag',true)`).rejects.toThrow('Unknown flag');
     const referred='00000000-0000-4000-8000-000000000093';
     await sql`insert into auth.users(id,email,raw_user_meta_data) values(${referred},'referred@example.test','{"username":"audit_referred"}')`;
@@ -422,7 +501,9 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect((await sql`select community_votes from writing_challenge_submissions where id=${entryId}`)[0].community_votes).toBe(0);
     await expect(sql`select apply_writing_intent(${sender},'vote',${entryId},'writing-self-vote','{"voted":true}')`).rejects.toThrow('own submission');
     const [bestQuestion]=await sql`insert into ask_writer_questions(user_id,question) values(${sender},'Which writing technique works best?') returning id`;
+    const originalWriters=await sql`select id,is_verified_author from users where id in(${recipient},${referred})`;await sql`update users set is_verified_author=true where id in(${recipient},${referred})`;
     const bestCandidates=await sql`insert into ask_writer_answers(user_id,question_id,answer) values(${recipient},${bestQuestion.id},'First useful answer for testing.'),(${referred},${bestQuestion.id},'Second useful answer for testing.') returning id,user_id`;
+    for(const writer of originalWriters)await sql`update users set is_verified_author=${writer.is_verified_author} where id=${writer.id}`;
     const bestOutcomes=await Promise.allSettled(bestCandidates.map(answer=>sql`select apply_writing_intent(${sender},'best_answer',${bestQuestion.id},${'best-answer-key-'+answer.id},${sql.json({answer_id:answer.id})})`));
     expect(bestOutcomes.filter(result=>result.status==='fulfilled')).toHaveLength(1);
     const [selectedAnswer]=await sql`select best_answer_id from ask_writer_questions where id=${bestQuestion.id}`;
@@ -700,6 +781,8 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     await sql`insert into auth.users(id,email,raw_user_meta_data)
       select ('00000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'fan'||i||'@example.test',jsonb_build_object('username','fan_'||i) from generate_series(10001,10501) i`;
     await sql`insert into follows(follower_id,following_id) select id,${recipient} from users where username like 'fan_%' on conflict do nothing`;
+    await sql`update users set is_verified_author=true where id=${recipient}`;
+    await sql`insert into author_work_claims(author_id,work_id) select ${recipient},work_id from books where id=${book.id} on conflict do nothing`;
     const announcement=await createContent('author_posts','announcement-root',{title:'A new chapter',body:'Announcement body',book_id:book.id,type:'announcement'});
     const [announcementRow]=await sql`select content,body,created_at from author_posts where id=${announcement.id}`;
     expect(announcementRow.content).toBe(announcementRow.body);
@@ -917,7 +1000,7 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     expect(profileResponse.status).toBe(200);
     const profile=(await profileResponse.json()).user;
     expect(profile).not.toHaveProperty('email');expect(profile).not.toHaveProperty('totp_secret');
-    const searchable=await new PgQueryBuilder<{id:string}[]>('books').select('id').textSearch('search_vector','Concurrent catalog',{type:'websearch',config:'english'});
+    const searchable=await new PgQueryBuilder<{id:string}[]>('books').select('id').textSearch('search_vector','Concurrent catalog',{type:'websearch',config:'simple'});
     expect(searchable.error).toBeNull();expect(searchable.data).toEqual([{id:bookId}]);
     const {GET:adminBooks}=await import('@/app/api/admin/books/route');
     await sql`update users set is_admin=true where id=${other}`;
@@ -1507,5 +1590,1203 @@ it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('rehearses all migrations, o
     }
     expect((await sql`select has_function_privilege('service_role','finish_factor_challenge_044(text,text,integer,bigint,text,text,text,text[])','EXECUTE') as allowed`)[0].allowed).toBe(false);
     }
+    {
+    const owner=crypto.randomUUID(),other=crypto.randomUUID(),hashA='a'.repeat(64),hashB='b'.repeat(64);
+    await sql`select create_direct_account(${owner},'avatar-owner@example.test','avatar_owner_fixture','Avatar owner')`;
+    await sql`select create_direct_account(${other},'avatar-other@example.test','avatar_other_fixture','Avatar other')`;
+    await sql`update users set avatar_url='https://cdn.test/original.jpg' where id=${owner}`;
+    const staged=await Promise.all(Array.from({length:3},()=>sql`select begin_avatar_upload(${owner},${hashA},'s3','avatars') as upload`));
+    expect(new Set(staged.map(rows=>rows[0].upload.id)).size).toBe(1);const first=staged[0][0].upload;
+    expect(first.path).toBe('avatars/'+owner+'/'+first.id+'.webp');
+    await expect(sql`select update_profile_atomic(${owner},${sql.json({avatar_upload_id:first.id})})`).rejects.toThrow('Avatar expired');
+    await expect(sql`select finish_avatar_upload(${other},${first.id},${'https://cdn.test/'+first.path})`).rejects.toThrow('Upload expired');
+    await sql`select finish_avatar_upload(${owner},${first.id},${'https://cdn.test/'+first.path})`;
+    await expect(sql`select update_profile_atomic(${owner},${sql.json({display_name:'',avatar_upload_id:first.id})})`).rejects.toThrow('Invalid profile');
+    expect((await sql`select avatar_url from users where id=${owner}`)[0].avatar_url).toBe('https://cdn.test/original.jpg');
+    expect((await sql`select state from profile_avatar_uploads where id=${first.id}`)[0].state).toBe('uploaded');
+    const changes={display_name:'Committed avatar',avatar_upload_id:first.id};
+    for(let replay=0;replay<2;replay++)expect((await sql`select update_profile_atomic(${owner},${sql.json(changes)}) as profile`)[0].profile.avatar_url).toBe('https://cdn.test/'+first.path);
+    expect((await sql`select count(*)::int as count from security_events where user_id=${owner} and event_type='avatar_changed'`)[0].count).toBe(1);
+    await expect(sql`select update_profile_atomic(${other},${sql.json({avatar_upload_id:first.id})})`).rejects.toThrow('Avatar expired');
+    await expect(sql`select update_profile_atomic(${other},${sql.json({avatar_url:'https://cdn.test/'+first.path})})`).rejects.toThrow('owned avatar');
+    expect((await sql`select begin_avatar_upload(${owner},${hashA},'s3','avatars') as upload`)[0].upload.id).toBe(first.id);
+    const second=(await sql`select begin_avatar_upload(${owner},${hashB},'s3','avatars') as upload`)[0].upload;
+    await sql`select finish_avatar_upload(${owner},${second.id},${'https://cdn.test/'+second.path})`;
+    await sql`select update_profile_atomic(${owner},${sql.json({avatar_upload_id:second.id})})`;
+    expect((await sql`select state from profile_avatar_uploads where id=${first.id}`)[0].state).toBe('abandoned');
+    await sql`update profile_avatar_uploads set expires_at=now()-interval '1 day' where id=${second.id}`;
+    const claimed=(await Promise.all([sql`select * from claim_avatar_cleanup('s3',5)`,sql`select * from claim_avatar_cleanup('s3',5)`])).flat();
+    expect(claimed.map(row=>row.id)).toEqual([first.id]);
+    await expect(sql`select update_profile_atomic(${owner},${sql.json({avatar_upload_id:first.id})})`).rejects.toThrow('Avatar expired');
+    expect((await sql`select finish_avatar_cleanup(${first.id},${crypto.randomUUID()},true) as finished`)[0].finished).toBe(false);
+    expect((await sql`select finish_avatar_cleanup(${first.id},${claimed[0].claim_token},true) as finished`)[0].finished).toBe(true);
+    expect((await sql`select finish_avatar_cleanup(${first.id},${claimed[0].claim_token},true) as finished`)[0].finished).toBe(true);
+    expect((await sql`select count(*)::int as count from profile_avatar_uploads where id=${first.id}`)[0].count).toBe(0);
+    const retry=(await sql`select begin_avatar_upload(${owner},${hashA},'s3','avatars') as upload`)[0].upload;expect(retry.path).not.toBe(first.path);
+    await sql`update profile_avatar_uploads set expires_at=now()-interval '1 day' where id=${retry.id}`;
+    const failed=(await sql`select * from claim_avatar_cleanup('s3',5)`)[0];expect(failed.id).toBe(retry.id);
+    await sql`select finish_avatar_cleanup(${retry.id},${failed.claim_token},false)`;
+    expect(await sql`select * from claim_avatar_cleanup('s3',5)`).toHaveLength(0);
+    await sql`update profile_avatar_uploads set expires_at=now()-interval '1 day' where id=${retry.id}`;
+    const reclaimed=(await sql`select * from claim_avatar_cleanup('s3',5)`)[0];expect(reclaimed.claim_token).not.toBe(failed.claim_token);
+    expect((await sql`select finish_avatar_cleanup(${retry.id},${failed.claim_token},true) as finished`)[0].finished).toBe(false);
+    await sql`select finish_avatar_cleanup(${retry.id},${reclaimed.claim_token},true)`;
+    expect((await sql`select avatar_url from users where id=${owner}`)[0].avatar_url).toBe('https://cdn.test/'+second.path);
+    await sql`delete from auth.users where id=${owner}`;
+    expect((await sql`select user_id from profile_avatar_uploads where id=${second.id}`)[0].user_id).toBeNull();
+    const orphan=(await sql`select * from claim_avatar_cleanup('s3',5)`)[0];expect(orphan.id).toBe(second.id);
+    await sql`select finish_avatar_cleanup(${orphan.id},${orphan.claim_token},true)`;
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'profile_avatar_uploads','SELECT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['begin_avatar_upload(uuid,text,text,text)','finish_avatar_upload(uuid,uuid,text)','claim_avatar_cleanup(text,integer)','finish_avatar_cleanup(uuid,uuid,boolean)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    expect((await sql`select has_function_privilege('service_role','update_profile_055(uuid,jsonb,text)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    for(const role of ['anon','authenticated'])await sql.begin(async tx=>{
+      await tx.unsafe('set local role '+role);
+      expect((await tx`select count(*)::int as count from storage.objects where bucket_id='avatars'`)[0].count).toBe(1);
+      await expect(tx.savepoint(async save=>{await save`insert into storage.objects(bucket_id) values('avatars')`;})).rejects.toThrow('row-level security');
+      expect(await tx`update storage.objects set bucket_id='other' where bucket_id='avatars' returning id`).toHaveLength(0);
+      expect(await tx`delete from storage.objects where bucket_id='avatars' returning id`).toHaveLength(0);
+      const [other]=await tx`insert into storage.objects(bucket_id) values('other') returning id`;
+      await expect(tx.savepoint(async save=>{await save`update storage.objects set bucket_id='avatars' where id=${other.id}`;})).rejects.toThrow('row-level security');
+      expect(await tx`delete from storage.objects where id=${other.id} returning id`).toHaveLength(1);
+    });
+
+    }
+    {
+    const owner=crypto.randomUUID(),collision=crypto.randomUUID(),hash='$2b$12$'+'a'.repeat(53);
+    await sql`select create_direct_account(${owner},'MiXeD.Auth@example.test','auth_identity_fixture','Native account',${hash})`;
+    expect((await sql`select find_direct_account(' mixed.AUTH@example.test ') as profile`)[0].profile.id).toBe(owner);
+    expect((await sql`select find_direct_account('missing.auth@example.test') as profile`)[0].profile).toBeNull();
+    await sql`select create_direct_account(${collision},'mixed.auth@example.test','auth_collision_fixture','Ambiguous account')`;
+    await expect(sql`select find_direct_account('mixed.auth@example.test')`).rejects.toThrow('Ambiguous email');
+    await sql`delete from auth.users where id=${collision}`;
+    await expect(sql`select resolve_direct_social_identity('google','google-unverified','mixed.auth@example.test','Google name',null)`).rejects.toThrow('existing sign-in method');
+    expect((await sql`select google_id from users where id=${owner}`)[0].google_id).toBeNull();
+    await sql`update users set email_verified=true,totp_enabled=true,mfa_version=7,pin_hash=${hash} where id=${owner}`;
+    const links=await Promise.allSettled(['google-race-a','google-race-b'].map(subject=>sql`select resolve_direct_social_identity('google',${subject},'mixed.auth@example.test','Google name',null) as profile`));
+    expect(links.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+    const linked=(await sql`select google_id,email,pin_hash,mfa_version,totp_enabled from users where id=${owner}`)[0];
+    expect(linked).toMatchObject({email:'MiXeD.Auth@example.test',pin_hash:hash,mfa_version:7,totp_enabled:true});
+    await sql`update users set email='recovery.auth@example.test' where id=${owner}`;
+    const stable=(await sql`select resolve_direct_social_identity('google',${linked.google_id},'mixed.auth@example.test','New name',null) as profile`)[0].profile;
+    expect(stable).toMatchObject({id:owner,email:'recovery.auth@example.test',mfa_version:7,totp_enabled:true});
+    expect((await sql`select count(*)::int as count from auth_factor_grants where user_id=${owner}`)[0].count).toBe(0);
+    const google=await Promise.all(Array.from({length:3},()=>sql`select resolve_direct_social_identity('google','google-canonical-new','created.auth@example.test',${'Long name '.repeat(20)},null) as profile`));
+    expect(new Set(google.map(rows=>rows[0].profile.id)).size).toBe(1);const created=google[0][0].profile;
+    expect(created.email_verified).toBe(true);expect(created.username).toMatch(/^[a-z0-9_]{3,30}$/);expect(created.display_name.length).toBeLessThanOrEqual(50);expect(created.is_admin).toBe(false);
+    const telegram=await Promise.all(Array.from({length:3},()=>sql`select resolve_direct_social_identity('telegram','599900000001',null,'Telegram fixture',null) as profile`));
+    expect(new Set(telegram.map(rows=>rows[0].profile.id)).size).toBe(1);const social=telegram[0][0].profile;
+    expect(social).toMatchObject({email:null,email_verified:false,telegram_id:'599900000001',is_admin:false});expect(social.username).toMatch(/^[a-z0-9_]{3,30}$/);
+    await sql`update users set is_banned=true where id=${social.id}`;
+    await expect(sql`select resolve_direct_social_identity('telegram','599900000001',null,'Telegram fixture',null)`).rejects.toThrow('Account unavailable');
+    await sql`update users set deleted_at=now() where id=${owner}`;
+    await expect(sql`select resolve_direct_social_identity('google',${linked.google_id},'mixed.auth@example.test','Name',null)`).rejects.toThrow('Account unavailable');
+    await expect(sql`select resolve_direct_social_identity('telegram','599900000002','forged@example.test','Name',null)`).rejects.toThrow('Invalid provider identity');
+    await expect(sql`select resolve_direct_social_identity('google','google-unsafe-avatar','safe.auth@example.test','Name','javascript:alert(1)')`).rejects.toThrow('Invalid provider identity');
+    for(const role of ['anon','authenticated'])for(const routine of ['find_direct_account(text)','resolve_direct_social_identity(text,text,text,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const actor=crypto.randomUUID(),reviewer=crypto.randomUUID(),other=crypto.randomUUID(),generic=crypto.randomUUID();
+    const legacy=await sql`select c.reviewer_id from review_conversions c join users u on u.id=c.actor_id where u.username='legacy_conversion_owner'`;
+    expect(legacy).toHaveLength(2);expect(legacy.every(row=>row.reviewer_id===null)).toBe(true);
+    for(const [index,id] of [actor,reviewer,other,generic].entries())await sql`select create_direct_account(${id},${'conversion'+index+'@example.test'},${'conversion_fixture_'+index},'Conversion fixture')`;
+    await sql`update users set is_creator=true where id in (${reviewer},${other})`;
+    const books=await sql`insert into books(title,author_name) values('Conversion book','Fixture'),('Generic conversion','Fixture'),('Rollback conversion','Fixture') returning id`;
+    const book=books[0].id,plain=books[1].id,rollback=books[2].id;
+    const reviews=await sql`insert into reviews(user_id,book_id,rating,content) values(${reviewer},${book},4,'First review'),(${other},${book},5,'Second review'),(${reviewer},${plain},4,'Generic review'),(${reviewer},${rollback},4,'Rollback review') returning id`;
+    const add=()=>sql`select apply_book_interaction(${actor},${book},'reaction','conversion-race',${reviews[0].id},true) as result`;
+    expect((await Promise.all(Array.from({length:4},add))).every(rows=>rows[0].result.reacted)).toBe(true);
+    expect((await sql`select count(*)::int as count from review_conversions where actor_id=${actor} and book_id=${book} and reviewer_id=${reviewer}`)[0].count).toBe(1);
+    expect((await sql`select want_to_read_count from reviews where id=${reviews[0].id}`)[0].want_to_read_count).toBe(1);
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='review_conversions' and event_type='check_badges' and aggregate_id=${actor+':'+book}`)[0].count).toBe(1);
+    expect((await sql`select amount from xp_ledger where user_id=${actor} and event_key=${'want-to-read:'+book}`)[0].amount).toBe(5);
+    await expect(sql`select apply_book_interaction(${actor},${book},'reaction','conversion-race',${reviews[1].id},true)`).rejects.toThrow('Conflicting');
+    await sql`select apply_book_interaction(${actor},${book},'reaction','conversion-remove',null,false)`;
+    await sql`select apply_book_interaction(${actor},${book},'reaction','conversion-other-review',${reviews[1].id},true)`;
+    expect((await sql`select reviewer_id from review_conversions where actor_id=${actor} and book_id=${book}`)[0].reviewer_id).toBe(reviewer);
+    expect((await sql`select want_to_read_count from reviews where id=${reviews[1].id}`)[0].want_to_read_count).toBe(0);
+    const shelf=(await sql`select id from shelves where user_id=${generic} and default_type='want_to_read'`)[0].id;
+    await sql`select set_shelf_membership(${generic},${shelf},${plain},true)`;await sql`select set_shelf_membership(${generic},${shelf},${plain},false)`;
+    await sql`select apply_book_interaction(${generic},${plain},'reaction','conversion-generic',${reviews[2].id},true)`;
+    expect((await sql`select reviewer_id from review_conversions where actor_id=${generic} and book_id=${plain}`)[0].reviewer_id).toBeNull();
+    await expect(sql`select apply_book_interaction(${generic},${plain},'reaction','conversion-wrong-book',${reviews[0].id},true)`).rejects.toThrow('Review unavailable');
+    await expect(sql`select apply_book_interaction(${reviewer},${book},'reaction','conversion-self',${reviews[0].id},true)`).rejects.toThrow('Review unavailable');
+    await sql`update reviews set is_hidden=true where id=${reviews[1].id}`;
+    await expect(sql`select apply_book_interaction(${generic},${book},'reaction','conversion-hidden',${reviews[1].id},true)`).rejects.toThrow('Review unavailable');
+    await sql`insert into xp_ledger(user_id,event_key,amount,reason) values(${generic},${'want-to-read:'+rollback},7,'conflicting-fixture')`;
+    await expect(sql`select apply_book_interaction(${generic},${rollback},'reaction','conversion-rollback',${reviews[3].id},true)`).rejects.toThrow('Conflicting reward');
+    expect((await sql`select count(*)::int as count from review_conversions where actor_id=${generic} and book_id=${rollback}`)[0].count).toBe(0);
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${generic} and book_id=${rollback}`)[0].count).toBe(0);
+    const {checkAndAwardBadges}=await import('@/services/badges');
+    expect(await checkAndAwardBadges(reviewer,'want_to_read_triggered')).toEqual(['spark']);
+    expect(await checkAndAwardBadges(reviewer,'want_to_read_triggered')).toEqual([]);
+    await sql`insert into tips(user_id,recipient_id,amount,platform_fee,recipient_amount,currency,status,refunded_recipient_amount) values(${actor},${reviewer},3,0.5,2.5,'USD','completed',0.5),(${generic},${reviewer},4,0.75,3.25,'USD','completed',0),(${generic},${reviewer},1000,100,900,'NGN','completed',0)`;
+    const stats=(await sql`select read_creator_analytics(${reviewer}) as stats`)[0].stats;
+    expect(stats).toMatchObject({want_to_read_triggered:1,tips_received:5.25,tips_received_by_currency:{USD:5.25,NGN:900,EUR:0}});
+    let board=(await sql`select read_creator_leaderboard() as board`)[0].board;
+    expect(board.leaderboard.find((entry:{user_id:string})=>entry.user_id===reviewer)).toMatchObject({want_to_read_score:1,total_score:1});
+    expect(new Date(board.week_start).getUTCDay()).toBe(1);
+    await sql`update review_conversions set created_at=now()-interval '8 days' where reviewer_id=${reviewer}`;
+    board=(await sql`select read_creator_leaderboard() as board`)[0].board;expect(board.leaderboard.some((entry:{user_id:string})=>entry.user_id===reviewer)).toBe(false);
+    expect((await sql`select read_creator_analytics(${reviewer}) as stats`)[0].stats.want_to_read_triggered).toBe(1);
+    await sql`update review_conversions set created_at=now() where reviewer_id=${reviewer}`;await sql`update users set profile_visibility='followers_only' where id=${reviewer}`;
+    board=(await sql`select read_creator_leaderboard() as board`)[0].board;expect(board.leaderboard.some((entry:{user_id:string})=>entry.user_id===reviewer)).toBe(false);
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'review_conversions','INSERT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['read_creator_analytics(uuid)','read_creator_leaderboard()'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    const reader=crypto.randomUUID(),publisher=crypto.randomUUID(),outsider=crypto.randomUUID();
+    for(const [index,id] of [reader,publisher,outsider].entries())await sql`select create_direct_account(${id},${'feed'+index+'@example.test'},${'feed_fixture_'+index},'Feed fixture')`;
+    await sql`insert into follows(follower_id,following_id) values(${reader},${publisher})`;
+    const books=await sql`insert into books(title,author_name) select 'Feed fixture '||i,'Fixture' from generate_series(1,24) i returning id`;
+    const shelf=(await sql`select id from shelves where user_id=${publisher} and default_type='want_to_read'`)[0].id;
+    for(const [index,book] of books.entries()){
+      await sql`insert into shelf_books(shelf_id,book_id,user_id,added_at) values(${shelf},${book.id},${publisher},'2026-10-28T00:00:00.123000Z'::timestamptz+${index+1}*interval '1 microsecond')`;
+      await sql`insert into reviews(user_id,book_id,rating,content,created_at) values(${publisher},${book.id},4,'Visible feed review','2026-10-28T00:00:00.123012Z')`;
+    }
+    await sql`insert into reviews(user_id,book_id,rating,content,is_hidden) values(${publisher},${books[0].id},4,'Hidden feed review',true),(${outsider},${books[0].id},4,'Unfollowed review',false)`;
+    const privateShelf=(await sql`insert into shelves(user_id,name,slug,is_public) values(${publisher},'Private fixture','private-fixture',false) returning id`)[0].id;
+    await sql`insert into shelf_books(shelf_id,book_id,user_id) values(${privateShelf},${books[0].id},${publisher})`;
+    const ownShelf=(await sql`select id from shelves where user_id=${reader} and default_type='want_to_read'`)[0].id;
+    await sql`select set_shelf_membership(${reader},${ownShelf},${books[0].id},true)`;
+    const {getSocialFeed}=await import('@/lib/social-feed');let cursor:string|null=null;const ids:string[]=[];
+    do{
+      const page=await getSocialFeed(reader,cursor);expect(page.items.length).toBeLessThanOrEqual(20);
+      for(const item of page.items){expect(item.userId).toBe(publisher);expect(item.user.id).toBe(publisher);expect(item.wantToRead).toBe(item.book.id===books[0].id);if(item.type==='shelf_book')expect(item.shelf.name).not.toBe('Private fixture');else expect(item.excerpt).toBe('Visible feed review');ids.push(item.id);}
+      if(page.nextCursor)expect(JSON.parse(Buffer.from(page.nextCursor,'base64url').toString()).at).toContain('.123');
+      cursor=page.nextCursor;
+    }while(cursor);
+    expect(ids).toHaveLength(48);expect(new Set(ids).size).toBe(48);
+    const raw=async()=>((await sql`select read_social_feed(${reader},null,null,null,50) as items`)[0].items as {type:string}[]);
+    await sql`update users set shelf_visibility='private' where id=${publisher}`;
+    expect((await raw()).every(item=>item.type==='review')).toBe(true);expect(await raw()).toHaveLength(24);
+    await sql`update users set is_banned=true where id=${publisher}`;expect(await raw()).toEqual([]);
+    await sql`update users set is_banned=false,deleted_at=now() where id=${publisher}`;expect(await raw()).toEqual([]);
+    await sql`update users set deleted_at=null where id=${publisher}`;await sql`delete from follows where follower_id=${reader} and following_id=${publisher}`;expect(await raw()).toEqual([]);
+    await expect(sql`select read_social_feed(${reader},now(),${books[0].id},null,20)`).rejects.toThrow('Invalid feed cursor');
+    for(const role of ['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'read_social_feed(uuid,timestamptz,uuid,text,integer)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'click@example.test','click_fixture','Click fixture')`;
+    const book=(await sql`insert into books(title,author_name) values('Click fixture','Fixture') returning id`)[0].id;
+    const store=(await sql`insert into affiliate_stores(name,countries,url_template,priority,is_non_affiliate) values('Click fixture',array['NG'],'https://store.example.test/?isbn={isbn}',1,false) returning id,to_jsonb(affiliate_stores)->>'updated_at' as version`)[0];
+    const linkId=store.id+':'+'a'.repeat(64),link={linkId,name:'Click fixture',storeId:store.id,storeVersion:store.version,country:'NG',isAffiliate:true,isPrimary:true};
+    const click=()=>sql`select record_book_link_click(${actor},${book},${linkId},'fixture-click-intent',${sql.json(link)}) as receipt`;
+    const receipts=await Promise.all(Array.from({length:4},click));expect(new Set(receipts.map(rows=>rows[0].receipt.clickId)).size).toBe(1);
+    const rows=await sql`select user_id_hash,link_type,is_affiliate,store_name,country,store_id from affiliate_link_clicks where book_id=${book}`;
+    expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({link_type:'primary',is_affiliate:true,store_name:'Click fixture',country:'NG',store_id:store.id});expect(rows[0].user_id_hash).toMatch(/^[a-f0-9]{64}$/);expect(rows[0].user_id_hash).not.toBe(actor);
+    await expect(sql`select record_book_link_click(${actor},${book},${linkId},'fixture-forged-flag',${sql.json({...link,isAffiliate:false})})`).rejects.toThrow('Book link changed');
+    await expect(sql`select record_book_link_click(${actor},${book},${linkId},'fixture-foreign-region',${sql.json({...link,country:'US'})})`).rejects.toThrow('Book link unavailable');
+    await sql`update affiliate_stores set name='Changed click store' where id=${store.id}`;
+    await expect(sql`select record_book_link_click(${actor},${book},${linkId},'fixture-stale-click',${sql.json(link)})`).rejects.toThrow('Book link changed');
+    await sql`update affiliate_stores set is_active=false where id=${store.id}`;
+    expect((await sql`select record_book_link_click(${actor},${book},${linkId},'fixture-click-intent',null) as receipt`)[0].receipt).toEqual(receipts[0][0].receipt);
+    await expect(sql`select record_book_link_click(${actor},${book},${linkId},'fixture-disabled-click',${sql.json(link)})`).rejects.toThrow('Book link unavailable');
+    await expect(sql`select record_book_link_click(${actor},${book},${'worldcat:'+ 'b'.repeat(64)},'fixture-click-intent',null)`).rejects.toThrow('Conflicting click intent');
+    expect((await sql`select count(*)::int as count from affiliate_link_clicks where book_id=${book}`)[0].count).toBe(1);
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'affiliate_link_clicks','INSERT') as allowed`)[0].allowed).toBe(false);
+      expect((await sql`select has_function_privilege(${role},'record_book_link_click(uuid,uuid,text,text,jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    const actor=crypto.randomUUID(),reviewer=crypto.randomUUID();
+    for(const [index,id] of [actor,reviewer].entries())await sql`select create_direct_account(${id},${'reward'+index+'@example.test'},${'reward_fixture_'+index},'Reward fixture')`;
+    const books=await sql`insert into books(title,author_name) values('Live completion','Fixture'),('Imported completion','Fixture'),('Reward conversion','Fixture') returning id`;
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+    const finish=()=>sql`select apply_shelf_membership_intent(${actor},${shelf},${books[0].id},true,'reward-completion-race') as receipt`;
+    const completed=await Promise.all(Array.from({length:4},finish));expect(completed.every(rows=>rows[0].receipt.xp_awarded===50)).toBe(true);
+    expect((await sql`select xp from users where id=${actor}`)[0].xp).toBe(50);
+    expect((await sql`select count(*)::int as count from xp_ledger where user_id=${actor} and event_key=${'finish_book:'+books[0].id}`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='reading_completions' and aggregate_id=${actor+':'+books[0].id}`)[0].count).toBe(2);
+    await expect(sql`select apply_shelf_membership_intent(${actor},${shelf},${books[1].id},true,'reward-completion-race')`).rejects.toThrow('Conflicting shelf intent');
+    await sql`select apply_shelf_membership_intent(${actor},${shelf},${books[0].id},false,'reward-completion-remove')`;
+    expect((await sql`select apply_shelf_membership_intent(${actor},${shelf},${books[0].id},true,'reward-completion-readd') as receipt`)[0].receipt.xp_awarded).toBe(0);
+    expect((await sql`select claim_reading_reward(${actor},'finish_book',${books[0].id}) as reward`)[0].reward.awarded).toBe(0);
+    await sql`insert into shelf_books(user_id,shelf_id,book_id,finished_at) values(${actor},${shelf},${books[1].id},current_date)`;
+    expect((await sql`select claim_reading_reward(${actor},'finish_book',${books[1].id}) as reward`)[0].reward.awarded).toBe(0);
+    await sql`select set_shelf_membership(${actor},${shelf},${books[1].id},false)`;
+    expect((await sql`select set_shelf_membership(${actor},${shelf},${books[1].id},true) as receipt`)[0].receipt.xp_awarded).toBe(0);
+    await sql`update shelf_books set finished_at=null where user_id=${actor} and shelf_id=${shelf} and book_id=${books[1].id}`;
+    expect((await sql`select set_shelf_membership(${actor},${shelf},${books[1].id},true) as receipt`)[0].receipt.xp_awarded).toBe(0);
+    expect((await sql`select books_read_count from users where id=${actor}`)[0].books_read_count).toBe(2);
+    const legacy=(await sql`select u.id,sb.book_id,sb.shelf_id from users u join shelf_books sb on sb.user_id=u.id where u.username='legacy_completion_owner'`)[0];
+    expect((await sql`select set_shelf_membership(${legacy.id},${legacy.shelf_id},${legacy.book_id},true) as receipt`)[0].receipt.xp_awarded).toBe(0);
+    const daily=await Promise.all(Array.from({length:3},()=>sql`select claim_reading_reward(${actor},'daily_login',null) as reward`));expect(daily.reduce((sum,rows)=>sum+rows[0].reward.awarded,0)).toBe(3);
+    await expect(sql`select claim_reading_reward(${actor},'add_book',${books[0].id})`).rejects.toThrow('Invalid reading reward');
+    const review=(await sql`insert into reviews(user_id,book_id,rating,content) values(${reviewer},${books[2].id},4,'Reward review') returning id`)[0].id;
+    await sql`select apply_book_interaction(${actor},${books[2].id},'reaction','reward-conversion',${review},true)`;
+    const events=await sql`select id from outbox_events where aggregate_type='review_conversions' and event_type='award_xp' and aggregate_id=${actor+':'+books[2].id}`;expect(events).toHaveLength(1);
+    await sql`update outbox_events set status='processing' where id=${events[0].id}`;
+    await Promise.all(Array.from({length:4},()=>sql`select process_outbox_event_atomic(${events[0].id})`));
+    expect((await sql`select xp from users where id=${reviewer}`)[0].xp).toBe(5);
+    expect((await sql`select count(*)::int as count from xp_ledger where user_id=${reviewer} and reason='want_to_read_received'`)[0].count).toBe(1);
+    await sql`select apply_book_interaction(${actor},${books[2].id},'reaction','reward-conversion-remove',null,false)`;await sql`select apply_book_interaction(${actor},${books[2].id},'reaction','reward-conversion-readd',${review},true)`;
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='review_conversions' and event_type='award_xp' and aggregate_id=${actor+':'+books[2].id}`)[0].count).toBe(1);
+    for(const role of ['anon','authenticated'])for(const routine of ['claim_reading_reward(uuid,text,uuid)','set_shelf_membership_045(uuid,uuid,uuid,boolean)','apply_shelf_membership_intent(uuid,uuid,uuid,boolean,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    expect((await sql`select has_function_privilege('service_role','set_shelf_membership_045(uuid,uuid,uuid,boolean)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const actor=crypto.randomUUID(),other=crypto.randomUUID();
+    for(const [index,id] of [actor,other].entries())await sql`select create_direct_account(${id},${'streak-proof'+index+'@example.test'},${'streak_proof_'+index},'Streak proof')`;
+    const book=(await sql`insert into books(title,author_name) values('Streak proof','Fixture') returning id`)[0].id;
+    const {createHash}=await import('node:crypto'),payload={book_id:book,pages_read:10,ended_at:null,notes:null},hash=createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+    const sessions=new Map<number,string>();
+    const add=async(day:number)=>{const id=crypto.randomUUID();sessions.set(day,id);await sql`insert into reading_sessions(id,user_id,book_id,pages_read,idempotency_key,request_hash,created_at) values(${id},${actor},${book},10,${'streak-proof-day-'+day},${hash},((now() at time zone 'UTC')::date-40+${day}::integer)::timestamptz)`;};
+    for(const day of [0,1,2,3,4,5,7])await add(day);
+    expect((await sql`select reading_streak from users where id=${actor}`)[0].reading_streak).toBe(1);
+    await add(6);expect((await sql`select reading_streak,streak_freeze_tokens,xp from users where id=${actor}`)[0]).toEqual({reading_streak:8,streak_freeze_tokens:1,xp:90});
+    await add(9);expect((await sql`select reading_streak,streak_freeze_tokens from users where id=${actor}`)[0]).toEqual({reading_streak:9,streak_freeze_tokens:0});
+    await add(8);expect((await sql`select reading_streak,streak_freeze_tokens,xp,last_streak_date::text as last_day from users where id=${actor}`)[0]).toEqual({reading_streak:10,streak_freeze_tokens:1,xp:100,last_day:(await sql`select ((now() at time zone 'UTC')::date-31)::text as day`)[0].day});
+    const {POST:logSession}=await import('@/app/api/reading-sessions/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor,email:'streak-proof0@example.test'});
+    const replay=await logSession(new Request('https://app.test/api/reading-sessions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'streak-proof-day-0'},body:JSON.stringify({book_id:book,pages_read:10})}));
+    expect(replay.status).toBe(201);expect((await replay.json()).session.id).toBe(sessions.get(0));expect((await sql`select reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:10,xp:100});
+    await expect(sql`insert into reading_sessions(user_id,book_id,pages_read,idempotency_key,request_hash) values(${actor},${book},10,'streak-proof-day-0',${hash})`).rejects.toThrow('already committed');
+    expect((await sql`select count(*)::int as count from reading_activity_days where user_id=${actor}`)[0].count).toBe(10);
+    expect((await sql`select reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:10,xp:100});
+    const event=(await sql`insert into outbox_events(aggregate_type,aggregate_id,event_type,status,payload) values('reading_sessions',${sessions.get(0)!},'award_xp','processing',${sql.json({userId:other,amount:9999,readingStreak:true,eventKey:'forged-fixture-key'})}) returning id`)[0].id;
+    const results=await Promise.all(Array.from({length:3},()=>sql`select process_outbox_event_atomic(${event}) as processed`));expect(results.filter(rows=>rows[0].processed)).toHaveLength(1);
+    expect((await sql`select reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:10,xp:100});expect((await sql`select xp from users where id=${other}`)[0].xp).toBe(0);
+    const fakeKey='streak:reading:'+(await sql`select (now() at time zone 'UTC')::date::text as day`)[0].day;
+    await sql`select award_xp_once(${actor},200,'reading_streak_30',${fakeKey})`;await sql`update users set reading_streak=99,last_streak_date=(now() at time zone 'UTC')::date,max_reading_streak=99 where id=${actor}`;
+    await sql`select rebuild_reading_streak(${actor})`;expect((await sql`select reading_streak,max_reading_streak,streak_freeze_tokens,xp from users where id=${actor}`)[0]).toEqual({reading_streak:10,max_reading_streak:10,streak_freeze_tokens:1,xp:100});
+    expect((await sql`select count(*)::int as count from xp_ledger where user_id=${actor} and event_key=${fakeKey}`)[0].count).toBe(0);
+    const audits=(await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${actor} and action='reading_streak_reconciled'`)[0].count;
+    await sql`select rebuild_reading_streak(${actor})`;expect((await sql`select count(*)::int as count from financial_audit_log where actor_user_id=${actor} and action='reading_streak_reconciled'`)[0].count).toBe(audits);
+    const denied=await logSession(new Request('https://app.test/api/reading-sessions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'streak-proof-switched','X-Liravo-Actor':other},body:JSON.stringify({book_id:book,pages_read:10})}));expect(denied.status).toBe(409);
+    const today=await logSession(new Request('https://app.test/api/reading-sessions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'streak-proof-today'},body:JSON.stringify({book_id:book,pages_read:10})}));expect(today.status).toBe(201);
+    expect((await sql`select reading_streak,max_reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:1,max_reading_streak:10,xp:105});
+    const {checkAndAwardBadges}=await import('@/services/badges');expect(await checkAndAwardBadges(actor,'streak')).toEqual(['streak_7']);expect(await checkAndAwardBadges(actor,'streak')).toEqual([]);
+    expect((await sql`select xp from users where id=${actor}`)[0].xp).toBe(155);
+    await sql`delete from books where id=${book}`;await sql`select rebuild_reading_streak(${actor})`;
+    expect((await sql`select reading_streak,max_reading_streak,xp from users where id=${actor}`)[0]).toEqual({reading_streak:1,max_reading_streak:10,xp:155});
+    expect((await sql`select count(*)::int as count from reading_activity_days where user_id=${actor}`)[0].count).toBe(11);
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_table_privilege(${role},'reading_sessions','INSERT') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['rebuild_reading_streak(uuid)','process_outbox_event_atomic_042(uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    const payload={title:'Edition integrity',author_name:'An author',open_library_work_id:'/works/OL990001W',work_title:'Edition integrity work'};
+    const store=async(data:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({...payload,...data})}) as book`)[0].book;
+    const saved=await Promise.all(Array.from({length:4},()=>store({open_library_id:'/books/OL990001M',google_books_id:'edition-integrity-a',isbn_13:'9780306406157',isbn_10:'0306406152',language:'en',page_count:200,format:'hardcover'})));
+    expect(new Set(saved.map(book=>book.id)).size).toBe(1);const first=saved[0];
+    const second=await store({title:'Une autre édition',open_library_id:'/books/OL990002M',google_books_id:'edition-integrity-b',isbn_13:'9780141439518',language:'fr',page_count:320,format:'paperback'});
+    expect(first.id).not.toBe(second.id);expect(first.work_id).toBe(second.work_id);
+    const alias=await store({google_books_id:'edition-integrity-alias',isbn_13:'9780306406157'});expect(alias.id).toBe(first.id);
+    expect((await sql`select book_id from book_edition_identifiers where provider='google' and identifier='edition-integrity-alias'`)[0].book_id).toBe(first.id);
+    await expect(store({google_books_id:'edition-integrity-a',isbn_13:'9780062316097'})).rejects.toMatchObject({code:'P1001'});
+    await expect(store({open_library_id:'/works/OL990001W'})).rejects.toThrow('Invalid catalog edition');
+    await expect(store({isbn_10:'0306406152',isbn_13:'9780141439518'})).rejects.toThrow('Invalid edition ISBN');
+    await expect(store({isbn_13:'4006381333931'})).rejects.toThrow('Invalid edition ISBN');
+    await expect(store({open_library_id:'/books/OL990001M',isbn_13:'9780306406157',format:'paperback'})).rejects.toMatchObject({code:'P1001'});
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'edition-integrity@example.test','edition_integrity_reader','Edition reader')`;
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+    const results=await Promise.all([first,second].map(book=>sql`select set_shelf_membership(${actor},${shelf},${book.id},true) as result`));
+    expect(results.map(rows=>rows[0].result.xp_awarded).sort((a,b)=>a-b)).toEqual([0,50]);
+    expect((await sql`select books_read_count,xp from users where id=${actor}`)[0]).toEqual({books_read_count:1,xp:50});
+    expect((await sql`select reading_goal_snapshot(${actor},extract(year from now() at time zone 'UTC')::integer) as result`)[0].result.progress.books_read).toBe(1);
+    const snapshot=(await sql`select book_work_snapshot(${first.work_id},null,1) as result`)[0].result;expect(snapshot.editions).toHaveLength(1);expect(snapshot.nextCursor).toBeTruthy();
+    const next=(await sql`select book_work_snapshot(${first.work_id},${snapshot.nextCursor},1) as result`)[0].result;expect(next.editions).toHaveLength(1);expect(next.editions[0].id).not.toBe(snapshot.editions[0].id);expect(next.nextCursor).toBeNull();
+    await sql`delete from books where id in (${first.id},${second.id})`;
+    const third=await store({open_library_id:'/books/OL990003M',isbn_13:'9780062316097'});expect(third.work_id).toBe(first.work_id);
+    expect((await sql`select set_shelf_membership(${actor},${shelf},${third.id},true) as result`)[0].result.xp_awarded).toBe(0);
+    expect((await sql`select count(*)::int as count from reading_work_completions where user_id=${actor} and rewarded_at is not null`)[0].count).toBe(1);
+    const unrelated=await store({open_library_work_id:'/works/OL990002W',open_library_id:'/books/OL990004M',isbn_13:'9780525559474'});
+    expect(unrelated.work_id).not.toBe(third.work_id);
+    await expect(store({open_library_work_id:'/works/OL990002W',isbn_13:'9780062316097'})).rejects.toThrow('Conflicting work');
+    for(const role of ['anon','authenticated'])for(const routine of ['store_catalog_book(jsonb)','book_work_snapshot(uuid,uuid,integer)','canonical_book_work(uuid)','claim_reading_reward_063(uuid,text,uuid)','import_goodreads_library_052(uuid,text,jsonb,integer)','seed_content_item_054(text,text,jsonb,uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    expect(legacyEditions).toBeTruthy();const legacy=legacyEditions!;
+    const rows=await sql`select id,work_id,canonical_edition_id,isbn_13,open_library_id from books where id in (${legacy.ids[0]},${legacy.ids[1]}) order by id`;
+    const canonical=rows.find(row=>row.canonical_edition_id===null)!,alias=rows.find(row=>row.canonical_edition_id!==null)!;
+    expect(alias.canonical_edition_id).toBe(canonical.id);expect(alias.work_id).toBe(canonical.work_id);expect(canonical.isbn_13).toBe('9780131103627');
+    expect((await sql`select book_id from reviews where id=${legacy.reviewId}`)[0].book_id).toBe(legacy.ids[1]);
+    expect((await sql`select book_id from shelf_books where user_id=${legacy.owner}`)[0].book_id).toBe(legacy.ids[1]);
+    expect((await sql`select book_work_snapshot(${canonical.work_id}) as result`)[0].result.work.open_library_id).toBe('/works/OL980001W');
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id in (${legacy.ids[0]},${legacy.ids[1]})`)[0].count).toBeGreaterThanOrEqual(1);
+    expect((await sql`select isbn_13 from books where google_books_id='legacy-corrupt-edition'`)[0].isbn_13).toBeNull();
+    const {getBookById,getEditionIds}=await import('@/services/books');expect((await getBookById(alias.id))?.id).toBe(canonical.id);expect((await getEditionIds(canonical.id)).sort()).toEqual([...legacy.ids].sort());
+    const shelf=(await sql`select id from shelves where user_id=${legacy.owner} and default_type='have_read'`)[0].id;
+    const before=(await sql`select xp from users where id=${legacy.owner}`)[0].xp;
+    expect((await sql`select award_xp_once(${legacy.owner},20,'write_review',${'review:'+canonical.id}) as result`)[0].result.awarded).toBe(0);
+    expect((await sql`select set_shelf_membership(${legacy.owner},${shelf},${canonical.id},true) as result`)[0].result.xp_awarded).toBe(0);
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${legacy.owner} and shelf_id=${shelf}`)[0].count).toBe(1);
+    expect((await sql`select xp from users where id=${legacy.owner}`)[0].xp).toBe(before);
+    expect((await getBookById(alias.id))?.have_read_count).toBe(1);
+    const progress=(await sql`select sb.progress_percent,round(sb.progress_pages*100.0/b.page_count,2) as expected from shelf_books sb join books b on b.id=${canonical.id} where sb.user_id=${legacy.owner} and sb.shelf_id=${shelf}`)[0];expect(Number(progress.progress_percent)).toBe(Number(progress.expected));
+    await sql`select set_shelf_membership(${legacy.owner},${shelf},${canonical.id},false)`;
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${legacy.owner} and shelf_id=${shelf}`)[0].count).toBe(0);
+    }
+    {
+    const store=async(data:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({title:'Work resolution fixture',author_name:'An author',...data})}) as book`)[0].book;
+    const unknown=await store({google_books_id:'unresolved-work-fixture',isbn_13:'9780132350884'}),known=await store({open_library_id:'/books/OL970001M',open_library_work_id:'/works/OL970001W',isbn_13:'9780201616224'});
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'work-resolution@example.test','work_resolution_reader','Work resolution reader')`;
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+    await sql`select set_shelf_membership(${actor},${shelf},${known.id},true)`;
+    const {getBookById}=await import('@/services/books');expect((await getBookById(unknown.id))?.work_id).toBe(unknown.work_id);
+    await Promise.all([store({open_library_id:'/books/OL970002M',open_library_work_id:'/works/OL970001W',isbn_13:'9780132350884'}),sql`select set_shelf_membership(${actor},${shelf},${unknown.id},true)`]);
+    expect((await sql`select books_read_count from users where id=${actor}`)[0].books_read_count).toBe(1);
+    expect((await getBookById(unknown.id))?.work_id).toBe(known.work_id);
+    expect((await sql`select book_work_snapshot(${unknown.work_id}) as result`)[0].result.work.id).toBe(known.work_id);
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${unknown.id} and reason='provider_work_resolved'`)[0].count).toBe(1);
+    const extra=await store({open_library_id:'/books/OL970003M',open_library_work_id:'/works/OL970001W',isbn_13:'9780735619678'});
+    expect((await sql`select set_shelf_membership(${actor},${shelf},${extra.id},true) as result`)[0].result.xp_awarded).toBe(0);
+    }
+    {
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'work-resolution-race@example.test','work_resolution_race','Work race')`;
+    const store=async(data:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({title:'Catalog lock race',author_name:'An author',...data})}) as book`)[0].book;
+    const source=await store({google_books_id:'catalog-lock-source'}),target=await store({open_library_id:'/books/OL960001M',open_library_work_id:'/works/OL960001W'});
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+    let signal:()=>void=()=>{},release:()=>void=()=>{};const ready=new Promise<void>(resolve=>{signal=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
+    const first=sql.begin(async tx=>{await tx`select apply_shelf_membership_intent(${actor},${shelf},${source.id},true,'catalog-lock-race-source')`;signal();await held;});
+    await ready;
+    const resolveWork=store({google_books_id:'catalog-lock-source',open_library_work_id:'/works/OL960001W'}),second=sql`select apply_shelf_membership_intent(${actor},${shelf},${target.id},true,'catalog-lock-race-target')`;
+    await new Promise(resolve=>setTimeout(resolve,100));release();await Promise.all([first,resolveWork,second]);
+    expect((await sql`select books_read_count from users where id=${actor}`)[0].books_read_count).toBe(1);
+    expect((await sql`select count_verified_books(${actor}) as count`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from shelf_books where user_id=${actor} and shelf_id=${shelf}`)[0].count).toBe(2);
+    }
+    {
+    expect(legacyImport).toBeTruthy();const legacy=legacyImport!;
+    const {parseGoodreadsImport}=await import('@/lib/goodreads-import');
+    const csv='Book Id,Title,Author,Language,Publisher,Binding,Number of Pages,Exclusive Shelf\n966001,Legacy import,Author,fr,Éditeur,Relié,320,read';
+    const rows=parseGoodreadsImport(csv).rows;
+    expect((await sql`select import_goodreads_library_v2(${legacy.owner},'legacy-parser-receipt',${sql.json(rows)},0) as result`)[0].result).toEqual(legacy.response);
+    expect((await sql`select xp from users where id=${legacy.owner}`)[0].xp).toBe(0);
+    const current=parseGoodreadsImport(csv.replaceAll('966001','966002')).rows;
+    expect((await sql`select import_goodreads_library_v2(${legacy.owner},'new-parser-receipt',${sql.json(current)},0) as result`)[0].result.imported).toBe(1);
+    const imported=(await sql`select b.* from books b join goodreads_book_identities g on g.book_id=b.id where g.goodreads_id='966002'`)[0];
+    expect(imported).toMatchObject({language:'fr',publisher:'Éditeur',format:'hardcover',page_count:320,metadata_source:'goodreads'});
+    const changed=current.map(row=>({...row,book:{...row.book,page_count:400}}));
+    await expect(sql`select import_goodreads_library_v2(${legacy.owner},'new-parser-receipt',${sql.json(changed)},0)`).rejects.toThrow('Conflicting');
+    const oldRows=legacy.rows.map(row=>{const item=row as {book:Record<string,unknown>};return {...item,book:{...item.book,goodreads_id:'966003'}};});
+    const oldResponse=(await sql`select import_goodreads_library(${legacy.owner},'rolling-parser-receipt',${sql.json(oldRows)},0) as result`)[0].result;
+    const rolling=rows.map(row=>({...row,book:{...row.book,goodreads_id:'966003'}}));
+    expect((await sql`select import_goodreads_library_v2(${legacy.owner},'rolling-parser-receipt',${sql.json(rolling)},0) as result`)[0].result).toEqual(oldResponse);
+    }
+    {
+    const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'metadata-066@example.test','metadata_066','Metadata reader')`;
+    const store=async(data:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({title:'Verified title',author_name:'Verified author',google_books_id:'metadata-066',...data})}) as book`)[0].book;
+    const first=await store({language:'und'});
+    const fill=(await sql.begin(async tx=>{await tx`select set_config('liravo.catalog_source','goodreads',true)`;return tx`select store_catalog_book(${tx.json({title:'CSV title',author_name:'Author',google_books_id:'metadata-066',goodreads_id:'966004',isbn_13:'9780999660669',language:'fr',page_count:320,format:'paperback'})}) as book`;}))[0].book;
+    const linked=await store({isbn_13:'9780999660669',language:'und'});
+    expect(linked.id).toBe(first.id);
+    expect(linked).toMatchObject({title:'Verified title',page_count:320,language:'fr',format:'paperback'});
+    expect(linked.metadata_provenance).toMatchObject({title:'google',page_count:'goodreads',language:'goodreads',format:'goodreads'});
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='currently_reading'`)[0].id;
+    await sql`select set_shelf_membership(${actor},${shelf},${linked.id},true)`;
+    const entry=(await sql`select id from shelf_books where user_id=${actor} and book_id=${linked.id}`)[0].id;
+    await sql`select update_shelf_progress(${actor},${entry},160,null)`;
+    const before=(await sql`select xp from users where id=${actor}`)[0].xp;
+    const verified=await store({isbn_13:'9780999660669',open_library_id:'/books/OL966001M',language:'de',page_count:400,format:'hardcover',publisher:'Verified publisher'});
+    expect(verified).toMatchObject({title:'Verified title',language:'de',page_count:400,format:'hardcover',publisher:'Verified publisher'});
+    await expect(store({isbn_13:'9780999660669',open_library_id:'/books/OL966001M',language:'fr'})).rejects.toMatchObject({code:'P1001'});
+    expect(verified.metadata_provenance).toMatchObject({title:'google',page_count:'openlibrary',language:'openlibrary',format:'openlibrary'});
+    expect(Number((await sql`select progress_percent from shelf_books where id=${entry}`)[0].progress_percent)).toBe(40);
+    expect((await sql`select xp from users where id=${actor}`)[0].xp).toBe(before);
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${verified.id} and reason='provider_progress_recalculated'`)[0].count).toBe(1);
+    const again=await store({google_books_id:null,goodreads_id:'966004',isbn_13:'9780999660669',title:'CSV overwrite',language:'fr',page_count:800,publisher:'CSV publisher',format:'paperback'});
+    expect(again).toMatchObject({title:'Verified title',language:'de',page_count:400,publisher:'Verified publisher',format:'hardcover'});
+    const audit=(await sql`select count(*)::int as count from book_catalog_audit where book_id=${verified.id}`)[0].count;
+    await store({isbn_13:'9780999660669',open_library_id:'/books/OL966001M',language:'de',page_count:400,format:'hardcover',publisher:'Verified publisher'});
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${verified.id}`)[0].count).toBe(audit);
+    for(const role of ['anon','authenticated'])for(const routine of ['import_goodreads_library_v2(uuid,text,jsonb,integer)','store_catalog_book_065(jsonb)','apply_book_interaction_060(uuid,uuid,text,text,uuid,boolean)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    expect((await sql`select has_function_privilege('service_role','store_catalog_book_065(jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    expect(fill.id).toBe(first.id);
+    }
+    {
+    const actor=crypto.randomUUID(),banned=crypto.randomUUID();
+    for(const [id,name] of [[actor,'mood_reader_067'],[banned,'mood_banned_067']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},'Mood reader')`;
+    const books=await sql`insert into books(title,author_name) select 'Mood fixture 067 '||n,'Author' from generate_series(1,64) n returning id`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,mood_tags) select ${actor},id,4,'Mood fixture 067','short','published',array['Intense'] from books where id=any(${books.map(book=>book.id)})`;
+    const excluded=await sql`insert into books(title,author_name) select 'Excluded mood 067 '||n,'Author' from generate_series(1,3) n returning id`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,mood_tags,is_hidden) values(${actor},${excluded[0].id},4,'Hidden mood','short','published',array['Intense'],true),(${actor},${excluded[1].id},4,'Pending mood','short','pending',array['Intense'],false),(${banned},${excluded[2].id},4,'Banned reader','short','published',array['Intense'],false)`;
+    await sql`update users set is_banned=true where id=${banned}`;
+    const legacy=legacyEditions!,canonical=(await sql`select coalesce(canonical_edition_id,id) as id from books where id=${legacy.ids[1]}`)[0].id;
+    await sql`update reviews set mood_tags=array['Intense'] where id=${legacy.reviewId}`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,mood_tags) values(${legacy.owner},${legacy.ids[0]},4,'Canonical alias mood','short','published',array['Intense'])`;
+    const {getMoodBooks}=await import('@/services/discovery');
+    let page=await getMoodBooks('Intense',null,30),cursor=page.nextCursor;const results=[...page.books];expect(cursor).toBeTruthy();
+    while(cursor){page=await getMoodBooks('Intense',cursor,30);results.push(...page.books);cursor=page.nextCursor;}
+    expect(new Set(results.map(book=>book.id)).size).toBe(results.length);
+    for(const book of books)expect(results.some(result=>result.id===book.id)).toBe(true);
+    for(const book of excluded)expect(results.some(result=>result.id===book.id)).toBe(false);
+    expect(results.find(book=>book.id===canonical)?.mood_count).toBe(1);
+    const first=await getMoodBooks('Intense',null,1);
+    await expect(getMoodBooks('Dark',first.nextCursor)).rejects.toThrow('Invalid mood cursor');
+    for(const role of ['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'discover_mood_books(text,integer,integer,uuid)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    await expect(sql`select discover_mood_books('invalid',30,null,null)`).rejects.toMatchObject({code:'P1004'});
+    const {GET}=await import('@/app/api/discover/mood/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);
+    expect((await GET(new Request('https://app.test/api/discover/mood?mood=intense&limit=20'))).status).toBe(200);
+    expect((await GET(new Request('https://app.test/api/discover/mood?mood=Intense&limit=999'))).status).toBe(400);
+    vi.mocked(getCurrentUser).mockResolvedValue(null);expect((await GET(new Request('https://app.test/api/discover/mood?mood=Intense'))).status).toBe(401);
+    }
+    {
+    const actor=crypto.randomUUID(),child=crypto.randomUUID(),legacyChild=crypto.randomUUID();
+    for(const [id,name] of [[actor,'export_reader_068'],[child,'referral_child_068'],[legacyChild,'legacy_referral_child_068']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},'Export reader')`;
+    const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='currently_reading'`)[0].id;
+    const books=await sql`insert into books(title,author_name,page_count) select 'Export fixture 068 '||n,'Author',400 from generate_series(1,1201) n returning id`;
+    await sql`insert into shelf_books(user_id,shelf_id,book_id,progress_pages,progress_percent) select ${actor},${shelf},id,160,40 from books where id=any(${books.map(book=>book.id)})`;
+    const exported=(await sql`select account_data_export(${actor}) as data`)[0].data;
+    expect(exported.reading_history).toHaveLength(1201);expect(exported.profile.id).toBe(actor);expect(new Set(exported.reading_history.map((entry:any)=>entry.book_id)).size).toBe(1201);
+    expect(exported.reading_history[0].books).toHaveProperty('id');expect(exported.reading_history[0].books).toHaveProperty('identifiers');
+    expect(exported.reading_history.every((entry:any)=>entry.books.page_count===400&&entry.progress_pages===160&&entry.progress_percent===40)).toBe(true);
+    for(const key of ['pin_hash','totp_secret','password_hash','recovery_codes'])expect(exported.profile).not.toHaveProperty(key);
+    expect((await sql`select account_data_export(${child}) as data`)[0].data.reading_history).toHaveLength(0);
+    const legacy=legacyEditions!,legacyData=(await sql`select account_data_export(${legacy.owner}) as data`)[0].data;
+    expect(legacyData.reviews.some((review:any)=>review.id===legacy.reviewId&&review.book_id===legacy.ids[1])).toBe(true);
+    const code=(await sql`select referral_code from users where id=${actor}`)[0].referral_code;
+    await Promise.all(Array.from({length:3},()=>sql`select attribute_referral_atomic(${child},${code})`));
+    await sql`update users set referred_by=${actor} where id=${legacyChild}`;
+    expect((await sql`select count(*)::int as count from outbox_events where aggregate_type='referrals' and aggregate_id=${child} and event_type='check_badges'`)[0].count).toBe(1);
+    for(const [currency,amount] of [['USD',0.1],['NGN',2.5],['EUR',3]] as const)await sql`insert into referral_commissions(referrer_id,referred_user_id,transaction_id,transaction_type,gross_transaction_amount,platform_fee_amount,commission_amount,currency) values(${actor},${child},${'export-068-'+currency},'tip',${amount*100},${amount*10},${amount},${currency})`;
+    const stats=(await sql`select referral_statistics(${actor}) as data`)[0].data;
+    expect(stats).toMatchObject({referralCount:2,xpFromReferrals:200,referralCode:code});expect(stats.earnedByCurrency).toEqual({USD:'0.1000',NGN:'2.5000',EUR:'3.0000'});expect(stats.milestones.map((item:any)=>item.target)).toEqual([10,50,200]);
+    await sql`update referral_commissions set commission_amount=0.04 where referrer_id=${actor} and currency='USD'`;
+    expect((await sql`select referral_statistics(${actor}) as data`)[0].data.earnedByCurrency.USD).toBe('0.0400');
+    await sql`update users set profile_visibility='followers_only' where id=${actor}`;
+    expect((await sql`select referral_statistics(${actor}) as data`)[0].data.topReferrers.some((person:any)=>person.id===actor)).toBe(false);
+    for(const role of ['anon','authenticated'])for(const routine of ['account_data_export(uuid)','referral_statistics(uuid)','attribute_referral_atomic_036(uuid,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    await sql`update users set is_banned=true where id=${child}`;await expect(sql`select account_data_export(${child})`).rejects.toMatchObject({code:'P1003'});
+    }
+    {
+    const actor=legacyNotification!.owner,other=crypto.randomUUID();
+    await sql`select create_direct_account(${other},'notifications-other-069@example.test','notifications_other_069','Other reader')`;
+    const badge=(await sql`select message_key,message_values from notifications where id=${legacyNotification!.badge}`)[0];
+    expect(badge).toMatchObject({message_key:'badge',message_values:{badgeId:'first_book',badgeName:'First Book'}});
+    expect((await sql`select message_key,message_values from notifications where id=${legacyNotification!.goal}`)[0]).toMatchObject({message_key:'readingGoal',message_values:{count:2,target:8,percent:25,year:'2026'}});
+    const {NOTIFICATION_KEYS,notificationPreference}=await import('@/lib/notification-preferences');
+    for(const key of NOTIFICATION_KEYS)await sql`update users set ${sql(key)}=false where id=${actor}`;
+    for(const [type,entity] of [['follow',null],['like',null],['review_like',null],['reply',null],['review_comment',null],['mention',null],['author_announcement',null],['new_release',null],['challenge_complete',null],['arc_granted',null],['buddy_read_invite','arc']] as const){
+      expect(notificationPreference(type,entity)).toBeTruthy();
+      expect(await sql`insert into notifications(user_id,type,entity_type,message) values(${actor},${type},${entity},'Opted out') returning id`).toHaveLength(0);
+    }
+    expect(await sql`insert into notifications(user_id,type,message) values(${actor},'tip_refunded','Financial history') returning id`).toHaveLength(1);
+    expect(await sql`insert into notifications(user_id,type,message) values(${actor},'buddy_read_invite','Reading group') returning id`).toHaveLength(1);
+    for(const key of NOTIFICATION_KEYS)await sql`update users set ${sql(key)}=true where id=${actor}`;
+    const notice=(await sql`insert into notifications(user_id,type,actor_id,message) values(${actor},'follow',${other},'English legacy text') returning *`)[0];
+    expect(notice).toMatchObject({message_key:'follow',message_values:{name:'Other reader'}});
+    await sql`select award_badge_atomic(${actor},'custom_notice',10,'Prix personnalisé','★')`;
+    expect((await sql`select message_key,message_values from notifications where user_id=${actor} and message_values->>'badgeId'='custom_notice'`)[0]).toMatchObject({message_key:'badge',message_values:{badgeName:'Prix personnalisé'}});
+    const tipId=crypto.randomUUID(),payload={userId:actor,actorId:other,tipId,amount:'12.3456',currency:'NGN'};
+    const event=(await sql`insert into outbox_events(aggregate_type,aggregate_id,event_type,payload,status) values('tip',${tipId},'notify_recipient',${sql.json(payload)},'processing') returning id`)[0].id;
+    expect((await sql`select process_outbox_event_atomic(${event}) as ok`)[0].ok).toBe(true);
+    expect((await sql`select process_outbox_event_atomic(${event}) as ok`)[0].ok).toBe(false);
+    expect((await sql`select message_key,message_values from notifications where entity_id=${tipId}`)[0]).toMatchObject({message_key:'tipAmount',message_values:{amount:'12.3456',currency:'NGN'}});
+    expect((await sql`select coalesce(current_setting('liravo.notification_context',true),'') as value`)[0].value).toBe('');
+    for(const role of ['anon','authenticated'])for(const column of ['message','type','user_id','message_key','message_values'])expect((await sql`select has_column_privilege(${role},'notifications',${column},'UPDATE') as allowed`)[0].allowed).toBe(false);
+    expect((await sql`select has_column_privilege('authenticated','notifications','is_read','UPDATE') as allowed`)[0].allowed).toBe(true);
+    expect((await sql`select has_table_privilege('authenticated','notifications','INSERT') as allowed`)[0].allowed).toBe(false);
+    await sql.begin(async tx=>{await tx`set local role authenticated`;await tx`select set_config('request.jwt.claim.sub',${actor},true)`;expect(await tx`update notifications set is_read=true where id=${notice.id} returning id`).toHaveLength(1);});
+    const foreign=(await sql`insert into notifications(user_id,type,message) values(${other},'follow','Other') returning id`)[0].id;
+    const {PATCH,GET}=await import('@/app/api/notifications/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);
+    const request=(body:unknown,owner=actor)=>new Request('https://app.test/api/notifications',{method:'PATCH',headers:{'X-Liravo-Actor':owner},body:JSON.stringify(body)});
+    expect((await PATCH(request({notification_id:foreign}))).status).toBe(404);
+    expect((await PATCH(request({notification_id:notice.id}))).status).toBe(200);
+    expect((await PATCH(request({notification_id:notice.id},other))).status).toBe(409);
+    expect((await PATCH(request({message:'Forged'}))).status).toBe(400);
+    const page=await(await GET(new Request('https://app.test/api/notifications'))).json();expect(page.actorId).toBe(actor);expect(page.notifications.every((n:any)=>n.user_id===actor&&n.message_key)).toBe(true);
+    }
+    {
+    const actor=crypto.randomUUID(),rolledBack=crypto.randomUUID();
+    const created=(await sql`select create_localized_direct_account(${actor},'locale070@example.test','locale_070','French reader','fr') as profile`)[0].profile;
+    expect(created).toMatchObject({preferred_locale:'fr',locale_initialized:true});
+    expect((await sql`select initialize_account_locale(${actor},'de') as locale`)[0].locale).toBe('fr');
+    await sql`select initialize_account_locale(${actor},'de',true)`;expect((await sql`select initialize_account_locale(${actor},'fr') as locale`)[0].locale).toBe('de');
+    await expect(sql`select create_localized_direct_account(${rolledBack},'rollback070@example.test','rollback_070','Rollback reader','xx')`).rejects.toMatchObject({code:'P1004'});expect(await sql`select id from users where id=${rolledBack}`).toHaveLength(0);
+    const accounts=await Promise.all(Array.from({length:4},()=>sql`select resolve_localized_social_identity('google','locale-social070','locale-social070@example.test','Social reader',null,'fr') as profile`));
+    const social=accounts[0][0].profile.id;expect(new Set(accounts.map(rows=>rows[0].profile.id)).size).toBe(1);expect(accounts.every(rows=>rows[0].profile.preferred_locale==='fr')).toBe(true);
+    expect((await sql`select resolve_localized_social_identity('google','locale-social070','locale-social070@example.test','Social reader',null,'de') as profile`)[0].profile.preferred_locale).toBe('fr');
+    const legacy=legacyNotification!.owner;expect((await sql`select locale_initialized from users where id=${legacy}`)[0].locale_initialized).toBe(true);await sql`update users set preferred_locale='de' where id=${legacy}`;expect((await sql`select initialize_account_locale(${legacy},'fr') as locale`)[0].locale).toBe('de');
+    const managed=crypto.randomUUID();await sql`insert into auth.users(id,email,raw_user_meta_data) values(${managed},'managed070@example.test','{"username":"managed_070"}')`;
+    expect((await sql`select locale_initialized from users where id=${managed}`)[0].locale_initialized).toBe(false);await sql`select initialize_account_locale(${managed},'fr')`;expect((await sql`select preferred_locale,locale_initialized from users where id=${managed}`)[0]).toEqual({preferred_locale:'fr',locale_initialized:true});
+    for(const role of ['anon','authenticated']){
+      expect((await sql`select has_column_privilege(${role},'users','locale_initialized','SELECT') as allowed`)[0].allowed).toBe(false);
+      expect((await sql`select has_column_privilege(${role},'users','locale_initialized','UPDATE') as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['initialize_account_locale(uuid,text,boolean)','create_localized_direct_account(uuid,text,text,text,text,text)','resolve_localized_social_identity(text,text,text,text,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    expect((await sql`select average_rating,ratings_count from books where id=${legacyRating!}`)[0]).toEqual({average_rating:null,ratings_count:0});
+    expect((await sql`select previous_data,resolution from book_catalog_audit where book_id=${legacyRating!} and reason='legacy_review_rating_cache'`)[0]).toEqual({previous_data:{average_rating:4.6,ratings_count:100},resolution:{average_rating:null,ratings_count:0}});
+    const actor=crypto.randomUUID(),banned=crypto.randomUUID(),deleted=crypto.randomUUID();
+    for(const [id,name] of [[actor,'review_reader_071'],[banned,'review_banned_071'],[deleted,'review_deleted_071']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},'Review reader')`;
+    const book=(await sql`insert into books(title,author_name,average_rating,ratings_count) values('Review snapshot fixture 071','Author',4.6,100) returning id,work_id`)[0];
+    const rows=await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,created_at) select ${actor},${book.id},case when n<=20 then 5 else 1 end,'Review snapshot 071 '||n,'short','published','2026-10-28T10:00:00.123456Z'::timestamptz from generate_series(1,55) n returning id`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,is_hidden) values(${actor},${book.id},1,'Hidden fixture','short','published',true),(${actor},${book.id},1,'Pending fixture','short','pending',false),(${banned},${book.id},1,'Banned fixture','short','published',false),(${deleted},${book.id},1,'Deleted fixture','short','published',false)`;
+    await sql`update users set is_banned=true where id=${banned}`;await sql`update users set deleted_at=now() where id=${deleted}`;
+    const {getBookReviews,ReviewCursorError}=await import('@/services/book-reviews');
+    let page=(await getBookReviews(book.id,null,20))!,cursor=page.nextCursor;const found=[...page.reviews];
+    expect(page.statistics).toEqual({ratings_count:55,average_rating:2.45,distribution:{1:35,2:0,3:0,4:0,5:20}});expect(page.reviews).toHaveLength(20);expect(cursor).toBeTruthy();
+    while(cursor){page=(await getBookReviews(book.id,cursor,20))!;found.push(...page.reviews);cursor=page.nextCursor;expect(page.statistics.ratings_count).toBe(55);}
+    expect(new Set(found.map(review=>review.id)).size).toBe(55);expect(found.every(review=>review.user.id===actor)).toBe(true);expect(found[0]).not.toHaveProperty('request_hash');
+    const first=(await getBookReviews(book.id,null,1))!;await expect(getBookReviews(crypto.randomUUID(),first.nextCursor)).rejects.toBeInstanceOf(ReviewCursorError);
+    await expect(getBookReviews(book.id,'invalid')).rejects.toBeInstanceOf(ReviewCursorError);expect(await getBookReviews(crypto.randomUUID())).toBeNull();
+    await sql`update reviews set is_hidden=true where id=${rows[0].id}`;expect((await getBookReviews(book.id))!.statistics.ratings_count).toBe(54);
+    await sql`delete from reviews where id=${rows[1].id}`;expect((await getBookReviews(book.id))!.statistics.ratings_count).toBe(53);
+    expect((await sql`select average_rating,ratings_count from books where id=${book.id}`)[0]).toEqual({average_rating:'4.60',ratings_count:100});
+    const work=(await sql`select book_work_snapshot(${book.work_id}) as data`)[0].data;expect(work.statistics).toMatchObject({ratings_count:53});
+    const legacy=legacyEditions!,legacyPage=(await getBookReviews(legacy.ids[1]))!,canonical=(await getBookReviews(legacy.ids[0]))!;expect(legacyPage.bookId).toBe(canonical.bookId);expect(legacyPage.statistics).toEqual(canonical.statistics);expect(legacyPage.reviews.some(review=>review.id===legacy.reviewId)).toBe(true);
+    const {GET}=await import('@/app/api/books/[id]/reviews/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);
+    const result=await GET(new Request('https://app.test/api/books/'+book.id+'/reviews?limit=20'),{params:{id:book.id}});expect(result.status).toBe(200);expect((await result.json()).statistics.ratings_count).toBe(53);
+    expect((await GET(new Request('https://app.test/api/books/'+book.id+'/reviews?limit=999'),{params:{id:book.id}})).status).toBe(400);
+    vi.mocked(getCurrentUser).mockResolvedValue(null);expect((await GET(new Request('https://app.test/api/books/'+book.id+'/reviews'),{params:{id:book.id}})).status).toBe(401);
+    await Promise.all(Array.from({length:10},(_,n)=>sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status) values(${actor},${book.id},3,${'Concurrent review 071 '+n},'short','published')`));
+    expect((await getBookReviews(book.id))!.statistics.ratings_count).toBe(63);
+    const provider=(await sql`select store_catalog_book(${sql.json({google_books_id:'review-provider071',title:'Provider score 071',author_name:'Author',average_rating:4.2,ratings_count:321})}) as data`)[0].data;
+    const refreshed=(await sql`select store_catalog_book(${sql.json({google_books_id:'review-provider071',title:'Provider score 071',author_name:'Author',average_rating:4.4,ratings_count:350})}) as data`)[0].data;expect(refreshed).toMatchObject({id:provider.id,average_rating:4.4,ratings_count:350,metadata_provenance:{average_rating:'google'}});
+    await sql`select award_badge_atomic(${actor},'first_book',50,'First Book','📖')`;const {getEarnedBadges}=await import('@/services/badges');expect(await getEarnedBadges(actor)).toContainEqual({id:'first_book',name:'First Book',icon:'📖'});
+    const {GET:profile}=await import('@/app/api/users/[id]/route');vi.mocked(getCurrentUser).mockResolvedValue({id:actor} as never);const profileData=await(await profile(new Request('https://app.test/api/users/review_reader_071'),{params:{id:'review_reader_071'}})).json();expect(profileData.user.badges).toContainEqual({id:'first_book',name:'First Book',icon:'📖'});
+    for(const role of ['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'book_review_snapshot(uuid,integer,integer,timestamptz,uuid)','EXECUTE') as allowed`)[0].allowed).toBe(false);expect((await sql`select has_function_privilege('service_role','store_catalog_book_066(jsonb)','EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+    const {id:room,owner}=legacyWorkshop!,other=crypto.randomUUID();await sql`select create_direct_account(${other},'workshop_other072@example.test','workshop_other072','Other writer')`;
+    expect((await sql`select member_count from workshop_rooms where id=${room}`)[0].member_count).toBe(1);
+    await sql`update workshop_rooms set member_count=999 where id=${room}`;expect((await sql`select member_count from workshop_rooms where id=${room}`)[0].member_count).toBe(1);
+    const peers=Array.from({length:4},()=>crypto.randomUUID());for(const [n,id] of peers.entries())await sql`select create_direct_account(${id},${'workshop_peer072_'+n+'@example.test'},${'workshop_peer072_'+n},'Peer writer')`;
+    await Promise.all(peers.flatMap(id=>Array.from({length:2},()=>sql`select join_content_group(${id},'workshop',${room})`)));
+    expect((await sql`select member_count from workshop_rooms where id=${room}`)[0].member_count).toBe(5);
+    expect((await sql`select count(*)::int as count from workshop_members where room_id=${room}`)[0].count).toBe(5);
+    const submissions=await sql`insert into workshop_submissions(user_id,room_id,title,excerpt,created_at) select ${owner},${room},'Draft 072 '||n,'A useful writing excerpt '||n,'2026-10-29T00:00:00.123456Z'::timestamptz from generate_series(1,45) n returning id`;
+    for(const [n,id] of [owner,...peers].entries())await sql`insert into workshop_feedback(user_id,submission_id,comment,created_at) values(${id},${submissions[0].id},${'Feedback 072 '+n},'2026-10-29T00:00:00.123456Z'::timestamptz)`;
+    const {GET:metadata}=await import('@/app/api/write/workshops/[id]/route'),{GET:drafts}=await import('@/app/api/write/workshops/[id]/submissions/route'),{GET:feedback}=await import('@/app/api/write/workshops/[id]/submissions/[submissionId]/feedback/route');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:other} as never);for(const handler of [metadata,drafts])expect((await handler(new Request('https://app.test/workshop'),{params:{id:room}})).status).toBe(403);
+    expect((await feedback(new Request('https://app.test/workshop'),{params:{id:room,submissionId:submissions[0].id}})).status).toBe(403);
+    await sql.begin(async tx=>{await tx`set local role authenticated`;await tx`select set_config('request.jwt.claim.sub',${other},true)`;expect(await tx`select id from workshop_submissions where room_id=${room}`).toHaveLength(0);expect(await tx`select id from workshop_feedback where submission_id=${submissions[0].id}`).toHaveLength(0);});
+    vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);
+    const summary=await(await metadata(new Request('https://app.test/workshop?summary=1'),{params:{id:room}})).json();expect(summary).toMatchObject({actorId:owner,room:{id:room,member_count:5}});expect(summary).not.toHaveProperty('submissions');expect(summary.room).not.toHaveProperty('request_hash');
+    const collect=async(handler:typeof drafts|typeof feedback,params:{id:string;submissionId:string},key:'submissions'|'feedback')=>{let cursor:string|null=null;const found:string[]=[];do{const result:Response=await handler(new Request('https://app.test/workshop'+(cursor?'?cursor='+encodeURIComponent(cursor):'')),{params}),data:Record<string,any>=await result.json();expect(result.status).toBe(200);expect(data[key].length).toBeLessThanOrEqual(20);found.push(...data[key].map((row:any)=>row.id));cursor=data.nextCursor;}while(cursor);expect(found).toHaveLength(key==='submissions'?45:5);expect(new Set(found).size).toBe(key==='submissions'?45:5);};
+    await collect(drafts,{id:room,submissionId:submissions[0].id},'submissions');await collect(feedback,{id:room,submissionId:submissions[0].id},'feedback');
+    const foreign=(await sql`insert into workshop_rooms(name,facilitator_id,max_members) values('Other workshop 072',${owner},8) returning id`)[0].id;
+    expect((await feedback(new Request('https://app.test/workshop'),{params:{id:foreign,submissionId:submissions[0].id}})).status).toBe(404);
+    expect((await drafts(new Request('https://app.test/workshop?cursor=broken'),{params:{id:room}})).status).toBe(400);
+    const changed=new Request('https://app.test/workshop',{headers:{'X-Liravo-Actor':other}});expect((await metadata(changed,{params:{id:room}})).status).toBe(409);expect((await drafts(changed,{params:{id:room}})).status).toBe(409);
+    const {applyWritingIntent}=await import('@/lib/writing-intents');await expect(applyWritingIntent(changed,owner,'join',room,{})).rejects.toMatchObject({status:409});
+    for(const role of ['anon','authenticated'])for(const table of ['workshop_rooms','workshop_members'])for(const privilege of ['INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
+    const prompt=(await sql`insert into writing_prompts(prompt_text,topic_seed,prompt_date,is_active) values('Recovery prompt 072','Recovery','1972-01-01',true) returning id`)[0].id;
+    await sql`select apply_writing_intent(${owner},'prompt',${prompt},'recover-prompt-072',${sql.json({content:'A useful prompt response '.repeat(4).trim()})})`;
+    const {GET:readPrompt}=await import('@/app/api/write/prompts/[id]/route');const response=await readPrompt(new Request('https://app.test/prompt'),{params:{id:prompt}}),owned=await response.json();expect(response.status).toBe(200);expect(owned).toMatchObject({actorId:owner,submission:{user_id:owner,content:'A useful prompt response '.repeat(4).trim()}});expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:other} as never);expect((await(await readPrompt(new Request('https://app.test/prompt'),{params:{id:prompt}})).json()).submission).toBeNull();
+    const challenge=(await sql`insert into writing_challenges(title,type,start_date,end_date,is_active) values('Recovery challenge 072','weekly',now()-interval '1 day',now()+interval '1 day',true) returning id`)[0].id;
+    await sql`select apply_writing_intent(${owner},'challenge',${challenge},'recover-entry-072',${sql.json({title:'Owned draft',content:'A recovered challenge entry'})})`;
+    const {GET:readChallenge}=await import('@/app/api/write/challenges/[id]/route');vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);expect((await(await readChallenge(new Request('https://app.test/challenge'),{params:{id:challenge}})).json()).entry).toMatchObject({user_id:owner,title:'Owned draft',content:'A recovered challenge entry'});
+    vi.mocked(getCurrentUser).mockResolvedValue({id:other} as never);expect((await(await readChallenge(new Request('https://app.test/challenge'),{params:{id:challenge}})).json()).entry).toBeNull();vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);
+    for(let n=0;n<35;n++)await sql`insert into workshop_rooms(name,facilitator_id,max_members,member_count) values(${'Catalog workshop 072 '+n},${owner},8,500)`;
+    expect((await sql`select bool_and(member_count=1) as correct from workshop_rooms where name like 'Catalog workshop 072 %'`)[0].correct).toBe(true);
+    const {GET:catalog}=await import('@/app/api/write/workshops/route');let cursor:string|null=null;const found:string[]=[];do{const result=await catalog(new Request('https://app.test/workshops'+(cursor?'?cursor='+encodeURIComponent(cursor):''))),page=await result.json();expect(result.status).toBe(200);expect(page.rooms.length).toBeLessThanOrEqual(30);found.push(...page.rooms.map((item:any)=>item.id));cursor=page.nextCursor;}while(cursor);expect(new Set(found).size).toBe(found.length);expect(found).toHaveLength((await sql`select count(*)::int as count from workshop_rooms where is_active`)[0].count);
+    }
+    {
+    const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'progress073@example.test','progress_073','Progress writer')`;
+    await sql`update users set reading_streak=27,writing_streak=3 where id=${owner}`;
+    const prompts=await sql`insert into writing_prompts(prompt_text,topic_seed,prompt_date,is_active) select 'Progress prompt 073 '||n,'Progress','1981-01-01'::date+n,false from generate_series(1,1105) n returning id`;
+    await sql`insert into writing_prompt_submissions(user_id,prompt_id,content,word_count,created_at) select ${owner},id,'Two words',2,date_trunc('week',now() at time zone 'UTC') at time zone 'UTC'-interval '1 second' from writing_prompts where id in ${sql(prompts.map(row=>row.id))}`;
+    const challenge=(await sql`insert into writing_challenges(title,type) values('Progress challenge 073','weekly') returning id`)[0].id;
+    await sql`insert into writing_challenge_submissions(user_id,challenge_id,content,word_count,submitted_at) values(${owner},${challenge},'A seven word entry for this challenge',7,date_trunc('week',now() at time zone 'UTC') at time zone 'UTC')`;
+    const room=(await sql`insert into workshop_rooms(name,facilitator_id,max_members) values('Progress workshop 073',${owner},8) returning id`)[0].id;
+    const drafts=await sql`insert into workshop_submissions(user_id,room_id,title,excerpt) values(${owner},${room},'Draft one','An excerpt'),(${owner},${room},'Draft two','Another excerpt') returning id`;
+    await sql`insert into workshop_feedback(user_id,submission_id,comment) values(${owner},${drafts[0].id},'A useful critique')`;
+    await sql`select award_badge_atomic(${owner},'first_draft',100,'First Draft','📝')`;
+    const progress=(await sql`select writing_progress_snapshot(${owner}) as snapshot`)[0].snapshot;
+    expect(progress).toMatchObject({total_words:2217,prompts_completed:1105,challenges_completed:1,workshop_critiques:1,writing_streak:3});
+    expect(progress.weekly_words).toHaveLength(7);expect(progress.weekly_words.slice(0,5).every((week:any)=>week.words===0)).toBe(true);expect(progress.weekly_words[5].words).toBe(2210);expect(progress.weekly_words[6].words).toBe(7);
+    expect(progress.badges).toEqual([expect.objectContaining({badge_id:'first_draft'})]);
+    const {GET:readProgress}=await import('@/app/api/write/progress/route');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);
+    const response=await readProgress(new Request('https://app.test/progress'));expect(response.status).toBe(200);expect(await response.json()).toEqual(progress);expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect((await readProgress(new Request('https://app.test/progress',{headers:{'X-Liravo-Actor':crypto.randomUUID()}}))).status).toBe(409);
+    vi.mocked(getCurrentUser).mockResolvedValue(null);expect((await readProgress(new Request('https://app.test/progress'))).status).toBe(401);
+    vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);
+    const known=(await sql`select id,isbn_13 from books where isbn_13 is not null and canonical_edition_id is null order by id limit 1`)[0];
+    const provider=vi.spyOn(globalThis,'fetch').mockRejectedValue(new Error('Providers offline'));
+    try{
+      const {GET:search}=await import('@/app/api/books/search/route');const response=await search(new Request('https://app.test/search?q='+known.isbn_13));
+      expect(response.status).toBe(200);expect(await response.json()).toMatchObject({source:'local',books:[{id:known.id,isbn_13:known.isbn_13}]});expect(provider).not.toHaveBeenCalled();
+    }finally{provider.mockRestore();}
+    await sql`update users set is_banned=true where id=${owner}`;expect((await sql`select writing_progress_snapshot(${owner}) as snapshot`)[0].snapshot).toBeNull();
+    vi.mocked(getCurrentUser).mockResolvedValue({id:owner} as never);expect((await readProgress(new Request('https://app.test/progress'))).status).toBe(503);
+    }
+    {
+    expect((await sql`select is_active from arcs where id=${legacyAuthor!.arc}`)[0].is_active).toBe(false);
+    expect((await sql`select book_id from author_posts where id=${legacyAuthor!.post}`)[0].book_id).toBeNull();
+    expect((await sql`select author_owns_book(${legacyAuthor!.owner},${legacyAuthor!.book}) as owned`)[0].owned).toBe(false);
+    expect((await sql`select count(*)::int as count from book_catalog_audit where book_id=${legacyAuthor!.book} and reason in('unverified_author_arc','unverified_author_post')`)[0].count).toBe(2);
+    const admin=crypto.randomUUID(),author=crypto.randomUUID(),coauthor=crypto.randomUUID(),impostor=crypto.randomUUID();
+    for(const [n,id] of [admin,author,coauthor,impostor].entries())await sql`select create_direct_account(${id},${'author074_'+n+'@example.test'},${'author074_'+n},'Identical editable name')`;
+    await sql`update users set is_admin=true where id=${admin}`;await sql`update users set is_verified_author=true,user_types=array['author'] where id in(${author},${coauthor},${impostor})`;
+    const store=async(payload:Record<string,unknown>)=>(await sql`select store_catalog_book(${sql.json({title:'Author catalog fixture',author_name:'Bibliographic pen name',...payload})}) as book`)[0].book;
+    const first=await store({google_books_id:'author074-first'}),second=await store({open_library_id:'/books/OL740002M',open_library_work_id:'/works/OL740001W'});
+    const grant=async(who:string,book:string,key:string,granted=true)=>(await sql`select set_author_work_claim(${admin},${who},${book},${granted},${key}) as result`)[0].result;
+    const {contentIntent}=await import('@/lib/content-intents');
+    const create=async(table:'arcs'|'author_posts',key:string,payload:Record<string,unknown>)=>(await contentIntent(new Request('https://app.test/content',{headers:{'Idempotency-Key':key}}),author,table,payload)).insert();
+    const arcBody={book_id:first.id,description:'A verified offer',reader_slots:3,is_active:true};
+    await expect(create('arcs','author074-unowned-arc',arcBody)).rejects.toMatchObject({status:403});
+    await expect(create('author_posts','author074-unowned-post',{book_id:first.id,title:'Unowned book',body:'An announcement',type:'announcement'})).rejects.toMatchObject({status:403});
+    await expect(sql`select set_author_work_claim(${author},${author},${first.id},true,'author074-self-grant')`).rejects.toThrow('Admin access');
+    const results=await Promise.all(Array.from({length:4},()=>grant(author,first.id,'author074-grant-replay')));expect(results.every(row=>row.workId===first.work_id)).toBe(true);
+    expect((await sql`select count(*)::int as count from author_work_claims where author_id=${author}`)[0].count).toBe(1);
+    expect((await sql`select count(*)::int as count from moderation_log where target_user_id=${author} and action='author_work_granted'`)[0].count).toBe(1);
+    await expect(grant(author,first.id,'author074-grant-replay',false)).rejects.toThrow('Intent already used');
+    await store({google_books_id:'author074-first',open_library_id:'/books/OL740001M',open_library_work_id:'/works/OL740001W'});
+    expect((await sql`select author_owns_book(${author},${second.id}) as owned`)[0].owned).toBe(true);
+    const extra=await sql`insert into books(work_id,title,author_name,created_at) select ${second.work_id},'Author edition 074 '||n,'Bibliographic pen name','2026-10-29T00:00:00.123456Z' from generate_series(1,35) n returning id`;
+    const alias=(await sql`insert into books(work_id,title,author_name,canonical_edition_id) values(${second.work_id},'Retained author edition alias','Bibliographic pen name',${second.id}) returning id`)[0].id;
+    expect((await sql`select author_owns_book(${author},${alias}) as owned`)[0].owned).toBe(true);
+    await grant(coauthor,second.id,'author074-coauthor');
+    expect((await sql`select book_authors_snapshot(${second.id}) as authors`)[0].authors.map((row:any)=>row.id).sort()).toEqual([author,coauthor].sort());
+    expect((await sql`select author_owns_book(${impostor},${first.id}) as owned`)[0].owned).toBe(false);
+    const {getAuthorCatalog,getAuthorAnalytics}=await import('@/lib/author-catalog');let cursor:string|null=null;const found:string[]=[];do{const page=await getAuthorCatalog(author,cursor);expect(page.books.length).toBeLessThanOrEqual(30);found.push(...page.books.map(book=>book.id));cursor=page.nextCursor;}while(cursor);expect(found).toHaveLength(37);expect(new Set(found).size).toBe(37);
+    const arc=await create('arcs','author074-owned-arc',{...arcBody,book_id:alias});
+    const post=await create('author_posts','author074-owned-post',{book_id:second.id,title:'Owned book',body:'An announcement',type:'announcement'});
+    await sql`update users set is_banned=true where id=${author}`;await expect(sql`insert into arc_applications(arc_id,reader_id) values(${arc.id},${coauthor})`).rejects.toThrow('Verified ARC ownership required');await sql`update users set is_banned=false where id=${author}`;
+    await sql`insert into arc_applications(arc_id,reader_id) values(${arc.id},${coauthor})`;
+    const shelf=(await sql`select id from shelves where user_id=${coauthor} and default_type='want_to_read'`)[0].id;
+    await sql`insert into shelf_books(shelf_id,user_id,book_id) values(${shelf},${coauthor},${first.id}),(${shelf},${coauthor},${extra[0].id})`;
+    await sql`insert into follows(follower_id,following_id) values(${coauthor},${author})`;
+    await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status) values(${coauthor},${extra[34].id},5,'A full-catalog review','short','published')`;
+    expect(await getAuthorAnalytics(author)).toMatchObject({totalWantToReads:1,totalReviews:1,followerCount:1});
+    expect((await sql`select followed_author_books(${coauthor}) as books`)[0].books).toHaveLength(10);
+    const {GET:readAuthor}=await import('@/app/api/author/[username]/route');const publicResponse=await readAuthor(new Request('https://app.test/author'),{params:{username:'author074_1'}});expect(publicResponse.status).toBe(200);expect(await publicResponse.json()).toMatchObject({followerCount:1,total:37,author:{id:author}});
+    const {GET:readBooks}=await import('@/app/api/author/books/route');vi.mocked(getCurrentUser).mockResolvedValue({id:author} as never);expect((await readBooks(new Request('https://app.test/books'))).status).toBe(200);expect((await readBooks(new Request('https://app.test/books?cursor=invalid'))).status).toBe(400);
+    const {GET:manage,PUT:update}=await import('@/app/api/admin/users/[id]/books/route');
+    expect((await manage(new Request('https://app.test/admin'),{params:{id:author}})).status).toBe(403);
+    vi.mocked(getCurrentUser).mockResolvedValue({id:admin} as never);const managed=await manage(new Request('https://app.test/admin?q=Author'),{params:{id:author}});expect(managed.status).toBe(200);expect(await managed.json()).toMatchObject({actorId:admin,total:37});
+    const mismatched=new Request('https://app.test/admin',{method:'PUT',headers:{'X-Liravo-Actor':author,'Idempotency-Key':'author074-mismatch'},body:JSON.stringify({book_id:first.id,granted:true})});expect((await update(mismatched,{params:{id:author}})).status).toBe(409);
+    await grant(author,second.id,'author074-revoke',false);expect((await sql`select author_owns_book(${author},${alias}) as owned`)[0].owned).toBe(false);
+    expect((await sql`select is_active from arcs where id=${arc.id}`)[0].is_active).toBe(false);expect((await sql`select book_id from author_posts where id=${post.id}`)[0].book_id).toBeNull();
+    await grant(author,first.id,'author074-grant-replay');expect((await sql`select author_owns_book(${author},${first.id}) as owned`)[0].owned).toBe(false);
+    expect((await sql`select book_authors_snapshot(${first.id}) as authors`)[0].authors.map((row:any)=>row.id)).toEqual([coauthor]);
+    await expect(sql`update arcs set is_active=true where id=${arc.id}`).rejects.toThrow('ownership required');
+    for(const role of ['anon','authenticated']){
+      for(const table of ['author_books','author_work_claims','author_catalog_intents'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['set_author_work_claim(uuid,uuid,uuid,boolean,text)','author_owns_book(uuid,uuid)','author_catalog_snapshot(uuid,timestamptz,uuid,integer)','book_authors_snapshot(uuid)','author_analytics_snapshot(uuid)','followed_author_books(uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    const owner=crypto.randomUUID(),writer=crypto.randomUUID(),novice=crypto.randomUUID(),inactive=crypto.randomUUID(),inactiveOwner=crypto.randomUUID();
+    for(const [n,id] of [owner,writer,novice,inactive,inactiveOwner].entries())await sql`select create_direct_account(${id},${'writer075_'+n+'@example.test'},${'writer075_'+n},'Question writer')`;
+    await sql`update users set is_verified_author=true where id in(${writer},${inactive})`;await sql`update users set user_types=array['author'] where id=${novice}`;
+    const questions=await sql`insert into ask_writer_questions(user_id,question,tags,created_at) select ${owner},'Writer pagination question 075 '||n,array['craft'],'2026-10-29T00:00:00.123456Z' from generate_series(1,45)n returning id`;
+    const target=questions[0].id,answers=await sql`insert into ask_writer_answers(user_id,question_id,answer,created_at) select ${writer},${target},'A useful detailed writing answer '||n,'2026-10-29T00:00:00.123456Z' from generate_series(1,45)n returning id`;
+    const hidden=(await sql`insert into ask_writer_answers(user_id,question_id,answer) values(${inactive},${target},'A response from a now inactive author') returning id`)[0].id;
+    await sql`update users set is_banned=true where id=${inactive}`;
+    await expect(sql`select apply_writing_intent(${owner},'best_answer',${target},'writer075-hidden-best',${sql.json({answer_id:hidden})})`).rejects.toThrow('Answer unavailable');
+    const chosen=answers.map(row=>row.id).sort()[0],selection=(await sql`select apply_writing_intent(${owner},'best_answer',${target},'writer075-best-replay',${sql.json({answer_id:chosen})}) as result`)[0].result;expect(selection.ok).toBe(true);
+    await sql`select apply_writing_intent(${owner},'best_answer',${target},'writer075-best-replay',${sql.json({answer_id:chosen})})`;
+    expect((await sql`select count(*)::int as n from notifications where user_id=${writer} and entity_id=${target} and message_key='writerBestAnswer'`)[0].n).toBe(1);
+    expect((await sql`select count(*)::int as n from xp_ledger where event_key=${'best-answer:'+target}`)[0].n).toBe(1);
+    const {getWriterThread,getWriterQuestions}=await import('@/lib/writer-questions');
+    const first=await getWriterThread(target,owner);expect(first).toMatchObject({actorId:owner,isOwner:true,canAnswer:false,question:{answer_count:45},bestAnswer:{id:chosen}});expect(first!.answers).toHaveLength(20);
+    let cursor:string|null=null;const found:string[]=[];do{const page=await getWriterThread(target,owner,cursor);expect(page!.answers.length).toBeLessThanOrEqual(20);expect(page!.bestAnswer!.id).toBe(chosen);found.push(...page!.answers.map(row=>row.id));cursor=page!.nextCursor;}while(cursor);expect(found).toHaveLength(44);expect(new Set([...found,chosen]).size).toBe(45);expect(found).not.toContain(hidden);
+    expect((await getWriterThread(target,novice))!.canAnswer).toBe(false);
+    vi.mocked(getCurrentUser).mockResolvedValue({id:novice} as never);
+    const {POST:answer}=await import('@/app/api/write/questions/[id]/answer/route'),{GET:read}=await import('@/app/api/write/questions/[id]/route'),{GET:list,POST:ask}=await import('@/app/api/write/questions/route');
+    const answerRequest=(key:string,body:unknown={answer:'An API answer with enough detail'},actor=novice)=>new Request('https://app.test/answer',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'X-Liravo-Actor':actor},body:JSON.stringify(body)});
+    expect((await answer(answerRequest('writer075-novice-answer'),{params:{id:target}})).status).toBe(403);
+    await expect(sql`insert into ask_writer_answers(user_id,question_id,answer) values(${novice},${target},'Role selection must not grant answering rights')`).rejects.toThrow('Verified author');
+    await sql`update users set xp=1000 where id=${novice}`;expect((await answer(answerRequest('writer075-boundary-answer'),{params:{id:target}})).status).toBe(403);
+    await sql`update users set xp=1001 where id=${novice}`;expect((await getWriterThread(target,novice))!.canAnswer).toBe(true);
+    expect((await answer(answerRequest('writer075-account-mismatch',undefined,writer),{params:{id:target}})).status).toBe(409);
+    expect((await answer(answerRequest('writer075-blank-answer',{answer:' '.repeat(30)}),{params:{id:target}})).status).toBe(422);
+    const before=(await sql`select count(*)::int as n from notifications where user_id=${owner} and entity_id=${target} and message_key='writerAnswer'`)[0].n;
+    const response=await answer(answerRequest('writer075-answer-replay'),{params:{id:target}}),saved=await response.json();expect(response.status).toBe(201);expect(saved).toMatchObject({actorId:novice,answer:{user_id:novice,question_id:target,author:{id:novice}}});
+    const replay=await answer(answerRequest('writer075-answer-replay'),{params:{id:target}});expect((await replay.json()).answer.id).toBe(saved.answer.id);
+    expect((await sql`select count(*)::int as n from notifications where user_id=${owner} and entity_id=${target} and message_key='writerAnswer'`)[0].n).toBe(before+1);
+    await sql`update users set notify_replies=false where id=${owner}`;expect((await answer(answerRequest('writer075-optout-answer'),{params:{id:target}})).status).toBe(201);
+    expect((await sql`select count(*)::int as n from notifications where user_id=${owner} and entity_id=${target} and message_key='writerAnswer'`)[0].n).toBe(before+1);
+    expect((await read(new Request('https://app.test/question?cursor='+encodeURIComponent(first!.nextCursor!)),{params:{id:questions[1].id}})).status).toBe(400);
+    for(const url of ['?page=bad','?page=2','?filter=bad','?cursor=bad'])expect((await list(new Request('https://app.test/questions'+url))).status).toBe(400);
+    const all=await getWriterQuestions('all');expect(all.nextCursor).toBeTruthy();expect((await list(new Request('https://app.test/questions?filter=unanswered&cursor='+encodeURIComponent(all.nextCursor!)))).status).toBe(400);
+    for(const filter of ['all','unanswered','most_answered'] as const){let cursor:string|null=null;const ids:string[]=[];let expected=0;do{const page=await getWriterQuestions(filter,cursor);expected=page.total;expect(page.questions.length).toBeLessThanOrEqual(20);if(filter==='unanswered')expect(page.questions.every(row=>row.answer_count===0)).toBe(true);ids.push(...page.questions.map(row=>row.id));cursor=page.nextCursor;}while(cursor);expect(ids).toHaveLength(expected);expect(new Set(ids).size).toBe(expected);expect(ids).toContain(questions[1].id);}
+    const hiddenQuestion=(await sql`insert into ask_writer_questions(user_id,question) values(${inactiveOwner},'A question by a now inactive writer') returning id`)[0].id;
+    await sql`update users set deleted_at=now() where id=${inactiveOwner}`;
+    expect(await getWriterThread(hiddenQuestion,writer)).toBeNull();vi.mocked(getCurrentUser).mockResolvedValue({id:writer} as never);expect((await read(new Request('https://app.test/question'),{params:{id:hiddenQuestion}})).status).toBe(404);
+    expect((await answer(answerRequest('writer075-inactive-question',undefined,writer),{params:{id:hiddenQuestion}})).status).toBe(404);
+    expect((await ask(new Request('https://app.test/questions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'writer075-invalid-question'},body:JSON.stringify({question:' '.repeat(20),tags:[]})}))).status).toBe(422);
+    vi.mocked(getCurrentUser).mockResolvedValue(null);const publicRead=await read(new Request('https://app.test/question'),{params:{id:target}});expect(publicRead.status).toBe(200);expect(await publicRead.json()).toMatchObject({actorId:null,isOwner:false,canAnswer:false});expect(publicRead.headers.get('Cache-Control')).toBe('private, no-store');
+    for(const role of ['anon','authenticated']){
+      for(const table of ['ask_writer_questions','ask_writer_answers'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['writer_question_catalog(text,jsonb,integer)','writer_question_thread(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+    const author=crypto.randomUUID(),first=crypto.randomUUID(),second=crypto.randomUUID(),observer=crypto.randomUUID();
+    for(const [n,id] of [author,first,second,observer].entries())await sql`select create_direct_account(${id},${'arc076_'+n+'@example.test'},${'arc076_'+n},'ARC participant')`;
+    await sql`update users set is_verified_author=true where id=${author}`;
+    const book=(await sql`insert into books(title,author_name) values('ARC snapshot book 076','ARC author') returning id,work_id`)[0];await sql`insert into author_work_claims(author_id,work_id) values(${author},${book.work_id})`;
+    const offers=await sql`insert into arcs(author_id,book_id,description,reader_slots,is_active,created_at) select ${author},${book.id},'ARC catalog 076 '||n,3,true,'2026-10-29T00:00:00.123456Z' from generate_series(1,35)n returning id`;
+    const arc=offers[0].id;await sql`insert into arc_applications(arc_id,reader_id,status) values(${arc},${first},'approved'),(${arc},${second},'approved')`;
+    const pending=[];for(let n=0;n<43;n++){const id=crypto.randomUUID();await sql`select create_direct_account(${id},${'arc076_pending_'+n+'@example.test'},${'arc076_pending_'+n},'Pending reader')`;pending.push((await sql`insert into arc_applications(arc_id,reader_id,applied_at) values(${arc},${id},'2026-10-29T00:00:00.123456Z') returning id,reader_id`)[0]);}
+    const history=(await sql`insert into arcs(author_id,book_id,description,reader_slots,is_active) values(${author},${book.id},'Expired history 076',3,true) returning id`)[0].id;await sql`insert into arc_applications(arc_id,reader_id) values(${history},${observer})`;await sql`update arcs set close_date=now()-interval '1 day' where id=${history}`;
+    const withdrawn=(await sql`insert into arcs(author_id,book_id,description,reader_slots,is_active) values(${author},${book.id},'Withdrawn offer 076',3,false) returning id`)[0].id;
+    const {getArcs,getArcApplications}=await import('@/lib/arcs');
+    let cursor:string|null=null;const ids:string[]=[];do{const page=await getArcs(observer,false,cursor,author);expect(page.arcs.length).toBeLessThanOrEqual(20);ids.push(...page.arcs.map(row=>row.id));cursor=page.nextCursor;}while(cursor);expect(ids).toHaveLength(36);expect(new Set(ids).size).toBe(36);expect(ids).toContain(history);expect(ids).not.toContain(withdrawn);
+    const others=await getArcs(first,false,null,author);expect(others.arcs.some(row=>row.id===history)).toBe(false);
+    const publicOffer=(await sql`select arc_offer_document(${arc},${observer}) as offer`)[0].offer;expect(publicOffer).toMatchObject({approved_count:2,slots_remaining:1,my_application_status:null,pending_count:null,total_applications:null});expect(JSON.stringify(publicOffer)).not.toContain(pending[0].reader_id);
+    const expired=(await sql`select arc_offer_document(${history},${observer}) as offer`)[0].offer;expect(expired).toMatchObject({is_open:false,can_apply:false,my_application_status:'pending'});
+    let appCursor:string|null=null;const apps:string[]=[];do{const page=await getArcApplications(author,arc,'all',appCursor);expect(page!.statistics).toEqual({total:45,pending:43,approved:2,rejected:0});expect(page!.applications.length).toBeLessThanOrEqual(20);apps.push(...page!.applications.map(row=>row.id));appCursor=page!.nextCursor;}while(appCursor);expect(apps).toHaveLength(45);expect(new Set(apps).size).toBe(45);
+    const {GET:readApplications}=await import('@/app/api/author/arcs/[id]/applications/route'),{GET:readOffers}=await import('@/app/api/arcs/route'),{GET:readOwned}=await import('@/app/api/author/arcs/route'),{POST:decide}=await import('@/app/api/author/arcs/[id]/approve/route');
+    vi.mocked(getCurrentUser).mockResolvedValue({id:observer} as never);expect((await readApplications(new Request('https://app.test/applications'),{params:{id:arc}})).status).toBe(403);
+    const visible=await readOffers(new Request('https://app.test/arcs?authorId='+author));expect(visible.status).toBe(200);expect(visible.headers.get('Cache-Control')).toBe('private, no-store');expect((await visible.json()).actorId).toBe(observer);
+    vi.mocked(getCurrentUser).mockResolvedValue({id:author} as never);expect((await readOwned(new Request('https://app.test/author/arcs'))).status).toBe(200);
+    const firstPage=await getArcApplications(author,arc);expect((await readApplications(new Request('https://app.test/applications?status=pending&cursor='+encodeURIComponent(firstPage!.nextCursor!)),{params:{id:arc}})).status).toBe(400);
+    expect((await readApplications(new Request('https://app.test/applications?cursor='+encodeURIComponent(firstPage!.nextCursor!)),{params:{id:offers[1].id}})).status).toBe(400);
+    const inactive=pending[42];await sql`update users set is_banned=true where id=${inactive.reader_id}`;
+    const request=(applicationId:string,approved:boolean,key:string,actor=author)=>new Request('https://app.test/approve',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'X-Liravo-Actor':actor},body:JSON.stringify({applicationId,approved})});
+    expect((await decide(request(inactive.id,true,'arc076-inactive-approval'),{params:{id:arc}})).status).toBe(404);
+    expect((await sql`select status from arc_applications where id=${inactive.id}`)[0].status).toBe('pending');
+    const decisions=await Promise.all([pending[0],pending[1]].map(row=>decide(request(row.id,true,'arc076-last-slot-'+row.id),{params:{id:arc}})));expect(decisions.map(response=>response.status).sort()).toEqual([200,409]);
+    const winning=await decisions.find(response=>response.status===200)!.json();expect(winning).toMatchObject({actorId:author,arcId:arc,application:{status:'approved',arc_id:arc}});
+    const winningKey='arc076-last-slot-'+winning.application.id;expect((await decide(request(winning.application.id,true,winningKey),{params:{id:arc}})).status).toBe(200);
+    await expect(sql`update arc_applications set status='rejected' where id=${winning.application.id}`).rejects.toThrow('Decision is final');
+    expect((await decide(request(inactive.id,false,'arc076-inactive-rejection'),{params:{id:arc}})).status).toBe(200);expect((await decide(request(inactive.id,false,'arc076-inactive-rejection'),{params:{id:arc}})).status).toBe(200);
+    expect((await sql`select count(*)::int as n from notifications where user_id=${inactive.reader_id} and entity_id=${arc}`)[0].n).toBe(1);
+    const complete=await getArcApplications(author,arc);expect(complete).toMatchObject({statistics:{total:45,pending:41,approved:3,rejected:1},arc:{slots_remaining:0,can_review:false}});
+    for(const status of ['pending','approved','rejected'] as const){let cursor:string|null=null;const rows:string[]=[];do{const page=await getArcApplications(author,arc,status,cursor);expect(page!.applications.every(row=>row.status===status)).toBe(true);rows.push(...page!.applications.map(row=>row.id));cursor=page!.nextCursor;}while(cursor);expect(rows).toHaveLength(complete!.statistics[status]);}
+    const denied=await decide(request(pending[2].id,false,'arc076-actor-mismatch',observer),{params:{id:arc}});expect(denied.status).toBe(409);
+    const own=await getArcs(author,true);expect((await readOffers(new Request('https://app.test/arcs?cursor='+encodeURIComponent(own.nextCursor!)))).status).toBe(400);
+    for(const role of ['anon','authenticated']){
+      for(const table of ['arcs','arc_applications'])for(const privilege of ['SELECT','INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);
+      for(const routine of ['arc_offer_document(uuid,uuid)','arc_catalog_snapshot(uuid,boolean,timestamptz,uuid,uuid,integer)','arc_application_snapshot(uuid,uuid,text,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    }
+    {
+      const owner=crypto.randomUUID(),other=crypto.randomUUID();for(const [id,name] of [[owner,'buddy077_owner'],[other,'buddy077_other']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},${name})`;
+      const [book]=await sql`insert into books(title,author_name) values('Buddy edition 077','Writer') returning id`;
+      const [open]=await sql`insert into buddy_reads(book_id,created_by,title,max_participants) values(${book.id},${other},'Older open group',3) returning id`;
+      const own:string[]=[];for(let i=0;i<23;i++){const [room]=await sql`insert into buddy_reads(book_id,created_by,title,max_participants) values(${book.id},${owner},${'Own group '+i},3) returning id`;own.push(room.id);await sql`insert into buddy_read_members(buddy_read_id,user_id) values(${room.id},${owner})`;}
+      const [privateRoom]=await sql`insert into buddy_reads(book_id,created_by,is_private) values(${book.id},${other},true) returning id`;
+      const {getBuddyReads,getBuddyDetail,getBuddyNotes,decodeBuddyCursor}=await import('@/lib/buddy-reads');
+      const first=await getBuddyReads(owner,'mine');expect(first.buddy_reads).toHaveLength(20);expect(first.nextCursor).toBeTruthy();const second=await getBuddyReads(owner,'mine',first.nextCursor);expect(second.buddy_reads).toHaveLength(3);expect(new Set([...first.buddy_reads,...second.buddy_reads].map(row=>row.id)).size).toBe(23);
+      expect(()=>decodeBuddyCursor(first.nextCursor,other,'mine')).toThrow('Invalid cursor');expect(()=>decodeBuddyCursor(first.nextCursor,owner,'open')).toThrow('Invalid cursor');
+      const available=await getBuddyReads(owner,'open');expect(available.buddy_reads.some(row=>row.id===open.id)).toBe(true);expect(available.buddy_reads.some(row=>row.id===privateRoom.id)).toBe(false);expect(await getBuddyDetail(owner,privateRoom.id)).toBeNull();
+      await sql`update users set is_banned=true where id=${other}`;await expect(sql`insert into buddy_read_members(buddy_read_id,user_id) values(${open.id},${owner})`).rejects.toThrow('unavailable');await sql`update users set is_banned=false where id=${other}`;
+      const roomId=own[0],detail=await getBuddyDetail(owner,roomId);expect(detail).toMatchObject({actorId:owner,buddyRead:{title:'Own group 0',participant_count:1,is_member:true,can_update:true,book:{id:book.id,title:'Buddy edition 077'}},participants:[{id:owner}]});
+      await expect(getBuddyNotes(other,roomId)).rejects.toMatchObject({status:403});
+      for(let i=0;i<45;i++)await sql`insert into buddy_read_notes(buddy_read_id,user_id,content) values(${roomId},${owner},${'Note '+i})`;
+      let cursor:string|null=null;const notes:string[]=[];do{const page=await getBuddyNotes(owner,roomId,cursor);notes.push(...page.notes.map(note=>note.id));cursor=page.nextCursor;}while(cursor);expect(notes).toHaveLength(45);expect(new Set(notes).size).toBe(45);
+      const [alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id) select 'Retained alias','Writer',work_id,id from books where id=${book.id} returning id`;await sql`update buddy_reads set book_id=${alias.id} where id=${roomId}`;expect((await getBuddyDetail(owner,roomId))!.book.id).toBe(book.id);
+      const notesPage=await getBuddyNotes(owner,roomId);expect(()=>decodeBuddyCursor(notesPage.nextCursor,owner,'notes.'+own[1])).toThrow('Invalid cursor');
+      await sql`update buddy_reads set is_active=false where id=${roomId}`;expect((await getBuddyDetail(owner,roomId))!.buddyRead).toMatchObject({is_member:true,can_update:false,can_join:false});expect((await getBuddyReads(owner,'mine')).buddy_reads.some(row=>row.id===roomId)||second.buddy_reads.some(row=>row.id===roomId)).toBe(true);
+      for(const role of ['anon','authenticated'])for(const routine of ['buddy_read_document(uuid,uuid)','buddy_catalog_snapshot(uuid,text,timestamptz,uuid,integer)','buddy_detail_snapshot(uuid,uuid)','buddy_notes_snapshot(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const actor=crypto.randomUUID(),year=2026;await sql`select create_direct_account(${actor},'reading078@example.test','reading078','Annual reader')`;
+      const shelf=(await sql`select id from shelves where user_id=${actor} and default_type='have_read'`)[0].id;
+      const books=await sql`insert into books(title,author_name,page_count,genres) select 'Reading 078 '||n,'Annual author',10,array['Fantasy'] from generate_series(1,1005) n returning id,work_id`;
+      await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at) select ${shelf},${actor},id,'2026-12-31T23:59:59.500Z'::timestamptz from books where id in ${sql(books.map(book=>book.id))}`;
+      const [edition]=await sql`insert into books(title,author_name,page_count,work_id) values('Another edition','Annual author',200,${books[0].work_id}) returning id`;
+      const [alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id) values('Retained alias','Annual author',${books[1].work_id},${books[1].id}) returning id`;
+      await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at) values(${shelf},${actor},${edition.id},'2026-06-01'),(${shelf},${actor},${alias.id},'2026-06-01')`;
+      const extra=await sql`insert into books(title,author_name,page_count) values('Unknown length','Other author',null),('Custom shelf only','Other author',600),('Previous year','Other author',900),('Next year','Other author',900) returning id`;
+      await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at,progress_pages) values(${shelf},${actor},${extra[0].id},'2026-12-31T23:59:59.999Z',80),(${shelf},${actor},${extra[2].id},'2025-12-31T23:59:59.999Z',900),(${shelf},${actor},${extra[3].id},'2027-01-01',900)`;
+      const [custom]=await sql`insert into shelves(user_id,name,slug,is_public) values(${actor},'Other shelf','reading078_custom',true) returning id`;await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at) values(${custom.id},${actor},${extra[1].id},'2026-06-01')`;
+      await sql`insert into reviews(user_id,book_id,rating,content,review_type,mood_tags,moderation_status,created_at) values(${actor},${books[0].id},4,'Published annual review','short',array['Cozy'],'published','2026-12-31T23:59:59.999Z'),(${actor},${books[1].id},1,'Hidden annual review','short',array['Dark'],'removed','2026-06-01'),(${actor},${books[2].id},5,'Previous review','short',array['Dark'],'published','2025-12-31')`;
+      await sql`insert into quotes(user_id,book_id,content,is_hidden,created_at) values(${actor},${books[0].id},'Annual quote',false,'2026-12-31T23:59:59.999Z'),(${actor},${books[0].id},'Hidden quote',true,'2026-06-01')`;
+      await sql`insert into user_badges(user_id,badge_id,awarded_at) values(${actor},'first_review','2026-12-31T23:59:59.999Z')`;
+      await sql`insert into xp_ledger(user_id,event_key,amount,reason,created_at) values(${actor},'reading078-award',40,'fixture','2026-12-31T23:59:59.999Z'),(${actor},'reading078-reversal',-5,'fixture','2026-06-01'),(${actor},'reading078-past',999,'fixture','2025-12-31')`;
+      await sql`update users set xp=777,genres=array['Romance'],reading_streak=2,max_reading_streak=31,last_streak_date=(now() at time zone 'UTC')::date-8 where id=${actor}`;await sql`select set_reading_goal(${actor},${year},2000)`;
+      const {getReadingYear,getPublicReadingYear}=await import('@/lib/reading-statistics'),snapshot=await getReadingYear(actor,year);
+      expect(snapshot!.stats).toMatchObject({booksReadThisYear:1006,pagesReadThisYear:10130,averageRating:4,reviewsWrittenThisYear:1,quotesSavedThisYear:1,currentReadingStreak:0,readingStreakMax:31,favouriteGenre:'Fantasy',longestBook:{page_count:10},goal:{progress:{books_read:1006}}});
+      expect(snapshot!.wrapped).toMatchObject({booksRead:1006,pagesRead:10130,topGenres:['Fantasy'],topMood:'Cozy',streakMax:31,yearXp:35,totalXp:777,badgesEarned:1,mostActiveMonthNumber:12,favouriteAuthor:'Annual author',readerLevel:500});
+      await sql`update shelves set is_public=false where id=${shelf}`;expect(await getPublicReadingYear(actor,year)).toMatchObject({booksRead:0,pagesRead:0,topGenres:[]});expect((await getReadingYear(actor,year))!.wrapped.booksRead).toBe(1006);
+      await sql`update users set is_banned=true where id=${actor}`;expect(await getPublicReadingYear(actor,year)).toBeNull();expect(await getReadingYear(actor,year)).toBeNull();
+      for(const role of ['anon','authenticated'])for(const routine of ['reading_year_books(uuid,integer,boolean)','public_reading_year_snapshot(uuid,integer)','reading_year_snapshot(uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const owner=crypto.randomUUID(),other=crypto.randomUUID();for(const [id,name] of [[owner,'rooms079_owner'],[other,'rooms079_other']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},${name})`;
+      const [book]=await sql`insert into books(title,author_name) values('Room edition 079','Writer') returning id,work_id`;const [alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id) values('Retained room alias','Writer',${book.work_id},${book.id}) returning id`;
+      const rooms=await sql`insert into reading_rooms(created_by,name,book_id,is_public) select ${owner},'Public room 079 '||n,${alias.id},true from generate_series(1,23) n returning id`;
+      const [privateRoom]=await sql`insert into reading_rooms(created_by,name,is_public) values(${owner},'Private room 079',false) returning id`;const [closed]=await sql`insert into reading_rooms(created_by,name,is_public) values(${owner},'Ended room 079',true) returning id`;await sql`update reading_rooms set is_active=false where id=${closed.id}`;
+      const {getReadingRooms,getReadingRoom,getRoomMilestones,getRoomPosts,decodeRoomCursor}=await import('@/lib/reading-rooms');
+      const first=await getReadingRooms(owner,'mine');expect(first.rooms).toHaveLength(20);const second=await getReadingRooms(owner,'mine',first.nextCursor);expect(second.rooms).toHaveLength(5);expect(new Set([...first.rooms,...second.rooms].map(room=>room.id)).size).toBe(25);expect([...first.rooms,...second.rooms].find(room=>room.id===privateRoom.id)).toMatchObject({is_public:false,is_member:true,member_count:1,book:null});expect([...first.rooms,...second.rooms].find(room=>room.id===closed.id)).toMatchObject({is_active:false,can_join:false,can_post:false});
+      expect(()=>decodeRoomCursor(first.nextCursor,other,'mine')).toThrow('Invalid cursor');expect(()=>decodeRoomCursor(first.nextCursor,owner,'public')).toThrow('Invalid cursor');await expect(getReadingRoom(other,privateRoom.id)).rejects.toMatchObject({status:403});
+      let cursor:string|null=null;const publicIds:string[]=[];do{const page=await getReadingRooms(other,'public',cursor);publicIds.push(...page.rooms.map(room=>room.id));cursor=page.nextCursor;}while(cursor);expect(publicIds).not.toContain(privateRoom.id);for(const room of rooms)expect(publicIds).toContain(room.id);expect(new Set(publicIds).size).toBe(publicIds.length);
+      const roomId=rooms[0].id;for(let n=0;n<22;n++){const member=n===0?other:crypto.randomUUID();if(n)await sql`select create_direct_account(${member},${'room079_member'+n+'@example.test'},${'room079_member'+n},'Reader')`;await sql`insert into room_participants(room_id,user_id) values(${roomId},${member})`;}
+      const detail=await getReadingRoom(owner,roomId);expect(detail).toMatchObject({room:{member_count:23,is_member:true,can_manage:true,book:{id:book.id,title:'Room edition 079'}}});expect(detail.participants).toHaveLength(20);expect((await getReadingRoom(owner,roomId,detail.participantsNextCursor)).participants).toHaveLength(3);expect(()=>decodeRoomCursor(detail.participantsNextCursor,owner,'participants.'+rooms[1].id)).toThrow('Invalid cursor');
+      const milestones=await sql`insert into reading_room_milestones(room_id,created_by,title,unlock_date) select ${roomId},${owner},'Opened chapter '||n,now()-n*interval '1 minute' from generate_series(1,25) n returning id`;
+      const [locked]=await sql`insert into reading_room_milestones(room_id,created_by,title,unlock_date) values(${roomId},${owner},'Future chapter',now()+interval '1 day') returning id`;
+      await sql`insert into reading_room_posts(room_id,user_id,content,milestone_id) select ${roomId},${owner},'Older chapter post '||n,${milestones[0].id} from generate_series(1,105) n`;
+      const [general]=await sql`insert into reading_room_posts(room_id,user_id,content) values(${roomId},${owner},'Latest general message') returning id`;
+      expect((await getRoomPosts(owner,roomId,'general')).posts.map(post=>post.id)).toEqual([general.id]);cursor=null;const posts:string[]=[];do{const page=await getRoomPosts(owner,roomId,milestones[0].id,cursor);posts.push(...page.posts.map(post=>post.id));cursor=page.nextCursor;}while(cursor);expect(posts).toHaveLength(105);expect(new Set(posts).size).toBe(105);
+      const postPage=await getRoomPosts(owner,roomId,milestones[0].id);expect(()=>decodeRoomCursor(postPage.nextCursor,owner,'posts.'+roomId+'.general')).toThrow('Invalid cursor');await expect(getRoomPosts(owner,roomId,locked.id)).rejects.toMatchObject({status:403});await expect(sql`insert into reading_room_posts(room_id,user_id,content,milestone_id) values(${roomId},${owner},'Locked spoiler',${locked.id})`).rejects.toThrow('Milestone unavailable');await expect(sql`insert into reading_room_posts(room_id,user_id,content) values(${roomId},${owner},' ')`).rejects.toThrow('Invalid content');
+      cursor=null;const chapters:any[]=[];do{const page=await getRoomMilestones(owner,roomId,cursor);expect(page.total).toBe(26);chapters.push(...page.milestones);cursor=page.nextCursor;}while(cursor);expect(chapters).toHaveLength(26);expect(chapters.find(row=>row.id===milestones[0].id)).toMatchObject({is_unlocked:true,post_count:105});expect(chapters.find(row=>row.id===locked.id)).toMatchObject({is_unlocked:false,post_count:0});
+      const {POST:writePost}=await import('@/app/api/reading-rooms/[id]/posts/route');const {POST:writeMilestone}=await import('@/app/api/reading-rooms/[id]/milestones/route');vi.mocked(getCurrentUser).mockResolvedValue({id:owner,email:'rooms079_owner@example.test'});
+      const intent=(path:string,key:string,payload:unknown)=>new Request('https://app.test/api/reading-rooms/'+roomId+'/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Liravo-Actor':owner,'Idempotency-Key':key},body:JSON.stringify(payload)});
+      const body={content:'A recoverable room post',milestone_id:null},saved=await writePost(intent('posts','room079-recovered-post',body),{params:{id:roomId}});expect(saved.status).toBe(201);expect(await saved.json()).toMatchObject({actorId:owner,roomId,post:{user_id:owner,users:{id:owner}}});
+      const milestoneBody={title:'A recoverable milestone',unlock_date:'2026-01-01T00:00:00.000Z'};expect((await writeMilestone(intent('milestones','room079-recovered-milestone',milestoneBody),{params:{id:roomId}})).status).toBe(201);
+      await sql`update reading_rooms set is_active=false where id=${roomId}`;expect((await writePost(intent('posts','room079-recovered-post',body),{params:{id:roomId}})).status).toBe(201);expect((await writeMilestone(intent('milestones','room079-recovered-milestone',milestoneBody),{params:{id:roomId}})).status).toBe(201);expect((await sql`select count(*)::int as n from reading_room_posts where room_id=${roomId} and content=${body.content}`)[0].n).toBe(1);
+      await sql`update users set is_banned=true where id=${owner}`;await expect(sql`select join_content_group(${other},'reading_room',${rooms[1].id})`).rejects.toThrow('Organizer unavailable');expect((await sql`select join_content_group(${other},'reading_room',${roomId}) as result`)[0].result).toMatchObject({joined:true,alreadyJoined:true});
+      for(const role of ['anon','authenticated']){for(const table of ['reading_rooms','room_participants','reading_room_members','reading_room_posts','reading_room_milestones'])for(const privilege of ['INSERT','UPDATE','DELETE'])expect((await sql`select has_table_privilege(${role},${table},${privilege}) as allowed`)[0].allowed).toBe(false);for(const routine of ['reading_room_catalog_snapshot(uuid,text,timestamptz,uuid,integer)','reading_room_detail_snapshot(uuid,uuid,timestamptz,uuid,integer)','reading_room_milestone_snapshot(uuid,uuid,timestamptz,uuid,integer)','reading_room_posts_snapshot(uuid,uuid,boolean,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE') as allowed`)[0].allowed).toBe(false);}
+    }
+    {
+      const actor=crypto.randomUUID();await sql`select create_direct_account(${actor},'content080@example.test','content080','Content writer')`;await sql`update users set created_at=now()-interval '8 days',xp=500 where id=${actor}`;
+      const [book]=await sql`insert into books(title,author_name,language,format) values('Content forms 080','Writer','fr','paperback') returning id`;
+      vi.mocked(getCurrentUser).mockResolvedValue({id:actor,email:'content080@example.test'});
+      const {POST:writeQuote}=await import('@/app/api/quotes/route'),{POST:verifyAuthor}=await import('@/app/api/author/verification-request/route');
+      const request=(key:string,body:unknown)=>new Request('https://app.test/content',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'X-Liravo-Actor':actor},body:JSON.stringify(body)});
+      const payload={book_id:book.id,content:'A meaningful passage.',page_number:2147483647},first=await writeQuote(request('quote080-owned',payload) as never);expect(first.status).toBe(201);const created=await first.json();expect(created.quote).toMatchObject({user_id:actor,book_id:book.id,page_number:2147483647});const replay=await writeQuote(request('quote080-owned',payload) as never);expect((await replay.json()).quote.id).toBe(created.quote.id);
+      for(const body of [{book_id:book.id,content:'<b></b>'},{book_id:book.id,content:'&nbsp;'},{book_id:book.id,content:'Passage',page_number:2147483648},{book_id:book.id,content:'Passage',page_number:1.5}])expect((await writeQuote(request('quote080-invalid',body) as never)).status).toBe(400);
+      expect((await sql`select count(*)::int as n from quotes where user_id=${actor}`)[0].n).toBe(1);expect((await sql`select count(*)::int as n from xp_ledger where user_id=${actor} and event_key=${'quote:'+created.quote.id}`)[0].n).toBe(1);
+      const evidence={pen_name:'Evidence writer',publisher:'',book_titles:'Published work and ISBN',website_url:'https://example.test/author',social_proof_url:''},verification=await verifyAuthor(request('verification080-owned',evidence));expect(verification.status).toBe(201);const data=await verification.json();expect(data).toMatchObject({actorId:actor,request:{user_id:actor,pen_name:'Evidence writer',status:'pending'}});expect((await(await verifyAuthor(request('verification080-owned',evidence))).json()).request.id).toBe(data.request.id);
+      expect((await sql`select count(*)::int as n from author_verification_requests where user_id=${actor}`)[0].n).toBe(1);expect((await sql`select is_verified_author from users where id=${actor}`)[0].is_verified_author).toBe(false);expect((await sql`select count(*)::int as n from author_work_claims where author_id=${actor}`)[0].n).toBe(0);
+      expect((await verifyAuthor(request('verification080-unsafe',{...evidence,website_url:'javascript:alert(1)'}))).status).toBe(400);expect((await sql`select count(*)::int as n from outbox_events where event_type='notify_admins' and payload->>'requestId'=${data.request.id}`)[0].n).toBe(1);
+    }
+    {
+      const owner=crypto.randomUUID(),reader=crypto.randomUUID();for(const [id,name] of [[owner,'lists081_owner'],[reader,'lists081_reader']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},${name})`;
+      const owned=await sql`insert into reading_lists(user_id,name,is_public,created_at) select ${owner},'List 081 '||n,true,'2026-01-01'::timestamptz from generate_series(1,53)n returning id`;
+      await sql`insert into reading_list_follows(user_id,list_id) select ${reader},id from reading_lists where user_id=${owner}`;
+      const [privateList]=await sql`insert into reading_lists(user_id,name,is_public) values(${owner},'Private 081',false) returning id`;await sql`insert into reading_list_follows(user_id,list_id) values(${reader},${privateList.id})`;
+      const {getReadingLists,getReadingList,mutateReadingList}=await import('@/lib/reading-lists');const first=await getReadingLists(owner,'mine'),second=await getReadingLists(owner,'mine',first.nextCursor);expect(first.lists).toHaveLength(50);expect(second.lists).toHaveLength(4);expect(new Set([...first.lists,...second.lists].map(row=>row.id)).size).toBe(54);
+      const followed=await getReadingLists(reader,'followed');expect(followed.lists).toHaveLength(50);expect((await getReadingLists(reader,'followed',followed.nextCursor)).lists).toHaveLength(3);await expect(getReadingList(reader,privateList.id)).rejects.toMatchObject({status:404});await expect(getReadingList(null,privateList.id)).rejects.toMatchObject({status:404});
+      const books=await sql`insert into books(title,author_name,language,format) select 'List edition 081 '||n,'Writer','fr','paperback' from generate_series(1,55)n returning id,work_id`;
+      await sql`update books set work_id=${books[0].work_id} where id=${books[1].id}`;
+      const [alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id) values('Retained list alias','Writer',${books[0].work_id},${books[0].id}) returning id`;
+      for(const [n,book]of books.entries())await sql`insert into reading_list_books(list_id,book_id,added_at) values(${owned[0].id},${book.id},${new Date(Date.UTC(2026,0,n+1))})`;
+      await sql`insert into reading_list_books(list_id,book_id,added_at) values(${owned[0].id},${alias.id},'2026-01-01')`;
+      let detail=await getReadingList(reader,owned[0].id);expect(detail.list).toMatchObject({book_count:55,follower_count:1,is_following:true});expect(detail.books).toHaveLength(20);expect(detail.books[0].id).toBe(books[54].id);const all=[...detail.books];while(detail.nextCursor){detail=await getReadingList(reader,owned[0].id,detail.nextCursor);all.push(...detail.books);}expect(all).toHaveLength(55);expect(new Set(all.map(row=>row.id)).size).toBe(55);expect(all.some(row=>row.id===books[1].id)).toBe(true);
+      await expect(mutateReadingList(reader,owned[0].id,'add',{book_id:books[0].id})).rejects.toMatchObject({status:404});await mutateReadingList(owner,owned[0].id,'add',{book_id:alias.id});expect((await getReadingList(owner,owned[0].id)).list.book_count).toBe(55);await mutateReadingList(owner,owned[0].id,'remove',{book_id:books[0].id});expect((await getReadingList(owner,owned[0].id)).list.book_count).toBe(54);expect((await sql`select count(*)::int n from reading_list_books where list_id=${owned[0].id} and book_id in(${alias.id},${books[0].id})`)[0].n).toBe(0);
+      await mutateReadingList(owner,owned[0].id,'update',{name:'  Updated list  ',description:'Details',is_public:false});expect((await getReadingList(owner,owned[0].id)).list).toMatchObject({name:'Updated list',description:'Details',is_public:false});await expect(getReadingList(reader,owned[0].id)).rejects.toMatchObject({status:404});
+      await expect(sql.begin(async tx=>{await tx`set local role authenticated`;await tx`update reading_lists set name='Bypass' where id=${owned[0].id}`;})).rejects.toMatchObject({code:'42501'});
+      await sql`update users set is_banned=true where id=${owner}`;await expect(mutateReadingList(owner,owned[1].id,'add',{book_id:books[0].id})).rejects.toMatchObject({status:403});await sql`update users set is_banned=false where id=${owner}`;
+      await mutateReadingList(owner,owned[0].id,'delete');expect(await mutateReadingList(owner,owned[0].id,'delete')).toMatchObject({deleted:true});expect((await sql`select count(*)::int n from books where id=${books[0].id}`)[0].n).toBe(1);
+    }
+    {
+      const owner=crypto.randomUUID(),moderator=crypto.randomUUID(),independent=crypto.randomUUID();for(const [id,name]of [[owner,'appeals082_owner'],[moderator,'appeals082_mod'],[independent,'appeals082_independent']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},${name})`;await sql`update users set is_moderator=true where id in(${moderator},${independent})`;
+      const [book]=await sql`insert into books(title,author_name) values('Owned appeal edition 082','Writer') returning id`;const quotes=await sql`insert into quotes(user_id,book_id,content,is_hidden) select ${owner},${book.id},'An owned moderated passage '||n,true from generate_series(1,26)n returning id`;
+      const reports=[];for(const quote of quotes){const [report]=await sql`insert into content_reports(reporter_id,entity_type,entity_id,reason,status,moderator_id,moderator_note,resolved_at) values(${moderator},'quote',${quote.id},'PRIVATE REPORTER TEXT','removed',${moderator},'A public decision note','2026-01-01') returning id`;reports.push(report);}
+      const {getAppeals}=await import('@/lib/appeals');let page=await getAppeals(owner,'actions');expect(page.actions).toHaveLength(20);expect(JSON.stringify(page)).not.toContain('PRIVATE REPORTER TEXT');expect(page.actions![0]).toMatchObject({label:'Owned appeal edition 082',content_type:'quote',moderator_note:'A public decision note'});expect((await getAppeals(owner,'actions','pending',page.nextCursor)).actions).toHaveLength(6);expect((await getAppeals(independent,'actions')).actions).toHaveLength(0);await expect(getAppeals(owner,'queue')).rejects.toMatchObject({status:403});
+      const {POST:submit}=await import('@/app/api/moderation/appeals/route');vi.mocked(getCurrentUser).mockResolvedValue({id:owner,email:'appeals082_owner@example.test'});const request=(key:string,body:unknown)=>new Request('https://app.test/api/moderation/appeals',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'X-Liravo-Actor':owner},body:JSON.stringify(body)});
+      for(const [n,report]of reports.entries()){const response=await submit(request('appeal082-case-'+n,{reason:'Please reconsider this content decision.',report_id:report.id}));expect(response.status).toBe(201);}
+      const general=await submit(request('appeal082-general',{reason:'Please reconsider my account warning.'}));expect(general.status).toBe(201);const data=await general.json();expect(data).toMatchObject({actorId:owner,appeal:{user_id:owner,report_id:null}});expect((await(await submit(request('appeal082-general',{reason:'Please reconsider my account warning.'}))).json()).appeal.id).toBe(data.appeal.id);
+      const {getAppealReceipt}=await import('@/lib/appeals');expect((await getAppealReceipt(owner,'appeal082-general')).appeal.id).toBe(data.appeal.id);await expect(getAppealReceipt(independent,'appeal082-general')).rejects.toMatchObject({status:404});await expect(getAppealReceipt(owner,'appeal082-uncommitted')).rejects.toMatchObject({status:404});
+      page=await getAppeals(owner,'mine');expect(page.appeals).toHaveLength(20);expect((await getAppeals(owner,'mine','pending',page.nextCursor)).appeals).toHaveLength(7);const ownActions=await getAppeals(owner,'actions');expect(ownActions.actions!.every(action=>action.pending_appeal_id)).toBe(true);
+      const [linked]=await sql`select id from appeals where user_id=${owner} and report_id=${reports[0].id}`;expect((await sql`select appeal_document(${moderator},${linked.id},true) doc`)[0].doc.can_review).toBe(false);expect((await sql`select appeal_document(${independent},${linked.id},true) doc`)[0].doc.can_review).toBe(true);
+      const [appeal]=await sql`select id from appeals where user_id=${owner} and report_id=${reports[0].id}`;await sql`select apply_community_intent(${independent},'appeal_review',${appeal.id},'appeal082-approved',${sql.json({status:'approved',note:'Restored after independent review.'})},null)`;expect((await sql`select is_hidden from quotes where id=${quotes[0].id}`)[0].is_hidden).toBe(false);expect((await getAppeals(owner,'mine')).appeals!.find(row=>row.id===appeal.id)?.status??(await sql`select status from appeals where id=${appeal.id}`)[0].status).toBe('approved');
+      await expect(sql`select apply_community_intent(${moderator},'appeal_review',${(await sql`select id from appeals where report_id=${reports[1].id}`)[0].id},'appeal082-original-moderator',${sql.json({status:'approved',note:null})},null)`).rejects.toMatchObject({code:'P1003'});
+      const foreign=await submit(request('appeal082-foreign',{reason:'An appeal with a foreign target.',content_type:'profile',content_id:moderator}));expect(foreign.status).toBe(403);expect((await submit(new Request('https://app.test/appeals',{method:'POST',body:'invalid-json'}))).status).toBe(400);
+      const rows=[];let next:string|null=null;do{const result=await getAppeals(independent,'queue','all',next);rows.push(...result.appeals!);next=result.nextCursor;}while(next);expect(new Set(rows.map(row=>row.id)).size).toBe(rows.length);expect(rows.filter(row=>row.user_id===owner)).toHaveLength(27);
+      expect((await sql`select has_function_privilege('authenticated','appeal_catalog_snapshot(uuid,text,text,timestamptz,uuid,integer)','EXECUTE') allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const reader=crypto.randomUUID(),lifetime=crypto.randomUUID(),recent=crypto.randomUUID(),restricted=crypto.randomUUID(),banned=crypto.randomUUID(),hidden=crypto.randomUUID();
+      for(const [id,name,xp]of [[reader,'board083_reader',0],[lifetime,'board083_lifetime',9000],[recent,'board083_recent',200],[restricted,'board083_restricted',30000],[banned,'board083_banned',40000],[hidden,'board083_hidden',100]] as const){await sql`select create_direct_account(${id},${name+'@example.test'},${name},${name})`;await sql`update users set country='QA',xp=${xp},created_at='2025-01-01' where id=${id}`;}
+      await sql`update users set profile_visibility='followers_only' where id=${restricted}`;await sql`update users set is_banned=true where id=${banned}`;await sql`insert into follows(follower_id,following_id) values(${reader},${lifetime}),(${reader},${recent})`;
+      for(const [id,key,amount,at]of [[lifetime,'outside-week',100,'2026-10-25T23:59:59.999999Z'],[lifetime,'week-start',10,'2026-10-26T00:00:00Z'],[lifetime,'reversal',-3,'2026-10-28T00:00:00Z'],[recent,'previous-month',20,'2026-10-31T00:00:00Z'],[recent,'month-start',50,'2026-11-01T00:00:00Z'],[recent,'future',99,'2026-11-01T12:00:00.000001Z']] as const)await sql`insert into xp_ledger(user_id,event_key,amount,reason,created_at) values(${id},${'board083-'+key},${amount},'Isolated period boundary',${at}::text::timestamptz)`;
+      const snapshot=async(type:string,period:string,country:string|null=null,now='2026-11-01T12:00:00Z')=>(await sql`select leaderboard_snapshot(${reader},${type},${period},${country},100,${now}::text::timestamptz) board`)[0].board;
+      const weekly=await snapshot('national','weekly','QA'),monthly=await snapshot('national','monthly','QA'),alltime=await snapshot('national','alltime','QA');expect(new Date(weekly.periodStart).toISOString()).toBe('2026-10-26T00:00:00.000Z');expect(new Date(monthly.periodStart).toISOString()).toBe('2026-11-01T00:00:00.000Z');expect(weekly.leaderboard.find((row:{id:string})=>row.id===lifetime)).toMatchObject({xp:7,lifetime_xp:9000});expect(weekly.leaderboard.find((row:{id:string})=>row.id===recent)).toMatchObject({xp:70});expect(monthly.leaderboard.find((row:{id:string})=>row.id===recent)).toMatchObject({xp:50});expect(alltime.leaderboard[0]).toMatchObject({id:lifetime,xp:9000});expect(alltime.leaderboard.some((row:{id:string})=>[restricted,banned].includes(row.id))).toBe(false);
+      expect((await snapshot('friends','weekly')).leaderboard.map((row:{id:string})=>row.id)).toEqual([recent,lifetime,reader]);await sql`insert into follows(follower_id,following_id) values(${reader},${restricted})`;expect((await snapshot('national','alltime','QA')).leaderboard[0].id).toBe(restricted);const yearBoundary=await snapshot('global','weekly',null,'2027-01-01T13:00:00+01:00');expect(new Date(yearBoundary.periodStart).toISOString()).toBe('2026-12-28T00:00:00.000Z');
+      const books=await sql`insert into books(title,author_name) select 'Board 083 edition '||n,'Writer' from generate_series(1,1001)n returning id`;await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,created_at,helpful_votes) select ${lifetime},id,4,'A useful published review.','short','published','2026-01-01',1 from books where id in ${sql(books.map(book=>book.id))}`;
+      await sql`insert into review_helpfulness_votes(review_id,user_id,is_helpful,created_at) select id,${reader},true,case when row_number() over(order by id)<=500 then '2026-09-01'::timestamptz else '2026-10-27'::timestamptz end from reviews where user_id=${lifetime}`;
+      const [recentReview]=await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,created_at,helpful_votes) values(${recent},${books[0].id},4,'Another useful review.','short','published','2026-01-01',1) returning id`;const [hiddenReview]=await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,is_hidden,helpful_votes) values(${hidden},${books[0].id},4,'A hidden review.','short','published',true,1000) returning id`;
+      await sql`insert into review_helpfulness_votes(review_id,user_id,is_helpful,created_at) values(${recentReview.id},${reader},true,'2026-11-01'),(${hiddenReview.id},${reader},true,'2026-10-27')`;
+      const reviewers=await snapshot('reviewers','weekly'),allReviewers=await snapshot('reviewers','alltime');expect(reviewers.leaderboard.find((row:{id:string})=>row.id===lifetime)).toMatchObject({helpful_votes:501,review_count:501});expect(allReviewers.leaderboard.find((row:{id:string})=>row.id===lifetime)).toMatchObject({helpful_votes:1001,review_count:1001});expect(reviewers.leaderboard.some((row:{id:string})=>row.id===hidden)).toBe(false);expect((await snapshot('reviewers','monthly')).leaderboard.find((row:{id:string})=>row.id===recent)).toMatchObject({helpful_votes:1,review_count:1});
+      const [transition]=await sql`insert into reviews(user_id,book_id,rating,content,review_type,moderation_status,created_at) values(${hidden},${books[1].id},4,'A visible vote transition.','short','published','2000-01-01') returning id`;await sql`insert into review_helpfulness_votes(review_id,user_id,is_helpful,created_at) values(${transition.id},${reader},false,'2000-01-01')`;
+      const started=Date.now();await sql`select apply_book_interaction(${reader},${books[1].id},'helpfulness','board083-change-old-vote',${transition.id},true)`;const [changed]=await sql`select created_at,cast_at,cast_at::text as cast_text from review_helpfulness_votes where review_id=${transition.id} and user_id=${reader}`;expect(changed.created_at.toISOString()).toBe('2000-01-01T00:00:00.000Z');expect(+changed.cast_at).toBeGreaterThanOrEqual(started);expect((await snapshot('reviewers','weekly',null,changed.cast_text)).leaderboard.find((row:{id:string})=>row.id===hidden)).toMatchObject({helpful_votes:1,review_count:1});
+      expect((await sql`select has_function_privilege('authenticated','leaderboard_snapshot(uuid,text,text,text,integer,timestamptz)','EXECUTE') allowed`)[0].allowed).toBe(false);await expect(sql`select leaderboard_snapshot(${banned},'global','weekly')`).rejects.toMatchObject({code:'P1003'});
+    }
+    {
+      const owner=crypto.randomUUID(),other=crypto.randomUUID(),banned=crypto.randomUUID();for(const[id,name]of[[owner,'discovery084_owner'],[other,'discovery084_other'],[banned,'discovery084_banned']])await sql`select create_direct_account(${id},${name+'@example.test'},${name},${name})`;await sql`update users set profile_visibility='followers_only' where id=${other}`;await sql`update users set is_banned=true where id=${banned}`;
+      const[edition]=await sql`insert into books(title,author_name,page_count,language,format) values('Discovery canonical 084','Writer',100,'fr','paperback') returning id,work_id`;const[large]=await sql`insert into books(title,author_name,page_count,work_id,language,format) values('Discovery earlier large 084','Writer',500,${edition.work_id},'de','hardcover') returning id`;const[alias]=await sql`insert into books(title,author_name,page_count,work_id,canonical_edition_id) values('Retained discovery alias','Writer',999,${edition.work_id},${edition.id}) returning id`;const[secondWork]=await sql`insert into books(title,author_name,page_count) values('Discovery second work 084','Writer',150) returning id`;
+      const quotes=await sql`insert into quotes(user_id,book_id,content,created_at) select ${owner},case when n<=20 then ${edition.id}::uuid else ${alias.id}::uuid end,'Tied quote '||n,'2026-01-01'::timestamptz from generate_series(1,23)n returning id`;await sql`insert into quotes(user_id,book_id,content) values(${owner},${large.id},'A distinct physical edition'),(${other},${edition.id},'Restricted profile passage'),(${banned},${edition.id},'Banned passage')`;await sql`insert into quotes(user_id,book_id,content,is_hidden)values(${owner},${edition.id},'Hidden passage',true)`;
+      const {getReadingQuotes,getReadingDebates,getReadingDebate,getReadingChallenges,getReadingChallenge}=await import('@/lib/reading-discovery');const quotePage=await getReadingQuotes(owner);expect(quotePage.total).toBe(24);expect(quotePage.quotes).toHaveLength(20);const rest=await getReadingQuotes(owner,owner,null,quotePage.nextCursor);expect(rest.quotes).toHaveLength(4);expect(new Set([...quotePage.quotes,...rest.quotes].map(row=>row.id)).size).toBe(24);const bookQuotes=await getReadingQuotes(owner,owner,edition.id);expect(bookQuotes.total).toBe(23);expect(bookQuotes.quotes.every(row=>row.books.id===edition.id&&row.books.title==='Discovery canonical 084')).toBe(true);expect((await getReadingQuotes(owner,owner,large.id)).total).toBe(1);await expect(getReadingQuotes(owner,other)).rejects.toMatchObject({status:403});await sql`insert into follows(follower_id,following_id)values(${owner},${other})`;expect((await getReadingQuotes(owner,other)).total).toBe(1);await sql`delete from follows where follower_id=${owner} and following_id=${other}`;
+      await expect(getReadingQuotes(other,other,null,quotePage.nextCursor)).rejects.toMatchObject({status:400});await expect(getReadingQuotes(owner,owner,edition.id,quotePage.nextCursor)).rejects.toMatchObject({status:400});expect(quotes).toHaveLength(23);
+      await expect(sql`insert into book_debates(book_id,user_id,question)values(${edition.id},${owner},'     ')`).rejects.toMatchObject({code:'P1004'});const {POST:createDebate}=await import('@/app/api/debates/route');vi.mocked(getCurrentUser).mockResolvedValue({id:owner,email:'discovery084_owner@example.test'});const createRequest=()=>new Request('https://app.test/api/debates',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'debate084-created','X-Liravo-Actor':owner},body:JSON.stringify({book_id:edition.id,question:'  A recoverable edition question?  '})});const created=await createDebate(createRequest()as never);expect(created.status).toBe(201);const createdData=await created.json();expect(createdData).toMatchObject({actorId:owner,debate:{user_id:owner,book_id:edition.id,question:'A recoverable edition question?'}});expect((await(await createDebate(createRequest()as never)).json()).debate.id).toBe(createdData.debate.id);await sql`update book_debates set is_active=false where id=${createdData.debate.id}`;
+      const debates=await sql`insert into book_debates(book_id,user_id,question,created_at)select ${alias.id},${owner},'Discovery question '||n||'?','2026-01-01'::timestamptz from generate_series(1,55)n returning id`;const[privateDebate]=await sql`insert into book_debates(book_id,user_id,question)values(${edition.id},${other},'A restricted question?')returning id`;const[closed]=await sql`insert into book_debates(book_id,user_id,question,is_active)values(${edition.id},${owner},'A closed question?',false)returning id`;const collected=[];let cursor:string|null=null;do{const result=await getReadingDebates(owner,'active',cursor);collected.push(...result.debates);cursor=result.nextCursor;}while(cursor);const ownDebates=collected.filter(row=>row.user_id===owner);expect(ownDebates).toHaveLength(55);expect(new Set(collected.map(row=>row.id)).size).toBe(collected.length);expect(ownDebates.every(row=>row.book.id===edition.id)).toBe(true);expect((await getReadingDebates(null)).debates.every(row=>!row.can_vote&&row.current_vote===null)).toBe(true);await expect(getReadingDebate(null,privateDebate.id)).rejects.toMatchObject({status:404});expect((await getReadingDebate(other,privateDebate.id)).debate.can_share).toBe(false);
+      const {POST:vote}=await import('@/app/api/debates/[id]/vote/route');vi.mocked(getCurrentUser).mockResolvedValue({id:other,email:'discovery084_other@example.test'});const voteRequest=(value:string)=>new Request('https://app.test/api/debates/'+debates[0].id+'/vote',{method:'POST',headers:{'Content-Type':'application/json','X-Liravo-Actor':other},body:JSON.stringify({vote:value})});const result=await vote(voteRequest('yes'),{params:{id:debates[0].id}});expect(await result.json()).toMatchObject({actorId:other,debateId:debates[0].id,vote:'yes',yes_count:1,no_count:0});expect((await vote(voteRequest('yes'),{params:{id:debates[0].id}})).status).toBe(200);await sql`update book_debates set is_active=false where id=${debates[0].id}`;expect((await vote(voteRequest('yes'),{params:{id:debates[0].id}})).status).toBe(200);expect((await vote(voteRequest('no'),{params:{id:debates[0].id}})).status).toBe(409);expect((await getReadingDebates(other,'mine')).debates.some(row=>row.id===debates[0].id&&row.current_vote==='yes'&&!row.can_vote)).toBe(true);expect((await getReadingDebates(owner,'mine')).debates.some(row=>row.id===closed.id)).toBe(true);
+      const active=await sql`insert into challenges(title,type,cadence,goal_books,created_at)select 'Discovery challenge '||n,'reading','weekly',5,'2026-01-01'::timestamptz from generate_series(1,105)n returning id`;const[challenge]=await sql`insert into challenges(title,type,cadence,goal_books,goal_pages,start_date,end_date)values('Discovery progress 084','reading','monthly',5,1000,now()-interval '14 days',now()+interval '14 days')returning id`;await sql`insert into challenge_participants(challenge_id,user_id,joined_at)values(${challenge.id},${owner},now()-interval '14 days'),(${challenge.id},${other},now()-interval '14 days')`;
+      for(let n=0;n<51;n++){const id=crypto.randomUUID(),name='discovery084_member'+n;await sql`select create_direct_account(${id},${name+'@example.test'},${name},${name})`;await sql`insert into challenge_participants(challenge_id,user_id)values(${challenge.id},${id})`;}
+      const[shelf]=await sql`select id from shelves where user_id=${owner} and default_type='have_read'`;await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at)values(${shelf.id},${owner},${large.id},(now()at time zone 'UTC')::date-5),(${shelf.id},${owner},${edition.id},(now()at time zone 'UTC')::date-2),(${shelf.id},${owner},${alias.id},(now()at time zone 'UTC')::date-1),(${shelf.id},${owner},${secondWork.id},(now()at time zone 'UTC')::date)`;
+      let detail=await getReadingChallenge(owner,challenge.id);expect(detail.challenge).toMatchObject({participant_count:53,joined:true,can_join:false});expect(detail.progress).toMatchObject({booksFinished:2,pagesRead:250});const members=[...detail.participants];while(detail.participantsNextCursor){detail=await getReadingChallenge(owner,challenge.id,detail.participantsNextCursor);members.push(...detail.participants);}expect(members).toHaveLength(53);expect(new Set(members.map(row=>row.id)).size).toBe(53);
+      const challengeRows:import('@/types/database').ReadingChallenge[]=[];cursor=null;do{const result=await getReadingChallenges(owner,'active',cursor);challengeRows.push(...result.challenges);cursor=result.nextCursor;}while(cursor);expect(active.every(row=>challengeRows.some(value=>value.id===row.id))).toBe(true);expect(new Set(challengeRows.map(row=>row.id)).size).toBe(challengeRows.length);await sql`update challenges set is_active=false where id=${challenge.id}`;expect((await getReadingChallenges(owner,'mine')).challenges.some(row=>row.id===challenge.id)).toBe(true);expect((await sql`select join_reading_challenge(${owner},${challenge.id})result`)[0].result).toMatchObject({joined:true,success:true});const newcomer=crypto.randomUUID();await sql`select create_direct_account(${newcomer},'discovery084_new@example.test','discovery084_new','New reader')`;await expect(sql`select join_reading_challenge(${newcomer},${challenge.id})`).rejects.toMatchObject({code:'P1004'});
+      const[window]=await sql`insert into challenges(title,type,cadence,goal_books,goal_pages,start_date,end_date,is_active)values('UTC completion dates 084','reading','weekly',5,1000,'2026-02-01T00:30:00Z','2026-02-03T00:00:00Z',false)returning id`;await sql`insert into challenge_participants(challenge_id,user_id,joined_at)values(${window.id},${owner},'2026-02-01T00:30:00Z')`;await sql`update shelf_books set finished_at=case when book_id=${large.id} then '2026-01-31'::date when book_id=${secondWork.id} then '2026-02-03'::date else '2026-02-01'::date end where user_id=${owner}`;await sql.begin(async tx=>{await tx`set local time zone 'America/New_York'`;expect((await tx`select reading_challenge_progress(${owner},${window.id})result`)[0].result.progress).toMatchObject({booksFinished:1,pagesRead:100});});
+      for(const routine of['quote_catalog_snapshot(uuid,uuid,uuid,timestamptz,uuid,integer)','debate_detail_snapshot(uuid,uuid)','reading_challenge_detail_snapshot(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege('authenticated',${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const reader={id:crypto.randomUUID()};await sql`select create_direct_account(${reader.id},'taste085@example.test','taste_editions_085','Taste editions')`;await sql`update users set premium_override=true where id=${reader.id}`;
+      const [shelf]=await sql`select id from shelves where user_id=${reader.id} and default_type='have_read'`;
+      const [first]=await sql`insert into books(title,author_name,genres)values('Older taste edition','Taste author',array['Horror'])returning id,work_id`;
+      const [latest]=await sql`insert into books(title,author_name,genres,work_id)values('Latest taste edition','Taste author',array['Fantasy'],${first.work_id})returning id`;
+      const [alias]=await sql`insert into books(title,author_name,genres,work_id,canonical_edition_id)values('Retained taste alias','Taste author',array['Wrong alias genre'],${first.work_id},${latest.id})returning id`;
+      for(const [id,date]of[[first.id,'2026-01-01'],[latest.id,'2026-02-01'],[alias.id,'2026-03-01']])await sql`insert into shelf_books(user_id,shelf_id,book_id,finished_at)values(${reader.id},${shelf.id},${id},${date})`;
+      await sql`insert into reviews(user_id,book_id,rating,mood_tags,content)values(${reader.id},${alias.id},5,array['Cozy'],'Alias reading preferences.')`;
+      const {readTasteProfile}=await import('@/services/ai-profiles');expect((await readTasteProfile(reader.id)).eligible).toBe(false);
+      let source=(await sql`select taste_profile_input(${reader.id})source`)[0].source;expect(source.books).toHaveLength(1);expect(source.books[0]).toMatchObject({id:latest.id,title:'Latest taste edition',genres:['Fantasy'],review:{moods:['Cozy']}});
+      const [custom]=await sql`insert into shelves(user_id,name,is_default)values(${reader.id},'Not completed',false)returning id`;
+      const [outside]=await sql`insert into books(title,author_name)values('Custom shelf only','Taste author')returning id`;await sql`insert into shelf_books(user_id,shelf_id,book_id,finished_at)values(${reader.id},${custom.id},${outside.id},'2026-12-31')`;
+      const extra=await sql`insert into books(title,author_name,genres)select 'Other taste work '||n,'Taste author',array['Poetry']from generate_series(1,25)n returning id`;
+      for(const [index,book]of extra.entries())await sql`insert into shelf_books(user_id,shelf_id,book_id,finished_at)values(${reader.id},${shelf.id},${book.id},${'2026-04-'+String(index+1).padStart(2,'0')})`;
+      source=(await sql`select taste_profile_input(${reader.id})source`)[0].source;expect(source.books).toHaveLength(20);expect(new Set(source.books.map((book:{id:string})=>book.id)).size).toBe(20);expect(source.books.some((book:{id:string})=>[first.id,latest.id,alias.id,outside.id].includes(book.id))).toBe(false);expect(source.books[0].finished_at).toBe('2026-04-25');expect((await readTasteProfile(reader.id)).eligible).toBe(true);
+      expect((await sql`select has_function_privilege('authenticated','taste_profile_input(uuid)','EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const owner=crypto.randomUUID();await sql`select create_direct_account(${owner},'premium086@example.test','premium_status_086','Premium status')`;await sql`update users set is_premium=true,premium_override=false where id=${owner}`;
+      const status=async()=>(await sql`select premium_status_snapshot(${owner})result`)[0].result;
+      expect(await status()).toEqual({active:false,subscriptions:[]});
+      await sql`insert into subscriptions(user_id,provider,status,amount,currency,current_period_end,renewal_cancelled)values(${owner},'google_play','active',4.99,'USD',now()-interval '1 day',false),(${owner},'google_play','active',4.99,'USD',null,false)`;
+      expect(await status()).toEqual({active:false,subscriptions:[]});
+      const [paid]=await sql`insert into subscriptions(user_id,provider,status,amount,currency,current_period_end,renewal_cancelled)values(${owner},'google_play','active',4.99,'USD',now()+interval '14 days',true)returning id`;
+      expect(await status()).toMatchObject({active:true,subscriptions:[{provider:'google_play',renewalCancelled:true}]});await sql`update subscriptions set current_period_end=now()-interval '1 second' where id=${paid.id}`;expect((await status()).active).toBe(false);
+      const [legacy]=await sql`insert into subscriptions(user_id,provider,status,amount,currency,current_period_end)values(${owner},'dodopayments','active',4.99,'USD',null)returning id`;expect(await status()).toEqual({active:false,subscriptions:[]});await sql`update subscriptions set status='cancelled' where id=${legacy.id}`;await sql`update users set premium_override=true where id=${owner}`;expect(await status()).toEqual({active:true,subscriptions:[]});
+      await sql`update users set is_banned=true where id=${owner}`;await expect(status()).rejects.toMatchObject({code:'P1003'});await sql`update users set is_banned=false,deleted_at=now() where id=${owner}`;await expect(status()).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])expect((await sql`select has_function_privilege(${role},'premium_status_snapshot(uuid)','EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const admin=crypto.randomUUID(),reader=crypto.randomUUID();await sql`select create_direct_account(${admin},'admin087@example.test','admin087_staff','Admin catalog')`;await sql`select create_direct_account(${reader},'admin087reader@example.test','admin087_reader','Catalog reader')`;await sql`update users set is_admin=true where id=${admin}`;
+      for(let n=0;n<27;n++)await sql`select create_direct_account(${crypto.randomUUID()},${'admin087reader'+n+'@example.test'},${'admin087_reader'+n},${'Catalog reader '+n})`;
+      const books=await sql`insert into books(title,author_name,created_at)select 'Admin087 books '||n,'Catalog writer','2026-10-01T12:00:00.123456Z'::timestamptz from generate_series(1,55)n returning id`;
+      await sql`insert into custom_themes(name,css_overrides,is_active,created_at)select 'Admin087 theme '||n,'',false,'2026-10-01T12:00:00.123456Z'::timestamptz from generate_series(1,27)n`;
+      await sql`insert into seasonal_events(name,start_date,end_date)select 'Admin087 season '||n,'2026-10-01T12:00:00.123456Z'::timestamptz,'2026-11-01'::timestamptz from generate_series(1,105)n`;
+      await sql`insert into promoted_listings(book_id,start_date,end_date)select ${books[0].id},'2026-10-01'::timestamptz,'2026-11-01'::timestamptz from generate_series(1,105)n`;
+      await sql`insert into writing_challenges(title,type,is_active)select 'Admin087 challenge '||n,'weekly',false from generate_series(1,27)n`;
+      const snapshot=async(scope:string,search='',cursor:{at:string;key:string}|null=null)=>(await sql`select admin_catalog_snapshot(${admin},${scope},${search},${cursor?.at??null}::text::timestamptz,${cursor?.key??null},25,0)data`)[0].data;
+      for(const scope of['users','books','themes','promotions','seasons','writing']){const search=scope==='users'?'admin087_reader':scope==='books'?'Admin087':'';let page=await snapshot(scope,search),rows=page.rows.slice(0,25),next=page.rows.length>25?rows.at(-1):null;while(next){page=await snapshot(scope,search,next);rows.push(...page.rows.slice(0,25));next=page.rows.length>25?page.rows[24]:null;}expect(rows).toHaveLength(page.total);expect(new Set(rows.map((row:{key:string})=>row.key)).size).toBe(rows.length);if(scope==='users'){expect(rows).toHaveLength(28);expect(rows[0].item).toHaveProperty('display_name');expect(rows[0].item).toHaveProperty('avatar_url');for(const row of rows){expect(row.item).not.toHaveProperty('password_hash');expect(row.item).not.toHaveProperty('pin_hash');expect(row.item).not.toHaveProperty('totp_secret');}}if(scope==='books')expect(rows).toHaveLength(55);if(scope==='themes')expect(rows.some((row:{key:string})=>row.key==='Admin087 theme 27')).toBe(true);}
+      vi.mocked(getCurrentUser).mockResolvedValue({id:admin,email:'admin087@example.test'});const {adminCatalogResponse}=await import('@/lib/admin-catalog');let cursor:string|null=null;const ids:string[]=[];do{const response=await adminCatalogResponse(new Request('https://app.test/admin?search=Admin087'+(cursor?'&cursor='+encodeURIComponent(cursor):'')),'books','books');expect(response.status).toBe(200);const data=await response.json();ids.push(...data.books.map((book:{id:string})=>book.id));cursor=data.nextCursor;}while(cursor);expect(ids).toHaveLength(55);expect(new Set(ids).size).toBe(55);
+      const {PATCH:updateUser}=await import('@/app/api/admin/users/route');const update=()=>updateUser(new Request('https://app.test/admin/users',{method:'PATCH',headers:{'Content-Type':'application/json','Idempotency-Key':'admin087-owned-suspension','X-Liravo-Actor':admin},body:JSON.stringify({userId:reader,is_suspended:true})}));expect(await(await update()).json()).toMatchObject({actorId:admin,userId:reader,updated:true});expect((await update()).status).toBe(200);expect((await sql`select count(*)::int n from moderation_log where target_user_id=${reader} and action='suspend_user'`)[0].n).toBe(1);
+      await expect(sql`select admin_catalog_snapshot(${reader},'users')`).rejects.toMatchObject({code:'P1003'});await expect(sql`select admin_catalog_snapshot(${admin},'users; drop table users')`).rejects.toMatchObject({code:'P1004'});expect((await sql`select has_function_privilege('authenticated','admin_catalog_snapshot(uuid,text,text,timestamptz,text,integer,integer)','EXECUTE')allowed`)[0].allowed).toBe(false);await sql`update users set is_admin=false where id=${admin}`;await expect(sql`select admin_catalog_snapshot(${admin},'users')`).rejects.toMatchObject({code:'P1003'});
+    }
+    {
+      const admin=crypto.randomUUID(),reader=crypto.randomUUID();await sql`select create_direct_account(${admin},'admin088@example.test','admin088_staff','Edition administrator')`;await sql`select create_direct_account(${reader},'admin088reader@example.test','admin088_reader','Edition reader')`;await sql`update users set is_admin=true where id=${admin}`;
+      const prefix='979999999901',isbn=prefix+String((10-[...prefix].reduce((sum,digit,index)=>sum+Number(digit)*(index%2?3:1),0)%10)%10);
+      const [book]=await sql`insert into books(title,author_name,isbn_13,language,format)values('Edition088 selected','Edition author',${isbn},'fr','paperback')returning id,work_id`;
+      const [alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id)values('Edition088 retained alias','Edition author',${book.work_id},${book.id})returning id`;
+      const [other]=await sql`insert into books(title,author_name,work_id,language,format)values('Edition088 other','Edition author',${book.work_id},'de','hardcover')returning id`;
+      await sql`insert into affiliate_link_clicks(book_id,user_id_hash,link_type,store_name,country,is_affiliate)select ${book.id},repeat('a',64),'secondary','Fixture store','FR',true from generate_series(1,1005)n`;await sql`insert into affiliate_link_clicks(book_id,user_id_hash,link_type,store_name,country,is_affiliate)select ${alias.id},repeat('a',64),'secondary','Fixture store','FR',n<=5 from generate_series(1,12)n`;
+      const[shelf]=await sql`select id from shelves where user_id=${reader} and default_type='have_read'`;for(const id of[book.id,alias.id])await sql`insert into shelf_books(user_id,shelf_id,book_id)values(${reader},${shelf.id},${id})`;
+      const snapshot=(await sql`select admin_catalog_snapshot(${admin},'books','Edition088')data`)[0].data;expect(snapshot.total).toBe(2);expect(snapshot.rows.map((row:{item:{id:string}})=>row.item.id)).not.toContain(alias.id);expect(snapshot.rows.find((row:{item:{id:string}})=>row.item.id===book.id).item).toMatchObject({affiliate_click_count:1010,have_read_count:1,language:'fr',format:'paperback'});expect((await sql`select admin_catalog_snapshot(${admin},'books',${isbn})data`)[0].data.rows[0].item.id).toBe(book.id);
+      const mutate=()=>sql`select set_admin_edition_audiobook(${admin},${alias.id},true)result`;expect((await mutate())[0].result).toMatchObject({updated:true,actorId:admin,bookId:alias.id,editionId:book.id,has_audiobook:true});const before=(await sql`select updated_at::text value from books where id=${book.id}`)[0].value;expect((await mutate())[0].result.has_audiobook).toBe(true);expect((await sql`select updated_at::text value from books where id=${book.id}`)[0].value).toBe(before);expect((await sql`select has_audiobook from books where id=${other.id}`)[0].has_audiobook).toBe(false);expect((await sql`select catalog_book_snapshot(${alias.id})data`)[0].data.has_audiobook).toBe(true);
+      await expect(sql`select set_admin_edition_audiobook(${admin},${crypto.randomUUID()},true)`).rejects.toMatchObject({code:'P1005'});await expect(sql`select set_admin_edition_audiobook(${reader},${book.id},true)`).rejects.toMatchObject({code:'P1003'});await sql`update users set is_admin=false where id=${admin}`;await expect(mutate()).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])for(const routine of['admin_edition_audiobook_snapshot(uuid,uuid)','set_admin_edition_audiobook(uuid,uuid,boolean)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const admin=crypto.randomUUID(),moderator=crypto.randomUUID(),reader=crypto.randomUUID();
+      for(const [user,name]of [[admin,'admin'],[moderator,'moderator'],[reader,'reader']])await sql`select create_direct_account(${user},${name+'089@example.test'},${name+'089'},${name+' 089'})`;
+      await sql`update users set is_admin=true where id=${admin}`;await sql`update users set is_moderator=true where id=${moderator}`;
+      const [book]=await sql`insert into books(title,author_name)values('Moderation089 book','Writer')returning id`;
+      const [review]=await sql`insert into reviews(user_id,book_id,rating,content)values(${reader},${book.id},4,'<p>Reading &amp; reflection</p>')returning id`;
+      await sql`insert into content_reports(reporter_id,entity_type,entity_id,reason,created_at)select ${reader},'review',${review.id},'Moderation089 report '||n,'2026-11-04T00:00:00.123456Z'::timestamptz from generate_series(1,45)n`;
+      const snapshot=async(user:string,scope='reports',status='pending',cursor:{at:string;key:string}|null=null)=>(await sql`select moderation_catalog_snapshot(${user},${scope},${status},${cursor?.at??null}::text::timestamptz,${cursor?.key??null}::uuid,20,0)data`)[0].data;
+      let page=await snapshot(admin),rows=page.rows.slice(0,20),cursor=page.rows.length>20?rows.at(-1):null;
+      while(cursor){page=await snapshot(admin,'reports','pending',cursor);rows.push(...page.rows.slice(0,20));cursor=page.rows.length>20?page.rows[19]:null;}
+      expect(rows).toHaveLength(page.total);expect(new Set(rows.map((row:{key:string})=>row.key)).size).toBe(rows.length);expect(rows.filter((row:{item:{reason:string}})=>row.item.reason.startsWith('Moderation089'))).toHaveLength(45);
+      const target=rows.find((row:{item:{reason:string}})=>row.item.reason==='Moderation089 report 1').item;
+      expect(target).toMatchObject({reporter:{username:'reader089'},target:{owner_id:reader,label:'Moderation089 book'},allowed_actions:['approve','remove','warn','escalate']});expect(JSON.stringify(target)).not.toContain('password_hash');
+      await sql`update users set is_moderator=true where id=${reader}`;expect((await sql`select moderation_report_document(${reader},${target.id},false)data`)[0].data.allowed_actions).toEqual([]);await sql`update users set is_moderator=false where id=${reader}`;
+      await sql`update content_reports set status='escalated' where id=${target.id}`;expect((await snapshot(moderator,'reports','escalated')).rows.find((row:{key:string})=>row.key===target.id).item.allowed_actions).toEqual([]);
+      const [userReport]=await sql`insert into content_reports(reporter_id,entity_type,entity_id,reason)values(${reader},'user',${reader},'Account report')returning id`;
+      expect((await snapshot(moderator)).rows.find((row:{key:string})=>row.key===userReport.id).item.allowed_actions).not.toContain('remove');
+      const decide=()=>sql`select apply_community_intent(${admin},'report_review',${target.id},'moderation089-owned',${sql.json({status:'approved',note:'Checked'})})data`;
+      const decision=(await decide())[0].data;expect((await decide())[0].data).toEqual(decision);expect((await sql`select moderation_receipt_snapshot(${admin},${target.id},'moderation089-owned')data`)[0].data).toEqual(decision);
+      expect((await snapshot(admin,'log')).rows.some((row:{item:{report_id:string;moderator:{username:string};action:string}})=>row.item.report_id===target.id&&row.item.action==='approved'&&row.item.moderator.username==='admin089')).toBe(true);
+      await expect(snapshot(moderator,'log')).rejects.toMatchObject({code:'P1003'});await expect(snapshot(reader)).rejects.toMatchObject({code:'P1003'});await expect(snapshot(admin,'reports','bogus')).rejects.toMatchObject({code:'P1004'});await expect(sql`select moderation_receipt_snapshot(${moderator},${target.id},'moderation089-owned')`).rejects.toMatchObject({code:'P1005'});
+      await sql`update users set is_admin=false where id=${admin}`;await expect(snapshot(admin)).rejects.toMatchObject({code:'P1003'});await expect(sql`select moderation_receipt_snapshot(${admin},${target.id},'moderation089-owned')`).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])for(const routine of['moderation_report_document(uuid,uuid,boolean)','moderation_catalog_snapshot(uuid,text,text,timestamptz,uuid,integer,integer)','moderation_receipt_snapshot(uuid,uuid,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const owner=crypto.randomUUID(),reader=crypto.randomUUID(),other=crypto.randomUUID();for(const[user,name]of[[owner,'owner'],[reader,'reader'],[other,'other']])await sql`select create_direct_account(${user},${name+'090@example.test'},${name+'090'},${name+' 090'})`;
+      await sql`insert into follows(follower_id,following_id)values(${owner},${reader}),(${reader},${owner})`;
+      const[book]=await sql`insert into books(title,author_name,language,format)values('Pass090 selected','Writer','fr','paperback')returning id,work_id`;
+      const[alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id)values('Pass090 alias','Writer',${book.work_id},${book.id})returning id`;
+      await sql`insert into pass_the_book_chains(book_id,creator_id,created_at)select ${alias.id},${owner},'2026-11-04T00:00:00.123456Z'::timestamptz from generate_series(1,45)n`;
+      await sql`insert into book_passes(sender_id,recipient_id,book_id,message,created_at)select ${owner},${reader},${alias.id},'Pass090','2026-11-04T00:00:00.123456Z'::timestamptz from generate_series(1,45)n`;
+      await sql`insert into book_passes(sender_id,recipient_id,book_id,message,created_at)select ${reader},${owner},${book.id},'Return090','2026-11-04T00:00:00.123456Z'::timestamptz from generate_series(1,45)n`;
+      const catalog=async(scope:string,cursor:{created_at:string;id:string}|null=null)=>(await sql`select book_pass_catalog_snapshot(${owner},${scope},${cursor?.created_at??null}::text::timestamptz,${cursor?.id??null}::uuid,20)data`)[0].data;
+      for(const scope of['chains','sent','received']){let page=await catalog(scope),items=page.items.slice(0,20),cursor=page.items.length>20?items.at(-1):null;while(cursor){page=await catalog(scope,cursor);items.push(...page.items.slice(0,20));cursor=page.items.length>20?page.items[19]:null;}expect(items).toHaveLength(page.total);expect(new Set(items.map((item:{id:string})=>item.id)).size).toBe(items.length);if(scope!=='chains'){expect(items).toHaveLength(45);expect(items[0].book).toMatchObject({id:book.id,language:'fr',format:'paperback'});expect(items[0]).not.toHaveProperty('request_hash');}}
+      expect((await sql`select book_pass_catalog_snapshot(${other},'sent')data`)[0].data.total).toBe(0);
+      const start=()=>sql`select apply_book_chain_intent(${owner},'chain_create',${alias.id},'pass090-chain',${sql.json({note:'Start'})})data`;const receipt=(await start())[0].data,chain=receipt.chainId;expect(receipt).toMatchObject({actorId:owner,bookId:alias.id,chain:{book_id:alias.id,creator_id:owner}});expect((await start())[0].data).toEqual(receipt);
+      await sql`update users set deleted_at=now()where id=${reader}`;
+      await expect(sql`select apply_book_chain_intent(${owner},'chain_nominate',${chain},'pass090-deleted',${sql.json({nominee_id:reader,note:null})})`).rejects.toMatchObject({code:'P1003'});
+      await expect(sql`insert into book_passes(sender_id,recipient_id,book_id)values(${owner},${reader},${book.id})`).rejects.toMatchObject({code:'P1003'});expect((await sql`select count(*)::int n from pass_the_book_nodes where chain_id=${chain}`)[0].n).toBe(1);expect((await sql`select count(*)::int n from content_intents where actor_id=${owner} and intent_key='pass090-deleted'`)[0].n).toBe(0);await sql`update users set deleted_at=null where id=${reader}`;
+      const nominations=await Promise.allSettled([reader,other].map((nominee,index)=>sql`select apply_book_chain_intent(${owner},'chain_nominate',${chain},${'pass090-nominate'+index},${sql.json({nominee_id:nominee,note:'Next'})})data`));expect(nominations.filter(result=>result.status==='fulfilled')).toHaveLength(1);const nominated=(nominations.find(result=>result.status==='fulfilled')as PromiseFulfilledResult<any>).value[0].data;expect(nominated).toMatchObject({actorId:owner,chainId:chain,success:true,position:1});
+      const[rosterChain]=await sql`insert into pass_the_book_chains(book_id,creator_id)values(${book.id},${owner})returning id`;
+      await sql`insert into pass_the_book_nodes(chain_id,user_id,position)select ${rosterChain.id},id,(row_number()over(order by id)/2)::int from users where not is_banned and deleted_at is null limit 45`;
+      const roster=async(position=-1,id:string|null=null)=>(await sql`select book_chain_roster_snapshot(${owner},${rosterChain.id},${position},${id}::uuid,20)data`)[0].data;
+      let page=await roster(),nodes=page.nodes.slice(0,20),cursor=page.nodes.length>20?nodes.at(-1):null;while(cursor){page=await roster(cursor.position,cursor.id);nodes.push(...page.nodes.slice(0,20));cursor=page.nodes.length>20?page.nodes[19]:null;}expect(nodes).toHaveLength(45);expect(new Set(nodes.map((node:{id:string})=>node.id)).size).toBe(45);
+      expect((await sql`select book_pass_receipt_snapshot(${owner},'chain_create','pass090-chain')data`)[0].data).toEqual(receipt);await expect(sql`select book_pass_receipt_snapshot(${reader},'chain_create','pass090-chain')`).rejects.toMatchObject({code:'P1005'});
+      await sql`update users set deleted_at=now()where id=${owner}`;await expect(catalog('sent')).rejects.toMatchObject({code:'P1003'});await expect(start()).rejects.toMatchObject({code:'P1003'});await expect(sql`select book_pass_receipt_snapshot(${owner},'chain_create','pass090-chain')`).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])for(const routine of['book_chain_node_document(uuid)','book_pass_catalog_snapshot(uuid,text,timestamptz,uuid,integer)','book_chain_roster_snapshot(uuid,uuid,integer,uuid,integer)','apply_book_chain_intent(uuid,text,uuid,text,jsonb,text)','book_pass_receipt_snapshot(uuid,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+    {
+      await sql`update release_email_campaigns set audience_complete=true`;
+      const author=crypto.randomUUID();await sql`select create_direct_account(${author},'author092@example.test','author092','Release author')`;await sql`update users set is_verified_author=true where id=${author}`;
+      await sql`select create_direct_account(gen_random_uuid(),'paid092_'||n||'@example.test','paid092_'||n,'Paid reader '||n)from generate_series(1,505)n`;
+      await sql`update users set email_verified=true,premium_override=true,is_premium=false,notify_new_releases=true,preferred_locale='fr' where username like 'paid092_%'`;
+      await sql`update users set notify_new_releases=false where username='paid092_502'`;await sql`update users set is_banned=true where username='paid092_503'`;await sql`update users set email_verified=false where username='paid092_504'`;await sql`update users set premium_override=false where username='paid092_505'`;
+      const[book]=await sql`insert into books(title,author_name,language,format)values('Paid092 selected','Release writer','fr','paperback')returning id,work_id`;
+      const[alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id)values('Paid092 alias','Release writer',${book.work_id},${book.id})returning id`;
+      await sql`insert into author_work_claims(author_id,work_id)values(${author},${book.work_id})`;
+      await sql`insert into follows(follower_id,following_id,created_at)select id,${author},now()-interval '1 day' from users where username like 'paid092_%'`;
+      const[post]=await sql`insert into author_posts(author_id,title,body,type,book_id)values(${author},'Release092','A new release','announcement',${alias.id})returning id`;
+      const[blog]=await sql`insert into author_posts(author_id,title,body,type,book_id)values(${author},'Blog092','A linked blog','blog',${book.id})returning id`;expect((await sql`select count(*)::int n from release_email_campaigns where post_id=${blog.id}`)[0].n).toBe(0);
+      const recipients=new Set<string>();let first:any;
+      const finish=(claim:any,status='sent',message:string|null='fixture-message')=>sql`select finish_paid_email('new_release_alert',${claim.userId},${claim.claimId},${status},${message},null,${claim.postId})ok`;
+      for(let round=0;round<20;round++){
+        await sql`select queue_release_email_audience(1,100)`;
+        while(true){const batch=(await sql`select claim_release_email_batch(20)data`)[0].data;if(!batch.examined)break;for(const claim of batch.claims){expect(recipients.has(claim.userId)).toBe(false);recipients.add(claim.userId);first??=claim;expect(claim).toMatchObject({postId:post.id,bookId:book.id,locale:'fr'});expect(claim.unsubscribeToken).toMatch(/^[a-f0-9]{64}$/);expect((await finish(claim))[0].ok).toBe(true);}}
+        if((await sql`select audience_complete from release_email_campaigns where post_id=${post.id}`)[0].audience_complete)break;
+      }
+      expect(recipients.size).toBe(501);expect((await sql`select count(*)::int n from release_email_deliveries where post_id=${post.id} and status='sent'`)[0].n).toBe(501);expect((await sql`select claim_release_email_batch(20)data`)[0].data.examined).toBe(0);expect((await finish(first))[0].ok).toBe(true);expect((await finish({...first,claimId:crypto.randomUUID()}))[0].ok).toBe(false);
+      const tokenHash=(await sql`select encode(sha256(convert_to(${first.unsubscribeToken},'UTF8')),'hex')value`)[0].value;expect((await sql`select token_hash from email_unsubscribe_proofs where token_hash=${tokenHash}`)[0].token_hash).not.toBe(first.unsubscribeToken);
+      expect((await sql`select consume_email_unsubscribe(${tokenHash})ok`)[0].ok).toBe(true);expect((await sql`select consume_email_unsubscribe(${tokenHash})ok`)[0].ok).toBe(true);expect((await sql`select notify_new_releases,email_digest_enabled from users where id=${first.userId}`)[0]).toMatchObject({notify_new_releases:false,email_digest_enabled:true});await sql`update users set notify_new_releases=true where id=${first.userId}`;expect((await sql`select consume_email_unsubscribe(${tokenHash})ok`)[0].ok).toBe(false);
+      const[newPost]=await sql`insert into author_posts(author_id,title,body,type,book_id)values(${author},'Retry092','Retry release','announcement',${book.id})returning id`;
+      await sql`insert into release_email_deliveries(post_id,user_id)values(${newPost.id},${first.userId})`;
+      let claim=(await sql`select claim_release_email_batch(1)data`)[0].data.claims[0];expect((await finish(claim,'failed',null))[0].ok).toBe(true);expect((await sql`select claim_release_email_batch(1)data`)[0].data.examined).toBe(0);await sql`update release_email_deliveries set updated_at=now()-interval '6 minutes' where post_id=${newPost.id} and user_id=${first.userId}`;const oldClaim=claim;claim=(await sql`select claim_release_email_batch(1)data`)[0].data.claims[0];expect(claim.claimId).not.toBe(oldClaim.claimId);expect((await finish(oldClaim))[0].ok).toBe(false);await finish(claim,'unknown',null);expect((await sql`select claim_release_email_batch(1)data`)[0].data.examined).toBe(0);await sql`update release_email_deliveries set status='sending',updated_at=now()-interval '6 minutes' where post_id=${newPost.id} and user_id=${first.userId}`;expect((await sql`select claim_release_email_batch(1)data`)[0].data.examined).toBe(0);expect((await sql`select status from release_email_deliveries where post_id=${newPost.id} and user_id=${first.userId}`)[0].status).toBe('unknown');
+      await sql`insert into author_posts(author_id,title,body,type,book_id)select ${author},'Bulk092 '||n,'Another announcement','announcement',${book.id} from generate_series(1,53)n`;expect((await sql`select count(*)::int n from release_email_campaigns c join author_posts p on p.id=c.post_id where p.author_id=${author}`)[0].n).toBe(55);
+      await sql`select queue_release_email_audience(1,100)`;await sql`update users set is_verified_author=false where id=${author}`;const withheld=(await sql`select claim_release_email_batch(20)data`)[0].data;expect(withheld.examined).toBeGreaterThan(0);expect(withheld.claims).toEqual([]);await sql`update users set is_verified_author=true where id=${author}`;
+      const period=(await sql`select to_char(date_trunc('week',now()at time zone 'UTC'),'YYYY-MM-DD')value`)[0].value,shelves=await sql`select id from shelves where user_id=${first.userId} and default_type in('have_read','want_to_read')`;
+      for(const shelf of shelves)for(const id of[book.id,alias.id])await sql`insert into shelf_books(user_id,shelf_id,book_id,added_at)values(${first.userId},${shelf.id},${id},${period}::date-interval '1 day')`;
+      const digest=(await sql`select claim_paid_digest(${first.userId},${period}::date)data`)[0].data;expect(digest).toMatchObject({userId:first.userId,period,locale:'fr',stats:{booksThisWeek:1}});expect((await sql`select claim_paid_digest(${first.userId},${period}::date)data`)[0].data).toBeNull();expect((await sql`select finish_paid_email('weekly_digest',${digest.userId},${digest.claimId},'sent','digest-receipt',${period}::date,null)ok`)[0].ok).toBe(true);
+      const oldPeriod=(await sql`select to_char(${period}::date-7,'YYYY-MM-DD')value`)[0].value;await sql`insert into notifications(user_id,type,message,created_at)values(${first.userId},'account_hardening','Older weekly event',${oldPeriod}::date-interval '1 day')`;expect((await sql`select claim_paid_digest(${first.userId},${oldPeriod}::date)data`)[0].data).toMatchObject({period:oldPeriod,stats:{newNotifications:1}});
+      await sql`select queue_paid_digest_audience(10)`;expect((await sql`select count(*)::int n from digest_email_campaigns where period_start=${period}::date`)[0].n).toBe(1);
+      const unsubscribeHash=(await sql`select encode(sha256(convert_to(${digest.unsubscribeToken},'UTF8')),'hex')value`)[0].value;expect((await sql`select consume_email_unsubscribe(${unsubscribeHash})ok`)[0].ok).toBe(true);expect((await sql`select email_digest_enabled,notify_new_releases from users where id=${first.userId}`)[0]).toMatchObject({email_digest_enabled:false,notify_new_releases:true});
+      const[expired]=await sql`select issue_email_unsubscribe(${first.userId},'weekly_digest')token`;await sql`update email_unsubscribe_proofs set expires_at=now()-interval '1 second' where token_hash=encode(sha256(convert_to(${expired.token},'UTF8')),'hex')`;expect((await sql`select consume_email_unsubscribe(encode(sha256(convert_to(${expired.token},'UTF8')),'hex'))ok`)[0].ok).toBe(false);
+      expect((await sql`select financial_integrity_snapshot()data`)[0].data).toMatchObject({uncertainReleaseEmails:1});
+      for(const role of['anon','authenticated'])for(const routine of['consume_email_unsubscribe(text)','cleanup_email_unsubscribe_proofs(integer)','issue_email_unsubscribe(uuid,text)','queue_paid_digest_audience(integer)','claim_paid_digest(uuid,date)','claim_digest_email_batch(integer)','queue_release_email_audience(integer,integer)','claim_release_email_batch(integer)','finish_paid_email(text,uuid,uuid,text,text,date,uuid)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const author=crypto.randomUUID(),reader=crypto.randomUUID(),other=crypto.randomUUID();for(const[id,name]of[[author,'author'],[reader,'reader'],[other,'other']])await sql`select create_direct_account(${id},${name+'093@example.test'},${name+'093'},${name+'093'})`;
+      await sql`update users set user_types=array['author'] where id=${author}`;
+      await sql`insert into author_qa(author_id,asked_by,question,answer,answered_at,created_at)select ${author},${reader},'Question093 '||n,'Answer093',case when n=45 then null else '2026-11-04T00:00:00.123456Z'::timestamptz end,'2026-11-04T00:00:00.123456Z'::timestamptz from generate_series(1,45)n`;
+      await sql`insert into author_qa(author_id,asked_by,question,answer,is_public)values(${author},${reader},'Private question093','Private answer',false),(${author},${reader},'Pending question093',null,true)`;
+      const page=async(cursor:{cursor_at:string;id:string}|null=null)=>(await sql`select author_question_snapshot(${author},${cursor?.cursor_at??null}::text::timestamptz,${cursor?.id??null}::uuid,20)data`)[0].data;
+      let snapshot=await page(),rows=snapshot.qa.slice(0,20);while(snapshot.qa.length>20){snapshot=await page(snapshot.qa[19]);rows.push(...snapshot.qa.slice(0,20));}expect(snapshot.total).toBe(45);expect(rows).toHaveLength(45);expect(new Set(rows.map((row:{id:string})=>row.id)).size).toBe(45);expect(rows.filter((row:{answered_at:string|null})=>row.answered_at===null)).toHaveLength(1);
+      await expect(sql`select author_question_snapshot(${author},null,${crypto.randomUUID()},20)`).rejects.toMatchObject({code:'P1004'});await expect(sql`select author_question_snapshot(${reader})`).rejects.toMatchObject({code:'P1005'});
+      const key='shelf093-private-receipt',hash='a'.repeat(64),[shelf]=await sql`insert into shelves(user_id,name,idempotency_key,request_hash)values(${reader},'Receipt093',${key},${hash})returning id,slug`;
+      expect((await sql`select content_creation_receipt_snapshot(${reader},'shelves',${key})data`)[0].data).toMatchObject({id:shelf.id,user_id:reader,slug:shelf.slug});await expect(sql`select content_creation_receipt_snapshot(${other},'shelves',${key})`).rejects.toMatchObject({code:'P1005'});await expect(sql`select content_creation_receipt_snapshot(${reader},'users',${key})`).rejects.toMatchObject({code:'P1004'});
+      const questionKey='question093-private-receipt',[question]=await sql`insert into author_qa(author_id,asked_by,question,idempotency_key,request_hash)values(${author},${reader},'Question093 & unchanged',${questionKey},${hash})returning id`;
+      expect((await sql`select content_creation_receipt_snapshot(${reader},'author_qa',${questionKey})data`)[0].data).toMatchObject({id:question.id,author_id:author,asked_by:reader,question:'Question093 & unchanged'});
+      await sql`update users set is_banned=true where id=${reader}`;await expect(sql`select content_creation_receipt_snapshot(${reader},'shelves',${key})`).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])for(const routine of['author_question_snapshot(uuid,timestamptz,uuid,integer)','content_creation_receipt_snapshot(uuid,text,text)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+    {
+      const reader=crypto.randomUUID(),other=crypto.randomUUID();for(const[id,name]of[[reader,'reader'],[other,'other']])await sql`select create_direct_account(${id},${name+'094@example.test'},${name+'094'},${name+'094'})`;await sql`update users set premium_override=true where id=${reader}`;
+      const[paper]=await sql`insert into books(title,author_name,page_count,language,format)values('Shelf094 paper','Writer094',200,'fr','paperback')returning id,work_id`,[alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id)values('Shelf094 alias','Writer094',${paper.work_id},${paper.id})returning id`,[hard]=await sql`insert into books(title,author_name,work_id,page_count,language,format)values('Shelf094 hard','Writer094',${paper.work_id},300,'de','hardcover')returning id`;
+      const shelves=await sql`select id,default_type from shelves where user_id=${reader}`;const current=shelves.find(shelf=>shelf.default_type==='currently_reading')!,finished=shelves.find(shelf=>shelf.default_type==='have_read')!,want=shelves.find(shelf=>shelf.default_type==='want_to_read')!;
+      for(const shelf of[current,finished])for(const book of[paper,alias,hard])await sql`insert into shelf_books(shelf_id,user_id,book_id,progress_pages,progress_percent,finished_at,added_at,updated_at)values(${shelf.id},${reader},${book.id},${book.id===alias.id?70:5},${book.id===alias.id?35:2.5},${shelf===finished?'2026-11-04':null},'2026-11-04T00:00:00.123456Z','2026-11-04T00:00:00Z'::timestamptz+${book.id===alias.id?'1 minute':'0 minute'}::interval)`;
+      await sql`insert into shelf_books(shelf_id,user_id,book_id)values(${want.id},${reader},${alias.id})`;await sql`select set_reading_goal(${reader},2026,12)`;
+      await sql`insert into shelves(user_id,name,created_at)select ${reader},'Shelf094 '||n,'2026-11-04T00:00:00.123456Z'::timestamptz from generate_series(1,55)n`;
+      const catalog=async(before:{is_default:boolean;created_at:string;id:string}|null=null)=>(await sql`select shelf_catalog_snapshot(${reader},${alias.id},${before?.is_default??null},${before?.created_at??null}::text::timestamptz,${before?.id??null}::uuid,50,2026)data`)[0].data;
+      let page=await catalog(),rows=page.shelves.slice(0,50);while(page.shelves.length>50){page=await catalog(page.shelves[49]);rows.push(...page.shelves.slice(0,50));}expect(rows).toHaveLength(58);expect(new Set(rows.map((row:{id:string})=>row.id)).size).toBe(58);expect(rows.slice(0,3).every((row:{is_default:boolean})=>row.is_default)).toBe(true);expect(page).toMatchObject({total:58,selectedTotal:3,reading:{goal:{target_books:12},progress:{books_read:1,year:2026}}});expect(rows.find((row:{id:string})=>row.id===current.id)).toMatchObject({book_count:2,contains_book:true});
+      const detail=(await sql`select shelf_detail_snapshot(${reader},${current.id})data`)[0].data;expect(detail.total).toBe(2);expect(detail.shelf).not.toHaveProperty('idempotency_key');expect(detail.shelf).not.toHaveProperty('request_hash');expect(rows[0]).not.toHaveProperty('request_hash');const paperback=detail.books.find((row:{entry:{book_id:string}})=>row.entry.book_id===paper.id).entry,hardback=detail.books.find((row:{entry:{book_id:string}})=>row.entry.book_id===hard.id).entry;expect(paperback).toMatchObject({source_book_id:alias.id,progress_pages:70,book:{id:paper.id,page_count:200,language:'fr',format:'paperback'}});expect(hardback.book).toMatchObject({id:hard.id,page_count:300,language:'de',format:'hardcover'});expect((await sql`select count(*)::int n from shelf_books where shelf_id=${current.id}`)[0].n).toBe(3);
+      await sql`select update_shelf_progress(${reader},${paperback.id},75,null)`;expect((await sql`select progress_pages from shelf_books where id=${paperback.id}`)[0].progress_pages).toBe(75);expect((await sql`select progress_pages from shelf_books where shelf_id=${current.id} and book_id=${hard.id}`)[0].progress_pages).toBe(5);
+      const large=rows.find((row:{is_default:boolean})=>!row.is_default)!;const books=await sql`insert into books(title,author_name)select 'Shelf094 paged '||n,'Writer094 paged'from generate_series(1,55)n returning id`;for(const book of books)await sql`insert into shelf_books(shelf_id,user_id,book_id,added_at)values(${large.id},${reader},${book.id},'2026-11-04T00:00:00.123456Z')`;
+      const detailPage=async(before:{at:string;id:string}|null=null)=>(await sql`select shelf_detail_snapshot(${reader},${large.id},${before?.at??null}::text::timestamptz,${before?.id??null}::uuid,50)data`)[0].data;let listing=await detailPage(),entries=listing.books.slice(0,50);while(listing.books.length>50){listing=await detailPage(listing.books[49]);entries.push(...listing.books.slice(0,50));}expect(entries).toHaveLength(55);expect(listing).toMatchObject({total:55,shelf:{book_count:55}});expect(new Set(entries.map((row:{id:string})=>row.id)).size).toBe(55);
+      await sql`update users set profile_visibility='followers_only' where id=${reader}`;await expect(sql`select shelf_detail_snapshot(${other},${current.id})`).rejects.toMatchObject({code:'P1003'});await sql`insert into follows(follower_id,following_id)values(${other},${reader})`;expect((await sql`select shelf_detail_snapshot(${other},${current.id})data`)[0].data.total).toBe(2);await sql`update users set shelf_visibility='private' where id=${reader}`;await expect(sql`select shelf_detail_snapshot(${other},${current.id})`).rejects.toMatchObject({code:'P1003'});expect((await sql`select shelf_detail_snapshot(${reader},${current.id})data`)[0].data.total).toBe(2);
+      await expect(sql`select shelf_catalog_snapshot(${reader},null,null,now(),${large.id})`).rejects.toMatchObject({code:'P1004'});await sql`update users set is_banned=true where id=${other}`;await expect(sql`select shelf_catalog_snapshot(${other})`).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])for(const routine of['shelf_edition_rows(uuid)','shelf_catalog_snapshot(uuid,uuid,boolean,timestamptz,uuid,integer,integer)','shelf_detail_snapshot(uuid,uuid,timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+    }
+
   } finally { vi.unstubAllEnvs();await closeAdapter();await sql.end(); }
 }, 60_000);
+
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('verifies complete discovery, canonical cohorts and privacy on the rehearsed PostgreSQL schema',async()=>{
+  const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Discovery rehearsal requires isolated loopback PostgreSQL');
+  const sql=postgres(url,{max:4,prepare:false,ssl:false,onnotice:()=>{}});
+  try{
+    if(!(await sql`select to_regprocedure('public.recommendation_reader_page(timestamptz,uuid,integer)')ready`)[0].ready)throw Error('Migration rehearsal must complete first');
+      const reader=crypto.randomUUID(),friend=crypto.randomUUID(),privateReader=crypto.randomUUID(),banned=crypto.randomUUID();for(const[id,name]of[[reader,'reader'],[friend,'friend'],[privateReader,'private'],[banned,'banned']])await sql`select create_direct_account(${id},${name+'095@example.test'},${name+'095'},${name+'095'})`;await sql`update users set premium_override=true,shelf_visibility='private'where id=${privateReader}`;await sql`update users set is_banned=true where id=${banned}`;
+      const[secret]=await sql`insert into books(title,author_name)values('Private discovery095','Writer095')returning id`;const privateShelves=await sql`insert into shelves(user_id,name,is_public)select ${privateReader},'Private095 '||n,false from generate_series(1,1105)n returning id`;for(const shelf of privateShelves)await sql`insert into shelf_books(shelf_id,user_id,book_id)values(${shelf.id},${privateReader},${secret.id})`;
+      const[popular]=await sql`insert into books(title,author_name,language,format)values('Popular discovery095','Writer095','fr','paperback')returning id,work_id`,[physical]=await sql`insert into books(title,author_name,work_id,language,format)values('Popular hard095','Writer095',${popular.work_id},'de','hardcover')returning id`,readers:string[]=[];
+      for(let n=0;n<200;n++){const id=crypto.randomUUID();readers.push(id);await sql`select create_direct_account(${id},${'popular095'+n+'@example.test'},${'popular095'+n},${'Popular095 '+n})`;await sql`update users set country=${n%2?'FR':'DE'} where id=${id}`;const[shelf]=await sql`select id from shelves where user_id=${id} and default_type='have_read'`;await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at)values(${shelf.id},${id},${n%2?physical.id:popular.id},current_date)`;}
+      const trending=(await sql`select discovery_trending_snapshot()data`)[0].data,national=(await sql`select discovery_trending_snapshot('DE')data`)[0].data;expect(trending.find((row:{work_id:string})=>row.work_id===popular.work_id)).toMatchObject({count:200});expect(trending.filter((row:{work_id:string})=>row.work_id===popular.work_id)).toHaveLength(1);expect(national.find((row:{work_id:string})=>row.work_id===popular.work_id)).toMatchObject({count:100});expect(trending.some((row:{book_id:string})=>row.book_id===secret.id)).toBe(false);await expect(sql`select discovery_trending_snapshot('invalid')`).rejects.toMatchObject({code:'P1004'});
+      const shared=await sql`insert into books(title,author_name)select 'Shared095 '||n,'Shared writer095'from generate_series(1,4)n returning id,work_id,title`,[alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id)values('STALE shared095','Old writer',${shared[0].work_id},${shared[0].id})returning id`,[secondAlias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id)values('STALE second095','Old writer',${shared[0].work_id},${shared[0].id})returning id`;
+      const owned=(await sql`select id from shelves where user_id=${reader} and default_type='have_read'`)[0],friendShelf=(await sql`select id from shelves where user_id=${friend} and default_type='have_read'`)[0],want=(await sql`select id from shelves where user_id=${reader} and default_type='want_to_read'`)[0];
+      for(const book of[shared[0],alias,secondAlias])await sql`insert into shelf_books(shelf_id,user_id,book_id)values(${owned.id},${reader},${book.id})`;for(const book of[alias,...shared.slice(1)])await sql`insert into shelf_books(shelf_id,user_id,book_id)values(${friendShelf.id},${friend},${book.id})`;expect((await sql`select shelf_overlap_snapshot(${reader})data`)[0].data).toMatchObject({cohort:[],books:[]});
+      for(const book of shared.slice(1,3))await sql`insert into shelf_books(shelf_id,user_id,book_id)values(${owned.id},${reader},${book.id})`;let overlap=(await sql`select shelf_overlap_snapshot(${reader})data`)[0].data;expect(overlap.cohort).toContain(friend);expect(overlap.books).toContainEqual(expect.objectContaining({id:shared[3].id}));const signature=overlap.signature;expect(signature).toMatch(/^[a-f0-9]{32}$/);
+      await sql`insert into shelf_books(shelf_id,user_id,book_id)values(${want.id},${reader},${shared[0].id})`;await sql`insert into follows(follower_id,following_id)values(${reader},${friend}),(${reader},${privateReader})`;const feed=(await sql`select read_social_feed(${reader})data`)[0].data;expect(feed.find((row:{book:{id:string}})=>row.book.id===shared[0].id)).toMatchObject({book:{title:shared[0].title},wantToRead:true});expect(feed.some((row:{book:{id:string}})=>row.book.id===secret.id||row.book.id===alias.id)).toBe(false);
+      const recommended=(await sql`select discovery_friends_snapshot(${reader})data`)[0].data;expect(recommended.some((row:{book_id:string})=>row.book_id===secret.id||row.book_id===alias.id||row.book_id===shared[0].id)).toBe(false);expect(recommended.some((row:{work_id:string})=>row.work_id===shared[3].work_id)).toBe(true);
+      await sql`update users set shelf_visibility='private'where id=${friend}`;overlap=(await sql`select shelf_overlap_snapshot(${reader},${sql.array([friend])}::uuid[])data`)[0].data;expect(overlap.cohort).toEqual([]);expect(overlap.books).toEqual([]);await sql`update users set shelf_visibility='public',profile_visibility='followers_only'where id=${friend}`;expect((await sql`select shelf_overlap_snapshot(${reader})data`)[0].data.cohort).toContain(friend);await sql`delete from follows where follower_id=${reader} and following_id=${friend}`;expect((await sql`select shelf_overlap_snapshot(${reader})data`)[0].data.cohort).not.toContain(friend);await sql`insert into follows(follower_id,following_id)values(${reader},${friend})`;await sql`insert into shelf_books(shelf_id,user_id,book_id)values(${want.id},${reader},${shared[3].id})`;expect((await sql`select shelf_overlap_snapshot(${reader})data`)[0].data.books).toEqual([]);
+      for(const id of readers.slice(0,45)){await sql`update users set created_at='2026-11-04T00:00:00.123456Z'where id=${id}`;const[shelf]=await sql`select id from shelves where user_id=${id} and default_type='have_read'`;for(const book of shared.slice(1,3))await sql`insert into shelf_books(shelf_id,user_id,book_id)values(${shelf.id},${id},${book.id})`;}
+      const readerPage=async(before:{created_at:string;id:string}|null=null)=>(await sql`select recommendation_reader_page(${before?.created_at??null}::text::timestamptz,${before?.id??null}::uuid,40)data`)[0].data;let page=await readerPage(),audience=page.slice(0,40);while(page.length>40){page=await readerPage(page[39]);audience.push(...page.slice(0,40));}expect(new Set(audience.map((row:{id:string})=>row.id)).size).toBe(audience.length);for(const id of readers.slice(0,45))expect(audience.map((row:{id:string})=>row.id)).toContain(id);expect(audience.map((row:{id:string})=>row.id)).not.toContain(banned);
+      const[gem]=await sql`insert into books(title,author_name)values('Current gem095','Gem writer095')returning id,work_id`,[gemAlias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id)values('Old gem095','Old writer',${gem.work_id},${gem.id})returning id`,[stale]=await sql`insert into books(title,author_name,average_rating,ratings_count)values('Stale gem095','Other writer095',4.99,900)returning id`;
+      for(const id of readers.slice(0,25))await sql`insert into reviews(user_id,book_id,rating,review_type,content)values(${id},${gemAlias.id},5,'short','A current public review095.')`;await sql`insert into reviews(user_id,book_id,rating,review_type,content,is_hidden)values(${readers[26]},${gem.id},1,'short','A hidden review095.',true),(${banned},${gem.id},1,'short','A banned review095.',false),(${readers[27]},${stale.id},1,'short','A current low review095.',false)`;
+      const gems=(await sql`select discovery_gems_snapshot()data`)[0].data;expect(gems.find((row:{work_id:string})=>row.work_id===gem.work_id)).toMatchObject({average_rating:5,rating_source:'community'});expect(gems.some((row:{id:string})=>row.id===gemAlias.id||row.id===stale.id)).toBe(false);
+      await expect(sql`select shelf_overlap_snapshot(${banned})`).rejects.toMatchObject({code:'P1003'});await expect(sql`select followed_author_books(${banned})`).rejects.toMatchObject({code:'P1003'});
+      for(const role of['anon','authenticated'])for(const routine of['discovery_shelf_rows(uuid)','discovery_trending_snapshot(text,integer)','discovery_gems_snapshot(integer)','discovery_friends_snapshot(uuid,integer)','shelf_overlap_snapshot(uuid,uuid[])','recommendation_reader_page(timestamptz,uuid,integer)'])expect((await sql`select has_function_privilege(${role},${routine},'EXECUTE')allowed`)[0].allowed).toBe(false);
+  }finally{await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('verifies share privacy, canonical editions and real challenge progress on PostgreSQL',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Share rehearsal requires isolated loopback PostgreSQL');
+ const sql=postgres(url,{max:2,prepare:false,ssl:false,onnotice:()=>{}});
+ try{
+  const owner=crypto.randomUUID(),viewer=crypto.randomUUID();for(const[id,name]of[[owner,'owner'],[viewer,'viewer']])await sql`select create_direct_account(${id},${name+'097@example.test'},${name+'097'},${name+'097'})`;
+  const[book]=await sql`insert into books(title,author_name,language,format,page_count)values('Canonical097','Author097','fr','paperback',300)returning id,work_id`,[alias]=await sql`insert into books(title,author_name,work_id,canonical_edition_id)values('Stale alias097','Old author097',${book.work_id},${book.id})returning id`,[hard]=await sql`insert into books(title,author_name,work_id,language,format,page_count)values('Hardcover097','Author097',${book.work_id},'de','hardcover',400)returning id`;
+  const snapshot=async(kind:string,target:string,reader:string|null=null,actor:string|null=null)=>(await sql`select share_card_snapshot(${kind},${target}::uuid,${reader}::uuid,${actor}::uuid)data`)[0].data;
+  expect(await snapshot('book',alias.id)).toMatchObject({id:book.id,title:'Canonical097'});expect(await snapshot('book',crypto.randomUUID())).toBeNull();expect(await snapshot('finished',book.id,owner)).toBeNull();
+  const[shelf]=await sql`select id from shelves where user_id=${owner} and default_type='have_read'`;
+  await sql`insert into shelf_books(shelf_id,user_id,book_id,finished_at)values(${shelf.id},${owner},${alias.id},current_date),(${shelf.id},${owner},${book.id},current_date)`;
+  expect(await snapshot('finished',alias.id,owner)).toMatchObject({book:{id:book.id,title:'Canonical097'},reader:{display_name:'owner097'}});expect(await snapshot('finished',hard.id,owner)).toBeNull();expect((await snapshot('shelf',owner,owner)).books).toHaveLength(1);
+  const[quote]=await sql`insert into quotes(user_id,book_id,content)values(${owner},${alias.id},'A real quote097')returning id`,[review]=await sql`insert into reviews(user_id,book_id,content,rating,review_type,moderation_status)values(${owner},${alias.id},'A real published review097',4,'short','published')returning id`;
+  expect(await snapshot('quote',quote.id)).toMatchObject({book:{id:book.id}});expect(await snapshot('review',review.id)).toMatchObject({book:{id:book.id},rating:4});
+  await sql`update users set profile_visibility='followers_only'where id=${owner}`;
+  for(const[kind,target,reader]of[['quote',quote.id,null],['review',review.id,null],['shelf',owner,owner],['finished',book.id,owner]]){expect(await snapshot(kind,target,reader)).toBeNull();expect(await snapshot(kind,target,reader,viewer)).toBeNull();expect(await snapshot(kind,target,reader,owner)).not.toBeNull();}
+  await sql`insert into follows(follower_id,following_id)values(${viewer},${owner})`;expect(await snapshot('quote',quote.id,null,viewer)).not.toBeNull();
+  await sql`update users set shelf_visibility='private'where id=${owner}`;expect(await snapshot('finished',book.id,owner,viewer)).toBeNull();expect(await snapshot('shelf',owner,owner,owner)).not.toBeNull();
+  await sql`update users set profile_visibility='public',shelf_visibility='public'where id=${owner}`;await sql`update shelves set is_public=false where id=${shelf.id}`;expect(await snapshot('shelf',owner,owner)).toBeNull();await sql`update shelves set is_public=true where id=${shelf.id}`;
+  const[challenge]=await sql`insert into challenges(title,goal_books,start_date)values('Reading097',2,now()-interval '2 days')returning id`;
+  expect(await snapshot('challenge',challenge.id)).toEqual({title:'Reading097'});expect(await snapshot('challenge',challenge.id,owner)).toBeNull();await sql`insert into challenge_participants(challenge_id,user_id,joined_at)values(${challenge.id},${owner},now()-interval '1 day')`;
+  expect(await snapshot('challenge',challenge.id,owner)).toMatchObject({completed:false,progress:{booksFinished:1,pagesRead:300}});await sql`update challenges set goal_books=1,goal_pages=500 where id=${challenge.id}`;expect(await snapshot('challenge',challenge.id,owner)).toMatchObject({completed:false});await sql`update challenges set goal_pages=300 where id=${challenge.id}`;expect(await snapshot('challenge',challenge.id,owner)).toMatchObject({completed:true});
+  const[writing]=await sql`insert into writing_challenges(title)values('Writing097')returning id`;expect(await snapshot('writing-challenge',writing.id)).toEqual({title:'Writing097'});expect(await snapshot('writing-challenge',writing.id,owner)).toBeNull();await sql`insert into writing_challenge_participants(challenge_id,user_id)values(${writing.id},${owner})`;expect(await snapshot('writing-challenge',writing.id,owner)).toMatchObject({submissionCount:0});
+  await sql`update quotes set is_hidden=true where id=${quote.id}`;await sql`update reviews set is_hidden=true where id=${review.id}`;expect(await snapshot('quote',quote.id,null,owner)).toBeNull();expect(await snapshot('review',review.id,null,owner)).toBeNull();
+  await sql`update users set is_banned=true where id=${owner}`;expect(await snapshot('shelf',owner,owner)).toBeNull();await expect(snapshot('shelf',owner,owner,owner)).rejects.toMatchObject({code:'P1003'});await sql`update users set is_banned=false,deleted_at=now()where id=${owner}`;expect(await snapshot('writing-challenge',writing.id,owner)).toBeNull();
+  expect((await sql`select has_function_privilege('anon','share_card_snapshot(text,uuid,uuid,uuid)','execute')anon,has_function_privilege('authenticated','share_card_snapshot(text,uuid,uuid,uuid)','execute')authenticated`)[0]).toMatchObject({anon:false,authenticated:false});
+ }finally{await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('verifies owned author question paging, immutable answer receipts and role revocation on PostgreSQL',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Author rehearsal requires isolated loopback PostgreSQL');const sql=postgres(url,{max:4,prepare:false,ssl:false,onnotice:()=>{}});
+ try{
+  const author=crypto.randomUUID(),reader=crypto.randomUUID(),other=crypto.randomUUID();for(const[id,name]of[[author,'author'],[reader,'reader'],[other,'other']])await sql`select create_direct_account(${id},${name+'098@example.test'},${name+'098'},${name+'098'})`;await sql`update users set is_verified_author=true where id=${author}`;await sql`update users set user_types=array['author']where id=${other}`;
+  const rows=await sql`insert into author_qa(author_id,asked_by,question,is_public,created_at)select ${author},${reader},'A tied question098 '||n,n%2=0,'2026-10-20T12:00:00.123456Z'::timestamptz from generate_series(1,55)n returning id`;
+  const page=async(state='all',at:string|null=null,id:string|null=null)=>(await sql`select author_question_owner_snapshot(${author},${state},${at}::text::timestamptz,${id}::uuid,20)data`)[0].data;
+  let cursor:{at:string;id:string}|null=null;const seen=new Set();for(let n=0;n<3;n++){const data=await page('all',cursor?.at??null,cursor?.id??null);expect(data).toMatchObject({total:55,unanswered:55,answered:0});const visible=data.qa.slice(0,20);for(const row of visible){expect(seen.has(row.id)).toBe(false);seen.add(row.id);}const last=visible.at(-1);cursor={at:last.created_at,id:last.id};}expect(seen.size).toBe(55);
+  const question=rows[0].id,payload={answer:'<p>A <strong>real</strong> answer.</p>'},key='author098-answer-key',answer=async(value=payload,intent=key)=>(await sql`select apply_community_intent(${author},'author_answer',${question},${intent},${sql.json(value)})data`)[0].data;
+  for(const blank of['<p></p>','<p>&nbsp;</p>','\n\t','\u200b'])await expect(sql`update author_qa set answer=${blank} where id=${question}`).rejects.toMatchObject({code:'P1004'});
+  const [a,b]=await Promise.all([answer(),answer()]);expect(a).toEqual(b);expect(a).toMatchObject({actorId:author,requestKey:key,qa:{id:question,author_id:author,answer:payload.answer}});expect(a.qa.answered_at).toBeTruthy();expect(Number((await sql`select count(*)from notifications where entity_id=${question} and type='author_qa_answer'`)[0].count)).toBe(1);
+  const newer=await answer({answer:'A newer answer.'},'author098-newer-key');expect(newer.qa.answer).toBe('A newer answer.');expect(await answer()).toEqual(a);expect((await sql`select author_answer_receipt_snapshot(${author},${question},${key})data`)[0].data).toEqual(a);await expect(answer({answer:'Conflicting answer.'})).rejects.toMatchObject({code:'P1001'});
+  expect(await page('unanswered')).toMatchObject({total:55,unanswered:54,answered:1});expect((await page('answered')).qa).toHaveLength(1);await expect(sql`select author_answer_receipt_snapshot(${other},${question},${key})`).rejects.toMatchObject({code:'P1005'});await expect(sql`select author_answer_receipt_snapshot(${author},${rows[1].id},${key})`).rejects.toMatchObject({code:'P1005'});await expect(sql`select author_question_owner_snapshot(${reader})`).rejects.toMatchObject({code:'P1003'});expect((await sql`select author_question_owner_snapshot(${other})data`)[0].data.total).toBe(0);
+  const legacyKey='author098-legacy-key';await sql`insert into content_intents(actor_id,action,intent_key,fingerprint,response)values(${author},'author_answer',${legacyKey},encode(sha256(convert_to(jsonb_build_object('target',${question}::uuid,'payload',${sql.json(payload)})::text,'UTF8')),'hex'),' {"ok":true}'::jsonb)`;expect(await answer(payload,legacyKey)).toMatchObject({ok:true,legacy:true,actorId:author});await expect(sql`select author_answer_receipt_snapshot(${author},${question},${legacyKey})`).rejects.toMatchObject({code:'P1005'});
+  await sql`update users set is_verified_author=false where id=${author}`;await expect(answer()).rejects.toMatchObject({code:'P1003'});await expect(page()).rejects.toMatchObject({code:'P1003'});await sql`update users set is_verified_author=true,deleted_at=now()where id=${author}`;await expect(answer()).rejects.toMatchObject({code:'P1003'});
+  expect((await sql`select has_function_privilege('authenticated','author_question_owner_snapshot(uuid,text,timestamptz,uuid,integer)','execute')owned,has_function_privilege('anon','author_answer_receipt_snapshot(uuid,uuid,text)','execute')receipt,has_function_privilege('service_role','apply_community_intent_before095(uuid,text,uuid,text,jsonb,text)','execute')bypass`)[0]).toMatchObject({owned:false,receipt:false,bypass:false});
+ }finally{await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('verifies current follow receipts, inactive targets and retained one-time rewards on PostgreSQL',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Follow rehearsal requires isolated loopback PostgreSQL');const sql=postgres(url,{max:4,prepare:false,ssl:false,onnotice:()=>{}});
+ try{const actor=crypto.randomUUID(),target=crypto.randomUUID(),other=crypto.randomUUID();for(const[id,name]of[[actor,'actor'],[target,'target'],[other,'other']])await sql`select create_direct_account(${id},${name+'099@example.test'},${name+'099'},${name+'099'})`;
+ const apply=async(action:string,key:string)=>(await sql`select apply_follow_intent_snapshot(${actor},${target},${action},${key})data`)[0].data;
+ const[a,b]=await Promise.all([apply('follow','follow099-first'),apply('follow','follow099-first')]);expect(a).toEqual(b);expect(a).toMatchObject({actorId:actor,targetId:target,following:true,committedFollowing:true});await apply('unfollow','follow099-remove');expect((await sql`select follow_intent_snapshot(${actor},${target},'follow099-first')data`)[0].data).toMatchObject({following:false,committedFollowing:true});await apply('follow','follow099-again');expect((await sql`select count(*)::int count from social_rewards where actor_id=${actor} and target_id=${target} and action='follow'`)[0].count).toBe(1);await expect(apply('unfollow','follow099-first')).rejects.toMatchObject({code:'P1001'});await expect(sql`select follow_intent_snapshot(${other},${target},'follow099-first')`).rejects.toMatchObject({code:'P1005'});
+ await sql`update users set deleted_at=now()where id=${target}`;await expect(apply('follow','follow099-deleted')).rejects.toMatchObject({code:'P1005'});expect(await apply('unfollow','follow099-cleanup')).toMatchObject({following:false});await sql`update users set deleted_at=null,is_banned=true where id=${target}`;await expect(apply('follow','follow099-banned')).rejects.toMatchObject({code:'P1005'});await sql`update users set is_banned=false where id=${target}`;await sql`update users set is_banned=true where id=${actor}`;await expect(apply('follow','follow099-actor')).rejects.toMatchObject({code:'P1003'});
+ expect((await sql`select has_table_privilege('authenticated','follows','insert')write,has_function_privilege('service_role','apply_social_intent_before096(uuid,uuid,text,text)','execute')bypass`)[0]).toMatchObject({write:false,bypass:false});
+ }finally{await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('load-tests concurrent payment replay and payout reservations on PostgreSQL',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Load rehearsal requires isolated loopback PostgreSQL');const sql=postgres(url,{max:16,prepare:false,ssl:false,onnotice:()=>{}}),times:number[]=[];
+ try{const recipient=crypto.randomUUID(),sender=crypto.randomUUID();for(const[id,name]of[[recipient,'recipient'],[sender,'sender']])await sql`select create_direct_account(${id},${id+'@example.test'},${'load'+id.replaceAll('-','').slice(0,20)},${'Load '+name})`;
+ const[tip]=await sql`insert into tips(user_id,recipient_id,amount,platform_fee,recipient_amount,currency)values(${sender},${recipient},100,10,90,'USD')returning id`,payload={tipId:tip.id,status:'completed',payment_id:'load-'+tip.id,paid_amount_minor:10000,currency:'USD'};
+ const started=performance.now();await Promise.all(Array.from({length:64},async()=>{const at=performance.now();await sql`select process_payment_event('paystack',${'charge:load-'+tip.id},${sql.json(payload)},'load-rehearsal')`;times.push(performance.now()-at);}));
+ await Promise.all(Array.from({length:8},(_,n)=>expect(sql`select process_payment_event('paystack',${'conflicting-'+tip.id+'-'+n},${sql.json(payload)},'load-conflict')`).rejects.toMatchObject({code:'P1001'})));expect((await sql`select count(*)::int count from payment_captures where entity_id=${tip.id}`)[0].count).toBe(1);expect((await sql`select count(*)::int count from payouts where tip_id=${tip.id}`)[0].count).toBe(1);
+ await sql`insert into user_payout_methods(user_id,provider,display_name,account_number,bank_code,currency)values(${recipient},'manual','Load account','1234567890','AUDIT','USD')`;
+ const requests=await Promise.allSettled(Array.from({length:64},(_,n)=>sql`select create_payout_request_atomic(${recipient},5,'manual',${'load-payout-'+n},'load-rehearsal')id`));expect(requests.filter(row=>row.status==='fulfilled')).toHaveLength(18);for(const row of requests)if(row.status==='rejected')expect(String(row.reason)).toContain('Insufficient balance');
+ const rows=await sql`select idempotency_key from payout_requests where user_id=${recipient}`;await Promise.all(rows.flatMap(row=>Array.from({length:4},()=>sql`select create_payout_request_atomic(${recipient},5,'manual',${row.idempotency_key},'load-replay')`)));expect((await sql`select count(*)::int count from financial_audit_log where target_user_id=${recipient} and action='payout_requested'`)[0].count).toBe(18);const balance=(await sql`select creator_balance(${recipient},'USD')balance`)[0].balance;expect(Number(balance.available)).toBe(0);expect(Number(balance.reserved)).toBe(90);
+ times.sort((a,b)=>a-b);const report=JSON.stringify({rehearsal:'financial-load',connections:16,webhookRequests:64,payoutRequests:64,payoutReplays:72,webhookP95Ms:Math.round(times[Math.floor(times.length*.95)]),durationMs:Math.round(performance.now()-started)});console.log(report);if(process.env.OPERATIONAL_REPORT_PATH)appendFileSync(process.env.OPERATIONAL_REPORT_PATH,report+'\n');
+ }finally{await sql.end();}
+},60_000);
+
+it.skipIf(!process.env.MIGRATION_TEST_DATABASE_URL)('enforces disabled social providers for new identities and existing account replays on PostgreSQL',async()=>{
+ const url=process.env.MIGRATION_TEST_DATABASE_URL!;if(!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Provider rollback rehearsal requires isolated loopback PostgreSQL');const sql=postgres(url,{max:2,prepare:false,ssl:false,onnotice:()=>{}});
+ const original=await sql`select name,enabled from feature_flags where name in('google_auth','telegram_auth')`;
+ try{for(const provider of['google','telegram']){const subject=provider==='google'?crypto.randomUUID():String(Date.now()),email=provider==='google'?subject+'@example.test':null,flag=provider+'_auth';await sql`update feature_flags set enabled=true where name=${flag}`;
+ const[created]=await sql`select resolve_localized_social_identity(${provider},${subject},${email},'Provider rollback101',null,'fr')profile`;expect(created.profile.preferred_locale).toBe('fr');await sql`update feature_flags set enabled=false where name=${flag}`;
+ await expect(sql`select resolve_localized_social_identity(${provider},${subject},${email},'Provider rollback101',null,'fr')`).rejects.toMatchObject({code:'P1003'});
+ const next=provider==='google'?crypto.randomUUID():String(Date.now()+10000);await expect(sql`select resolve_direct_social_identity(${provider},${next},${provider==='google'?next+'@example.test':null},'Disabled provider101',null)`).rejects.toMatchObject({code:'P1003'});
+ await sql`update feature_flags set enabled=true where name=${flag}`;expect((await sql`select resolve_direct_social_identity(${provider},${subject},${email},'Provider rollback101',null)profile`)[0].profile.id).toBe(created.profile.id);
+ }}finally{for(const row of original)await sql`update feature_flags set enabled=${row.enabled} where name=${row.name}`;await sql.end();}
+},60_000);

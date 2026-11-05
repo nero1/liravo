@@ -1,3 +1,5 @@
+import {accountLocale} from '@/lib/auth/locale';
+import {AuthChallengeError,credentialEmail,credentialPassword,verifyAuthChallenge} from '@/lib/auth/challenges';
 import { isStatelessNativeAuth } from '@/lib/csrf';
 import { clientUser } from '@/lib/user-profile';
 import { NextResponse } from 'next/server';
@@ -12,26 +14,10 @@ import { getClientIp } from '@/lib/utils';
 export const dynamic = 'force-dynamic';
 
 const BodySchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  hcaptchaToken: z.string().optional(),
+  email: credentialEmail,
+  password: credentialPassword.refine(value=>value.length>=8),
+  hcaptchaToken: z.string().max(8192).optional(),
 });
-
-async function verifyHcaptcha(token: string): Promise<boolean> {
-  const secret = process.env.HCAPTCHA_SECRET_KEY;
-  if (!secret) return true; // Skip if not configured
-  try {
-    const res = await fetch('https://hcaptcha.com/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ secret, response: token }),
-    });
-    const data = await res.json() as { success: boolean };
-    return data.success === true;
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(request: Request) {
   if (!isDirectPostgres()) {
@@ -44,13 +30,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
+  const raw=await request.text();if(raw.length>16384)return NextResponse.json({error:'Payload too large'},{status:413});
+  let body:unknown;try{body=JSON.parse(raw);}catch{return NextResponse.json({error:'Invalid JSON'},{status:400});}
 
+  if(body&&typeof body==='object'&&'password' in body&&typeof body.password==='string'&&Buffer.byteLength(body.password,'utf8')>72)return NextResponse.json({error:'Choose a shorter password',code:'PASSWORD_TOO_LONG'},{status:422});
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Email and password (min 8 chars) are required' }, { status: 400 });
@@ -58,25 +41,13 @@ export async function POST(request: Request) {
 
   const { email, password, hcaptchaToken } = parsed.data;
 
-  // Verify hCaptcha if secret is configured
-  if (process.env.HCAPTCHA_SECRET_KEY) {
-    if (!hcaptchaToken) {
-      return NextResponse.json({ error: 'Human verification required' }, { status: 400 });
-    }
-    const captchaOk = await verifyHcaptcha(hcaptchaToken);
-    if (!captchaOk) {
-      return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 400 });
-    }
-  }
+  try{await verifyAuthChallenge(hcaptchaToken,request);}catch(error){return error instanceof AuthChallengeError?NextResponse.json({error:error.code,code:error.code,requireCaptcha:true},{status:error.status}):NextResponse.json({error:'Authentication unavailable'},{status:503});}
   const supabase = createServiceClient();
 
   // Check email not already taken
-  const { data: existing } = await supabase
-    .from('users')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle();
+  const {data:existing,error:lookupError}=await supabase.rpc('find_direct_account' as never,{p_email:email} as never);
 
+  if(lookupError)return NextResponse.json({error:'Authentication unavailable'},{status:503});
   if (existing) {
     return NextResponse.json({ error: 'Email already registered' }, { status: 409 });
   }
@@ -86,23 +57,17 @@ export async function POST(request: Request) {
 
   // Derive username from email prefix
   const emailPrefix = email.split('@')[0].replace(/[^a-z0-9_]/gi, '_').toLowerCase();
-  const username = `${emailPrefix}_${id.slice(0, 6)}`;
+  const username = `${emailPrefix.slice(0,20)}_${id.slice(0,6)}`;
 
-  const {error}=await supabase.rpc('create_direct_account' as never,{p_id:id,p_email:email,p_username:username,p_display_name:emailPrefix,p_password_hash:password_hash} as never);
+  const {error}=await supabase.rpc('create_localized_direct_account' as never,{p_locale:accountLocale(request),p_id:id,p_email:email,p_username:username,p_display_name:emailPrefix.slice(0,50),p_password_hash:password_hash} as never);
 
   if (error) {
     return NextResponse.json({error:error.code==='23505'?'Account already exists':'Failed to create account'},{status:error.code==='23505'?409:503});
   }
 
-  const token = await createDoSession({ id, email });
-
-  // Fetch the newly created user row so mobile clients can bootstrap in one round-trip.
-  const supabaseForProfile = createServiceClient();
-  const { data: profile } = await supabaseForProfile
-    .from('users')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
+  const {data:profile,error:profileError}=await createServiceClient().from('users').select('*').eq('id',id).maybeSingle();
+  if(profileError||!profile)return NextResponse.json({error:'Authentication unavailable'},{status:503});
+  let token:string;try{token=await createDoSession({id,email});}catch{return NextResponse.json({error:'Authentication unavailable'},{status:503});}
 
   const response = NextResponse.json({ ok: true, token, user: clientUser(profile), userId: id });
   if(!isStatelessNativeAuth(request))response.cookies.set(SESSION_COOKIE, token, {

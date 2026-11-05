@@ -1,30 +1,22 @@
-import { View, Text, FlatList, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { Avatar } from '@/components/ui/Avatar';
-import { Button } from '@/components/ui/Button';
-
-export default function ARCDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const qc = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ['author', 'arc', id], queryFn: () => api.get<{ arc: any; applications: any[] }>(`/api/author/arcs/${id}/applications`), enabled: !!id });
-  const approve = useMutation({ mutationFn: (appId: string) => api.post(`/api/author/arcs/${id}/approve`, { applicationId:appId,approved:true }), onSuccess: () => qc.invalidateQueries({ queryKey: ['author', 'arc', id] }), onError: (err) => Alert.alert('Error', (err as Error).message) });
-  const arc = data?.arc;
-  const applications = data?.applications ?? [];
-  if (isLoading || !arc) return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" /></View>;
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <View className="px-4 py-3 border-b border-border"><Text className="text-xl font-bold text-foreground">{arc.title}</Text><Text className="text-sm text-muted-foreground">{applications.length} applications</Text></View>
-      <FlatList data={applications} keyExtractor={(a) => a.id} renderItem={({ item }) => (
-        <View className="flex-row items-center px-4 py-3 border-b border-border gap-3">
-          <Avatar uri={item.reader?.avatar_url} name={item.reader?.display_name} size={40} />
-          <View className="flex-1"><Text className="font-medium text-foreground">{item.reader?.display_name}</Text><Text className="text-sm text-muted-foreground">@{item.reader?.username}</Text></View>
-          {item.status === 'pending' && <Button onPress={() => approve.mutate(item.id)} loading={approve.isPending} size="sm">Approve</Button>}
-          {item.status === 'approved' && <Text className="text-accent text-sm">Approved</Text>}
-        </View>
-      )} contentContainerStyle={{ paddingBottom: 24 }} />
-    </SafeAreaView>
-  );
+import {View,Text,FlatList,Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useLocalSearchParams} from 'expo-router';
+import {useState} from 'react';
+import {useInfiniteQuery,useMutation,useQueryClient,type InfiniteData} from '@tanstack/react-query';
+import {useAuthStore} from '@/stores/auth';
+import {useRequestIntent} from '@/hooks/useRequestIntent';
+import {useTranslations} from '@/hooks/useTranslations';
+import {api} from '@/lib/api';
+import {Avatar} from '@/components/ui/Avatar';
+import {Button} from '@/components/ui/Button';
+import {QueryError,EmptyState} from '@/components/ui/EmptyState';
+import {LoadingSpinner} from '@/components/ui/LoadingSpinner';
+import type {ArcApplications,ArcApplication,ArcApplicationStatus} from '@/types';
+export default function ARCDetailScreen(){
+  const {id}=useLocalSearchParams<{id:string}>(),owner=useAuthStore(state=>state.user?.id),intent=useRequestIntent(owner),qc=useQueryClient(),{t,locale}=useTranslations('arcs'),{t:common}=useTranslations('common'),[status,setStatus]=useState<'all'|ArcApplicationStatus>('all'),key=['author','arc',id,owner,status];
+  const query=useInfiniteQuery({queryKey:key,enabled:!!id&&!!owner,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const page=await api.get<ArcApplications>('/api/author/arcs/'+id+'/applications',{status,...(pageParam?{cursor:pageParam}:{})},signal);if(page.actorId!==owner||page.arc?.id!==id)throw Error('Invalid ARC applications');return page;},getNextPageParam:page=>page.nextCursor}),snapshot=query.data?.pages[0];
+  const decide=useMutation({mutationFn:async({row,approved}:{row:ArcApplication;approved:boolean})=>{const body={applicationId:row.id,approved},scope='arc.review.'+id+'.'+row.id,result=await api.post<{actorId:string;arcId:string;application:ArcApplication}>('/api/author/arcs/'+id+'/approve',body,await intent.durableHeaders(body,scope));if(result.actorId!==owner||result.arcId!==id||result.application?.id!==row.id||result.application.arc_id!==id||result.application.reader_id!==row.reader_id||result.application.status!==(approved?'approved':'rejected'))throw Error('Invalid ARC decision receipt');await intent.complete(scope);return {...row,...result.application};},onSuccess:row=>{if(useAuthStore.getState().user?.id!==owner)return;qc.setQueryData<InfiniteData<ArcApplications>>(key,previous=>{if(!previous)return previous;const before=previous.pages.flatMap(page=>page.applications).find(item=>item.id===row.id)?.status,statistics={...previous.pages[0].statistics};if(before&&before!==row.status){statistics[before]=Math.max(0,statistics[before]-1);statistics[row.status]++;}return {...previous,pages:previous.pages.map(page=>({...page,statistics,arc:{...page.arc,approved_count:statistics.approved,pending_count:statistics.pending,slots_remaining:Math.max(0,page.arc.reader_slots-statistics.approved),can_review:page.arc.is_open&&statistics.approved<page.arc.reader_slots},applications:page.applications.map(item=>item.id===row.id?row:item).filter(item=>status==='all'||item.status===status)}))};});void qc.invalidateQueries({queryKey:['author','arc',id]});void qc.invalidateQueries({queryKey:['author','arcs']});void qc.invalidateQueries({queryKey:['arcs']});Alert.alert(t('decisionSaved'));},onError:()=>{Alert.alert(common('error'),t('saveFailed'));void qc.invalidateQueries({queryKey:['author','arc',id]});}});
+  if(query.error&&!snapshot)return <QueryError error={query.error} retry={()=>void query.refetch()}/>;
+  if(query.isLoading||!snapshot)return <LoadingSpinner/>;
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={query.data?.pages.flatMap(page=>page.applications)??[]} keyExtractor={row=>row.id} contentContainerStyle={{paddingBottom:24}} ListHeaderComponent={<View className="p-4 gap-3"><Text accessibilityRole="header" className="text-xl font-bold text-foreground">{snapshot.arc.books.title}</Text><Text className="text-sm text-muted-foreground">{t('approvedCapacity',{count:snapshot.statistics.approved,max:snapshot.arc.reader_slots})} · {t(snapshot.arc.is_open?'open':'closed')}</Text><View className="flex-row flex-wrap gap-2">{(['all','pending','approved','rejected'] as const).map(value=><Button key={value} size="sm" accessibilityState={{selected:value===status}} variant={value===status?'primary':'outline'} disabled={decide.isPending} onPress={()=>setStatus(value)}>{t(value)+' ('+(value==='all'?snapshot.statistics.total:snapshot.statistics[value]).toLocaleString(locale)+')'}</Button>)}</View></View>} renderItem={({item:row})=><View className="px-4 py-3 border-b border-border gap-2"><View className="flex-row items-center gap-3"><Avatar uri={row.reader.avatar_url} name={row.reader.display_name} size={40}/><View className="flex-1"><Text className="font-medium text-foreground">{row.reader.display_name}</Text><Text className="text-xs text-muted-foreground">@{row.reader.username} · {t('readerXp',{count:row.reader.xp})}</Text><Text className="text-xs text-muted-foreground">{new Date(row.applied_at).toLocaleDateString(locale,{timeZone:'UTC'})} · {t(row.status)}</Text></View></View>{!row.reader.active&&<Text className="text-xs text-muted-foreground">{t('inactiveReader')}</Text>}{row.status==='pending'&&<View className="flex-row gap-3"><Button size="sm" disabled={decide.isPending||!snapshot.arc.can_review||!row.reader.active} loading={decide.isPending&&decide.variables?.row.id===row.id} onPress={()=>decide.mutate({row,approved:true})}>{t('approve')}</Button><Button size="sm" variant="outline" disabled={decide.isPending} onPress={()=>decide.mutate({row,approved:false})}>{t('reject')}</Button></View>}</View>} ListEmptyComponent={<EmptyState title={t('noApplications')}/>} ListFooterComponent={<View className="p-4 gap-3">{query.error&&<QueryError error={query.error} retry={()=>void query.refetch()}/>} {query.hasNextPage&&<Button disabled={decide.isPending} loading={query.isFetchingNextPage} onPress={()=>void query.fetchNextPage()}>{common('loadMore')}</Button>}<Button variant="outline" disabled={decide.isPending} loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></View>}/></SafeAreaView>;
 }

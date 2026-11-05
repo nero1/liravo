@@ -7,7 +7,7 @@ import en from '../messages/en.json';
 it('resolves literal translation calls against the English catalog', () => {
   const missing: string[] = [];
   const walk = (directory: string): string[] => readdirSync(directory,{withFileTypes:true}).flatMap(entry => entry.isDirectory() ? walk(join(directory,entry.name)) : /\.tsx?$/.test(entry.name) ? [join(directory,entry.name)] : []);
-  for (const file of walk('src')) {
+  for (const file of [...walk('src'),...walk('mobile/app'),...walk('mobile/components'),...walk('mobile/hooks')]) {
     const contents=readFileSync(file,'utf8');
     if (!/\b(?:useTranslations|getTranslations)\s*\(/.test(contents)) continue;
     const source=ts.createSourceFile(file,contents,ts.ScriptTarget.Latest,true);
@@ -18,14 +18,16 @@ it('resolves literal translation calls against the English catalog', () => {
       return parent ?? source;
     };
     const collect=(node: ts.Node) => {
-      if(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      if(ts.isVariableDeclaration(node) && (ts.isIdentifier(node.name)||ts.isObjectBindingPattern(node.name)) && node.initializer) {
         const value=ts.isAwaitExpression(node.initializer)?node.initializer.expression:node.initializer;
         if(ts.isCallExpression(value) && ts.isIdentifier(value.expression) && ['useTranslations','getTranslations'].includes(value.expression.text)) {
           const argument=value.arguments[0];
           const namespace=!argument?'':ts.isStringLiteral(argument)?argument.text:undefined;
           if(namespace!==undefined) {
             const scope=scopeOf(node), map=bindings.get(scope) ?? new Map<string,string>();
-            map.set(node.name.text,namespace); bindings.set(scope,map);
+            if(ts.isIdentifier(node.name))map.set(node.name.text,namespace);
+            else for(const element of node.name.elements)if(ts.isIdentifier(element.name)&&(element.propertyName?.getText()??element.name.text)==='t')map.set(element.name.text,namespace);
+            bindings.set(scope,map);
           }
         }
       }
@@ -57,10 +59,10 @@ it('resolves literal translation calls against the English catalog', () => {
   expect(missing).toEqual([]);
 });
 
-it('keeps localized sign-in and admin screens free of untranslated text and labels', () => {
+it('keeps localized screens and all shared components free of untranslated text and labels', () => {
   const literals: string[] = [];
   const adminFiles=(directory:string):string[]=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?adminFiles(join(directory,entry.name)):entry.name.endsWith('.tsx')?[join(directory,entry.name)]:[]);
-  for(const file of ['src/components/auth/EmailRecoveryForm.tsx','src/app/(app)/settings/email/EmailSettingsForm.tsx','src/app/(app)/settings/2fa/TwoFAClient.tsx','src/app/(app)/settings/pin/PINSettingsClient.tsx','src/components/profile/ProfileEditForm.tsx','src/components/auth/OnboardingFlow.tsx','src/app/(app)/buddy-reads/[id]/page.tsx','src/app/(app)/settings/import/page.tsx','src/components/auth/LoginForm.tsx','src/app/login/page.tsx','src/components/creator/TipButton.tsx','src/components/creator/PayoutForm.tsx','src/components/creator/PayoutQueue.tsx','src/app/(app)/earnings/page.tsx','src/components/creator/CancelSubscriptionButton.tsx','src/app/(app)/tips/[id]/page.tsx','src/app/(app)/write/prompts/page.tsx','src/app/(app)/write/prompts/[id]/page.tsx','src/app/(app)/write/challenges/page.tsx','src/app/(app)/write/challenges/[id]/page.tsx','src/components/writing/ChallengeJoinButton.tsx','src/app/(app)/share/writing-challenge/[id]/route.tsx',...adminFiles('src/app/(app)/admin')]) {
+  for(const file of ['src/app/(app)/arcs/page.tsx','src/app/(app)/author/arcs/page.tsx','src/app/(app)/author/arcs/[id]/page.tsx','src/app/(app)/write/ask/page.tsx','src/app/(app)/write/ask/[id]/page.tsx','src/app/(app)/author/[username]/page.tsx','src/app/(app)/author/analytics/page.tsx','src/app/(app)/author/arcs/new/page.tsx','src/app/(app)/author/posts/new/page.tsx','src/app/(app)/write/progress/page.tsx','src/app/(app)/write/resources/page.tsx','src/app/(app)/write/workshops/page.tsx','src/app/(app)/write/workshops/[id]/page.tsx','src/app/(app)/write/workshops/[id]/WorkshopRoom.tsx','src/app/(app)/settings/page.tsx','src/app/(app)/settings/SettingsDataActions.tsx','src/app/(app)/referral/page.tsx','src/app/(app)/discover/mood/[tag]/page.tsx','src/app/(app)/book/[id]/page.tsx','src/components/books/BookSearch.tsx','src/components/books/QuoteForm.tsx','src/components/books/ReviewForm.tsx','src/components/shelf/LogReadingSessionButton.tsx','src/components/shelf/AddToShelfButton.tsx','src/components/books/AudibleCTA.tsx','src/components/books/AffiliateLinkButtons.tsx','src/app/(app)/feed/page.tsx','src/components/books/ReactionButtons.tsx','src/app/(app)/creator/dashboard/page.tsx','src/app/(app)/creator/leaderboard/page.tsx','src/components/auth/HCaptcha.tsx','src/components/auth/CaptchaBridge.tsx','src/app/auth/captcha/page.tsx','src/components/auth/EmailRecoveryForm.tsx','src/app/(app)/settings/email/EmailSettingsForm.tsx','src/app/(app)/settings/2fa/TwoFAClient.tsx','src/app/(app)/settings/pin/PINSettingsClient.tsx','src/components/profile/ProfileEditForm.tsx','src/components/auth/OnboardingFlow.tsx','src/app/(app)/buddy-reads/[id]/page.tsx','src/app/(app)/settings/import/page.tsx','src/components/auth/LoginForm.tsx','src/app/login/page.tsx','src/components/creator/TipButton.tsx','src/components/creator/PayoutForm.tsx','src/components/creator/PayoutQueue.tsx','src/app/(app)/earnings/page.tsx','src/components/creator/CancelSubscriptionButton.tsx','src/app/(app)/tips/[id]/page.tsx','src/app/(app)/write/prompts/page.tsx','src/app/(app)/write/prompts/[id]/page.tsx','src/app/(app)/write/challenges/page.tsx','src/app/(app)/write/challenges/[id]/page.tsx','src/components/writing/ChallengeJoinButton.tsx','src/app/(app)/share/writing-challenge/[id]/route.tsx',...adminFiles('src/app/(app)/admin'),...adminFiles('src/components')]) {
     const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
     const check=(node: ts.Node) => {
       let value: string | undefined;
@@ -76,10 +78,10 @@ it('keeps localized sign-in and admin screens free of untranslated text and labe
   expect(literals).toEqual([]);
 });
 
-it('keeps admin fields named and switches stateful for assistive technology', () => {
+it('keeps admin and shared component fields named and switches stateful for assistive technology', () => {
   const files=(directory:string):string[]=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?files(join(directory,entry.name)):entry.name.endsWith('.tsx')?[join(directory,entry.name)]:[]);
   const missing: string[]=[];
-  for(const file of files('src/app/(app)/admin')) {
+  for(const file of [...files('src/app/(app)/admin'),...files('src/components')]) {
     const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
     type Element=ts.JsxOpeningElement|ts.JsxSelfClosingElement;
     const attributes=(node:Element)=>new Map(node.attributes.properties.filter(ts.isJsxAttribute).map(attribute=>[attribute.name.getText(),attribute.initializer]));
@@ -95,7 +97,7 @@ it('keeps admin fields named and switches stateful for assistive technology', ()
     const check=(node:ts.Node)=>{
       if(ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node)) {
         const tag=node.tagName.getText(), attrs=attributes(node);
-        if(['input','textarea','select'].includes(tag)&&value(attrs.get('type'))!=='hidden') {
+        if(['input','textarea','select'].includes(tag)&&value(attrs.get('type'))!=='hidden'&&value(attrs.get('aria-hidden'))!=='true') {
           let parent:ts.Node|undefined=node.parent,wrapped=false;
           while(parent&&!ts.isFunctionLike(parent)) {
             if(ts.isJsxElement(parent)&&parent.openingElement.tagName.getText()==='label') wrapped=true;
@@ -111,4 +113,22 @@ it('keeps admin fields named and switches stateful for assistive technology', ()
     check(source);
   }
   expect(missing).toEqual([]);
+});
+
+it('keeps completed native screens free of untranslated text and labels',()=>{
+  const writingFiles=(directory:string):string[]=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?writingFiles(join(directory,entry.name)):entry.name.endsWith('.tsx')?[join(directory,entry.name)]:[]);
+  const files=['mobile/app/settings/account.tsx','mobile/app/referral/index.tsx','mobile/app/_layout.tsx','mobile/app/(tabs)/_layout.tsx','mobile/app/(tabs)/discover/index.tsx',...writingFiles('mobile/app/write'),'mobile/app/(tabs)/discover/mood/[tag].tsx','mobile/app/(tabs)/discover/mood-ai.tsx','mobile/app/(tabs)/profile/index.tsx','mobile/app/(tabs)/shelf/index.tsx','mobile/app/(tabs)/shelf/[id].tsx','mobile/app/(tabs)/write.tsx','mobile/app/auth/welcome.tsx','mobile/app/settings/index.tsx','mobile/app/book/[id].tsx','mobile/components/ui/LocaleSwitcher.tsx'];
+  const literals:string[]=[];
+  for(const file of files){
+    const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
+    const check=(node:ts.Node)=>{
+      let value:string|undefined;
+      if(ts.isJsxText(node))value=node.text.trim();
+      if(ts.isJsxAttribute(node)&&['title','label','placeholder','description','accessibilityLabel','alt'].includes(node.name.getText())&&node.initializer&&ts.isStringLiteral(node.initializer))value=node.initializer.text;
+      if(ts.isPropertyAssignment(node)&&node.name.getText()==='title'&&ts.isStringLiteral(node.initializer))value=node.initializer.text;
+      if(value&&/[A-Za-z]{2}/.test(value)&&!['Liravo','XP'].includes(value))literals.push(file+': '+value);
+      ts.forEachChild(node,check);
+    };check(source);
+  }
+  expect(literals).toEqual([]);
 });

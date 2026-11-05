@@ -1,3 +1,5 @@
+import {getTranslations} from 'next-intl/server';
+import {getEarnedBadges} from '@/services/badges';
 import { languageAlternates } from '@/lib/metadata';
 import { PUBLIC_USER_COLUMNS } from '@/lib/user-profile';
 import { notFound } from 'next/navigation';
@@ -15,22 +17,24 @@ interface ProfilePageProps {
 }
 
 export async function generateMetadata({ params }: ProfilePageProps): Promise<Metadata> {
+  const t=await getTranslations('profile');
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('users')
     .select('display_name, bio, avatar_url, profile_visibility, is_banned')
     .eq('username', params.username)
+    .is('deleted_at',null)
     .single();
 
-  if (!data || data.is_banned || data.profile_visibility !== 'public') return { title: 'Profile', robots: { index: false, follow: false } };
+  if (!data || data.is_banned || data.profile_visibility !== 'public') return { title:t('title'), robots: { index: false, follow: false } };
 
   return {
     title: `${data.display_name} (@${params.username})`,
-    description: data.bio ?? `${data.display_name}'s reading profile on Liravo`,
+    description: data.bio ?? t('metadataDescription',{name:data.display_name}),
     alternates: languageAlternates(`/user/${encodeURIComponent(params.username)}`),
     twitter: { card: 'summary', title: `${data.display_name} (@${params.username})`, description: data.bio ?? '', images: data.avatar_url ? [data.avatar_url] : [] },
     openGraph: {
-      title: `${data.display_name} on Liravo`,
+      title: t('metadataTitle',{name:data.display_name}),
       description: data.bio ?? '',
       url: `${APP_URL}/user/${params.username}`,
       images: data.avatar_url ? [data.avatar_url] : [],
@@ -39,12 +43,14 @@ export async function generateMetadata({ params }: ProfilePageProps): Promise<Me
 }
 
 export default async function PublicProfilePage({ params }: ProfilePageProps) {
+  const t=await getTranslations('profile');
   const supabase = createServiceClient();
   const { data: profile } = await supabase
     .from('users')
     .select(PUBLIC_USER_COLUMNS)
     .eq('username', params.username)
     .eq('is_banned', false)
+    .is('deleted_at',null)
     .single();
 
   if (!profile) notFound();
@@ -59,8 +65,8 @@ export default async function PublicProfilePage({ params }: ProfilePageProps) {
       return (
         <div className="max-w-xl mx-auto px-4 py-20 text-center">
           <p className="text-2xl mb-2">🔒</p>
-          <h1 className="font-display text-xl font-bold mb-2">This profile is private</h1>
-          <p className="text-muted-foreground text-sm">Only followers can view this profile.</p>
+          <h1 className="font-display text-xl font-bold mb-2">{t('privateTitle')}</h1>
+          <p className="text-muted-foreground text-sm">{t('privateDescription')}</p>
         </div>
       );
     }
@@ -74,26 +80,14 @@ export default async function PublicProfilePage({ params }: ProfilePageProps) {
       return (
         <div className="max-w-xl mx-auto px-4 py-20 text-center">
           <p className="text-2xl mb-2">🔒</p>
-          <h1 className="font-display text-xl font-bold mb-2">This profile is private</h1>
-          <p className="text-muted-foreground text-sm">Only followers can view this profile.</p>
+          <h1 className="font-display text-xl font-bold mb-2">{t('privateTitle')}</h1>
+          <p className="text-muted-foreground text-sm">{t('privateDescription')}</p>
         </div>
       );
     }
   }
 
-  // Fetch earned badges for this user
-  const { data: userBadges } = await supabase
-    .from('user_badges')
-    .select('badge_id, awarded_at')
-    .eq('user_id', profile.id)
-    .order('awarded_at', { ascending: false });
-
-  // Map badge IDs to badge definitions
-  const { BADGE_DEFINITIONS } = await import('@/services/badges');
-  const earnedBadges = (userBadges ?? []).map((ub: { badge_id: string }) => {
-    const def = BADGE_DEFINITIONS.find((b) => b.id === ub.badge_id);
-    return def ? { icon: def.icon, name: def.name } : null;
-  }).filter((badge): badge is NonNullable<typeof badge> => badge !== null);
+  const earnedBadges=await getEarnedBadges(profile.id);
 
   const profileWithBadges = { ...profile, badges: earnedBadges };
 

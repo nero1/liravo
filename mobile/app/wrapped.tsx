@@ -1,142 +1,21 @@
-import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { Card } from '@/components/ui/Card';
-
-interface WrappedData {
-  year: number;
-  displayName: string;
-  booksRead: number;
-  pagesRead: number;
-  topGenres: string[];
-  topMood: string | null;
-  streakMax: number;
-  badgesEarned: number;
-  totalXp: number;
-  favouriteAuthor: string | null;
-  longestBook: { title: string; pageCount: number } | null;
-  shortestBook: { title: string; pageCount: number } | null;
-  mostActiveMonth: string | null;
-  readerTitle: string;
-}
-
-export default function WrappedScreen() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['wrapped'],
-    queryFn: () => api.get<WrappedData>(ENDPOINTS.wrapped),
-  });
-
-  if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#d97706" size="large" />
-      </View>
-    );
-  }
-
-  if (!data) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-4">
-        <Text className="text-muted-foreground text-center">
-          Your year in books is not available yet. Check back at year end!
-        </Text>
-      </View>
-    );
-  }
-
-  const wrapped = data;
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}>
-        <Text className="text-2xl font-bold text-foreground text-center mb-1">
-          {wrapped.displayName}&apos;s {wrapped.year} in Books
-        </Text>
-        <Text className="text-center text-accent font-semibold mb-4">{wrapped.readerTitle}</Text>
-
-        <View className="gap-4">
-          <Card>
-            <Text className="text-5xl font-bold text-foreground text-center">{wrapped.booksRead}</Text>
-            <Text className="text-center text-muted-foreground mt-1">Books Read</Text>
-          </Card>
-
-          <Card>
-            <Text className="text-4xl font-bold text-foreground text-center">
-              {(wrapped.pagesRead ?? 0).toLocaleString()}
-            </Text>
-            <Text className="text-center text-muted-foreground mt-1">Pages Turned</Text>
-          </Card>
-
-          {(wrapped.topGenres ?? []).length > 0 && (
-            <Card>
-              <Text className="font-semibold text-foreground mb-2">Top Genres</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {wrapped.topGenres.map((g) => (
-                  <View key={g} className="bg-accent/10 rounded-full px-3 py-1">
-                    <Text className="text-accent text-sm font-medium">{g}</Text>
-                  </View>
-                ))}
-              </View>
-            </Card>
-          )}
-
-          {wrapped.topMood && (
-            <Card>
-              <Text className="font-semibold text-foreground mb-1">Most Common Mood Tag</Text>
-              <Text className="text-xl font-bold text-accent">{wrapped.topMood}</Text>
-            </Card>
-          )}
-
-          {wrapped.favouriteAuthor && (
-            <Card>
-              <Text className="font-semibold text-foreground mb-1">Favourite Author</Text>
-              <Text className="text-xl font-bold text-foreground">{wrapped.favouriteAuthor}</Text>
-            </Card>
-          )}
-
-          {wrapped.mostActiveMonth && (
-            <Card>
-              <Text className="font-semibold text-foreground mb-1">Most Active Month</Text>
-              <Text className="text-xl font-bold text-foreground">{wrapped.mostActiveMonth}</Text>
-            </Card>
-          )}
-
-          {wrapped.longestBook && (
-            <Card>
-              <Text className="font-semibold text-foreground mb-1">Longest Book</Text>
-              <Text className="text-base font-bold text-foreground" numberOfLines={2}>{wrapped.longestBook.title}</Text>
-              <Text className="text-sm text-muted-foreground">{wrapped.longestBook.pageCount.toLocaleString()} pages</Text>
-            </Card>
-          )}
-
-          {wrapped.shortestBook && (
-            <Card>
-              <Text className="font-semibold text-foreground mb-1">Shortest Book</Text>
-              <Text className="text-base font-bold text-foreground" numberOfLines={2}>{wrapped.shortestBook.title}</Text>
-              <Text className="text-sm text-muted-foreground">{wrapped.shortestBook.pageCount.toLocaleString()} pages</Text>
-            </Card>
-          )}
-
-          <Card>
-            <View className="flex-row justify-between">
-              <View className="items-center flex-1">
-                <Text className="text-3xl font-bold text-foreground">{wrapped.streakMax}</Text>
-                <Text className="text-xs text-muted-foreground text-center">Longest Streak</Text>
-              </View>
-              <View className="items-center flex-1">
-                <Text className="text-3xl font-bold text-foreground">{wrapped.badgesEarned}</Text>
-                <Text className="text-xs text-muted-foreground text-center">Badges Earned</Text>
-              </View>
-              <View className="items-center flex-1">
-                <Text className="text-3xl font-bold text-accent">{(wrapped.totalXp ?? 0).toLocaleString()}</Text>
-                <Text className="text-xs text-muted-foreground text-center">XP Gained</Text>
-              </View>
-            </View>
-          </Card>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
+import {View,Text,ScrollView,ActivityIndicator} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useQuery} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useTranslations} from '@/hooks/useTranslations';
+import {Card} from '@/components/ui/Card';
+import {Button} from '@/components/ui/Button';
+import {QueryError} from '@/components/ui/EmptyState';
+import type {WrappedData} from '@/types';
+export default function WrappedScreen(){
+  const owner=useAuthStore(state=>state.user?.id),{t,locale}=useTranslations('wrapped'),genres=useTranslations('aiProfiles'),moods=useTranslations('moods'),levels=useTranslations('profile'),query=useQuery({queryKey:['wrapped',owner],enabled:!!owner,queryFn:async({signal})=>{const data=await api.get<WrappedData&{actorId:string}>('/api/wrapped',undefined,signal);if(data.actorId!==owner||data.userId!==owner||!Array.isArray(data.topGenres))throw Error('Invalid reading summary');return data;}});
+  if(query.error)return <QueryError error={query.error} retry={()=>void query.refetch()}/>;
+  const data=query.data;if(!data)return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706"/></View>;
+  const number=(value:number)=>new Intl.NumberFormat(locale).format(value),genre=(value:string)=>genres.has('genreLabels.'+value)?genres.t('genreLabels.'+value):value,cards=[
+    {label:t('booksRead'),value:number(data.booksRead)},{label:t('pagesRead'),value:number(data.pagesRead)},
+    {label:t('maximumStreak'),value:number(data.streakMax)},{label:t('badgesEarned'),value:number(data.badgesEarned)},
+    {label:t('yearXp'),value:number(data.yearXp)},{label:t('totalXp'),value:number(data.totalXp)},
+  ];
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><ScrollView className="px-4" contentContainerStyle={{paddingTop:16,paddingBottom:32,gap:16}}><Text accessibilityRole="header" className="text-2xl font-bold text-foreground">{t('yearTitle',{year:data.year})}</Text><Text className="text-foreground">{t('greeting',{name:data.displayName})}</Text><Text className="font-semibold text-accent">{levels.t('levels.'+data.readerLevel)}</Text>{cards.map(card=><Card key={card.label}><Text className="text-3xl font-bold text-foreground">{card.value}</Text><Text className="text-sm text-muted-foreground">{card.label}</Text></Card>)}{data.topGenres.length>0&&<Card><Text className="font-semibold text-foreground">{t('topGenres')}</Text>{data.topGenres.map(value=><Text key={value} className="text-foreground">{genre(value)}</Text>)}</Card>}{data.topMood&&<Card><Text className="font-semibold text-foreground">{t('topMood')}</Text><Text className="text-foreground">{moods.has(data.topMood)?moods.t(data.topMood):data.topMood}</Text><Text className="text-xs text-muted-foreground">{t('moodDescription')}</Text></Card>}{data.favouriteAuthor&&<Card><Text className="font-semibold text-foreground">{t('favouriteAuthor')}</Text><Text className="text-foreground">{data.favouriteAuthor}</Text></Card>}{data.mostActiveMonthNumber&&<Card><Text className="font-semibold text-foreground">{t('mostActiveMonth')}</Text><Text className="text-foreground">{new Intl.DateTimeFormat(locale,{month:'long',timeZone:'UTC'}).format(new Date(Date.UTC(data.year,data.mostActiveMonthNumber-1,1)))}</Text></Card>}{(['longestBook','shortestBook'] as const).map(key=>data[key]&&<Card key={key}><Text className="font-semibold text-foreground">{t(key)}</Text><Text className="text-foreground">{data[key]!.title} · {t('pageCount',{count:data[key]!.pageCount})}</Text></Card>)}<Button variant="outline" loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></ScrollView></SafeAreaView>;
 }

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import {useTranslations} from '@/hooks/useTranslations';
+import { useState,useRef,useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   FlatList, ActivityIndicator, Pressable,
@@ -6,6 +7,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Sparkles, ArrowLeft } from 'lucide-react-native';
+import {useAuthStore} from '@/stores/auth';
+import {AI_MOOD_MAX_LENGTH} from '../../../../src/constants/ai';
 import { api } from '@/lib/api';
 
 interface AiBook {
@@ -14,29 +17,34 @@ interface AiBook {
   reason: string;
 }
 
-export default function MoodAiScreen() {
-  const router = useRouter();
+export default function MoodAiScreen(){const actorId=useAuthStore(state=>state.user?.id),{locale}=useTranslations('discover');return <OwnedMoodAiScreen key={(actorId??'guest')+locale} actorId={actorId}/>;}
+export function OwnedMoodAiScreen({actorId}:{actorId:string|undefined}) {
+  const router = useRouter(),{t,locale}=useTranslations('discover'),{t:common}=useTranslations('common'),controller=useRef<AbortController|null>(null);
+  useEffect(()=>()=>{controller.current?.abort();controller.current=null;},[]);
   const [query, setQuery] = useState('');
   const [books, setBooks] = useState<AiBook[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error,setError]=useState(false);
 
   async function search() {
-    if (!query.trim() || query.trim().length < 3) return;
+    if(!actorId||controller.current||query.trim().length<3||query.trim().length>AI_MOOD_MAX_LENGTH)return;
+    const current=new AbortController();controller.current=current;
     setLoading(true);
-    setError(null);
+    setError(false);
     setSearched(false);
     try {
-      const data = await api.get<{ recommendations?: AiBook[] }>('/api/ai/recommendations', {
-        mood: query.trim(),
-      });
-      setBooks(data.recommendations ?? []);
+      const data = await api.get<{ recommendations: AiBook[];actorId:string;locale:string }>('/api/ai/recommendations', {
+        mood: query.trim(),userId:actorId,
+      },current.signal);
+      if(controller.current!==current||current.signal.aborted)return;
+      if(useAuthStore.getState().user?.id!==actorId||data.actorId!==actorId||data.locale!==locale||!Array.isArray(data.recommendations)||!data.recommendations.every(book=>book&&typeof book.title==='string'&&book.title.length>0&&typeof book.author==='string'&&book.author.length>0&&typeof book.reason==='string'&&book.reason.length>0))throw Error('Invalid recommendations');
+      setBooks(data.recommendations);
       setSearched(true);
     } catch {
-      setError('Could not get AI recommendations. Please try again.');
+      if(controller.current===current&&!current.signal.aborted)setError(true);
     } finally {
-      setLoading(false);
+      if(controller.current===current){controller.current=null;setLoading(false);}
     }
   }
 
@@ -44,31 +52,31 @@ export default function MoodAiScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       {/* Header */}
       <View className="flex-row items-center px-4 py-3 gap-3">
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={common('back')} onPress={() => router.back()}>
           <ArrowLeft size={22} color="#d97706" />
         </TouchableOpacity>
         <View className="flex-row items-center gap-2 flex-1">
           <Sparkles size={20} color="#d97706" />
-          <Text className="text-xl font-bold text-foreground">AI Mood Search</Text>
+          <Text className="text-xl font-bold text-foreground">{t('aiTitle')}</Text>
         </View>
       </View>
 
       <View className="px-4 mb-4">
         <Text className="text-sm text-muted-foreground mb-3">
-          Describe how you&apos;re feeling or what kind of book you want.
+          {t('aiDescription')}
         </Text>
         <View className="flex-row gap-2">
           <TextInput
             value={query}
-            onChangeText={setQuery}
+            onChangeText={value=>{controller.current?.abort();controller.current=null;setQuery(value);setBooks([]);setSearched(false);setError(false);setLoading(false);}}
             onSubmitEditing={search}
-            placeholder="e.g. cosy mystery with a female lead..."
+            accessibilityLabel={t('aiDescription')} placeholder={t('aiPlaceholder')}
             placeholderTextColor="#9ca3af"
             className="flex-1 bg-muted border border-border rounded-xl px-4 py-3 text-foreground text-sm"
             returnKeyType="search"
-            maxLength={200}
+            maxLength={AI_MOOD_MAX_LENGTH}
           />
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('find')} accessibilityState={{disabled:loading||query.trim().length<3,busy:loading}}
             onPress={search}
             disabled={loading || query.trim().length < 3}
             className="bg-accent rounded-xl px-4 py-3 items-center justify-center"
@@ -77,19 +85,19 @@ export default function MoodAiScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text className="text-white font-semibold text-sm">Find</Text>
+              <Text className="text-white font-semibold text-sm">{t('find')}</Text>
             )}
           </TouchableOpacity>
         </View>
         {error && (
-          <Text className="text-destructive text-sm mt-2">{error}</Text>
+          <Text className="text-destructive text-sm mt-2">{t('aiFailed')}</Text>
         )}
       </View>
 
       {searched && books.length === 0 && !loading && (
         <View className="flex-1 items-center justify-center px-4">
           <Text className="text-muted-foreground text-center">
-            No recommendations found. Try being more descriptive.
+            {t('aiEmpty')}
           </Text>
         </View>
       )}
@@ -98,7 +106,7 @@ export default function MoodAiScreen() {
         data={books}
         keyExtractor={(_, i) => String(i)}
         renderItem={({ item }) => (
-          <Pressable
+          <Pressable accessibilityRole="link" accessibilityLabel={item.title}
             onPress={() => router.push(`/discover?q=${encodeURIComponent(item.title)}`)}
             className="mx-4 mb-3 p-4 bg-card border border-border rounded-xl"
           >
@@ -113,7 +121,7 @@ export default function MoodAiScreen() {
         ListEmptyComponent={loading ? (
           <View className="py-8 items-center">
             <ActivityIndicator color="#d97706" />
-            <Text className="text-muted-foreground mt-2 text-sm">Finding books for your mood...</Text>
+            <Text className="text-muted-foreground mt-2 text-sm">{t('aiLoading')}</Text>
           </View>
         ) : null}
       />

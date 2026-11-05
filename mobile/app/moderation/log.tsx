@@ -1,25 +1,14 @@
-import { View, Text, FlatList } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
-import { formatDistanceToNow } from 'date-fns';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-
-export default function ModerationLogScreen() {
-  const { data, isLoading } = useQuery({ queryKey: ['moderation', 'log'], queryFn: () => api.get<{ log: any[] }>(ENDPOINTS.moderation.log) });
-  const log = data?.log ?? [];
-  if (isLoading) return <LoadingSpinner />;
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <FlatList data={log} keyExtractor={(l) => l.id} renderItem={({ item }) => (
-        <View className="px-4 py-3 border-b border-border">
-          <Text className="font-medium text-foreground">{item.action_type}</Text>
-          <Text className="text-sm text-muted-foreground">by @{item.moderator?.username}</Text>
-          <Text className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}</Text>
-        </View>
-      )} ListEmptyComponent={<EmptyState title="No moderation actions" />} contentContainerStyle={{ paddingBottom: 24 }} />
-    </SafeAreaView>
-  );
+import {View,Text,FlatList} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useTranslations} from '@/hooks/useTranslations';
+import {Button} from '@/components/ui/Button';
+import {EmptyState,QueryError} from '@/components/ui/EmptyState';
+import type {ModerationLog,ModerationPage} from '@/types';
+export default function ModerationLogScreen(){
+  const owner=useAuthStore(state=>state.user?.id),{t,locale,has}=useTranslations('moderation'),{t:common}=useTranslations('common');
+  const query=useInfiniteQuery({queryKey:['moderation','log',owner],enabled:!!owner,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<Omit<ModerationPage<ModerationLog>,'items'>&{logs:ModerationLog[]}>('/api/moderation/log',pageParam?{cursor:pageParam}:{},signal);if(data.actorId!==owner||!Array.isArray(data.logs))throw Error('Invalid moderation log');return data;},getNextPageParam:page=>page.nextCursor});
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={query.data?.pages.flatMap(page=>page.logs)??[]} keyExtractor={log=>log.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:16}} ListHeaderComponent={<View className="gap-2 mb-2"><Text accessibilityRole="header" className="text-xl font-bold text-foreground">{t('log')}</Text>{query.data&&<Text className="text-sm text-muted-foreground">{t('entries',{count:query.data.pages[0].total})}</Text>}</View>} renderItem={({item})=><View className="border-b border-border py-3 gap-1"><Text className="font-semibold text-foreground">{has('statuses.'+item.action)?t('statuses.'+item.action):has('audit.'+item.action)?t('audit.'+item.action):t('otherAction',{action:item.action})}</Text><Text className="text-sm text-muted-foreground">{t('moderator',{name:item.moderator?item.moderator.display_name+' (@'+item.moderator.username+')':t('unknown')})}</Text>{item.entity_type&&<Text className="text-sm text-foreground">{has('entities.'+item.entity_type)?t('entities.'+item.entity_type):item.entity_type}{item.target&&' · '+item.target.display_name}</Text>}{(item.reason||item.notes)&&<Text className="text-sm text-foreground">{item.reason??item.notes}</Text>}<Text className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString(locale)}</Text></View>} ListEmptyComponent={query.isLoading?<Text>{common('loading')}</Text>:query.isError?null:<EmptyState title={t('emptyLog')}/>} ListFooterComponent={<View className="gap-3">{query.isError&&<QueryError error={query.error} retry={()=>void query.refetch()}/>} {query.hasNextPage&&<Button loading={query.isFetchingNextPage} onPress={()=>void query.fetchNextPage()}>{common('loadMore')}</Button>}<Button variant="outline" loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></View>}/></SafeAreaView>;
 }

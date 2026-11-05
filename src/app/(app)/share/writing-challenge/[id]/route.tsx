@@ -1,38 +1,17 @@
 import { ImageResponse } from 'next/og';
-import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-import { getTranslations } from 'next-intl/server';
-import { z } from 'zod';
+import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  request: NextRequest,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createServiceClient();
-  const searchParams = new URL(request.url).searchParams;
-  const userId = searchParams.get('userId');
-
-  if (!z.string().uuid().safeParse(params.id).success || (userId && !z.string().uuid().safeParse(userId).success)) return NextResponse.json({error:'Invalid share target'},{status:400});
-  const t = await getTranslations('writing');
-  const { data: challenge, error: challengeError } = await supabase.from('writing_challenges').select('title').eq('id',params.id).maybeSingle();
-  if (challengeError) return NextResponse.json({error:'Challenge unavailable'},{status:503});
-  if (!challenge) return NextResponse.json({error:'Challenge not found'},{status:404});
-  const challengeName = challenge.title;
-  let submissionCount = 0;
-  let userName = t('writer');
-  if (userId) {
-    const { data: profile, error: profileError } = await supabase.from('users').select('display_name').eq('id',userId).eq('is_banned',false).maybeSingle();
-    if (profileError) return NextResponse.json({error:'Profile unavailable'},{status:503});
-    if (!profile) return NextResponse.json({error:'Profile not found'},{status:404});
-    userName = profile.display_name || t('writer');
-    const {count,error} = await supabase.from('writing_challenge_submissions').select('id',{count:'exact',head:true}).eq('challenge_id',params.id).eq('user_id',userId);
-    if (error || count == null) return NextResponse.json({error:'Submissions unavailable'},{status:503});
-    submissionCount=count;
-  }
+  try {
+  const {data,t}=await getShareCard(request,'writing-challenge',params.id,new URL(request.url).searchParams.get('userId'));
+  const challengeName=data.title,submissionCount=data.submissionCount??0,userName=data.reader?.display_name;
 
   return new ImageResponse(
     (
@@ -71,7 +50,7 @@ export async function GET(
               display: 'flex',
             }}
           >
-            {t('shareIntro')}
+            {t('writingChallenge')}
           </div>
           <div
             style={{
@@ -93,7 +72,7 @@ export async function GET(
               display: 'flex',
             }}
           >
-            {t('shareMessage')}
+            {t('writingMessage')}
           </div>
 
           {submissionCount > 0 && (
@@ -113,7 +92,7 @@ export async function GET(
           )}
 
           <div style={{ fontSize: '22px', color: 'rgba(255,255,255,0.8)', display: 'flex' }}>
-            — {userName}
+            {userName?'— '+userName:''}
           </div>
         </div>
 
@@ -131,6 +110,7 @@ export async function GET(
         </div>
       </div>
     ),
-    { width: 1200, height: 630 }
+    { width: 1200, height: 630,headers:SHARE_IMAGE_HEADERS }
   );
+  } catch(error) { return shareCardFailure(error); }
 }

@@ -1,8 +1,10 @@
+import {useTranslations} from '@/hooks/useTranslations';
 import { Tabs } from 'expo-router';
 import { Home, Search, Feather, BookOpen, User } from 'lucide-react-native';
 import { Platform } from 'react-native';
 
 export default function TabsLayout() {
+  const {t}=useTranslations('nav');
   return (
     <Tabs
       screenOptions={{
@@ -21,35 +23,35 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="feed"
         options={{
-          title: 'Home',
+          title: t('home'),
           tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="discover"
         options={{
-          title: 'Discover',
+          title: t('discover'),
           tabBarIcon: ({ color, size }) => <Search size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="write"
         options={{
-          title: 'Write',
+          title: t('write'),
           tabBarIcon: ({ color, size }) => <Feather size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="shelf"
         options={{
-          title: 'Shelf',
+          title: t('shelf'),
           tabBarIcon: ({ color, size }) => <BookOpen size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: t('profile'),
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
         }}
       />

@@ -1,62 +1,19 @@
 import { ImageResponse } from 'next/og';
-import { NextRequest } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  request: NextRequest,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
-  // Get challenge details
-  const supabase = createServiceClient();
-
-  let challengeName = 'Reading Challenge';
-  let bookCount = 0;
-  let userName = 'A Reader';
-
-  const searchParams = new URL(request.url).searchParams;
-  const userId = searchParams.get('userId');
-
   try {
-    const { data: challenge } = await supabase 
-      .from('challenges')
-      .select('name, goal_books')
-      .eq('id', params.id)
-      .single();
-
-    if (challenge) {
-      challengeName = challenge.name;
-    }
-
-    if (userId) {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('display_name')
-        .eq('id', userId)
-        .single();
-
-      if (profile) {
-        userName = profile.display_name;
-      }
-
-      // Get progress
-      const { data: progress } = await supabase 
-        .from('challenge_participants')
-        .select('joined_at')
-        .eq('challenge_id', params.id)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (progress && challenge?.goal_books) {
-        bookCount = challenge.goal_books;
-      }
-    }
-  } catch {
-    // Use defaults
-  }
+  const {searchParams}=new URL(request.url);
+  const {data,t}=await getShareCard(request,'challenge',params.id,searchParams.get('userId'));
+  const challengeName=data.title,userName=data.reader?.display_name;
+  const bookCount=data.progress?.booksFinished??null,pagesRead=data.progress?.pagesRead??null;
 
   return new ImageResponse(
     (
@@ -90,25 +47,27 @@ export async function GET(
             {userName}
           </div>
           <div style={{ fontSize: '42px', color: '#ffffff', fontWeight: '800', lineHeight: 1.2 }}>
-            I completed the
+            {t(userName?(data.completed?'challengeCompleted':'challengeProgress'):'readingChallenge')}
           </div>
           <div style={{ fontSize: '48px', color: '#fff7ed', fontWeight: '900', lineHeight: 1.2 }}>
             {challengeName}
           </div>
           <div style={{ fontSize: '38px', color: '#ffffff', fontWeight: '800' }}>
-            challenge on Liravo!
+            Liravo
           </div>
-          {bookCount > 0 && (
+          {bookCount!==null && (
             <div style={{ fontSize: '24px', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>
-              {bookCount} books read
+              {t('booksRead',{count:bookCount})}
             </div>
           )}
+          {pagesRead!==null&&<div style={{fontSize:'24px',color:'rgba(255,255,255,0.85)'}}>{t('pagesRead',{count:pagesRead})}</div>}
           <div style={{ fontSize: '18px', color: 'rgba(255,255,255,0.7)', marginTop: '8px' }}>
             liravo.org
           </div>
         </div>
       </div>
     ),
-    { width: 1200, height: 630 }
+    { width: 1200, height: 630,headers:SHARE_IMAGE_HEADERS }
   );
+  } catch(error) { return shareCardFailure(error); }
 }

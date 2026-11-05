@@ -11,7 +11,7 @@ function queryError(error: unknown): { message: string; code?: string } {
   return { message: String(error) };
 }
 
-type FilterOp = { col: string; op: string; val: unknown };
+type FilterOp = {col:string;op:string;val:unknown;config?:'english'|'simple'};
 
 type MutationType = 'insert' | 'update' | 'delete' | 'upsert';
 
@@ -101,15 +101,20 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
     return this;
   }
 
+  overlaps(column:string,value:unknown[]|string){
+    this._filters.push({col:column,op:'&&',val:value});
+    return this;
+  }
+
   ilike(column: string, pattern: string) {
     this._filters.push({ col: column, op: 'ILIKE', val: pattern });
     return this;
   }
 
   textSearch(column:string,query:string,options?:{type?:'plain'|'websearch';config?:string}){
-    if(options?.config&&options.config!=='english')throw new Error('Unsupported search language');
+    if(options?.config&&!['english','simple'].includes(options.config))throw new Error('Unsupported search language');
     if(options?.type&&!['plain','websearch'].includes(options.type))throw new Error('Unsupported search mode');
-    this._filters.push({col:column,op:options?.type==='websearch'?'@@websearch':'@@plain',val:query});
+    this._filters.push({col:column,op:options?.type==='websearch'?'@@websearch':'@@plain',val:query,config:options?.config==='simple'?'simple':'english'});
     return this;
   }
 
@@ -196,14 +201,15 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         case '<=':  parts.push(sql`${sql(f.col)} <= ${f.val as SerializableParameter<never>}`); break;
         case 'IN':  parts.push(sql`${sql(f.col)} = ANY(${f.val as SerializableParameter<never>[]})`); break;
         case '@>': parts.push(sql`${sql(f.col)} @> ${f.val as SerializableParameter<never>}`); break;
+        case '&&': parts.push(sql`${sql(f.col)} && ${f.val as SerializableParameter<never>}`); break;
         case 'ILIKE': parts.push(sql`${sql(f.col)} ILIKE ${f.val as string}`); break;
         case 'IS NOT':
           if (f.val === null) parts.push(sql`${sql(f.col)} IS NOT NULL`);
           else if (f.val === true) parts.push(sql`${sql(f.col)} IS NOT TRUE`);
           else if (f.val === false) parts.push(sql`${sql(f.col)} IS NOT FALSE`);
           break;
-        case '@@websearch': parts.push(sql`${sql(f.col)} @@ websearch_to_tsquery('english',${f.val as string})`); break;
-        case '@@plain': parts.push(sql`${sql(f.col)} @@ plainto_tsquery('english',${f.val as string})`); break;
+        case '@@websearch': parts.push(sql`${sql(f.col)} @@ websearch_to_tsquery(${f.config??'english'}::regconfig,${f.val as string})`); break;
+        case '@@plain': parts.push(sql`${sql(f.col)} @@ plainto_tsquery(${f.config??'english'}::regconfig,${f.val as string})`); break;
         case 'IS':
           if (f.val === null)       parts.push(sql`${sql(f.col)} IS NULL`);
           else if (f.val === true)  parts.push(sql`${sql(f.col)} IS TRUE`);

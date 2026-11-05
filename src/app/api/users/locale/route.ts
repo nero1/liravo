@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
@@ -10,7 +10,7 @@ const BodySchema = z.object({
 });
 
 export async function PUT(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = createServiceClient();
   const user = await getCurrentUser();
 
   if (!user) {
@@ -31,16 +31,13 @@ export async function PUT(request: NextRequest) {
 
   const { locale } = parsed.data;
 
-  const { error } = await supabase
-    .from('users')
-    .update({ preferred_locale: locale })
-    .eq('id', user.id);
+  const {data,error}=await supabase.rpc('initialize_account_locale' as never,{p_user_id:user.id,p_locale:locale,p_replace:true} as never);
 
-  if (error) {
-    return NextResponse.json({ error: 'Failed to update locale' }, { status: 500 });
+  if (error||data!==locale) {
+    return NextResponse.json({ error: 'Failed to update locale' }, { status: 503 });
   }
 
-  const response = NextResponse.json({ success: true, locale });
+  const response = NextResponse.json({ success: true, locale },{headers:{'Cache-Control':'private, no-store'}});
   response.cookies.set('NEXT_LOCALE', locale, { path: '/', sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 31536000 });
   return response;
 }

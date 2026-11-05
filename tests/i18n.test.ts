@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect,vi } from 'vitest';
+import requestConfig from '../src/i18n';
+const preferences=vi.hoisted(()=>({header:undefined as string|undefined,cookie:undefined as string|undefined}));
+vi.mock('next-intl/server',()=>({getRequestConfig:(callback:unknown)=>callback}));
+vi.mock('next/headers',()=>({headers:()=>({get:()=>preferences.header}),cookies:()=>({get:()=>preferences.cookie?{value:preferences.cookie}:undefined})}));
 import { createTranslator } from 'next-intl';
 import en from '../messages/en.json';
 import fr from '../messages/fr.json';
@@ -30,4 +34,11 @@ for (const [locale,messages] of Object.entries({en,fr,de})) describe(`locale ${l
     const t=createTranslator({locale,messages});
     expect(t('book.replyCount',{count:1})).not.toBe(t('book.replyCount',{count:2}));
   });
+});
+
+it('honors explicit server locales ahead of request preferences and keeps request fallback',async()=>{
+  preferences.header='en';preferences.cookie='en';
+  const french=await requestConfig({locale:'fr',requestLocale:Promise.resolve(undefined)});expect(french.locale).toBe('fr');expect(french.messages).toEqual(fr);expect(french.timeZone).toBe('UTC');
+  preferences.header='fr';preferences.cookie='fr';expect((await requestConfig({locale:'de',requestLocale:Promise.resolve(undefined)})).messages).toEqual(de);
+  expect((await requestConfig({requestLocale:Promise.resolve(undefined)})).locale).toBe('fr');preferences.header=undefined;preferences.cookie='de';expect((await requestConfig({requestLocale:Promise.resolve(undefined)})).locale).toBe('de');preferences.cookie='unsupported';expect((await requestConfig({requestLocale:Promise.resolve(undefined)})).locale).toBe('en');
 });

@@ -1,5 +1,8 @@
 import { ImageResponse } from 'next/og';
-import { createServiceClient } from '@/lib/supabase/server';
+import {getPublicReadingYear} from '@/lib/reading-statistics';
+import {getLocale,getTranslations} from 'next-intl/server';
+import {NextResponse} from 'next/server';
+import {z} from 'zod';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,50 +12,14 @@ export async function GET(
   request: Request,
   { params }: { params: { userId: string } }
 ) {
-  const { searchParams } = new URL(request.url);
-  const isStories = searchParams.get('format') === 'stories';
-  const supabase = createServiceClient();
-
-  let displayName = 'A Reader';
-  let booksRead = 0;
-  let topGenre = 'Fiction';
-  let maxStreak = 0;
-  const currentYear = new Date().getFullYear();
-
-  try {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('display_name, books_read_count, reading_streak, genres')
-      .eq('id', params.userId)
-      .single();
-
-    if (profile) {
-      displayName = profile.display_name;
-      maxStreak = profile.reading_streak ?? 0;
-      if (profile.genres && profile.genres.length > 0) {
-        topGenre = profile.genres[0];
-      }
-    }
-
-    // Count books finished this year
-    const { data: yearShelves } = await supabase
-      .from('shelves')
-      .select('id')
-      .eq('user_id', params.userId)
-      .eq('default_type', 'have_read');
-
-    if (yearShelves && yearShelves.length > 0) {
-      const { count } = await supabase
-        .from('shelf_books')
-        .select('*', { count: 'exact', head: true })
-        .in('shelf_id', yearShelves.map((s) => s.id))
-        .gte('finished_at', `${currentYear}-01-01`)
-        .lte('finished_at', `${currentYear}-12-31`);
-      booksRead = count ?? 0;
-    }
-  } catch {
-    // Use defaults
-  }
+  if(!z.string().uuid().safeParse(params.userId).success)return NextResponse.json({error:'Invalid reader'},{status:400});
+  const {searchParams}=new URL(request.url),format=searchParams.get('format'),requestedLocale=searchParams.get('locale');
+  if(format&&format!=='stories')return NextResponse.json({error:'Invalid format'},{status:400});
+  if(requestedLocale&&!['en','fr','de'].includes(requestedLocale))return NextResponse.json({error:'Invalid locale'},{status:400});
+  const locale=requestedLocale??await getLocale(),t=await getTranslations({locale,namespace:'wrapped'}),genres=await getTranslations({locale,namespace:'aiProfiles'}),isStories=format==='stories';
+  let summary;try{summary=await getPublicReadingYear(params.userId);}catch{return NextResponse.json({error:'Reading summary unavailable'},{status:503});}
+  if(!summary)return NextResponse.json({error:'Reader not found'},{status:404});
+  const displayName=summary.displayName,booksRead=summary.booksRead,pagesRead=summary.pagesRead,currentYear=summary.year,genre=summary.topGenres[0],topGenre=genre?(genres.has('genreLabels.'+genre)?genres('genreLabels.'+genre):genre):t('unknownGenre'),number=(value:number)=>new Intl.NumberFormat(locale).format(value);
 
   if (isStories) {
     // 9:16 Instagram Stories format (1080×1920)
@@ -85,7 +52,7 @@ export async function GET(
             }}
           >
             <div style={{ fontSize: '22px', color: '#d97706', fontWeight: '700', letterSpacing: '6px', textTransform: 'uppercase' }}>
-              Liravo · {currentYear} Wrapped
+              {'Liravo · '+t('publicTitle',{year:currentYear})}
             </div>
 
             <div style={{ fontSize: '64px', color: '#ffffff', fontWeight: '900', lineHeight: 1.1 }}>
@@ -94,18 +61,18 @@ export async function GET(
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '48px', marginTop: '32px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <div style={{ fontSize: '120px', color: '#f59e0b', fontWeight: '900', lineHeight: 1 }}>{booksRead}</div>
-                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>Books Read</div>
+                <div style={{ fontSize: '120px', color: '#f59e0b', fontWeight: '900', lineHeight: 1 }}>{number(booksRead)}</div>
+                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>{t('booksRead')}</div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <div style={{ fontSize: '120px', color: '#f59e0b', fontWeight: '900', lineHeight: 1 }}>{maxStreak}</div>
-                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>Day Streak</div>
+                <div style={{ fontSize: '120px', color: '#f59e0b', fontWeight: '900', lineHeight: 1 }}>{number(pagesRead)}</div>
+                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>{t('pagesRead')}</div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <div style={{ fontSize: '56px', color: '#f59e0b', fontWeight: '900', lineHeight: 1.2, maxWidth: '800px', textAlign: 'center' }}>{topGenre}</div>
-                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>Top Genre</div>
+                <div style={{ fontSize: '28px', color: '#a8a29e', letterSpacing: '2px', textTransform: 'uppercase' }}>{t('topGenres')}</div>
               </div>
             </div>
 
@@ -116,7 +83,7 @@ export async function GET(
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '6px', background: 'linear-gradient(90deg, #d97706, #f59e0b, #fbbf24)' }} />
         </div>
       ),
-      { width: 1080, height: 1920 }
+      { width: 1080, height: 1920,headers:{'Cache-Control':'private, no-store'} }
     );
   }
 
@@ -146,7 +113,7 @@ export async function GET(
           }}
         >
           <div style={{ fontSize: '20px', color: '#d97706', fontWeight: '700', letterSpacing: '4px', textTransform: 'uppercase' }}>
-            Liravo · {currentYear} Wrapped
+            {'Liravo · '+t('publicTitle',{year:currentYear})}
           </div>
           <div style={{ fontSize: '52px', color: '#ffffff', fontWeight: '900', lineHeight: 1.1 }}>
             {displayName}
@@ -159,22 +126,22 @@ export async function GET(
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <div style={{ fontSize: '60px', color: '#f59e0b', fontWeight: '900' }}>{booksRead}</div>
-              <div style={{ fontSize: '16px', color: '#a8a29e' }}>Books Read</div>
+              <div style={{ fontSize: '60px', color: '#f59e0b', fontWeight: '900' }}>{number(booksRead)}</div>
+              <div style={{ fontSize: '16px', color: '#a8a29e' }}>{t('booksRead')}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <div style={{ fontSize: '60px', color: '#f59e0b', fontWeight: '900' }}>{maxStreak}</div>
-              <div style={{ fontSize: '16px', color: '#a8a29e' }}>Day Streak</div>
+              <div style={{ fontSize: '60px', color: '#f59e0b', fontWeight: '900' }}>{number(pagesRead)}</div>
+              <div style={{ fontSize: '16px', color: '#a8a29e' }}>{t('pagesRead')}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
               <div style={{ fontSize: '30px', color: '#f59e0b', fontWeight: '900', maxWidth: '200px', textAlign: 'center', lineHeight: 1.2 }}>{topGenre}</div>
-              <div style={{ fontSize: '16px', color: '#a8a29e' }}>Top Genre</div>
+              <div style={{ fontSize: '16px', color: '#a8a29e' }}>{t('topGenres')}</div>
             </div>
           </div>
           <div style={{ fontSize: '16px', color: '#78716c', marginTop: '16px' }}>liravo.org</div>
         </div>
       </div>
     ),
-    { width: 1200, height: 630 }
+    { width: 1200, height: 630,headers:{'Cache-Control':'private, no-store'} }
   );
 }

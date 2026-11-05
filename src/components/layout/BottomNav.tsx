@@ -23,11 +23,11 @@ export function BottomNav() {
     <nav className="fixed bottom-0 inset-x-0 z-50 bg-card border-t border-border md:hidden safe-area-bottom">
       <div className="flex">
         {NAV_ITEMS.map(({ href, icon: Icon, labelKey }) => {
-          const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
+          const isActive = href === '/' ? pathname === '/' : pathname===href||pathname.startsWith(href+'/');
           return (
             <Link
               key={href}
-              href={href}
+              href={href} aria-current={isActive?'page':undefined}
               className={cn(
                 'flex-1 flex flex-col items-center gap-0.5 py-2 text-xs font-medium transition-colors',
                 isActive
@@ -35,7 +35,7 @@ export function BottomNav() {
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              <Icon size={22} strokeWidth={isActive ? 2.5 : 1.75} />
+              <Icon aria-hidden="true" size={22} strokeWidth={isActive ? 2.5 : 1.75} />
               <span>{t(labelKey)}</span>
             </Link>
           );

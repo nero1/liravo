@@ -1,7 +1,7 @@
 # Custom Bugs Report
 Date/Time: May 23, 2026 09:39 PM UTC
 
-Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 not fixed. Current evidence and remaining work: `custom-bugs-verification.md`.
+Verification updated 5 November 2026: ✅ resolved/verified; 🟡 partial; 🔵 not fixed. Current evidence and remaining work: `custom-bugs-verification.md`.
 
 ## Critical (one-line list)
 ✅ 1: BUG-001: IDOR risk in user-specific mutation endpoints because route `id` is not consistently enforced against authenticated user identity.
@@ -15,7 +15,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
 ✅ 7: BUG-007: CSRF defense is partial (origin/referer heuristic) and does not uniformly require anti-CSRF tokens for cookie-auth mutating routes.
 ✅ 8: BUG-008: Several money/auth endpoints trust raw forwarding headers for client identity; this can enable rate-limit bypass.
 ✅ 9: BUG-009: Retry logic can still classify non-transient failures too broadly by message substring matching, raising retry-storm risk.
-🟡 10: BUG-010: Idempotency usage is inconsistent across side-effecting endpoints (likes/follows/notifications/XP), enabling duplicate outcomes under retries.
+✅ 10: BUG-010: Idempotency usage is inconsistent across side-effecting endpoints (likes/follows/notifications/XP), enabling duplicate outcomes under retries.
 ✅ 11: BUG-011: Setup docs schedule multiple jobs more than once daily despite Vercel Hobby constraint requirement from stakeholder note.
 ✅ 12: BUG-012: Cron endpoints lack a single centralized runner policy (timeout, lock, and overlap controls), increasing thundering-herd/overlap risk.
 
@@ -25,7 +25,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
 ✅ 15: BUG-015: Observability is incomplete for security/finance paths (limited correlation IDs and error taxonomies).
 ✅ 16: BUG-016: JSDoc/documentation coverage for critical utility modules is inconsistent, raising maintenance and misuse risk.
 ✅ 17: BUG-017: Large cron fan-out loops are sequential in places and may time out on Hobby compute windows.
-🟡 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
+✅ 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
 
 ## Low (one-line list)
 ✅ 19: BUG-019: Setup guidance includes endpoint names not present in repository (operational drift).
@@ -72,7 +72,7 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
    FILES: src/lib/retry.ts
    FIX: Replace message heuristics with explicit error classes/status codes (429/5xx/network timeout). Add circuit-breaker and per-provider retry budgets.
 
-🟡 10: BUG-010: Idempotency usage is inconsistent across side-effecting endpoints (likes/follows/notifications/XP), enabling duplicate outcomes under retries.
+✅ 10: BUG-010: Idempotency usage is inconsistent across side-effecting endpoints (likes/follows/notifications/XP), enabling duplicate outcomes under retries.
     FILES: src/lib/idempotency.ts, src/app/api/reviews/[id]/like/route.ts, src/app/api/users/[id]/follow/route.ts, src/services/xp.ts
     FIX: Require idempotency key for all non-read POST/PATCH with side effects; enforce unique DB constraints keyed to business event identity.
 
@@ -104,9 +104,10 @@ Verification updated 26 October 2026: ✅ resolved/verified; 🟡 partial; 🔵 
     FILES: src/app/api/cron/email-digest/route.ts
     FIX: Process in bounded batches with concurrency limit + retry budget + checkpoint cursor/state; continue next run from saved cursor.
 
-🟡 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
+✅ 18: BUG-018: i18n coverage is partial; some UX/admin flows and messages are likely hardcoded in English only.
     FILES: messages/en.json, messages/fr.json, messages/de.json, src/app/(app)/admin/**, src/components/**
     FIX: Enforce translation key usage in UI, add missing locale keys, and create CI check for untranslated literals in user-facing components.
+    ✅ Search, quote and review forms: EN/FR/DE, accessible labels/states, recoverable search and owned reload-safe submissions. All 45 shared components now pass locale/field checks; room, notification, goal, progress, language and modal recovery pass Chromium. Wider web/native and stored-message coverage remains 🟡.
 
 ✅ 19: BUG-019: Setup guidance includes endpoint names not present in repository (operational drift).
     FILES: docs/SETUP.md, src/app/api/cron/**/route.ts

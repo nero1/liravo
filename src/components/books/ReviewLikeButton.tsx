@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import {useTranslations} from 'next-intl';
 import { Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -15,6 +16,7 @@ export function ReviewLikeButton({
   initialLiked,
   initialCount,
 }: ReviewLikeButtonProps) {
+  const t=useTranslations('reviewForm'),common=useTranslations('common'),[error,setError]=useState(false);
   const intent = useRef(crypto.randomUUID());
   const busy = useRef(false);
   const [liked, setLiked] = useState(initialLiked);
@@ -24,7 +26,7 @@ export function ReviewLikeButton({
   async function handleToggle() {
     if (busy.current) return;
     busy.current = true;
-    setLoading(true);
+    setLoading(true);setError(false);
     try {
       const res = await fetch(`/api/reviews/${reviewId}/like`, {
         method: 'POST',
@@ -36,9 +38,8 @@ export function ReviewLikeButton({
         intent.current = crypto.randomUUID();
         setLiked(data.liked);
         if (data.liked !== liked) setCount((prev) => (data.liked ? prev + 1 : Math.max(0, prev - 1)));
-      }
-    } catch {
-      // Ignore network errors
+      }else throw new Error('Like unavailable');
+    }catch{setError(true);
     } finally {
       busy.current = false;
       setLoading(false);
@@ -46,10 +47,10 @@ export function ReviewLikeButton({
   }
 
   return (
-    <button
+    <span className="inline-flex items-center gap-2"><button
       onClick={handleToggle}
       disabled={loading}
-      aria-label={liked ? 'Unlike this review' : 'Like this review'}
+      aria-label={t(liked?'unlike':'like')} aria-pressed={liked}
       className={cn(
         'flex items-center gap-1 text-xs font-medium transition-colors disabled:opacity-50',
         liked
@@ -62,6 +63,6 @@ export function ReviewLikeButton({
         className={cn(liked ? 'fill-rose-500 stroke-rose-500' : 'stroke-current')}
       />
       {count > 0 && <span>{count}</span>}
-    </button>
+    </button>{error&&<span role="alert" className="text-xs text-destructive">{common('error')}</span>}</span>
   );
 }

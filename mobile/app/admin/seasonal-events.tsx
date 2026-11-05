@@ -1,23 +1,6 @@
-import { View, Text, FlatList } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-
-export default function SeasonalEventsScreen() {
-  const { data, isLoading } = useQuery({ queryKey: ['admin', 'seasonal-events'], queryFn: () => api.get<{ events: any[] }>(ENDPOINTS.admin.seasonalEvents) });
-  const events = data?.events ?? [];
-  if (isLoading) return <LoadingSpinner />;
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <FlatList data={events} keyExtractor={(e) => e.id} renderItem={({ item }) => (
-        <View className="px-4 py-4 border-b border-border">
-          <Text className="font-semibold text-foreground">{item.title}</Text>
-          <Text className="text-sm text-muted-foreground">{item.start_date && new Date(item.start_date).toLocaleDateString()} — {item.end_date && new Date(item.end_date).toLocaleDateString()}</Text>
-        </View>
-      )} ListEmptyComponent={<EmptyState title="No seasonal events" />} contentContainerStyle={{ paddingBottom: 24 }} />
-    </SafeAreaView>
-  );
-}
+import {View,Text} from 'react-native';
+import {useTranslations} from '@/hooks/useTranslations';
+import {AdminCatalog} from '@/components/admin/Catalog';
+import {Badge} from '@/components/ui/Badge';
+interface Event{id:string;name:string;start_date:string;end_date:string;is_published:boolean;}
+export default function SeasonalEventsScreen(){const {t,locale}=useTranslations('nativeAdmin'),admin=useTranslations('admin'),date=(value:string)=>new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeZone:'UTC'}).format(new Date(value));return <AdminCatalog<Event> scope="seasons" title={admin.t('seasonalEvents')} renderItem={({item})=><View className="px-4 py-4 border-b border-border gap-2"><Text className="font-semibold text-foreground">{item.name}</Text><Text className="text-sm text-muted-foreground">{t('dateRange',{start:date(item.start_date),end:date(item.end_date)})}</Text><Badge variant={item.is_published?'accent':'default'}>{t(item.is_published?'published':'draft')}</Badge></View>}/>;}

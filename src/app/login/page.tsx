@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { LoginForm } from '@/components/auth/LoginForm';
-import { getFeatureFlag } from '@/lib/feature-flags';
+import { getFeatureFlags } from '@/lib/feature-flags';
 import { FEATURE_FLAGS } from '@/constants/config';
 import type { Metadata } from 'next';
 
@@ -11,10 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function LoginPage() {
   const t = await getTranslations('auth');
-  const [googleEnabled, telegramEnabled] = await Promise.all([
-    getFeatureFlag(FEATURE_FLAGS.GOOGLE_AUTH),
-    getFeatureFlag(FEATURE_FLAGS.TELEGRAM_AUTH),
-  ]);
+  const flags=await getFeatureFlags(),googleEnabled=flags[FEATURE_FLAGS.GOOGLE_AUTH],telegramEnabled=flags[FEATURE_FLAGS.TELEGRAM_AUTH];
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">

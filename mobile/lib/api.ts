@@ -14,6 +14,8 @@ class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?:string,
+    public requireCaptcha=false,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -26,11 +28,13 @@ async function request<T>(
   body?: unknown,
   params?: Record<string, string | number | undefined>,
   extraHeaders?: Record<string, string>,
+  signal?:AbortSignal,
 ): Promise<T> {
   const { token, user } = useAuthStore.getState();
   const mutating = method !== 'GET';
+  const multipart=typeof FormData!=='undefined'&&body instanceof FormData;
   const primaryAuth=/^\/api\/(auth\/(login|signup|google|telegram|2fa\/verify)|users\/(account-recovery|verify-recovery|verify-email))$/.test(path);
-  const secret=primaryAuth||!!body&&typeof body==='object'&&Object.keys(body).some(key=>/^(pin|currentPin|current_pin|newPin|password)$/i.test(key));
+  const secret=primaryAuth||multipart||!!body&&typeof body==='object'&&Object.keys(body).some(key=>/^(pin|currentPin|current_pin|newPin|password)$/i.test(key));
   const signature = secret?'':JSON.stringify([user?.id ?? token, method, path, body]);
   const trackIntent=mutating&&!secret;
   const suppliedKey = Object.entries(extraHeaders ?? {}).find(([name]) => /^(x-)?idempotency-key$/i.test(name))?.[1];
@@ -41,7 +45,7 @@ async function request<T>(
   }
 
   const headers: Record<string, string> = {
-    'Content-Type':'application/json',
+    ...(!multipart?{'Content-Type':'application/json'}:{}),
     'X-Liravo-Client':'native',
     ...(intentKey ? { 'Idempotency-Key': intentKey!, 'X-Idempotency-Key': intentKey! } : {}),
     ...Object.fromEntries(Object.entries(extraHeaders ?? {}).filter(([name]) => !/^(x-)?idempotency-key$/i.test(name))),
@@ -60,39 +64,46 @@ async function request<T>(
   }
 
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),15000);
+  const abort=()=>controller.abort();
+  if(signal?.aborted)abort();
+  signal?.addEventListener('abort',abort,{once:true});
+  const timeout=setTimeout(abort,25000);
   try{
   const res = await fetch(url, {
     method,
     credentials:'omit',
     signal:controller.signal,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body:multipart?body as FormData:body!==undefined?JSON.stringify(body):undefined,
   });
 
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
+    let code:string|undefined,requireCaptcha=false;
     try {
       const json = await res.json();
       message = typeof json.error === 'string' ? json.error : message;
+      if(typeof json.code==='string')code=json.code;
+      requireCaptcha=json.requireCaptcha===true;
     } catch {}
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status,message,code,requireCaptcha);
   }
 
   const data = res.status===204?undefined as T:await res.json() as T;
   if (trackIntent && !suppliedKey) pendingIntents.delete(signature);
   return data;
-  }finally{clearTimeout(timeout);}
+  }finally{clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
 }
 
 export const api = {
-  get: <T>(path: string, params?: Record<string, string | number | undefined>) =>
-    request<T>(path, 'GET', undefined, params),
+  get: <T>(path: string, params?: Record<string, string | number | undefined>,signal?:AbortSignal) =>
+    request<T>(path, 'GET', undefined, params,undefined,signal),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
     request<T>(path, 'POST', body, undefined, headers),
   put: <T>(path: string, body?: unknown,headers?:Record<string,string>) => request<T>(path, 'PUT', body,undefined,headers),
-  patch: <T>(path: string, body?: unknown) => request<T>(path, 'PATCH', body),
-  delete: <T>(path: string) => request<T>(path, 'DELETE'),
+  upload:<T>(path:string,body:FormData,headers?:Record<string,string>)=>request<T>(path,'POST',body,undefined,headers),
+  patch: <T>(path: string, body?: unknown,headers?:Record<string,string>) => request<T>(path, 'PATCH', body,undefined,headers),
+  delete: <T>(path: string,headers?:Record<string,string>) => request<T>(path, 'DELETE',undefined,undefined,headers),
 };
 
 export { ApiError };

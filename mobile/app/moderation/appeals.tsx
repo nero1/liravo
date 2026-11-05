@@ -1,32 +1,22 @@
-import { View, Text, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-
-export default function ModerationAppealsScreen() {
-  const qc = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ['moderation', 'appeals'], queryFn: () => api.get<{ appeals: any[] }>(ENDPOINTS.moderation.appeals) });
-  const update = useMutation({ mutationFn: ({ id, status }: { id: string; status: string }) => api.patch(ENDPOINTS.moderation.appeals + `/${id}`, { status }), onSuccess: () => qc.invalidateQueries({ queryKey: ['moderation', 'appeals'] }), onError: (err) => Alert.alert('Error', (err as Error).message) });
-  const appeals = data?.appeals ?? [];
-  if (isLoading) return <LoadingSpinner />;
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <FlatList data={appeals} keyExtractor={(a) => a.id} renderItem={({ item }) => (
-        <View className="px-4 py-4 border-b border-border gap-2">
-          <Text className="font-medium text-foreground">@{item.user?.username}</Text>
-          <Text className="text-sm text-foreground">{item.reason}</Text>
-          {item.status === 'pending' && (
-            <View className="flex-row gap-2">
-              <TouchableOpacity onPress={() => update.mutate({ id: item.id, status: 'approved' })} className="bg-accent rounded-lg px-3 py-1.5" activeOpacity={0.7}><Text className="text-accent-foreground text-sm font-medium">Approve</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => update.mutate({ id: item.id, status: 'rejected' })} className="bg-muted rounded-lg px-3 py-1.5" activeOpacity={0.7}><Text className="text-foreground text-sm">Reject</Text></TouchableOpacity>
-            </View>
-          )}
-          {item.status !== 'pending' && <Text className="text-sm text-muted-foreground">Status: {item.status}</Text>}
-        </View>
-      )} ListEmptyComponent={<EmptyState title="No appeals" />} contentContainerStyle={{ paddingBottom: 24 }} />
-    </SafeAreaView>
-  );
+import {useState} from 'react';
+import {View,Text,FlatList,Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useInfiniteQuery,useMutation,useQueryClient} from '@tanstack/react-query';
+import {api} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useRequestIntent} from '@/hooks/useRequestIntent';
+import {useTranslations} from '@/hooks/useTranslations';
+import {Input} from '@/components/ui/Input';
+import {Button} from '@/components/ui/Button';
+import {QueryError,EmptyState} from '@/components/ui/EmptyState';
+import type {AppealPage,AppealRow} from '@/types';
+export default function ModerationAppealsScreen(){
+  const owner=useAuthStore(state=>state.user?.id),{t}=useTranslations('appealWorkflow'),{t:common}=useTranslations('common'),[status,setStatus]=useState<'pending'|'approved'|'rejected'|'all'>('pending');
+  const query=useInfiniteQuery({queryKey:['appeal-queue',owner,status],enabled:!!owner,initialPageParam:null as string|null,queryFn:async({pageParam,signal})=>{const data=await api.get<AppealPage>('/api/moderation/appeals',{scope:'queue',status,...(pageParam?{cursor:pageParam}:{})},signal);if(data.actorId!==owner||!Array.isArray(data.appeals))throw Error('Invalid appeal queue');return data;},getNextPageParam:page=>page.nextCursor});
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><FlatList data={query.data?.pages.flatMap(page=>page.appeals)??[]} keyExtractor={appeal=>appeal.id} contentContainerStyle={{padding:16,paddingBottom:32,gap:16}} ListHeaderComponent={<View className="gap-3 mb-2"><Text accessibilityRole="header" className="text-xl font-bold text-foreground">{t('review')}</Text><View className="flex-row flex-wrap gap-2">{(['pending','approved','rejected','all'] as const).map(value=><Button key={value} variant={status===value?'primary':'outline'} accessibilityState={{selected:status===value}} onPress={()=>setStatus(value)}>{t(value)}</Button>)}</View></View>} renderItem={({item:appeal})=><NativeAppealReview key={owner+':'+appeal.id} owner={owner} appeal={appeal}/>} ListEmptyComponent={query.isLoading?<Text>{common('loading')}</Text>:query.isError?null:<EmptyState title={t('empty')}/>} ListFooterComponent={<View className="gap-3">{query.isError&&<QueryError error={query.error} retry={()=>void query.refetch()}/>} {query.hasNextPage&&<Button loading={query.isFetchingNextPage} onPress={()=>void query.fetchNextPage()}>{common('loadMore')}</Button>}<Button variant="outline" loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></View>}/></SafeAreaView>;
+}
+export function NativeAppealReview({owner,appeal}:{owner:string|undefined;appeal:AppealRow}){
+  const {t}=useTranslations('appealWorkflow'),{t:common}=useTranslations('common'),intent=useRequestIntent(owner),qc=useQueryClient(),[note,setNote]=useState('');
+  const update=useMutation({mutationFn:async(status:'approved'|'rejected')=>{const body={status,note:note.trim()||undefined},scope='appeal.review.'+appeal.id,data=await api.patch<{actorId:string;appealId:string;appeal:AppealRow&{reviewed_by:string}}>('/api/moderation/appeals/'+appeal.id,body,await intent.durableHeaders(body,scope));if(data.actorId!==owner||data.appealId!==appeal.id||data.appeal?.id!==appeal.id||data.appeal.status!==status||data.appeal.reviewed_by!==owner||data.appeal.user_id!==appeal.user_id)throw Error('Invalid appeal decision receipt');await intent.complete(scope);return data;},onSuccess:()=>{if(useAuthStore.getState().user?.id===owner){void qc.invalidateQueries({queryKey:['appeal-queue']});void qc.invalidateQueries({queryKey:['appeals']});}},onError:()=>Alert.alert(common('error'),t('reviewFailed'))});
+  return <View className="border border-border rounded-xl p-3 gap-3"><Text className="font-semibold text-foreground">{appeal.user.display_name} (@{appeal.user.username}) · {t(appeal.status)}</Text><Text className="text-foreground">{appeal.action?.label??t(appeal.report_id?'unknown':'general')}</Text>{!!appeal.action?.content&&<Text className="text-sm text-muted-foreground">{appeal.action.content}</Text>}<Text className="text-foreground">{appeal.reason}</Text>{appeal.reviewer_note&&<Text className="text-muted-foreground">{appeal.reviewer_note}</Text>}{appeal.status==='pending'&&(appeal.can_review?<><Input label={t('reviewNote')} value={note} onChangeText={setNote} maxLength={500} editable={!update.isPending} multiline/><View className="flex-row gap-3"><Button disabled={update.isPending} onPress={()=>update.mutate('approved')}>{t('approve')}</Button><Button disabled={update.isPending} variant="outline" onPress={()=>update.mutate('rejected')}>{t('reject')}</Button></View></>:<Text className="text-muted-foreground">{t('anotherReviewer')}</Text>)}</View>;
 }

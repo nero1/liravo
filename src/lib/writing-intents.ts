@@ -5,6 +5,7 @@ import { z } from 'zod';
 type WritingAction = 'prompt' | 'challenge' | 'join' | 'vote' | 'best_answer';
 
 export async function applyWritingIntent(request: Request, userId: string, action: WritingAction, target: string, payload: Record<string, unknown>) {
+  if(request.headers.has('x-liravo-actor')&&request.headers.get('x-liravo-actor')!==userId)throw new ContentIntentError('ACCOUNT_CHANGED',409);
   const key = request.headers.get('idempotency-key');
   if (!key || key.length < 8 || key.length > 200) throw new ContentIntentError('Missing/invalid idempotency key',400);
   if (!z.string().uuid().safeParse(target).success) throw new ContentIntentError('Invalid writing target',400);

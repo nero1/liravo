@@ -1,156 +1,22 @@
-import { createClient } from '@/lib/supabase/server';
-import { notFound, redirect } from 'next/navigation';
+import {getCurrentUser} from '@/lib/auth/getCurrentUser';
+import {getShelfDetail,getShelfForSlug,ShelfError} from '@/lib/shelf-catalog';
+import {getBulkBookSearch} from '@/lib/reading-lists';
+import {shareCardPath} from '@/lib/share-card-path';
+import {getTranslations,getFormatter,getLocale} from 'next-intl/server';
+import {notFound,redirect} from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ReadingProgressBar } from '@/components/shelf/ReadingProgressBar';
-import { LogReadingSessionButton } from '@/components/shelf/LogReadingSessionButton';
-import type { Metadata } from 'next';
-
-export const dynamic = 'force-dynamic';
-
-interface ShelfPageProps {
-  params: { slug: string };
-}
-
-export async function generateMetadata({ params }: ShelfPageProps): Promise<Metadata> {
-  const supabase = createClient();
-  const { data: shelf } = await supabase
-    .from('shelves')
-    .select('name, description')
-    .eq('slug', params.slug)
-    .single();
-  return { title: shelf ? shelf.name : 'Shelf' };
-}
-
-export default async function ShelfDetailPage({ params }: ShelfPageProps) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: shelf } = await supabase
-    .from('shelves')
-    .select('*')
-    .eq('slug', params.slug)
-    .eq('user_id', user.id)
-    .single();
-
-  if (!shelf) notFound();
-
-  const { data: items } = await supabase
-    .from('shelf_books')
-    .select(`
-      id, progress_pages, progress_percent, started_at, finished_at, added_at,
-      books:book_id (id, title, author_name, cover_url, page_count, average_rating, isbn_13)
-    `)
-    .eq('shelf_id', shelf.id)
-    .order('added_at', { ascending: false });
-
-  // Build "Buy All on Amazon" URL for want_to_read shelves with ISBN-13s
-  const booksWithIsbn = (items ?? [])
-    .map((i) => (i.books as unknown as { isbn_13?: string | null } | null)?.isbn_13)
-    .filter((isbn): isbn is string => !!isbn);
-  const buyAllUrl =
-    shelf.default_type === 'want_to_read' &&
-    booksWithIsbn.length > 0 &&
-    booksWithIsbn.length <= 10 &&
-    booksWithIsbn.length === (items?.length ?? 0)
-      ? `https://www.amazon.com/s?k=${booksWithIsbn.join('+')}&tag=liravo-20`
-      : null;
-
-  return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      <div className="mb-6">
-        <Link href="/shelf" className="text-sm text-muted-foreground hover:text-foreground mb-2 inline-block">
-          ← My Shelf
-        </Link>
-        <h1 className="font-display text-2xl font-bold">{shelf.name}</h1>
-        {shelf.description && <p className="text-muted-foreground text-sm mt-1">{shelf.description}</p>}
-        <p className="text-xs text-muted-foreground mt-1">
-          {items?.length ?? 0} books · {shelf.is_public ? 'Public' : 'Private'}
-        </p>
-        {buyAllUrl && (
-          <a
-            href={buyAllUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 transition-colors"
-          >
-            🛒 Buy All on Amazon
-          </a>
-        )}
-      </div>
-
-      {(!items || items.length === 0) ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <p className="text-4xl mb-3">📚</p>
-          <p>No books here yet.</p>
-          <Link href="/discover" className="text-accent hover:underline text-sm mt-2 inline-block">
-            Search for books to add
-          </Link>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {items.map((item) => {
-            const book = item.books as unknown as {
-              id: string; title: string; author_name: string;
-              cover_url: string | null; page_count: number | null; average_rating: number | null;
-            } | null;
-
-            if (!book) return null;
-
-            return (
-              <div key={item.id} className="flex gap-3 p-3 border border-border rounded-xl">
-                <Link href={`/book/${book.id}`} className="flex-shrink-0">
-                  <div className="w-12 h-16 relative">
-                    {book.cover_url ? (
-                      <Image src={book.cover_url} alt={book.title} fill sizes="48px" className="object-cover rounded" />
-                    ) : (
-                      <div className="w-full h-full bg-muted rounded flex items-center justify-center">
-                        <span className="text-[8px] text-center text-muted-foreground px-0.5">{book.title.slice(0, 10)}</span>
-                      </div>
-                    )}
-                  </div>
-                </Link>
-
-                <div className="flex-1 min-w-0">
-                  <Link href={`/book/${book.id}`}>
-                    <p className="font-medium text-sm truncate hover:underline">{book.title}</p>
-                    <p className="text-xs text-muted-foreground">{book.author_name}</p>
-                  </Link>
-
-                  {shelf.default_type === 'currently_reading' && (
-                    <ReadingProgressBar
-                      shelfBookId={item.id}
-                      bookId={book.id}
-                      pageCount={book.page_count}
-                      progressPages={item.progress_pages}
-                      progressPercent={item.progress_percent}
-                    />
-                  )}
-
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-xs text-muted-foreground">
-                      Added {new Date(item.added_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
-                    {shelf.default_type === 'currently_reading' && (
-                      <LogReadingSessionButton bookId={book.id} />
-                    )}
-                    {shelf.default_type === 'have_read' && (
-                      <Link
-                        href={`/share/finished/${user.id}/${book.id}`}
-                        target="_blank"
-                        className="text-xs text-muted-foreground hover:text-accent transition-colors"
-                      >
-                        Share card
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+import {ReadingProgressBar} from '@/components/shelf/ReadingProgressBar';
+import {LogReadingSessionButton} from '@/components/shelf/LogReadingSessionButton';
+export const dynamic='force-dynamic';
+type Props={params:{slug:string};searchParams?:{cursor?:string}};
+export async function generateMetadata({params}:Props){const t=await getTranslations('shelves'),books=await getTranslations('books'),user=await getCurrentUser();let title=t('title');if(user)try{const shelf=await getShelfForSlug(user.id,params.slug);title=shelf.default_type?books({currently_reading:'currentlyReading',have_read:'haveRead',want_to_read:'wantToRead'}[shelf.default_type]):shelf.name;}catch{}return{title,robots:{index:false,follow:false}};}
+export default async function ShelfDetailPage({params,searchParams}:Props){
+ const user=await getCurrentUser();if(!user)redirect('/login');const t=await getTranslations('shelves'),books=await getTranslations('books'),common=await getTranslations('common'),formatter=await getFormatter(),locale=await getLocale();let data;
+ const path='/shelf/'+encodeURIComponent(params.slug),retry=path+(searchParams?.cursor?'?cursor='+encodeURIComponent(searchParams.cursor):'');
+ try{data=await getShelfDetail(user.id,(await getShelfForSlug(user.id,params.slug)).id,searchParams?.cursor??null);}catch(error){if(error instanceof ShelfError&&error.status===404)notFound();return <div className="max-w-2xl mx-auto px-4 py-6 space-y-4"><Link href="/shelf" className="underline">{t('title')}</Link><p role="alert">{t(error instanceof ShelfError&&error.status===400?'invalidCursor':'loadFailed')}</p><Link href={error instanceof ShelfError&&error.status===400?path:retry} className="underline">{common('retry')}</Link></div>;}
+ const{shelf,books:items}=data,labels={currently_reading:'currentlyReading',have_read:'haveRead',want_to_read:'wantToRead'}as const,name=shelf.default_type?books(labels[shelf.default_type]):shelf.name;let bulkUrl:string|null=null,bulkFailed=false;
+ if(shelf.default_type==='want_to_read'&&!searchParams?.cursor)try{bulkUrl=await getBulkBookSearch(user.id,data.total,items.map(item=>item.book));}catch{bulkFailed=true;}
+ return <div className="max-w-2xl mx-auto px-4 py-6 space-y-6"><div><Link href="/shelf" className="text-sm text-muted-foreground hover:underline mb-2 inline-block">← {t('title')}</Link><h1 className="font-display text-2xl font-bold">{name}</h1>{shelf.description&&<p className="text-muted-foreground text-sm mt-1">{shelf.description}</p>}<p className="text-xs text-muted-foreground mt-1">{t('bookCount',{count:data.total})} · {t(shelf.is_public?'public':'private')}</p>{bulkUrl&&<a href={bulkUrl} target="_blank" rel="noopener noreferrer sponsored" className="mt-3 inline-flex rounded-lg bg-orange-500 text-white text-sm font-medium px-4 py-2">{t('buyAll')}</a>}{bulkFailed&&<p role="alert" className="text-sm">{t('storesFailed')} <Link href={retry} className="underline">{common('retry')}</Link></p>}</div>
+ {!items.length?<div className="text-center py-16 text-muted-foreground"><p className="text-4xl mb-3" aria-hidden="true">📚</p><p>{t(data.total?'noMoreBooks':'emptyShelf')}</p><Link href="/discover" className="text-accent hover:underline text-sm mt-2 inline-block">{t('findBooks')}</Link></div>:<div className="space-y-3">{items.map(item=><article key={item.id} className="flex gap-3 p-3 border border-border rounded-xl"><Link href={'/book/'+item.book.id} className="flex-shrink-0"><div className="w-12 h-16 relative">{item.book.cover_url?<Image src={item.book.cover_url} alt={item.book.title} fill sizes="48px" className="object-cover rounded"/>:<div className="w-full h-full bg-muted rounded flex items-center justify-center"><span className="text-[8px] text-center text-muted-foreground px-0.5">{item.book.title.slice(0,10)}</span></div>}</div></Link><div className="flex-1 min-w-0"><Link href={'/book/'+item.book.id}><p className="font-medium text-sm truncate hover:underline">{item.book.title}</p><p className="text-xs text-muted-foreground">{item.book.author_name}</p></Link>{shelf.default_type==='currently_reading'&&<ReadingProgressBar shelfBookId={item.id} bookId={item.book.id} sourceBookId={item.source_book_id} userId={user.id} pageCount={item.book.page_count} progressPages={item.progress_pages} progressPercent={item.progress_percent}/>}<div className="flex items-center gap-2 mt-1.5 flex-wrap"><time dateTime={item.added_at} className="text-xs text-muted-foreground">{t('added',{date:formatter.dateTime(new Date(item.added_at),{month:'short',day:'numeric',timeZone:'UTC'})})}</time>{shelf.default_type==='currently_reading'&&<LogReadingSessionButton bookId={item.book.id} userId={user.id}/>} {shelf.default_type==='have_read'&&<Link href={shareCardPath('finished',user.id+'/'+item.book.id,locale)} target="_blank" className="text-xs text-muted-foreground hover:text-accent">{t('shareCard')}</Link>}</div></div></article>)}</div>}{data.nextCursor&&<Link href={path+'?cursor='+encodeURIComponent(data.nextCursor)} className="block underline text-sm">{common('loadMore')}</Link>}{searchParams?.cursor&&<Link href={path} className="block underline text-sm">{common('back')}</Link>}</div>;
 }

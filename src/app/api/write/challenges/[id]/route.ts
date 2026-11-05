@@ -56,5 +56,7 @@ export async function GET(
   const viewer = await getCurrentUser();
   const membership = viewer ? await supabase.from('writing_challenge_participants').select('user_id').eq('challenge_id',params.id).eq('user_id',viewer.id).maybeSingle() : null;
   if (membership?.error) return NextResponse.json({ error: 'Membership unavailable' }, { status: 503 });
-  return NextResponse.json({ joined: !!membership?.data, challenge: writingChallengeResponse(challenge), leaderboard });
+  const entry=viewer?await supabase.from('writing_challenge_submissions').select('id,user_id,title,content,word_count').eq('challenge_id',params.id).eq('user_id',viewer.id).maybeSingle():null;
+  if(entry?.error)return NextResponse.json({error:'Entry unavailable'},{status:503});
+  return NextResponse.json({actorId:viewer?.id??null,joined:!!membership?.data,challenge:writingChallengeResponse(challenge),entry:entry?.data??null,leaderboard},{headers:{'Cache-Control':'private, no-store'}});
 }

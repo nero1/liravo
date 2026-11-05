@@ -10,7 +10,7 @@ import { SESSION_COOKIE, destroySession } from '@/lib/db/unified-client';
 
 export const dynamic = 'force-dynamic';
 
-// Soft-delete: sets deleted_at, hard delete via cron after 30 days (PRD §15.10)
+// Deactivate the profile; related records are retained.
 export async function DELETE(req: Request) {
   const ip = getClientIp(req);
   const rate = await checkCriticalRateLimit(ip);
@@ -27,7 +27,7 @@ export async function DELETE(req: Request) {
     .update({
       deleted_at: new Date().toISOString(),
       display_name: '[Deleted User]',
-      username: `deleted_${user.id.slice(0, 8)}`,
+      username: `deleted_${user.id.replaceAll('-', '')}`,
       bio: null,
       avatar_url: null,
     })
@@ -42,9 +42,9 @@ export async function DELETE(req: Request) {
   if (isDirectPostgres()) {
     // Direct-postgres mode: destroy Redis session and clear the session cookie
     const cookieStore = cookies();
-    const token = cookieStore.get(SESSION_COOKIE)?.value;
-    if (token) await destroySession(token);
-    const response = NextResponse.json({ deleted: true, message: 'Your account has been scheduled for deletion. It will be permanently removed in 30 days.' });
+    const token = req.headers.get('authorization')?.match(/^Bearer (.+)$/i)?.[1]??cookieStore.get(SESSION_COOKIE)?.value;
+    try{if(token)await destroySession(token);}catch{recordMetric('account_session_cleanup_error',{user_id:user.id},'error');}
+    const response = NextResponse.json({ deleted: true, status: 'deactivated' });
     response.cookies.delete(SESSION_COOKIE);
     recordMetric('account_deleted', { user_id: user.id });
     return response;
@@ -54,5 +54,5 @@ export async function DELETE(req: Request) {
   }
 
   recordMetric('account_deleted', { user_id: user.id });
-  return NextResponse.json({ deleted: true, message: 'Your account has been scheduled for deletion. It will be permanently removed in 30 days.' });
+  return NextResponse.json({ deleted: true, status: 'deactivated' });
 }

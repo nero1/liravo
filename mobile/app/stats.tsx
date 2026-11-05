@@ -1,75 +1,30 @@
-import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { Card } from '@/components/ui/Card';
-import type { ReadingStatsRow } from '@/types';
-
-export default function StatsScreen() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['stats'],
-    queryFn: () => api.get<{ stats: ReadingStatsRow }>(ENDPOINTS.stats.reading),
-  });
-
-  const stats = data?.stats;
-
-  if (isLoading || !stats) {
-    return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706" size="large" /></View>;
-  }
-
-  const goalProgress = stats.annual_goal ? Math.min(100, (stats.annual_progress / stats.annual_goal) * 100) : 0;
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 16 }}>
-        {/* Annual goal */}
-        {stats.annual_goal && (
-          <Card>
-            <Text className="font-semibold text-foreground mb-2">📅 Annual Reading Goal</Text>
-            <Text className="text-3xl font-bold text-foreground">
-              {stats.annual_progress} / {stats.annual_goal}
-            </Text>
-            <Text className="text-muted-foreground text-sm mb-3">books this year</Text>
-            <View className="h-2 bg-muted rounded-full overflow-hidden">
-              <View className="h-full bg-accent rounded-full" style={{ width: `${goalProgress}%` }} />
-            </View>
-            <Text className="text-xs text-muted-foreground mt-1">{Math.round(goalProgress)}% complete</Text>
-          </Card>
-        )}
-
-        {/* Core stats */}
-        <View className="flex-row flex-wrap gap-3">
-          {[
-            { emoji: '📚', label: 'Books Read', value: stats.books_read },
-            { emoji: '📄', label: 'Pages Read', value: stats.pages_read.toLocaleString() },
-            { emoji: '⭐', label: 'Reviews', value: stats.reviews_written },
-            { emoji: '💬', label: 'Quotes', value: stats.quotes_saved },
-            { emoji: '🔥', label: 'Current Streak', value: `${stats.current_streak}d` },
-            { emoji: '🏆', label: 'Best Streak', value: `${stats.longest_streak}d` },
-          ].map(({ emoji, label, value }) => (
-            <Card key={label} className="flex-1 min-w-[45%]">
-              <Text className="text-2xl">{emoji}</Text>
-              <Text className="text-xl font-bold text-foreground mt-1">{value}</Text>
-              <Text className="text-xs text-muted-foreground">{label}</Text>
-            </Card>
-          ))}
-        </View>
-
-        {/* Favorite genres */}
-        {stats.favorite_genres.length > 0 && (
-          <Card>
-            <Text className="font-semibold text-foreground mb-2">🎭 Favorite Genres</Text>
-            <View className="flex-row flex-wrap gap-2">
-              {stats.favorite_genres.map((g) => (
-                <View key={g} className="bg-muted rounded-full px-3 py-1">
-                  <Text className="text-sm text-foreground">{g}</Text>
-                </View>
-              ))}
-            </View>
-          </Card>
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
+import {View,Text,ScrollView,ActivityIndicator} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useRouter} from 'expo-router';
+import {useQuery} from '@tanstack/react-query';
+import {api,ApiError} from '@/lib/api';
+import {useAuthStore} from '@/stores/auth';
+import {useTranslations} from '@/hooks/useTranslations';
+import {Card} from '@/components/ui/Card';
+import {Button} from '@/components/ui/Button';
+import {QueryError} from '@/components/ui/EmptyState';
+import type {ReadingStatsRow} from '@/types';
+export default function StatsScreen(){
+  const owner=useAuthStore(state=>state.user?.id),{t,locale}=useTranslations('readingStatistics'),genres=useTranslations('aiProfiles'),router=useRouter(),query=useQuery({queryKey:['stats',owner],enabled:!!owner,queryFn:async({signal})=>{const result=await api.get<ReadingStatsRow&{actorId:string}>('/api/stats/reading',undefined,signal);if(result.actorId!==owner||!Number.isFinite(result.booksReadThisYear))throw Error('Invalid reading statistics');return result;}});
+  if(query.error instanceof ApiError&&query.error.status===403)return <View className="p-4 gap-4"><Text className="text-foreground">{t('premiumRequired')}</Text><Button onPress={()=>router.push('/premium')}>{t('premiumLink')}</Button></View>;
+  if(query.error)return <QueryError error={query.error} retry={()=>void query.refetch()}/>;
+  const stats=query.data;if(!stats)return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator color="#d97706"/></View>;
+  const number=(value:number)=>new Intl.NumberFormat(locale,{maximumFractionDigits:2}).format(value),genre=stats.favouriteGenre,genreLabel=genre?(genres.has('genreLabels.'+genre)?genres.t('genreLabels.'+genre):genre):'—',cards=[
+    {label:t('books',{year:stats.year}),value:number(stats.booksReadThisYear)},
+    {label:t('pages'),value:number(stats.pagesReadThisYear)},
+    {label:t('rating'),value:stats.reviewsWrittenThisYear?number(stats.averageRating)+' ★':'—'},
+    {label:t('pace'),value:t('paceValue',{count:number(stats.readingPace)})},
+    {label:t('genre'),value:genreLabel},
+    {label:t('longest'),value:stats.longestBook?stats.longestBook.title+' · '+t('pageCount',{count:stats.longestBook.page_count}):'—'},
+    {label:t('currentStreak'),value:t('days',{count:stats.currentReadingStreak})},
+    {label:t('maximumStreak'),value:t('days',{count:stats.readingStreakMax})},
+    {label:t('reviews'),value:number(stats.reviewsWrittenThisYear)},
+    {label:t('quotes'),value:number(stats.quotesSavedThisYear)},
+  ];
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><ScrollView className="px-4" contentContainerStyle={{paddingTop:16,paddingBottom:32,gap:16}}><Text accessibilityRole="header" className="text-2xl font-bold text-foreground">{t('title')}</Text><View className="flex-row flex-wrap gap-3">{cards.map(card=><Card key={card.label} className="flex-1 min-w-[45%]"><Text className="text-xl font-bold text-foreground">{card.value}</Text><Text className="text-xs text-muted-foreground">{card.label}</Text></Card>)}</View>{stats.goal.goal&&<Card><Text className="font-semibold text-foreground">{t('goal')}</Text><Text className="text-foreground">{t('goalProgress',{count:stats.goal.progress.books_read,target:stats.goal.goal.target_books})}</Text><Text className="text-muted-foreground">{t('percentage',{count:stats.goal.progress.percentage??0})}</Text></Card>}<Button variant="outline" loading={query.isRefetching} onPress={()=>void query.refetch()}>{t('refresh')}</Button></ScrollView></SafeAreaView>;
 }

@@ -164,10 +164,10 @@ import { PUT as updateLocale } from '../src/app/api/users/locale/route';
 it('stores a supported locale for the authenticated owner and updates the browser cookie', async () => {
   const actor=crypto.randomUUID();
   vi.mocked(getCurrentUser).mockResolvedValue({id:actor,email:'reader@example.test'});
-  const eq=vi.fn().mockResolvedValue({error:null}); const update=vi.fn().mockReturnValue({eq});
-  vi.mocked(createClient).mockReturnValue({from:vi.fn().mockReturnValue({update})} as unknown as ReturnType<typeof createClient>);
+  const rpc=vi.fn().mockResolvedValue({data:'fr',error:null});
+  vi.mocked(createServiceClient).mockReturnValue({rpc} as never);
   const response=await updateLocale(new NextRequest('https://app.test/api/users/locale',{method:'PUT',body:JSON.stringify({locale:'fr'})}));
-  expect(response.status).toBe(200); expect(eq).toHaveBeenCalledWith('id',actor);
+  expect(response.status).toBe(200);expect(rpc).toHaveBeenCalledWith('initialize_account_locale',{p_user_id:actor,p_locale:'fr',p_replace:true});
   expect(response.cookies.get('NEXT_LOCALE')?.value).toBe('fr');
 });
 

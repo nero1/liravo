@@ -37,3 +37,9 @@ it('rejects cross-origin and forwarded-host spoofing even with a well-formed tok
     expect((await middleware(request)).status).toBe(403);
   }
 });
+
+it('allows public one-click unsubscribe proofs through while retaining CSRF on ambient account mutations',async()=>{
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','');vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY','');
+  const unsubscribe=await middleware(new NextRequest('https://app.test/api/users/unsubscribe?token='+'a'.repeat(64),{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'List-Unsubscribe=One-Click'}));expect(unsubscribe.status).toBe(200);
+  const protectedResponse=await middleware(new NextRequest('https://app.test/api/users/profile',{method:'PATCH',headers:{'Content-Type':'application/json'},body:'{}'}));expect(protectedResponse.status).toBe(403);
+});

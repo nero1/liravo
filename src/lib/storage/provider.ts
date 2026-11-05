@@ -82,13 +82,15 @@ function createS3StorageAdapter(): StorageProvider {
     async upload(bucket, path, body, opts) {
       try {
         const client = getS3Client();
+        const acl=process.env.S3_OBJECT_ACL??'none';
+        if(!['none','public-read'].includes(acl))throw new Error('S3_OBJECT_ACL must be none or public-read');
         await client.send(
           new PutObjectCommand({
             Bucket: bucket,
             Key: path,
             Body: body,
             ContentType: opts?.contentType ?? 'application/octet-stream',
-            ACL: 'public-read',
+            ...(acl==='public-read'?{ACL:'public-read' as const}:{}),
           })
         );
         return { data: { path }, error: null };
@@ -100,7 +102,7 @@ function createS3StorageAdapter(): StorageProvider {
     async remove(bucket, paths) {
       try {
         const client = getS3Client();
-        await client.send(
+        const result=await client.send(
           new DeleteObjectsCommand({
             Bucket: bucket,
             Delete: {
@@ -109,6 +111,7 @@ function createS3StorageAdapter(): StorageProvider {
             },
           })
         );
+        if(result.Errors?.length)return {error:{message:'Storage rejected one or more object deletions'}};
         return { error: null };
       } catch (err) {
         return { error: { message: String(err) } };
@@ -116,8 +119,9 @@ function createS3StorageAdapter(): StorageProvider {
     },
 
     getPublicUrl(_bucket, path) {
-      const cdnUrl = process.env.S3_CDN_URL ?? '';
-      return `${cdnUrl.replace(/\/$/, '')}/${path}`;
+      const url=new URL(process.env.S3_CDN_URL??'');
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw new Error('S3_CDN_URL must be an HTTP(S) asset URL');
+      url.pathname=url.pathname.replace(/\/$/,'')+'/'+path;return url.toString();
     },
   };
 }

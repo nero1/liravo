@@ -1,6 +1,7 @@
+import {adminCatalogResponse} from '@/lib/admin-catalog';
 import { applyCommunityIntent } from '@/lib/community-intents';
 import { ContentIntentError } from '@/lib/content-intents';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -12,7 +13,7 @@ const patchSchema = z.object({
   is_moderator: z.boolean().optional(),
   is_premium: z.boolean().optional(),
   is_suspended: z.boolean().optional(),
-});
+}).strict().refine(value=>['is_moderator','is_premium','is_suspended'].some(key=>key in value));
 
 async function checkAdmin(supabase: ReturnType<typeof createClient>, userId: string) {
   const { data } = await supabase
@@ -23,49 +24,7 @@ async function checkAdmin(supabase: ReturnType<typeof createClient>, userId: str
   return data?.is_admin === true;
 }
 
-export async function GET(req: Request) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!(await checkAdmin(supabase, user.id))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const { searchParams } = new URL(req.url);
-  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
-  const search = searchParams.get('search') ?? '';
-  const pageSize = 25;
-  const from = (page - 1) * pageSize;
-
-  const service = createServiceClient();
-
-  let query = service
-    .from('users')
-    .select(
-      'id, username, email, user_types, is_premium, premium_override, is_moderator, is_admin, is_suspended, created_at',
-      { count: 'exact' }
-    )
-    .order('created_at', { ascending: false })
-    .range(from, from + pageSize - 1);
-
-  if (search) {
-    query = query.ilike('username', `%${search}%`);
-  }
-
-  const { data: users, count, error } = await query;
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({
-    users: (users ?? []).map((u) => ({
-      ...u,
-      is_premium: (u).is_premium ?? false,
-    })),
-    total: count ?? 0,
-    page,
-    pageSize,
-  });
-}
+export const GET=(request:Request)=>adminCatalogResponse(request,'users','users');
 
 export async function PATCH(req: Request) {
   const supabase = createClient();
@@ -75,6 +34,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  if(req.headers.has('X-Liravo-Actor')&&req.headers.get('X-Liravo-Actor')!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   const body = await req.json().catch(() => ({}));
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
@@ -82,7 +42,7 @@ export async function PATCH(req: Request) {
   }
 
   const {userId,...updates}=parsed.data;
-  try{return NextResponse.json(await applyCommunityIntent(req,user.id,'admin_user',userId,updates));
+  try{return NextResponse.json({...await applyCommunityIntent(req,user.id,'admin_user',userId,updates),actorId:user.id,userId});
   }catch(error){
     return NextResponse.json({error:error instanceof Error?error.message:'Community service unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }

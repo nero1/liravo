@@ -1,43 +1,18 @@
+import {ShareRating} from '@/components/books/ShareRating';
 import { ImageResponse } from '@vercel/og';
-import { createServiceClient } from '@/lib/supabase/server';
+import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createServiceClient();
-
-  const { data: review } = await supabase
-    .from('reviews')
-    .select(`
-      content, rating,
-      books:book_id (title, author_name, cover_url),
-      users:user_id (display_name, username)
-    `)
-    .eq('id', params.id)
-    .eq('moderation_status', 'published')
-    .eq('is_hidden', false)
-    .single();
-
-  if (!review) {
-    return new Response('Not found', { status: 404 });
-  }
-
-  const book = (review.books as unknown) as { title: string; author_name: string; cover_url: string | null } | null;
-  const reviewer = (review.users as unknown) as { display_name: string; username: string } | null;
-
-  const bookTitle = book?.title ?? 'Unknown Book';
-  const authorName = book?.author_name ?? '';
-  const coverUrl = book?.cover_url ?? null;
-  const reviewerName = reviewer?.display_name ?? reviewer?.username ?? 'A reader';
-  const rating = review.rating ?? 0;
-  const content = review.content ?? '';
-  const truncated = content.length > 180 ? content.slice(0, 180) + '…' : content;
-
-  const stars = Array.from({ length: 5 }, (_, i) => (i < rating ? '★' : '☆')).join('');
+  try {
+  const {data:review,t}=await getShareCard(request,'review',params.id);
+  const bookTitle=review.book.title,authorName=review.book.author_name,coverUrl=review.book.cover_url,reviewerName=review.reader.display_name;
+  const rating=review.rating,content=review.content,truncated=content.length>180?content.slice(0,180)+'…':content;
 
   return new ImageResponse(
     (
@@ -88,20 +63,20 @@ export async function GET(
 
           {/* Middle: book info + review */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
+            <div style={{display:'flex',flexDirection:'column'}}>
               <p style={{ fontSize: '24px', fontWeight: 700, color: '#f1f5f9', margin: 0, lineHeight: 1.3 }}>
                 {bookTitle}
               </p>
               {authorName && (
                 <p style={{ fontSize: '16px', color: '#94a3b8', margin: '4px 0 0', lineHeight: 1 }}>
-                  by {authorName}
+                  {t('by',{author:authorName})}
                 </p>
               )}
             </div>
 
             {/* Stars */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '28px', color: '#f59e0b', letterSpacing: '2px' }}>{stars}</span>
+              <ShareRating rating={rating}/>
             </div>
 
             {/* Review text */}
@@ -123,11 +98,12 @@ export async function GET(
           {/* Bottom: reviewer */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '28px', height: '2px', background: '#d97706' }} />
-            <span style={{ fontSize: '15px', color: '#94a3b8' }}>Review by {reviewerName}</span>
+            <span style={{ fontSize: '15px', color: '#94a3b8' }}>{t('reviewBy',{name:reviewerName})}</span>
           </div>
         </div>
       </div>
     ),
-    { width: 1200, height: 630 }
+    { width: 1200, height: 630,headers:SHARE_IMAGE_HEADERS }
   );
+  } catch(error) { return shareCardFailure(error); }
 }

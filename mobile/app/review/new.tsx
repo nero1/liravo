@@ -1,107 +1,26 @@
-import { useState } from 'react';
-import { View, Text, ScrollView, Alert, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { ENDPOINTS } from '@/constants/api';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
-import { StarRating } from '@/components/books/StarRating';
-import { MOOD_TAGS } from '@/types';
-
-export default function NewReviewScreen() {
-  const { bookId } = useLocalSearchParams<{ bookId: string }>();
-  const router = useRouter();
-  const qc = useQueryClient();
-  const [rating, setRating] = useState(0);
-  const [content, setContent] = useState('');
-  const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
-  const [hasSpoilers, setHasSpoilers] = useState(false);
-
-  const submit = useMutation({
-    mutationFn: () =>
-      api.post(ENDPOINTS.books.reviews(bookId), {
-        star_rating: rating,
-        body: content,
-        mood_tags: selectedMoods,
-        spoiler_warning: hasSpoilers,
-        review_type: content.length > 200 ? 'long' : content.length > 0 ? 'short' : 'one_line',
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['book', bookId, 'reviews'] });
-      qc.invalidateQueries({ queryKey: ['feed'] });
-      router.back();
-    },
-    onError: (err) => Alert.alert('Error', (err as Error).message),
-  });
-
-  function toggleMood(mood: string) {
-    setSelectedMoods((prev) =>
-      prev.includes(mood) ? prev.filter((m) => m !== mood) : [...prev, mood],
-    );
-  }
-
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 32, gap: 20 }}>
-          <View className="items-center gap-2">
-            <Text className="font-semibold text-foreground">Your Rating</Text>
-            <StarRating value={rating} onChange={setRating} size={36} />
-          </View>
-
-          <Input
-            label="Review"
-            value={content}
-            onChangeText={setContent}
-            placeholder="What did you think?"
-            multiline
-            numberOfLines={5}
-            maxLength={2000}
-            style={{ minHeight: 120, textAlignVertical: 'top' }}
-          />
-
-          <View className="gap-2">
-            <Text className="font-medium text-foreground text-sm">Mood Tags</Text>
-            <View className="flex-row flex-wrap gap-2">
-              {MOOD_TAGS.map((mood) => {
-                const selected = selectedMoods.includes(mood);
-                return (
-                  <TouchableOpacity
-                    key={mood}
-                    onPress={() => toggleMood(mood)}
-                    className={`border rounded-full px-3 py-1.5 ${selected ? 'border-accent bg-accent' : 'border-border bg-card'}`}
-                    activeOpacity={0.7}
-                  >
-                    <Text className={`text-sm ${selected ? 'text-accent-foreground' : 'text-foreground'}`}>{mood}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          <TouchableOpacity
-            className="flex-row items-center gap-2"
-            onPress={() => setHasSpoilers(!hasSpoilers)}
-            activeOpacity={0.7}
-          >
-            <View className={`w-5 h-5 rounded border-2 items-center justify-center ${hasSpoilers ? 'border-accent bg-accent' : 'border-border'}`}>
-              {hasSpoilers && <Text className="text-accent-foreground text-xs">✓</Text>}
-            </View>
-            <Text className="text-foreground">Contains spoilers</Text>
-          </TouchableOpacity>
-
-          <Button
-            onPress={() => submit.mutate()}
-            loading={submit.isPending}
-            disabled={rating === 0 || !content.trim()}
-            size="lg"
-          >
-            Post Review
-          </Button>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+import {useState} from 'react';
+import {View,Text,ScrollView,Alert,TouchableOpacity} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useLocalSearchParams,useRouter} from 'expo-router';
+import {useMutation,useQueryClient} from '@tanstack/react-query';
+import {useAuthStore} from '@/stores/auth';
+import {useTranslations} from '@/hooks/useTranslations';
+import {useRequestIntent} from '@/hooks/useRequestIntent';
+import {useBook} from '@/hooks/useBooks';
+import {api} from '@/lib/api';
+import {Input} from '@/components/ui/Input';
+import {Button} from '@/components/ui/Button';
+import {QueryError} from '@/components/ui/EmptyState';
+import {LoadingSpinner} from '@/components/ui/LoadingSpinner';
+import {StarRating} from '@/components/books/StarRating';
+import {SelectedEdition} from '@/components/books/SelectedEdition';
+import {MOOD_TAGS,type ReviewRow} from '@/types';
+import {validReadDate} from '../../../src/lib/content-form-values';
+export default function NewReviewScreen(){const {bookId}=useLocalSearchParams<{bookId?:string}>(),owner=useAuthStore(state=>state.user?.id);return <NativeReviewForm key={owner+':'+bookId} bookId={typeof bookId==='string'?bookId:''} owner={owner}/>;}
+export function NativeReviewForm({bookId,owner}:{bookId:string;owner:string|undefined}){
+  const {t}=useTranslations('reviewForm'),{t:moods}=useTranslations('moods'),{t:contentText}=useTranslations('nativeContent'),{t:common}=useTranslations('common'),router=useRouter(),qc=useQueryClient(),intent=useRequestIntent(owner),query=useBook(bookId),book=query.data?.book,[rating,setRating]=useState(0),[body,setBody]=useState(''),[type,setType]=useState<'short'|'long'|'one_line'>('short'),[selected,setSelected]=useState<string[]>([]),[spoilers,setSpoilers]=useState(false),[date,setDate]=useState('');
+  const submit=useMutation({mutationFn:async()=>{if(!owner||!book)throw Error('Book required');const payload={star_rating:rating,body:body.trim(),review_type:type,mood_tags:MOOD_TAGS.filter(mood=>selected.includes(mood)),spoiler_warning:spoilers,...(date?{read_date:date}:{})},scope='review.'+book.id,data=await api.post<{review:ReviewRow}>('/api/books/'+book.id+'/reviews',payload,await intent.durableHeaders(payload,scope));if(!data.review?.id||data.review.user_id!==owner||data.review.book_id!==book.id)throw Error('Invalid review receipt');await intent.complete(scope);return data;},onSuccess:()=>{if(useAuthStore.getState().user?.id!==owner)return;void qc.invalidateQueries({queryKey:['book',bookId]});void qc.invalidateQueries({queryKey:['feed']});void qc.invalidateQueries({queryKey:['stats']});void qc.invalidateQueries({queryKey:['wrapped']});router.back();},onError:()=>Alert.alert(common('error'),t('failed'))});
+  if(!bookId)return <View className="p-4 gap-3"><Text className="text-foreground">{contentText('bookRequired')}</Text><Button onPress={()=>router.push('/(tabs)/discover')}>{contentText('discover')}</Button></View>;
+  if(query.error)return <QueryError error={query.error} retry={()=>void query.refetch()}/>;if(!book)return <LoadingSpinner/>;
+  return <SafeAreaView className="flex-1 bg-background" edges={['bottom']}><ScrollView className="px-4" keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingTop:16,paddingBottom:32,gap:16}}><SelectedEdition book={book}/><Text className="font-medium text-foreground">{t('rating')}</Text><StarRating value={rating} onChange={setRating} disabled={submit.isPending} size={36}/><View accessibilityRole="radiogroup" className="gap-2"><Text className="font-medium text-foreground">{t('type')}</Text><View className="flex-row flex-wrap gap-2">{(['one_line','short','long'] as const).map(value=><TouchableOpacity key={value} disabled={submit.isPending} accessibilityRole="radio" accessibilityState={{checked:type===value,disabled:submit.isPending}} onPress={()=>setType(value)} className={`rounded-lg border px-3 py-2 ${type===value?'border-accent':'border-border'}`}><Text className="text-foreground">{t('types.'+value)}</Text></TouchableOpacity>)}</View></View><Input label={t('body')} value={body} onChangeText={setBody} placeholder={t('placeholders.'+type)} editable={!submit.isPending} multiline numberOfLines={5} maxLength={2000} style={{minHeight:120,textAlignVertical:'top'}}/><Text className="font-medium text-foreground">{t('moods')}</Text><View className="flex-row flex-wrap gap-2">{MOOD_TAGS.map(mood=><TouchableOpacity key={mood} disabled={submit.isPending} accessibilityRole="checkbox" accessibilityState={{checked:selected.includes(mood),disabled:submit.isPending}} onPress={()=>setSelected(previous=>previous.includes(mood)?previous.filter(value=>value!==mood):[...previous,mood])} className={`rounded-full border px-3 py-1.5 ${selected.includes(mood)?'border-accent bg-accent':'border-border'}`}><Text className={selected.includes(mood)?'text-white':'text-foreground'}>{moods(mood)}</Text></TouchableOpacity>)}</View><Input label={t('readDate')} value={date} onChangeText={setDate} editable={!submit.isPending} maxLength={10} error={date&&!validReadDate(date)?contentText('invalidDate'):undefined}/><TouchableOpacity disabled={submit.isPending} accessibilityRole="checkbox" accessibilityState={{checked:spoilers,disabled:submit.isPending}} onPress={()=>setSpoilers(value=>!value)} className="flex-row gap-2"><Text className="text-accent">{spoilers?'☑':'☐'}</Text><Text className="text-foreground">{t('spoilers')}</Text></TouchableOpacity><Button onPress={()=>submit.mutate()} loading={submit.isPending} disabled={!owner||rating<1||!body.trim()||!validReadDate(date)}>{t('submit')}</Button></ScrollView></SafeAreaView>;
 }

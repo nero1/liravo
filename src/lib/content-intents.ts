@@ -13,6 +13,7 @@ export class ContentIntentError extends Error {
 
 /** Durable replay data commits with the inserted row; retries can finish keyed downstream effects. */
 export async function contentIntent(request: Request, userId: string, table: ContentTable, payload: Record<string, unknown>) {
+  if(request.headers.has('x-liravo-actor')&&request.headers.get('x-liravo-actor')!==userId)throw new ContentIntentError('ACCOUNT_CHANGED',409);
   const key = request.headers.get('idempotency-key') ?? request.headers.get('x-idempotency-key');
   if (!key || key.length < 8 || key.length > 200) throw new ContentIntentError('Missing/invalid idempotency key', 400);
   if(!await checkRouteRateLimit(userId,'social'))throw new ContentIntentError('Too many requests',429);
@@ -48,4 +49,11 @@ export async function requireReadingRoomAccess(roomId:string,userId:string) {
   const {data,error}=await createServiceClient().rpc('reading_room_visible' as never,{p_room_id:roomId,p_user_id:userId} as never);
   if(error)throw new ContentIntentError('Room access unavailable',error.code==='22P02'?400:503);
   if(!data)throw new ContentIntentError('Room unavailable',403);
+}
+
+export async function getContentCreationReceipt(userId:string,action:'shelves'|'author_qa',key:string){
+  if(key.length<8||key.length>200)throw new ContentIntentError('Invalid receipt',400);
+  const{data,error}=await createServiceClient().rpc('content_creation_receipt_snapshot'as never,{p_user:userId,p_action:action,p_key:key}as never);
+  if(error||!data)throw new ContentIntentError('Receipt unavailable',({P1003:403,P1004:400,P1005:404}as Record<string,number>)[error?.code??'']??503);
+  return data as Record<string,unknown>;
 }

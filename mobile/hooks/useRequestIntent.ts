@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import {useRef} from 'react';
 import * as SecureStore from 'expo-secure-store';
 
@@ -9,17 +10,26 @@ export function useRequestIntent(ownerId:string|undefined){
   return {
     async durableHeaders(payload:unknown,scope='default'){
       if(!ownerId)throw new Error('Authenticated owner required');
-      const serialized=serialize(payload),saved=JSON.parse(await SecureStore.getItemAsync(storageKey(scope))??'null');
+      const serialized=serialize(payload),fingerprint=await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,serialized);
       if(actor.current!==ownerId)throw new Error('Account changed');
-      if(saved?.payload===serialized&&typeof saved.key==='string'&&saved.key.length>=8&&saved.key.length<=200)current.current.set(scope,saved);
+      const saved=JSON.parse(await SecureStore.getItemAsync(storageKey(scope))??'null');
+      if(actor.current!==ownerId)throw new Error('Account changed');
+      if((saved?.fingerprint===fingerprint||saved?.payload===serialized)&&typeof saved.key==='string'&&saved.key.length>=8&&saved.key.length<=200)current.current.set(scope,{payload:serialized,key:saved.key});
       if(current.current.get(scope)?.payload!==serialized)current.current.set(scope,{payload:serialized,key:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2)});
-      await SecureStore.setItemAsync(storageKey(scope),JSON.stringify(current.current.get(scope)));
+      const entry=current.current.get(scope)!;
+      await SecureStore.setItemAsync(storageKey(scope),JSON.stringify({fingerprint,key:entry.key}));
       if(actor.current!==ownerId)throw new Error('Account changed');
-      return {'Idempotency-Key':current.current.get(scope)!.key,'X-Liravo-Actor':ownerId};
+      if(current.current.get(scope)?.key!==entry.key)throw new Error('Intent changed');
+      return {'Idempotency-Key':entry.key,'X-Liravo-Actor':ownerId};
     },
-    async complete(scope='default'){
-      try{const saved=JSON.parse(await SecureStore.getItemAsync(storageKey(scope))??'null');if(saved?.key===current.current.get(scope)?.key)await SecureStore.deleteItemAsync(storageKey(scope));}catch{}
-      current.current.delete(scope);
+    async pending(scope='default'){
+      if(!ownerId)return null;
+      try{const saved=JSON.parse(await SecureStore.getItemAsync(storageKey(scope))??'null');if(actor.current!==ownerId)return null;const entry=current.current.get(scope);if(!entry&&(typeof saved?.key!=='string'||saved.key.length<8||saved.key.length>200))return null;const key=entry?.key??saved.key;if(!entry)current.current.set(scope,{payload:'',key});return {'Idempotency-Key':key,'X-Liravo-Actor':ownerId};}catch{return null;}
+    },
+    async complete(scope='default',acknowledgedKey?:string){
+      if(acknowledgedKey&&current.current.get(scope)?.key!==acknowledgedKey)return;
+      try{const saved=JSON.parse(await SecureStore.getItemAsync(storageKey(scope))??'null');if(saved?.key===current.current.get(scope)?.key&&(!acknowledgedKey||saved.key===acknowledgedKey))await SecureStore.deleteItemAsync(storageKey(scope));}catch{}
+      if(!acknowledgedKey||current.current.get(scope)?.key===acknowledgedKey)current.current.delete(scope);
     },
   };
 }

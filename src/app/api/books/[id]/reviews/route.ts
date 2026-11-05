@@ -1,13 +1,12 @@
+import {getBookReviews,ReviewCursorError} from '@/services/book-reviews';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
-import { createServiceClient } from '@/lib/supabase/server';
 import { awardXP } from '@/services/xp';
 import { XP_CONFIG } from '@/constants/config';
 import { classifyTone } from '@/lib/tone-classifier';
 import { checkSpam } from '@/lib/spam-detection';
-import { sanitizeText, sanitizeRichText } from '@/lib/sanitize';
+import { sanitizeText, sanitizeRichText,hasVisibleText } from '@/lib/sanitize';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { getRedisClient } from '@/lib/redis';
 
@@ -23,30 +22,13 @@ const reviewSchema = z.object({
   edition_read: z.string().max(100).optional(),
 });
 
-export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
-
-  const { data: reviews, error } = await supabase
-    .from('reviews')
-    .select(`
-      id, rating, content, review_type, mood_tags, has_spoilers,
-      likes_count, created_at, moderation_status,
-      users:user_id (display_name, avatar_url, username)
-    `)
-    .eq('book_id', params.id)
-    .eq('moderation_status', 'published')
-    .eq('is_hidden', false)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ reviews: reviews ?? [] });
+export async function GET(request:Request,{params}:{params:{id:string}}){
+  if(!await getCurrentUser())return NextResponse.json({error:'Unauthorized'},{status:401});
+  const query=new URL(request.url).searchParams;
+  try{
+    const page=await getBookReviews(params.id,query.get('cursor'),Number(query.get('limit')??50));
+    return page?NextResponse.json(page,{headers:{'Cache-Control':'private, no-store'}}):NextResponse.json({error:'Book not found'},{status:404});
+  }catch(error){return NextResponse.json({error:error instanceof ReviewCursorError?'Invalid review page':'Reviews unavailable'},{status:error instanceof ReviewCursorError?400:503});}
 }
 
 export async function POST(
@@ -56,7 +38,8 @@ export async function POST(
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const raw = await request.json();
+  if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid book'},{status:400});
+  const raw = await request.json().catch(()=>null);
   const parsed = reviewSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
@@ -65,6 +48,7 @@ export async function POST(
   const { star_rating, review_type, mood_tags, spoiler_warning } = parsed.data;
   // Sanitize before any further processing or storage
   const body = review_type === 'long' ? sanitizeRichText(parsed.data.body) : sanitizeText(parsed.data.body);
+  if(!hasVisibleText(body))return NextResponse.json({error:'Review text is required'},{status:400});
 
   let review;
   try {
@@ -81,7 +65,6 @@ export async function POST(
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Review unavailable' }, { status: error instanceof ContentIntentError ? error.status : 503 });
   }
-  const serviceSupabase = createServiceClient();
 
   // Award XP for writing a review
   await awardXP(user.id, XP_CONFIG.SHORT_REVIEW, 'write_review', `review:${params.id}`);
@@ -92,28 +75,6 @@ export async function POST(
     await redis.del(`taste_profile:${user.id}`);
   } catch {
     // Non-critical
-  }
-
-  // Upsert book_community_stats if table exists — best effort
-  try {
-    const { data: existing } = await serviceSupabase
-      .from('reviews')
-      .select('rating')
-      .eq('book_id', params.id)
-      .eq('moderation_status', 'published');
-
-    if (existing && existing.length > 0) {
-      const avg = existing.reduce((sum, r) => sum + r.rating, 0) / existing.length;
-      await serviceSupabase
-        .from('books')
-        .update({
-          average_rating: Math.round(avg * 10) / 10,
-          ratings_count: existing.length,
-        })
-        .eq('id', params.id);
-    }
-  } catch {
-    // Non-critical — ignore errors
   }
 
   return NextResponse.json({ review }, { status: 201 });

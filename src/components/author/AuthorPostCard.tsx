@@ -1,3 +1,4 @@
+import {useTranslations,useFormatter} from 'next-intl';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -20,14 +21,9 @@ interface AuthorPostCardProps {
   bookTitle?: string | null;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  announcement: 'Announcement',
-  blog: 'Blog Post',
-  arc_invite: 'ARC Invite',
-};
-
 export function AuthorPostCard({ post, author, bookCoverUrl, bookTitle }: AuthorPostCardProps) {
-  const date = new Date(post.created_at).toLocaleDateString('en-US', {
+  const t=useTranslations('authorPost'),formatter=useFormatter();
+  const date=formatter.dateTime(new Date(post.created_at), {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -59,11 +55,11 @@ export function AuthorPostCard({ post, author, bookCoverUrl, bookTitle }: Author
             </Link>
             {author.is_verified_author && (
               <span className="text-accent text-xs font-medium px-1.5 py-0.5 rounded-full bg-accent/10">
-                Verified Author
+                {t('verified')}
               </span>
             )}
             <span className="text-xs text-neutral-500 dark:text-neutral-400 px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800">
-              {TYPE_LABELS[post.type] ?? post.type}
+              {t('types.'+(['announcement','blog','arc_invite'].includes(post.type)?post.type:'other'))}
             </span>
           </div>
           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{date}</p>

@@ -1,0 +1,9 @@
+import {afterEach,expect,it,vi} from 'vitest';
+import {getFeatureFlag,getFeatureFlags,invalidateFeatureFlag} from '@/lib/feature-flags';
+const mocks=vi.hoisted(()=>({one:vi.fn(),many:vi.fn(),del:vi.fn(),get:vi.fn().mockResolvedValue('true')}));
+vi.mock('@/lib/supabase/server',()=>({createServiceClient:()=>({from:()=>({select:(columns:string)=>columns==='enabled'?{eq:()=>({maybeSingle:mocks.one})}:mocks.many()})})}));
+vi.mock('@/lib/redis',()=>({getRedisClient:()=>({get:mocks.get,del:mocks.del}),REDIS_KEYS:{featureFlag:(name:string)=>'flag:'+name}}));
+afterEach(()=>vi.clearAllMocks());
+it('uses current database values instead of stale enabled cache entries',async()=>{mocks.one.mockResolvedValue({data:{enabled:false},error:null});expect(await getFeatureFlag('telegram_auth')).toBe(false);mocks.one.mockResolvedValue({data:{enabled:true},error:null});expect(await getFeatureFlag('telegram_auth')).toBe(true);expect(mocks.get).not.toHaveBeenCalled();});
+it('never enables flags after missing, malformed or failed reads',async()=>{for(const value of[{data:null,error:null},{data:{enabled:'true'},error:null},{data:{enabled:true},error:{code:'08006'}}]){mocks.one.mockResolvedValue(value);expect(await getFeatureFlag('google_auth')).toBe(false);}mocks.one.mockRejectedValue(Error('Unavailable'));expect(await getFeatureFlag('google_auth')).toBe(false);mocks.many.mockResolvedValue({data:null,error:{code:'08006'}});expect(Object.values(await getFeatureFlags()).every(value=>value===false)).toBe(true);});
+it('keeps flag changes authoritative when legacy cache cleanup fails',async()=>{mocks.del.mockRejectedValue(Error('Redis unavailable'));await expect(invalidateFeatureFlag('telegram_auth')).resolves.toBeUndefined();mocks.one.mockResolvedValue({data:{enabled:false},error:null});expect(await getFeatureFlag('telegram_auth')).toBe(false);});

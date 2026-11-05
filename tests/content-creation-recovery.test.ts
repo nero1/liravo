@@ -1,0 +1,18 @@
+import {expect,it,vi} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import ts from 'typescript';
+function mount(pending:string|null=null){
+ const slots:any[]=[],effects:(()=>()=>void)[]=[],fetch=vi.fn(),complete=vi.fn(),success=vi.fn(),intent={pending:async()=>pending?{'Idempotency-Key':pending}:null,durableHeaders:async()=>({'Idempotency-Key':'original-key','X-Liravo-Actor':'reader'}),complete};let index=0;
+ const exports:any={},code=ts.transpileModule(readFileSync('src/lib/client/useContentCreation.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+ runInNewContext(code,{exports,fetch,URLSearchParams,require:(name:string)=>name==='react'?{useRef:(initial:any)=>{const i=index++;slots[i]??={current:initial};return slots[i];},useState:(initial:any)=>{const i=index++;if(!(i in slots))slots[i]=initial;return[slots[i],(value:any)=>{slots[i]=typeof value==='function'?value(slots[i]):value;}];},useCallback:(fn:any)=>{index++;return fn;},useEffect:(effect:any)=>{index++;effects.push(effect);}}:{useRequestIntent:()=>intent}});
+ function render(){index=0;return exports.useContentCreation('reader','/api/shelves','shelf',(data:any)=>data?.actorId==='reader'&&data.shelf?.user_id==='reader',success);}
+ return{fetch,complete,success,render,effects};
+}
+const receipt={actorId:'reader',shelf:{id:'shelf',user_id:'reader',slug:'saved'}};
+it('recovers a committed create after reload before opening the form',async()=>{const view=mount('persisted-key');view.fetch.mockResolvedValueOnce(Response.json(receipt));let change=view.render();expect(change.checking).toBe(true);await change.recover();expect(view.complete).toHaveBeenCalledExactlyOnceWith('shelf','persisted-key');expect(view.success).toHaveBeenCalledExactlyOnceWith(receipt);expect(view.render().checking).toBe(false);});
+it('does not unlock a form or clear an intent when receipt storage is unavailable',async()=>{const view=mount('persisted-key');view.fetch.mockResolvedValueOnce(Response.json({error:'Unavailable'},{status:503}));await view.render().recover();const change=view.render();expect(change.checking).toBe(true);expect(change.failed).toBe(true);expect(view.complete).not.toHaveBeenCalled();});
+it('confirms a lost create response using the same key and prevents duplicate simultaneous submits',async()=>{const view=mount();await view.render().recover();const change=view.render();view.fetch.mockRejectedValueOnce(Error('Lost response')).mockResolvedValueOnce(Response.json(receipt));await Promise.all([change.submit({name:'Saved'}),change.submit({name:'Saved'})]);expect(view.fetch).toHaveBeenCalledTimes(2);expect(view.fetch.mock.calls[1][0]).toBe('/api/shelves?receipt=original-key');expect(view.complete).toHaveBeenCalledExactlyOnceWith('shelf','original-key');expect(view.success).toHaveBeenCalledExactlyOnceWith(receipt);});
+it('retains the original key after a foreign receipt and ignores a late success after unmount',async()=>{const view=mount();await view.render().recover();view.fetch.mockResolvedValueOnce(Response.json({...receipt,actorId:'other'})).mockResolvedValueOnce(Response.json({...receipt,actorId:'other'}));await view.render().submit({name:'Saved'});expect(view.complete).not.toHaveBeenCalled();expect(view.render().failed).toBe(true);
+ const next=mount();await next.render().recover();next.render();const cleanup=next.effects[0]();let finish!:(value:Response)=>void;next.fetch.mockReturnValueOnce(new Promise(resolve=>{finish=resolve;}));const task=next.render().submit({name:'Saved'});await Promise.resolve();cleanup();finish(Response.json(receipt));await task;expect(next.complete).not.toHaveBeenCalled();expect(next.success).not.toHaveBeenCalled();
+});

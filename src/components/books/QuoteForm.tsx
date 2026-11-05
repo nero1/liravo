@@ -2,77 +2,77 @@
 
 import { useRequestIntent } from '@/lib/client/useRequestIntent';
 
-import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import {useTranslations} from 'next-intl';
+import { useState,useRef,useEffect } from 'react';
 import { Quote } from 'lucide-react';
+import {MAX_QUOTE_PAGE} from '@/lib/content-form-values';
 import { cn } from '@/lib/utils';
 
 interface QuoteFormProps {
   bookId: string;
+  userId:string;
   onSuccess?: () => void;
 }
 
-export function QuoteForm({ bookId, onSuccess }: QuoteFormProps) {
-  const intent = useRequestIntent();
+export function QuoteForm(props:QuoteFormProps){return <OwnedQuoteForm key={props.userId+':'+props.bookId} {...props}/>;}
+function OwnedQuoteForm({bookId,userId,onSuccess}:QuoteFormProps){
+  const intent=useRequestIntent(userId),t=useTranslations('books'),common=useTranslations('common'),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>();
+  useEffect(()=>()=>clearTimeout(timer.current),[]);
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState('');
   const [pageNumber, setPageNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(false);
+  const [invalidPage,setInvalidPage]=useState(false);
 
   const handleSave = async () => {
-    if (!content.trim()) return;
-    setSaving(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setSaving(false); return; }
+    if(!content.trim()||busy.current)return;setInvalidPage(false);
+    if(pageNumber&&(!Number.isSafeInteger(Number(pageNumber))||Number(pageNumber)<1||Number(pageNumber)>MAX_QUOTE_PAGE)){setInvalidPage(true);return;}
+    busy.current=true;setSaving(true);
+    const body={book_id:bookId,content:content.trim(),...(pageNumber?{page_number:Number(pageNumber)}:{})},scope='quote:'+bookId;
 
     setError(false);
     try {
       const response = await fetch('/api/quotes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...intent.headers({ bookId, content, pageNumber }) },
-        body: JSON.stringify({
-          book_id: bookId,
-          content: content.trim(),
-          page_number: pageNumber ? parseInt(pageNumber, 10) : undefined,
-        }),
+        headers:{'Content-Type':'application/json',...await intent.durableHeaders(body,scope)},body:JSON.stringify(body),
       });
 
       if (!response.ok) { setError(true); return; }
-      await response.json();
-      intent.complete();
+      const result=await response.json();if(typeof result.quote?.id!=='string'||result.quote.user_id!==userId||result.quote.book_id!==bookId)throw new Error('Invalid quote receipt');
+      intent.complete(scope);
       setDone(true);
       setContent('');
       setPageNumber('');
       setOpen(false);
       onSuccess?.();
-      setTimeout(() => setDone(false), 3000);
+      timer.current=setTimeout(() => setDone(false), 3000);
     } catch { setError(true); }
-    finally { setSaving(false); }
+    finally {busy.current=false;setSaving(false);}
   };
 
   return (
     <div>
-      {error && <p role="alert" className="text-sm text-red-500 mb-2">Unable to save quote. Please retry.</p>}
+      {invalidPage&&<p role="alert" className="text-sm text-red-500 mb-2">{t('quoteInvalidPage')}</p>}
+      {error && <p role="alert" className="text-sm text-red-500 mb-2">{t('quoteFailed')}</p>}
       {done && (
-        <p className="text-sm text-accent mb-2">Quote saved!</p>
+        <p role="status" className="text-sm text-accent mb-2">{t('quoteSaved')}</p>
       )}
       {!open ? (
         <button
           onClick={() => setOpen(true)}
           className="flex items-center gap-2 px-4 py-2.5 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
         >
-          <Quote size={16} />
-          Save a quote
+          <Quote size={16} aria-hidden="true"/>
+          {t('saveQuote')}
         </button>
       ) : (
         <div className="border border-border rounded-xl p-4 space-y-3">
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Enter the quote..."
+            id={'quote-content-'+bookId} aria-label={t('quoteText')} disabled={saving} placeholder={t('quotePlaceholder')}
             maxLength={1000}
             rows={3}
             className="w-full px-3 py-2 border border-border rounded-lg bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent/50"
@@ -82,16 +82,16 @@ export function QuoteForm({ bookId, onSuccess }: QuoteFormProps) {
               type="number"
               value={pageNumber}
               onChange={(e) => setPageNumber(e.target.value)}
-              placeholder="Page # (optional)"
+              id={'quote-page-'+bookId} aria-label={t('quotePage')} disabled={saving} placeholder={t('quotePage')}
               min={1}
               className="w-32 px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
             />
             <div className="flex gap-2 ml-auto">
               <button
-                onClick={() => setOpen(false)}
+                disabled={saving} onClick={() => setOpen(false)}
                 className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
               >
-                Cancel
+                {common('cancel')}
               </button>
               <button
                 onClick={handleSave}
@@ -101,7 +101,7 @@ export function QuoteForm({ bookId, onSuccess }: QuoteFormProps) {
                   'hover:bg-accent/90 disabled:opacity-60'
                 )}
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving?common('saving'):common('save')}
               </button>
             </div>
           </div>

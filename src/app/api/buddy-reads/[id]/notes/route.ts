@@ -1,3 +1,4 @@
+import {decodeBuddyCursor,getBuddyNotes} from '@/lib/buddy-reads';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
@@ -6,30 +7,13 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request:Request,{params}:{params:{id:string}}){
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid buddy read'},{status:400});
-  const supabase = createClient();
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const {data:member,error:membershipError}=await supabase.from('buddy_read_members').select('user_id').eq('buddy_read_id',params.id).eq('user_id',user.id).maybeSingle();
-  if(membershipError)return NextResponse.json({error:'Membership unavailable'},{status:503});
-  if(!member)return NextResponse.json({error:'Not a participant'},{status:403});
-
-  const { data: notes, error } = await supabase
-    .from('buddy_read_notes')
-    .select(`
-      id, user_id, content, created_at, reply_to_id,
-      user:user_id (display_name, username, avatar_url)
-    `)
-    .eq('buddy_read_id', params.id)
-    .order('created_at', { ascending: false })
-    .limit(100);
-
-  if(error)return NextResponse.json({error:'Notes unavailable'},{status:503});
-  return NextResponse.json({ notes: notes ?? [] });
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
+  const cursor=new URL(request.url).searchParams.get('cursor');try{decodeBuddyCursor(cursor,user.id,'notes.'+params.id);}catch{return NextResponse.json({error:'Invalid cursor'},{status:400});}
+  try{return NextResponse.json(await getBuddyNotes(user.id,params.id,cursor),{headers:{'Cache-Control':'private, no-store'}});}
+  catch(error){return NextResponse.json({error:'Notes unavailable'},{status:(error as {status?:number}).status??503});}
 }
 
 const NoteSchema = z.object({
@@ -76,5 +60,5 @@ export async function POST(
     return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
-  return NextResponse.json({ note }, { status: 201 });
+  return NextResponse.json({ note,actorId:user.id,roomId:params.id }, { status: 201 });
 }

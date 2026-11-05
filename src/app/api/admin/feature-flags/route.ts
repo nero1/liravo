@@ -37,6 +37,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  if(req.headers.has('X-Liravo-Actor')&&req.headers.get('X-Liravo-Actor')!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   const body = await req.json().catch(() => ({}));
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
@@ -54,9 +55,9 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: status === 409 ? 'At least one sign-in provider must remain active' : 'Flag update unavailable', code: error.code }, { status });
   }
 
-  // Invalidate Redis cache immediately
-  try { await invalidateFeatureFlag(name); }
-  catch { return NextResponse.json({ error: 'Flag saved; retry to synchronize cache', code: 'FLAG_CACHE_UNAVAILABLE' }, { status: 503 }); }
+  if(typeof changed!=='boolean')return NextResponse.json({error:'Flag update unavailable'},{status:503});
 
-  return NextResponse.json({ updated: true, changed });
+  await invalidateFeatureFlag(name);
+
+  return NextResponse.json({updated:true,changed,actorId:user.id,name,enabled});
 }

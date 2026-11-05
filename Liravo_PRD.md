@@ -197,7 +197,7 @@ The database layer is provider-agnostic. All application code talks to a single 
 **Auth abstraction (`src/lib/auth/getCurrentUser.ts`)**
 
 - Supabase mode: delegates to Supabase Auth (supports Google and Telegram OAuth out of the box).
-- Direct PostgreSQL mode: custom session management using Redis + signed httpOnly cookies. Google and Telegram OAuth still works; session is written to Redis rather than Supabase's session store.
+- Direct PostgreSQL mode: Redis sessions with httpOnly web cookies or native Bearer tokens. Web uses email/password; native Google ID tokens and signed Telegram payloads exchange through the server. Provider subjects remain stable across recovery-email changes.
 
 **Storage abstraction (`src/lib/storage/provider.ts`)**
 
@@ -266,15 +266,15 @@ All layouts designed at 375px width first, scaled to desktop. Fixed bottom navig
 
 ### PWA
 
-- Web app manifest: name, icons, theme colour, `display: standalone`.
-- Service worker for caching app shell, static assets, and recent feed.
+- Web app manifest: EN/FR/DE descriptions/shortcuts, supplied 192/512 px icons, theme colour and `display: standalone`.
+- Service worker caches public offline assets and hashed static files. Upgrades clear legacy page caches and refresh affected windows once.
 - Install prompt: dismissible banner, not intrusive.
 
 ### Offline Behaviour
 
-- App shell and recent cached feed load without network.
-- Network-dependent actions show clear offline state and queue for retry on reconnect.
-- Book metadata and covers cached after first load.
+- A public EN/FR/DE offline screen loads without network and retries the requested page.
+- Authenticated pages and actions use the network; users retry pending actions after reconnecting.
+- Offline assets contain no account, feed, shelf or private-media content.
 
 ### Low-Bandwidth
 
@@ -292,9 +292,9 @@ All layouts designed at 375px width first, scaled to desktop. Fixed bottom navig
 **Sign-in methods:**
 - Google OAuth
 - Telegram OAuth
-- Admin can toggle which providers are available via the admin panel (e.g. disable Google login, or disable Telegram login independently).
+- Admin can toggle providers independently. Direct PostgreSQL exchanges enforce the current flag for new and existing identities; existing sessions remain valid. Web/native controls read uncached provider state. Supabase deployments must also disable the provider in Supabase.
 
-**No email/password login at sign-up.** Social auth only. Email collection happens post-onboarding as an optional recovery measure (see below).
+**Supabase web sign-in uses social auth.** Direct PostgreSQL web/native also supports email/password. OAuth accounts can add an optional verified recovery email after onboarding (see below).
 
 **Post-sign-in onboarding flow:**
 1. Choose a username (auto-suggested from OAuth display name, editable).
@@ -367,8 +367,8 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 - Want to Read
 
 **Custom shelves:**
-- Unlimited on paid tiers. Free tier: max 10.
-- Each shelf is public or private.
+- Unlimited on paid tiers. Free tier: max 10. Access uses current paid periods or manual grants, including when a cached profile flag is stale.
+- Each shelf is public or private. Web/native catalogs and contents use owned cursor pages and full edition counts; retained aliases display once, separate editions remain, and the latest stored progress is shown without rewriting history. Regional bulk searches use configured stores only for complete ISBN-13 lists up to 10 editions.
 
 **Reading progress tracker:**
 - Log progress by page or percentage.
@@ -376,7 +376,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 - Progress bar on book card within the shelf.
 
 **Annual reading goal:**
-- Set at any time. Goals and profile targets share one current-year value; progress counts distinct books finished that calendar year.
+- Set at any time, from 1 to 10,000 whole books. Goals and profile targets share one current-year value; progress counts distinct works finished that calendar year. Failed progress reads show retry controls.
 - Public progress bar on profile.
 - Feed updates at 25%, 50%, 75%, and 100%.
 
@@ -390,14 +390,14 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 
 ### 7.4 Book Pages and the Book Catalogue
 
-Every book has a canonical page on Liravo.
+Works group editions through verified provider relationships. Each edition retains its book UUID, ISBNs, language, format, publisher and page count; existing links, reviews, quotes and shelf history are preserved. ISBN-10/13 pairs must identify the same edition. The seed dataset contains 101 English editions; the catalog stores metadata, not full book text. Web/native readers can choose an edition, resolve Google-only records through an exact ISBN lookup and discover further editions in bounded pages. Reading goals and completion XP count a known work once; historical awards remain intact.
 
 **Book data sources (in priority order):**
 1. Liravo internal database (manually added or previously cached)
 2. Google Books API (primary lookup)
 3. Open Library API (fallback)
 
-All metadata fetched from external APIs is saved to the local database on first lookup. Subsequent requests are served from the database, not the API.
+Validated edition metadata is saved to the local database on lookup. Mutable reading counts and work identities are read from the database; further provider lookups are explicit.
 
 **Book page components:**
 - Cover image, title, author, publisher, year, ISBN, genre tags
@@ -419,6 +419,8 @@ Liravo aims to send users to the best available purchase or access point for eac
 4. **Non-affiliate external link:** If the book exists on a non-affiliate store, a library, an open-access repository (Project Gutenberg, Standard Ebooks, Internet Archive), or the author's own site, show a clearly labelled non-affiliate external link (e.g. "Available free on Project Gutenberg" or "Find at your library via WorldCat"). These links use `rel="nofollow noopener"` and are clearly not presented as primary CTAs.
 5. **No link available:** Show a "Not yet available online — check your local library" message with a WorldCat search link.
 
+ISBN-less editions omit ISBN-required templates and retain title searches. WorldCat fallback searches use ISBN-13, ISBN-10 or the title; generated links do not verify store availability.
+
 All link clicks are logged (book_id, link_type, affiliate/non-affiliate, store, user country) for reporting. This data guides future affiliate program priority.
 
 The affiliate store system must be designed so new stores can be added by admin without a code deployment.
@@ -438,6 +440,7 @@ The affiliate store system must be designed so new stores can be added by admin 
 - Spoiler toggle
 - Read date (optional)
 - Edition read (optional)
+- Community averages, totals and rating distribution include all published, visible reviews from active accounts for the selected edition and its legacy aliases. Review lists use bounded pages; catalog/provider ratings are labeled separately.
 
 **Reactions:**
 - Like
@@ -453,6 +456,7 @@ The affiliate store system must be designed so new stores can be added by admin 
 ### 7.6 Quotes
 
 - Users submit a quote from any book.
+- Web/native catalogs paginate all visible quotes, preserve the selected edition and honor restricted profiles.
 - Displayed on the book page.
 - Styled into a shareable image card using the book cover's colour palette.
 - Quote cards are a primary virality mechanism for Instagram, X/Twitter, and WhatsApp.
@@ -467,10 +471,10 @@ The affiliate store system must be designed so new stores can be added by admin 
 - Cursor-based pagination, load more on scroll.
 
 **Discover tab:**
-- Trending books (past 7 days, by shelf additions and reviews)
+- Trending works from the past 7 days, ranked by distinct active public shelf readers before preview limits; retained aliases count once.
 - Trending in your country
 - New releases from followed authors
-- "Readers like you also loved" (shelf-overlap, computed nightly)
+- "Readers like you also loved": nightly cohorts share at least three completed works. Reads recheck current privacy, account state and owned works; the cron resumes from durable reader checkpoints.
 - Mood-based search: type a mood, AI returns matched books
 - Hidden gems: books with fewer than 50 ratings but high scores from trusted readers
 - Genre streams
@@ -491,7 +495,7 @@ The affiliate store system must be designed so new stores can be added by admin 
 - Other users can follow (get notified of additions) or fork (copy to their own lists).
 - Every book in a list carries its appropriate buy link (affiliate or non-affiliate fallback as per Section 7.4).
 - "Buy all on Amazon" bulk CTA for lists where all books are Amazon-available.
-- Lists have SEO-friendly public URLs.
+- Lists have SEO-friendly public URLs. Web/native EN/FR/DE screens share complete own/followed catalogs, paged editions, counts, follow state and owner editing. Retained aliases display once; different editions of a work stay separate. Creation/copy retries retain owned receipts. Bulk searches use configured regional Amazon stores for complete ISBN lists up to 10 editions.
 
 ---
 
@@ -501,19 +505,21 @@ Authors get an enhanced version of the standard profile.
 
 **Additional author features:**
 - Verified author badge (admin-granted after verification)
-- Full book catalog with buy links (affiliate where available)
+- Full book catalog with buy links (affiliate where available). Web/native followed-author discovery uses approved works and shows recent catalog additions rather than inferring publication dates from author names.
 - "Books that inspired me" shelf (affiliate-linked — high-value placement)
 - "From the Author" posts (updates, writing process content, book news)
-- Reader Q&A (fans submit, author answers publicly)
+- Reader Q&A (fans submit, author answers publicly). Web/native submissions retain owned retry receipts; public answers have full counts and deterministic cursor pages. The EN/FR/DE author queue pages every status with full counts, named answer fields and owned publish/recovery receipts. Blank rich-text answers are rejected; web/native display readable answer text.
 - ARC distribution (author uploads file, sets eligibility criteria, platform identifies and notifies eligible readers)
+- ARC applications use complete private counts and paginated reader/author views. Authors approve or decline readers; inactive accounts cannot receive new approvals, final decisions are immutable and approved slots are serialized.
 - New release announcements (in-app notification to followers)
 - Event hosting (Section 7.13)
 
 **Author verification:**
-- Author submits verification request with one or more ISBNs associated with their name.
-- System cross-references against Google Books / Open Library.
-- Moderator (not necessarily admin) reviews and approves or rejects.
-- Verified badge applied.
+- Author submits a pen name, book titles and optional publisher/evidence links.
+- An administrator reviews the evidence and approves or rejects the identity request.
+- Administrators approve catalog works separately under Users → Author works; approval covers all editions and coauthors. Editable names do not establish ownership.
+- ARC offers and linked posts require approved work ownership. Revocation disables affected offers and removes post book links; prior values remain audited.
+- Verified badge applied after identity approval.
 
 ---
 
@@ -534,23 +540,25 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 **Craft Resources Section:**
 - Curated reading lists of craft books: plotting, sentence-level writing, memoir, dialogue, screenwriting, etc.
-- All books in these lists are affiliate-linked.
+- Exact-ISBN book links use configured affiliate retailers when available; otherwise readers can search the catalog.
 - Community-sourced craft tips from established writers on the platform.
 
 **Writing Workshop Rooms:**
+- Membership counters follow actual membership. Member-only drafts/feedback use bounded pages; each member can leave one feedback entry per draft. Web/native create and join through the shared atomic API.
 - Small groups (max 8) read and critique each other's writing submissions.
 - Structured feedback format enforced: What worked / What to improve / One specific suggestion.
 - Created by any user with Newbie Writer or Author type.
 
 **Progress Tracking:**
-- Words written (self-reported per session, optionally extracted from submitted challenge responses).
+- Words written and completion counts come from all prompt/challenge submissions; workshop critiques count feedback, not drafts.
 - Challenge completions on profile.
-- Writing streak (separate from reading streak).
+- Writing streak (separate from reading streak), canonical writing badges and seven Monday–Sunday UTC word totals.
 
 **Ask a Writer:**
 - Newbie Writers post craft questions publicly.
-- Any verified Author or experienced Newbie Writer can respond.
-- Best answer marked by the asker.
+- Verified authors and members with more than 1,000 XP can answer; selecting the Author profile type alone does not qualify.
+- Web/native expose complete question and answer pages. The asker chooses one final best answer, which stays pinned.
+- Replies notify the asker; best-answer decisions notify the writer. Both respect reply preferences and link to the thread.
 
 **Writing Resource Library:**
 - Standalone page linking to the best craft books across genres and writing types.
@@ -562,14 +570,16 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 ### 7.11 Social and Community Features
 
-**Following system:** Follow any user or author. Suggested follows on sign-up.
+**Following system:** Follow active users and authors. Suggested follows on sign-up. Web/native controls use EN/FR/DE, owned retry receipts and current relationship state; native profile/discovery caches refresh after follow changes.
 
 **Buddy reads:**
+- Public groups currently support 2–5 readers including the creator, edition search, participant-only paged discussion, replies and chapter updates on web/native in EN/FR/DE. Private invitations and expanded capacity below remain planned.
 - Invite one other user to read a book together.
 - Private discussion thread shared between participants.
 - Expandable to group reads (up to 20).
 
 **Reading Together Rooms:**
+- Web/native catalogs include joined private/ended rooms, complete counts and cursor pages. Creation supports optional edition search; chapter controls, UTC scheduling, server locks and read-only history use EN/FR/DE. Invitation management remains planned.
 - Group read a single book, divided into chapter milestones.
 - Room creator sets the reading schedule.
 - Discussion thread per milestone, locked until that milestone's date.
@@ -577,18 +587,23 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 
 **Book Debates:**
 - User posts a provocative claim about a book.
+- Web/native creation selects an edition and validates 5–200 trimmed characters. Catalogs/detail show complete counts and final votes with owned retry recovery; public share cards use EN/FR/DE.
 - Others vote agree/disagree and add arguments.
 - Debate cards are shareable.
+- Book, shelf, quote, review and challenge images use EN/FR/DE and canonical edition metadata. Personal images enforce current account/profile/shelf access and disable caching; completed-reading cards require actual membership, and challenge cards show real progress before claiming completion.
 
 **Notifications (in-app):**
 - Follows, likes, want-to-reads, replies, mentions, challenge completions, ARC grants, buddy read invites, author Q&A answers.
-- Notification preferences configurable per type.
+- Notification preferences configurable per type on web/native; saved opt-outs suppress matching in-app and push notifications. Weekly digest and new-release email preferences are independent.
+- Stored notification facts render in the current English/French/German locale, preserving authored content; financial/security notices remain available. Push uses the recipient’s saved locale and remains best effort.
 
 **Email notifications (paid tiers only):**
 - Free tier: no email notifications. Account-critical transactional emails only (e.g. email verification link, recovery link if email added, 2FA recovery code delivery).
 - Paid tier: opt-in weekly activity digest, new release alerts from followed authors, challenge reminder emails.
-- Every email has a one-click unsubscribe link.
+- Transactional and paid-email templates use the recipient’s saved EN/FR/DE language for subjects, content, plurals and HTML/text footers; unsupported locales fall back to English. Names, titles and recovery codes remain intact.
+- Optional email includes standard one-click unsubscribe headers and a signed-out confirmation link; account-critical email links to notification settings. Limited, expiring proofs update only the matching preference, remain safe on retry and stop working after an email-address change.
 - No marketing or promotional email to free users.
+- Paid-email campaigns and recipient receipts persist across runs and week boundaries. Delivery checks current access, verified email, preferences and author ownership; uncertain sends are quarantined. Weekly digests summarize the previous complete UTC week and count tracked canonical works once across shelves/edition aliases.
 
 ---
 
@@ -614,7 +629,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 - All calculations use Decimal.js.
 
 **Creator leaderboard:**
-- Top creators by want-to-reads triggered this week.
+- Top creators by unique review-driven want-to-reads since Monday 00:00 UTC. A reader/book pair earns attribution once; generic shelf additions and imports cannot later claim a review. Self-attribution and unavailable reviews are rejected.
 - Top creators by follower growth this week.
 - Featured on the Discover page.
 
@@ -720,7 +735,8 @@ When a book page is rendered, the server checks this table for the user's countr
 - Email digests (weekly activity, new release alerts, challenge reminders)
 - Advanced reading statistics dashboard (pace, genre distribution over time, seasonal patterns)
 - Unlimited custom shelves
-- AI taste profile analysis (requires three finished books; generated on demand with actual genre/mood counts and validated prose, refreshed when reading history changes)
+- AI taste profile analysis (requires three finished canonical works; uses the latest completed edition for each of the 20 most recent works, actual genre/mood counts and validated prose; refreshed when reading history changes)
+- Native Premium reads authoritative access, restores all unique supported Google Play purchases and provides translated EN/FR/DE billing/retry/management controls; cached profile flags do not grant access.
 - AI-powered personalised writing challenges and weekly plan (for Newbie Writer users on premium)
 - Priority matching in buddy read finder
 - Exclusive seasonal badge designs
@@ -756,21 +772,22 @@ Verified tip, event and referral entries form each user’s currency balance; pe
 
 | Action | XP Earned |
 |---|---|
-| Finish a book (logged) | 50 XP |
+| Finish a book through a live shelf action (once per reader/book; imports excluded) | 50 XP |
 | Write a short review | 20 XP |
 | Write a long-form review | 40 XP |
 | Post a quote | 10 XP |
 | Complete a reading challenge | 100 XP |
 | Complete a writing challenge (free) | 80 XP |
 | Complete a writing challenge (AI-guided, paid) | 120 XP |
-| Get a "want to read" on your review | 5 XP per reaction |
+| Add a book to Want to Read (once per reader/book) | 5 XP |
+| Get a review-driven want-to-read (once per reader/book) | 5 XP |
 | Refer a confirmed new sign-up | 200 XP |
 | Refer milestone: 10 referrals | 500 XP bonus |
 | Refer milestone: 50 referrals | 2,000 XP bonus |
 | Start a buddy read | 25 XP |
 | Daily login | 3 XP |
-| 7-day login streak bonus | 50 XP |
-| 30-day login streak bonus | 200 XP |
+| 7-day reading streak bonus | 50 XP |
+| 30-day reading streak bonus | 200 XP |
 | Follow a user | 2 XP |
 | Receive a new follower | 5 XP |
 | Submit a writing prompt response | 15 XP |
@@ -789,6 +806,8 @@ Verified tip, event and referral entries form each user’s currency balance; pe
 | 50,000+ | Legend of the Shelf |
 
 ### 9.3 Badges
+
+Earned badge IDs and localized names are shared across owned/public web and native profiles.
 
 **Reading milestones:** First Book, 10 Books, 50 Books, 100 Books, 365-Day Streak.
 
@@ -814,7 +833,7 @@ Verified tip, event and referral entries form each user’s currency balance; pe
 - Top referrers by confirmed sign-ups (monthly)
 - Top referrers by commission earned (monthly)
 
-Leaderboards refresh nightly via cron.
+Current XP and helpfulness views support UTC weekly/monthly/all-time filters, privacy and EN/FR/DE on web/native. Period XP uses net ledger changes; reader levels use lifetime XP. Live rankings use authoritative snapshots; the daily cron archives the public weekly XP top 100.
 
 ### 9.5 Reading Streaks
 
@@ -851,11 +870,13 @@ All cards include the Liravo wordmark and a URL back to the relevant page on lir
 
 ### 10.2 Reading Wrapped
 
-Generated in December and on annual reading goal completion.
+Available year-round; December and annual goal completion are promotion opportunities.
 
 **Data points:** Total books read, estimated total pages, favourite genre, favourite author, longest book, shortest book, peak streak, most active month, personalised reader title.
 
-Available in 16:9 (standard share) and 9:16 (Instagram Stories) formats.
+Annual totals count each completed canonical work once within the UTC year and use the completed edition’s page count, falling back to recorded progress. Public cards include only public completed shelves; private summaries retain private reading. Annual net XP and lifetime XP are shown separately.
+
+Available as 1200×630 standard cards and 1080×1920 Instagram Stories in EN/FR/DE.
 
 ### 10.3 Challenges and Trends
 
@@ -863,7 +884,7 @@ Available in 16:9 (standard share) and 9:16 (Instagram Stories) formats.
 
 **Monthly genre spotlight:** Community focuses on one genre. Genre leaderboard for the month. Featured reading lists and author spotlights.
 
-**Pass the Book chain:** One reader nominates the next publicly. Viral thread where each node links to the book page.
+**Pass the Book chain:** One reader nominates the next publicly. Viral thread where each node links to the book page. EN/FR/DE web/native screens page complete chains, rosters and personal sent/received passes, show selected-edition context and choose readers by username. Only an eligible participant can nominate; direct passes retain the follow requirement. Deleted/banned recipients are rejected, and owned receipts recover committed submissions after response loss or reload.
 
 ### 10.4 Referral System
 
@@ -929,7 +950,7 @@ The goal is a self-moderating community with minimal admin involvement in day-to
 
 **Tier 2 — Moderator review:**
 - Trusted, dedicated community members can be granted Moderator role by admin.
-- Moderators see the content report queue.
+- Moderators see the content report queue. EN/FR/DE web/native queues show all statuses, content context, complete cursor pages and permitted actions; owned decision receipts recover lost responses. Dashboard counts use UTC, and the administrator-only audit log includes moderator names and complete paging.
 - Moderators can: approve reported content (dismiss the report), edit content, remove content, send a warning to a user, or escalate to admin.
 - Moderators cannot: ban users, grant roles, or access financial data.
 - Moderator role is granted and revoked by admin. Admin can see a moderator's action history.
@@ -953,13 +974,15 @@ The goal is a self-moderating community with minimal admin involvement in day-to
 
 ### 12.4 Appeals
 
-- Users can appeal a content removal or account warning via a form in their account settings.
+- Users can appeal a content removal or account warning via a form in their account settings. EN/FR/DE web/native screens list owned actions and appeal history, support general appeals without suspension, and recover committed submissions after reload. Reporter details remain private; staff queues show independent-review permissions and retain final decisions.
 - Appeal goes to a moderator (not the one who took the original action, if attributable).
 - Admin reviews escalated appeals.
 
 ---
 
 ## 13. Admin Panel
+
+Native admin catalogs use complete private cursor pages, real user/theme/event fields, owned retry receipts and EN/FR/DE controls. Cron Status includes outbox, integrity and operational data alongside health; web theme catalogs also paginate.
 
 Accessible at `/admin`. Every admin route verifies `is_admin = true` against the `users` table in the database server-side. Session data alone is never trusted for admin access.
 
@@ -1001,8 +1024,9 @@ Accessible at `/admin`. Every admin route verifies `is_admin = true` against the
 
 - Add books manually.
 - Edit book metadata.
-- Mark book as having an audiobook (enables Audible CTA).
-- Manage affiliate links per book.
+- Mark a canonical edition as having an audiobook (enables Audible CTA); retained book links resolve to that edition.
+- Manage affiliate links per book. Preview current purchase links from active store templates.
+- Editable catalogs page canonical editions, preserve separate physical editions and show full edition-family affiliate/shelf counts.
 - Affiliate store registry management (add, edit, deactivate stores).
 
 ### 13.6 Promoted Listings
@@ -1122,7 +1146,7 @@ A dedicated system account with username `@liravo_editors` and display name "Lir
 
 - All input validated server-side with Zod schemas.
 - User HTML content (long reviews, bio) sanitised with DOMPurify before storage and rendering.
-- File uploads validated for MIME type (not just extension) and size server-side.
+- Avatar uploads are decoded and re-encoded server-side (JPEG/PNG/static WebP, at most 3 MB and 25 million input pixels). Metadata is stripped; the stored WebP is at most 512×512. Staged uploads become active with the profile transaction; abandoned objects are cleaned asynchronously.
 - `dangerouslySetInnerHTML` is never used.
 
 ### 15.3 OWASP Top 10
@@ -1151,7 +1175,7 @@ A dedicated system account with username `@liravo_editors` and display name "Lir
 ### 15.6 Bot and Abuse Mitigation
 
 - Honeypot fields on sign-up.
-- hCaptcha (free tier) on sign-up and after 3 failed auth attempts.
+- hCaptcha on direct sign-up and after 3 failed password attempts per account or IP, when configured. Web/native challenges bind the site key and hostname; provider outages fail closed.
 - Anomalous activity detection (bulk shelf additions, review spam) triggers hold and moderator flag.
 - User-agent analysis on API requests.
 
@@ -1182,8 +1206,8 @@ Data isolation in these modes is enforced at the **application layer**: every AP
 
 ### 15.10 Data Privacy
 
-- GDPR-ready data export from account settings.
-- Account deletion: soft-delete flag, 30-day recovery window, then hard delete via cron.
+- Authenticated JSON/CSV export from account settings includes profile, reading history, edition/provider identities and progress, reviews, quotes, prompt responses, goals, XP history and sent tips. Exports fail closed on database errors.
+- Account deletion deactivates and anonymizes the profile; related records, including financial history, are retained. Automatic recovery/purge is not implemented.
 - Affiliate link clicks logged with hashed user IDs.
 - No third-party analytics that collect PII in MVP.
 
@@ -1193,7 +1217,7 @@ Data isolation in these modes is enforced at the **application layer**: every AP
 
 ### 16.1 Caching Strategy
 
-- Redis namespaced keys: `book:{id}`, `feed:{user_id}:cursor:{cursor}`, `leaderboard:weekly`, `affiliate_link:{book_id}:{country}`.
+- Redis namespaced keys: `book:{id}`, `feed:{user_id}:cursor:{cursor}`, `leaderboard:weekly`. Purchase links read current store configuration and carry versioned identities; click metadata is derived by the server.
 - Feed cache: 5-minute TTL.
 - Book metadata: 24-hour TTL.
 - Leaderboards: 1-hour TTL.
@@ -1233,7 +1257,7 @@ Architecture must be able to scale to 50,000 concurrent users without structural
 
 - `next-intl` for all UI strings from day one.
 - All strings in locale JSON files. No hardcoded English strings in components.
-- Default locale: `en-US`.
+- Supported interface locales: English (`en`, default), French (`fr`) and German (`de`). All shared web components use these catalogs; remaining web/native screens and stored system messages are still being translated. Book metadata retains its source language. Native provides signed-out language selection and uses the saved account preference with device/persisted fallback.
 - Date/time via `Intl.DateTimeFormat`.
 - Logical CSS properties throughout (`margin-inline-start` not `margin-left`) to support future RTL expansion.
 - Amazon affiliate tag routing per country: `affiliate_tags` table keyed by ISO country code.
@@ -1303,7 +1327,7 @@ Distinctive display font for headings. System-friendly variable font for body (s
 - Follow a user and verify feed update.
 - Complete a reading challenge.
 - Generate and share a book finished card.
-- Author verification request and moderator approval.
+- Author verification request and moderator approval. Web/native requests collect pen name, published titles and optional publisher/HTTP(S) proof links, retain owned retries and use EN/FR/DE. Submission grants neither verified status nor work ownership.
 - Newbie Writer submits a writing challenge response.
 - Referral link generation and referral sign-up attribution.
 - Tip a creator and verify commission split.
@@ -1382,7 +1406,7 @@ Distinctive display font for headings. System-friendly variable font for body (s
 - Follow / unfollow.
 - Like and "want to read" reactions.
 - In-app notification system.
-- Goodreads CSV import: web upload/native JSON, maximum 2 MB/2,000 rows, atomic replay-safe shelf/catalog writes, no import XP.
+- Goodreads CSV import: web upload/native JSON, maximum 2 MB/2,000 rows, atomic replay-safe shelf/catalog writes, edition language/publisher/binding/pages/year when supplied, no import XP. Verified provider metadata can correct imported fields while preserving recorded pages.
 - Quote posting and display.
 - Basic XP system.
 - Level titles on profiles.
@@ -1399,7 +1423,7 @@ Distinctive display font for headings. System-friendly variable font for body (s
 
 - Discover tab: trending books, country trending, mood-based AI search.
 - AI recommendation layer (DeepSeek/Gemini) — mood matching.
-- Nightly cron: shelf-overlap recommendation pre-computation.
+- Nightly cron: bounded shelf-overlap cohort pre-computation with persisted continuation. Failed cache/checkpoint writes retain unfinished work.
 - Full badge system.
 - Leaderboards (global, national, friend circle).
 - Reading streaks and freeze tokens.
@@ -1602,7 +1626,7 @@ Financial webhooks and payout reservations now commit state and audit records at
 
 XP is now awarded from verified activity and a durable per-user event ledger; client-supplied activity names alone cannot mint rewards. Subscription intents and cancellation update state/audit atomically; gateway adapters still require sandbox verification.
 
-Billing returns users to an entitlement-checked pending-confirmation page; browser redirects never activate Premium. Locale preferences now persist in the profile and browser, and Premium checkout has English/French/German catalogs and locale-aware prices. Full UI translation remains tracked separately.
+Billing returns users to an entitlement-checked pending-confirmation page; browser redirects never activate Premium. Locale preferences now persist in the profile and browser, and Premium checkout has English/French/German catalogs and locale-aware prices. New email/social accounts inherit the selected language once; existing accounts retain their saved preference across later logins. Full UI translation remains tracked separately.
 
 Development audit: migrations 029–031 restrict private profile data and RPC access, add weekly digest receipts, and expose service-only financial reconciliation counts through outbox drain. Public metadata honors profile privacy and supported language URLs. The audit retains unresolved work explicitly; provider sandbox validation is required before enabling live billing.
 

@@ -1,15 +1,14 @@
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createServiceClient } from '@/lib/supabase/server';
-import { requireModerator } from '@/lib/moderation';
+import {AppealError,getAppeals,getAppealReceipt} from '@/lib/appeals';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
 const appealSchema = z.object({
   report_id: z.string().uuid().optional(),
-  reason: z.string().min(10).max(500),
+  reason: z.string().trim().min(10).max(500),
   content_type: z.enum(['review', 'quote', 'profile', 'debate']).optional(),
   content_id: z.string().uuid().optional(),
 });
@@ -18,7 +17,7 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const raw = await request.json();
+  const raw = await request.json().catch(()=>null);
   const parsed = appealSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }, { status: 400 });
@@ -40,25 +39,11 @@ export async function POST(request: Request) {
     return NextResponse.json({error:error instanceof Error?error.message:'Content creation unavailable'},{status:error instanceof ContentIntentError?error.status:503});
   }
 
-  return NextResponse.json({ appeal: data }, { status: 201 });
+  return NextResponse.json({ appeal: data,actorId:user.id }, { status: 201 });
 }
 
-export async function GET() {
-  const auth = await requireModerator();
-  if (auth instanceof NextResponse) return auth;
-
-  const supabase = createServiceClient();
-
-  // appeals table may not be in DB type
-  const { data: appeals, error } = await supabase
-    .from('appeals')
-    .select('*')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: true });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ appeals: appeals ?? [] });
+export async function GET(request:Request){
+  const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  const query=new URL(request.url).searchParams,scope=query.get('scope')??'queue',status=query.get('status')??'pending';if(scope==='receipt'){try{return NextResponse.json(await getAppealReceipt(user.id,query.get('key')??''),{headers:{'Cache-Control':'private, no-store'}});}catch(error){return NextResponse.json({error:'Receipt unavailable'},{status:error instanceof AppealError?error.status:503});}}if(!['mine','queue','actions'].includes(scope)||!['pending','approved','rejected','all'].includes(status))return NextResponse.json({error:'Invalid catalog'},{status:400});
+  try{return NextResponse.json(await getAppeals(user.id,scope as 'mine'|'queue'|'actions',status,query.get('cursor')),{headers:{'Cache-Control':'private, no-store'}});}catch(error){return NextResponse.json({error:'Appeals unavailable'},{status:error instanceof AppealError?error.status:503});}
 }

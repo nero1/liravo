@@ -31,6 +31,15 @@ export interface UserRow {
   referred_by: string | null;
   email: string | null;
   email_verified: boolean;
+  email_digest_enabled:boolean;
+  notify_follows:boolean;
+  notify_likes:boolean;
+  notify_replies:boolean;
+  notify_mentions:boolean;
+  notify_author_announcements:boolean;
+  notify_new_releases:boolean;
+  notify_challenge_completions:boolean;
+  notify_arc_grants:boolean;
   totp_enabled: boolean;
   external_links: string[];
   profile_visibility: 'public' | 'followers_only';
@@ -41,11 +50,31 @@ export interface UserRow {
   email_prompt_dismissed_at: string | null;
   created_at: string;
   updated_at: string;
-  badges?: { icon: string; name: string }[];
+  badges?: {id?:string;icon:string;name:string}[];
 }
 
+export interface BookWorkRow {
+  id:string;
+  title:string;
+  author_name:string;
+  open_library_id:string|null;
+  merged_into:string|null;
+  created_at:string;
+}
+export interface WorkCatalog {
+  work:BookWorkRow;
+  editions:BookRow[];
+  nextCursor:string|null;
+  statistics:{ratings_count:number;average_rating:number|null;readers_count:number};
+}
 export interface BookRow {
   id: string;
+  work_id:string;
+  canonical_edition_id:string|null;
+  metadata_source:'legacy'|'seed'|'goodreads'|'google'|'openlibrary';
+  metadata_provenance:Record<string,string>;
+  edition_name:string|null;
+  format:'hardcover'|'paperback'|'ebook'|'audiobook'|null;
   google_books_id: string | null;
   open_library_id: string | null;
   isbn_10: string | null;
@@ -143,61 +172,43 @@ export interface NotificationRow {
   entity_type: string | null;
   entity_id: string | null;
   message: string;
+  message_key:string|null;
+  message_values:Record<string,string|number|null>;
   is_read: boolean;
   created_at: string;
   actor?: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url'>;
 }
 
-export interface FeedItem {
-  id: string;
-  type: 'review' | 'shelf_add' | 'challenge_join' | 'quote' | 'follow';
-  actor: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url'>;
-  book?: Pick<BookRow, 'id' | 'title' | 'cover_url' | 'author_name'>;
-  review?: ReviewRow;
-  quote?: QuoteRow;
-  created_at: string;
-}
+export type {SocialFeedItem as FeedItem} from '../../src/types/database';
 
 export interface BuddyReadRow {
-  id: string;
-  title: string;
-  book_id: string;
-  organizer_id: string;
-  start_date: string;
-  end_date: string | null;
-  participant_count: number;
-  is_public: boolean;
-  created_at: string;
-  book?: Pick<BookRow, 'id' | 'title' | 'cover_url' | 'author_name'>;
+  id:string;title:string|null;book_id:string;created_by:string;created_at:string;
+  max_participants:number;current_chapter:number;is_active:boolean;is_private:boolean;
+  participant_count:number;is_member:boolean;can_join:boolean;can_update:boolean;
+  book:Pick<BookRow,'id'|'title'|'author_name'|'cover_url'|'isbn_13'|'isbn_10'|'language'|'format'>;
 }
+export interface BuddyReadDetail {
+  actorId:string;buddyRead:BuddyReadRow;book:BuddyReadRow['book'];
+  participants:Pick<UserRow,'id'|'username'|'display_name'|'avatar_url'>[];
+}
+export interface BuddyNote {
+  id:string;user_id:string;content:string;created_at:string;reply_to_id:string|null;
+  user?:Pick<UserRow,'username'|'display_name'|'avatar_url'>;
+}
+export interface BuddyReadPage {actorId:string;buddy_reads:BuddyReadRow[];nextCursor:string|null;}
+export interface BuddyNotePage {actorId:string;roomId:string;notes:BuddyNote[];nextCursor:string|null;}
 
-export interface ChallengeRow {
-  id: string;
-  title: string;
-  description: string | null;
-  type: 'reading' | 'writing';
-  cadence:'weekly'|'monthly';
-  start_date: string | null;
-  end_date: string | null;
-  goal_books:number|null;
-  goal_pages:number|null;
-  is_active:boolean;
-  participant_count?: number;
-  created_at: string;
-}
+export type ChallengeRow=ReadingChallenge;
 
 export interface ListRow {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string | null;
-  is_public: boolean;
-  book_count: number;
-  follower_count: number;
-  created_at: string;
-  updated_at: string;
-  user?: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url'>;
+  id:string;user_id:string;name:string;description:string|null;is_public:boolean;created_at:string;updated_at:string;
+  book_count:number;follower_count:number;is_following:boolean;
 }
+export interface ReadingListBook {
+  id:string;title:string;author_name:string;cover_url:string|null;isbn_10:string|null;isbn_13:string|null;language:string;format:BookRow['format'];added_at:string;
+}
+export interface ReadingListPage {lists:ListRow[];nextCursor:string|null;actorId:string;}
+export interface ReadingListDetail {list:ListRow;books:ReadingListBook[];nextCursor:string|null;actorId:string|null;bulkSearchUrl:string|null;}
 
 export interface WritingPromptRow {
   id: string;
@@ -208,6 +219,8 @@ export interface WritingPromptRow {
 }
 
 export interface WritingChallengeRow {
+  goal_type:'word_count'|'submission_count';
+  goal_value:number;
   id: string;
   title: string;
   description: string | null;
@@ -220,23 +233,19 @@ export interface WritingChallengeRow {
 }
 
 export interface ReadingStatsRow {
-  books_read: number;
-  pages_read: number;
-  reviews_written: number;
-  quotes_saved: number;
-  current_streak: number;
-  longest_streak: number;
-  favorite_genres: string[];
-  annual_goal: number | null;
-  annual_progress: number;
+  year:number;booksReadThisYear:number;pagesReadThisYear:number;averageRating:number;readingPace:number;
+  favouriteGenre:string|null;longestBook:{title:string;page_count:number}|null;
+  readingStreakMax:number;currentReadingStreak:number;reviewsWrittenThisYear:number;quotesSavedThisYear:number;
+  goal:{goal:{target_books:number}|null;progress:{books_read:number;year:number;percentage:number|null}};
+}
+export interface PublicReadingYear {userId:string;displayName:string;year:number;booksRead:number;pagesRead:number;topGenres:string[];}
+export interface WrappedData extends PublicReadingYear {
+  topMood:string|null;streakMax:number;badgesEarned:number;totalXp:number;yearXp:number;
+  favouriteAuthor:string|null;longestBook:{title:string;pageCount:number}|null;shortestBook:{title:string;pageCount:number}|null;
+  mostActiveMonthNumber:number|null;mostActiveMonth:string|null;readerTitle:string;readerLevel:number;publicSummary:PublicReadingYear;
 }
 
-export interface LeaderboardEntry {
-  rank: number;
-  user: Pick<UserRow, 'id' | 'username' | 'display_name' | 'avatar_url' | 'xp' | 'books_read_count'>;
-  xp: number;
-  books_read: number;
-}
+export interface LeaderboardEntry {rank:number;id:string;username:string;display_name:string;avatar_url:string|null;xp:number;lifetime_xp:number;level_title:string;level_min:number;helpful_votes:number;review_count:number;}
 
 export type UserType = 'reader' | 'author' | 'newbie_writer' | 'creator';
 
@@ -304,6 +313,7 @@ export interface ContentReportRow {
 }
 
 export interface AffiliateLink {
+  linkId:string;
   name:string;
   url:string;
   isAffiliate:boolean;
@@ -320,3 +330,79 @@ export interface WritingPlan {
   generatedAt:string;
   tasks:{day:'Monday'|'Tuesday'|'Wednesday'|'Thursday'|'Friday'|'Saturday'|'Sunday';task:string;goal:string}[];
 }
+
+export interface ReviewStatistics {ratings_count:number;average_rating:number|null;distribution:Record<1|2|3|4|5,number>;}
+export interface BookReviewPage {
+  bookId:string;
+  reviews:(Pick<ReviewRow,'id'|'book_id'|'user_id'|'rating'|'content'|'review_type'|'mood_tags'|'has_spoilers'|'likes_count'|'helpful_votes'|'unhelpful_votes'|'created_at'>&{user:Pick<UserRow,'id'|'display_name'|'avatar_url'|'username'>})[];
+  statistics:ReviewStatistics;
+  nextCursor:string|null;
+}
+
+export type QuestionFilter='all'|'unanswered'|'most_answered';
+export interface Writer {id:string;username:string;display_name:string;avatar_url:string|null;is_verified_author:boolean;}
+export interface WriterQuestion {id:string;user_id:string;question:string;tags:string[];answer_count:number;created_at:string;author:Writer;}
+export interface WriterAnswer {id:string;question_id:string;user_id:string;answer:string;created_at:string;author:Writer;}
+export interface WriterThread {question:WriterQuestion;bestAnswer:WriterAnswer|null;answers:WriterAnswer[];actorId:string|null;isOwner:boolean;canAnswer:boolean;nextCursor:string|null;}
+
+export type ArcApplicationStatus='pending'|'approved'|'rejected';
+export interface ArcOffer {
+  id:string;author_id:string;book_id:string;title:string;description:string;reader_slots:number;close_date:string|null;is_active:boolean;created_at:string;
+  books:{id:string;title:string;author_name:string;cover_url:string|null;isbn_13:string|null;language:string;format:string|null};
+  author:{id:string;display_name:string;username:string;avatar_url:string|null;is_verified_author:boolean};
+  approved_count:number;pending_count:number|null;total_applications:number|null;slots_remaining:number;my_application_status:ArcApplicationStatus|null;is_open:boolean;can_apply:boolean;can_review:boolean;
+}
+export interface ArcApplication {id:string;arc_id:string;reader_id:string;status:ArcApplicationStatus;applied_at:string;reviewed_at:string|null;reader:{id:string;display_name:string;username:string;avatar_url:string|null;xp:number;active:boolean};}
+export interface ArcApplications {arc:ArcOffer;applications:ArcApplication[];statistics:{total:number;pending:number;approved:number;rejected:number};nextCursor:string|null;actorId:string;}
+
+export interface ReadingRoom {
+  id:string;name:string;book_id:string|null;created_by:string;created_at:string;is_active:boolean;is_public:boolean;
+  member_count:number;is_member:boolean;can_join:boolean;can_post:boolean;can_manage:boolean;
+  book:Pick<BookRow,'id'|'title'|'author_name'|'cover_url'|'isbn_13'|'language'|'format'>|null;
+}
+export interface RoomParticipant extends Pick<UserRow,'id'|'username'|'display_name'|'avatar_url'> {joined_at:string;}
+export interface RoomMilestone {id:string;room_id:string;created_by:string|null;title:string;unlock_date:string;created_at:string;is_unlocked:boolean;post_count:number;}
+export interface RoomPost {id:string;user_id:string;room_id:string;content:string;milestone_id:string|null;created_at:string;users:Pick<UserRow,'id'|'username'|'display_name'|'avatar_url'>;}
+export interface ReadingRoomPage {actorId:string;rooms:ReadingRoom[];nextCursor:string|null;}
+export interface ReadingRoomDetail {actorId:string;room:ReadingRoom;participants:RoomParticipant[];participantsNextCursor:string|null;}
+export interface RoomMilestonePage {actorId:string;roomId:string;milestones:RoomMilestone[];nextCursor:string|null;serverNow:string;total:number;}
+export interface RoomPostPage {actorId:string;roomId:string;posts:RoomPost[];nextCursor:string|null;}
+
+export interface AppealAction {id:string;content_type:'review'|'quote'|'profile';status:'removed'|'warned'|'approved';created_at:string;label:string|null;moderator_note:string|null;content:string|null;pending_appeal_id:string|null;}
+export interface AppealRow {id:string;user_id:string;report_id:string|null;reason:string;content_type:string|null;status:'pending'|'approved'|'rejected';created_at:string;reviewer_note:string|null;reviewed_at:string|null;user:{username:string;display_name:string};action:AppealAction|null;can_review:boolean;}
+export interface AppealPage {appeals:AppealRow[];nextCursor:string|null;actorId:string;}
+export interface AppealActionPage {actions:AppealAction[];nextCursor:string|null;actorId:string;}
+
+export type LeaderboardType='global'|'national'|'friends'|'reviewers';
+export type LeaderboardPeriod='weekly'|'monthly'|'alltime';
+export interface LeaderboardPage {leaderboard:LeaderboardEntry[];type:LeaderboardType;period:LeaderboardPeriod;periodStart:string|null;periodEnd:string|null;country:string|null;generatedAt:string;actorId:string|null;limit:number;}
+
+export type ReadingEdition=Pick<BookRow,'id'|'title'|'author_name'|'cover_url'|'isbn_10'|'isbn_13'|'language'|'format'>;
+export interface ReadingQuote {id:string;user_id:string;book_id:string;content:string;page_number:number|null;created_at:string;books:ReadingEdition;users:{username:string;display_name:string;avatar_url:string|null};}
+export interface ReadingQuotePage {quotes:ReadingQuote[];total:number;nextCursor:string|null;actorId:string;}
+export interface ReadingDebate {id:string;book_id:string;user_id:string;question:string;yes_count:number;no_count:number;is_active:boolean;created_at:string;current_vote:'yes'|'no'|null;can_vote:boolean;can_share:boolean;book:ReadingEdition;}
+export interface ReadingDebatePage {debates:ReadingDebate[];nextCursor:string|null;actorId:string|null;}
+export interface DebateVoteReceipt {actorId:string;debateId:string;success:true;vote:'yes'|'no';yes_count:number|null;no_count:number|null;alreadyVoted?:boolean;}
+export interface ReadingChallenge {id:string;title:string;description:string|null;type:'reading'|'writing';cadence:'weekly'|'monthly';start_date:string|null;end_date:string|null;goal_books:number|null;goal_pages:number|null;is_active:boolean;created_at:string;participant_count:number;joined:boolean;can_join:boolean;}
+export interface ReadingChallengeProgress {booksFinished:number;pagesRead:number;goalBooks:number|null;goalPages:number|null;booksPercent:number|null;pagesPercent:number|null;}
+export interface ReadingChallengePage {challenges:ReadingChallenge[];nextCursor:string|null;actorId:string;}
+export interface ReadingChallengeDetail {challenge:ReadingChallenge;joined:boolean;joinedAt?:string;progress:ReadingChallengeProgress|null;participants:{id:string;username:string;display_name:string;avatar_url:string|null;joined_at:string}[];participantsNextCursor:string|null;actorId:string;}
+
+export type ModerationAction='approve'|'remove'|'warn'|'escalate';
+export interface ModerationPerson {username:string;display_name:string;}
+export interface ModerationReport extends ContentReportRow {reporter:ModerationPerson;moderator:ModerationPerson|null;target:{owner_id:string|null;username:string|null;display_name:string|null;label:string|null;content:string|null};allowed_actions:ModerationAction[];}
+export interface ModerationLog {id:string;moderator_id:string|null;target_user_id:string|null;report_id:string|null;action:string;reason:string|null;notes:string|null;entity_type:string|null;entity_id:string|null;created_at:string;moderator:ModerationPerson|null;target:ModerationPerson|null;}
+export interface ModerationPage<T> {items:T[];total:number;actorId:string;nextCursor:string|null;page:number;pageSize:number;}
+
+export interface BookChainNode {id:string;chain_id:string;user_id:string;nominee_id:string|null;note:string|null;position:number;created_at:string;reader:(ModerationPerson&{id:string;avatar_url:string|null})|null;}
+export interface BookChain {id:string;book_id:string;creator_id:string;created_at:string;books:BookRow;nodes:BookChainNode[];reader_count:number;can_nominate:boolean;}
+export interface BookPassEntry {id:string;sender_id:string;recipient_id:string;book_id:string;message:string|null;created_at:string;book:BookRow;sender:(ModerationPerson&{id:string})|null;recipient:(ModerationPerson&{id:string})|null;}
+export interface BookPassPage<T> {items:T[];total:number;actorId:string;nextCursor:string|null;}
+export interface BookPassReceipt {actorId:string;chainId?:string;bookId?:string;nomineeId?:string;chain?:{id:string;book_id:string;creator_id:string};success?:boolean;position?:number;pass?:{id:string;sender_id:string;recipient_id:string;book_id:string;message:string|null};}
+
+export interface AuthorQuestion {id:string;author_id:string;asked_by:string|null;question:string;answer:string|null;answer_text?:string|null;created_at:string;answered_at:string|null;}
+export interface AuthorQuestionPage {qa:AuthorQuestion[];total:number;authorId:string;nextCursor:string|null;}
+export interface ReadingGoalData {actorId:string;goal:{id:string;user_id:string;year:number;target_books:number}|null;progress:{books_read:number;year:number;percentage:number|null};}
+
+export interface ShelfCatalogPage {shelves:(ShelfRow&{book_count:number;contains_book:boolean})[];addedToShelves:string[];total:number;selectedTotal:number;reading:Omit<ReadingGoalData,'actorId'>;actorId:string;bookId:string|null;nextCursor:string|null}
+export interface ShelfDetailPage {shelf:ShelfRow&{book_count:number};books:(ShelfBookRow&{book:BookRow;source_book_id:string})[];total:number;actorId:string;shelfId:string;nextCursor:string|null}

@@ -206,7 +206,7 @@ function StoreForm({
           <input id="affiliate-countries"
             value={form.countries}
             onChange={(e) => setForm({ ...form, countries: e.target.value })}
-            placeholder="US, UK, CA"
+            placeholder="US, GB, CA"
             className="w-full px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
         </div>

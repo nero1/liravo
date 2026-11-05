@@ -1,41 +1,29 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect,useRef,useId,useCallback } from 'react';
+import {useTranslations,useFormatter} from 'next-intl';
+import {useRequestIntent} from '@/lib/client/useRequestIntent';
 import Image from 'next/image';
+import {readingRoomUnlockDate} from '@/lib/reading-room-date';
+import type {RoomMilestone as Milestone,RoomPost as Post,RoomMilestonePage,RoomPostPage} from '@/types/database';
 import Link from 'next/link';
-
-interface Milestone {
-  id: string;
-  title: string;
-  unlock_date: string;
-}
-
-interface PostAuthor {
-  id: string;
-  display_name: string;
-  username: string;
-  avatar_url: string | null;
-}
-
-interface Post {
-  id: string;
-  content: string;
-  milestone_id: string | null;
-  created_at: string;
-  users: PostAuthor | null;
-}
 
 interface Props {
   roomId: string;
   isCreator: boolean;
   isMember: boolean;
+  isActive?:boolean;
   currentUserId: string;
 }
 
-export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props) {
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
+export function RoomBoard(props:Props){return <OwnedRoomBoard key={props.currentUserId+':'+props.roomId} {...props}/>;}
+function OwnedRoomBoard({roomId,isCreator,isMember,isActive=true,currentUserId}:Props){
+  const t=useTranslations('roomBoard'),common=useTranslations('common'),formatter=useFormatter(),rooms=useTranslations('readingRooms'),intent=useRequestIntent(currentUserId),postBusy=useRef(false),milestoneBusy=useRef(false),deleteBusy=useRef(false),panelId=useId(),[revision,setRevision]=useState(0),[deleting,setDeleting]=useState(false);
+  const [milestones, setMilestones] = useState<Milestone[]>([]),[milestoneTotal,setMilestoneTotal]=useState(0);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingMilestones,setLoadingMilestones]=useState(true),[loadingPosts,setLoadingPosts]=useState(true),[milestonesFailed,setMilestonesFailed]=useState(false),[postsFailed,setPostsFailed]=useState(false),[milestoneCursor,setMilestoneCursor]=useState<string|null>(null),[postCursor,setPostCursor]=useState<string|null>(null),[moreMilestones,setMoreMilestones]=useState(false),[morePosts,setMorePosts]=useState(false);
+  const milestoneRequest=useRef<AbortController|null>(null),postRequest=useRef<AbortController|null>(null),lastMilestoneCursor=useRef<string|null>(null),lastPostCursor=useRef<string|null>(null);
+  const loading=loadingMilestones&&milestones.length===0||loadingPosts&&posts.length===0,loadError=milestonesFailed||postsFailed;
   const [activeTab, setActiveTab] = useState<'discussion' | 'milestones'>('discussion');
   const [selectedMilestone, setSelectedMilestone] = useState<string | null>(null);
 
@@ -50,93 +38,78 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    Promise.all([
-      fetch(`/api/reading-rooms/${roomId}/milestones`).then((r) => r.json()),
-      fetch(`/api/reading-rooms/${roomId}/posts`).then((r) => r.json()),
-    ]).then(([mData, pData]) => {
-      setMilestones((mData as { milestones?: Milestone[] }).milestones ?? []);
-      setPosts((pData as { posts?: Post[] }).posts ?? []);
-    }).finally(() => setLoading(false));
-  }, [roomId]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [posts]);
+  const loadMilestones=useCallback(async(cursor:string|null=null)=>{
+    milestoneRequest.current?.abort();const request=new AbortController();milestoneRequest.current=request;lastMilestoneCursor.current=cursor;setMilestonesFailed(false);if(cursor)setMoreMilestones(true);else setLoadingMilestones(true);
+    try{const response=await fetch(`/api/reading-rooms/${roomId}/milestones`+(cursor?'?cursor='+encodeURIComponent(cursor):''),{signal:request.signal}),data=await response.json() as RoomMilestonePage;if(!response.ok||data.actorId!==currentUserId||data.roomId!==roomId||!Array.isArray(data.milestones))throw Error();if(!request.signal.aborted){setMilestones(previous=>cursor?[...new Map([...previous,...data.milestones].map(item=>[item.id,item])).values()]:data.milestones);setMilestoneCursor(data.nextCursor);setMilestoneTotal(data.total);}}
+    catch{if(!request.signal.aborted)setMilestonesFailed(true);}finally{if(!request.signal.aborted){setLoadingMilestones(false);setMoreMilestones(false);}}
+  },[roomId,currentUserId]);
+  const loadPosts=useCallback(async(cursor:string|null=null)=>{
+    postRequest.current?.abort();const request=new AbortController();postRequest.current=request;lastPostCursor.current=cursor;setPostsFailed(false);if(cursor)setMorePosts(true);else setLoadingPosts(true);
+    try{const response=await fetch(`/api/reading-rooms/${roomId}/posts?`+new URLSearchParams({milestone:selectedMilestone??'general',...(cursor?{cursor}:{})}),{signal:request.signal}),data=await response.json() as RoomPostPage;if(!response.ok||data.actorId!==currentUserId||data.roomId!==roomId||!Array.isArray(data.posts))throw Error();if(!request.signal.aborted){setPosts(previous=>cursor?[...new Map([...previous,...data.posts].map(item=>[item.id,item])).values()]:data.posts);setPostCursor(data.nextCursor);}}
+    catch{if(!request.signal.aborted)setPostsFailed(true);}finally{if(!request.signal.aborted){setLoadingPosts(false);setMorePosts(false);}}
+  },[roomId,currentUserId,selectedMilestone]);
+  useEffect(()=>{void loadMilestones();return()=>milestoneRequest.current?.abort();},[loadMilestones,revision]);
+  useEffect(()=>{setPosts([]);setPostCursor(null);void loadPosts();return()=>postRequest.current?.abort();},[loadPosts,revision]);
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
-    if (!postContent.trim()) return;
-    setPosting(true);
-    setPostError('');
-
-    const res = await fetch(`/api/reading-rooms/${roomId}/posts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: postContent.trim(), milestone_id: selectedMilestone }),
-    });
-
-    const data = await res.json() as { post?: Post; error?: string };
-    if (!res.ok) {
-      setPostError(data.error ?? 'Failed to post');
-    } else if (data.post) {
-      setPosts((prev) => [...prev, data.post!]);
-      setPostContent('');
-    }
-    setPosting(false);
+    if(!postContent.trim()||postBusy.current)return;postBusy.current=true;setPosting(true);setPostError('');
+    const payload={content:postContent.trim(),milestone_id:selectedMilestone},scope='room-post:'+roomId;
+    try{
+      const res=await fetch(`/api/reading-rooms/${roomId}/posts`,{method:'POST',headers:{'Content-Type':'application/json',...await intent.durableHeaders(payload,scope)},body:JSON.stringify(payload)}),data=await res.json();
+      if(!res.ok||data.actorId!==currentUserId||data.roomId!==roomId||typeof data.post?.id!=='string'||data.post.user_id!==currentUserId||data.post.room_id!==roomId||data.post.milestone_id!==selectedMilestone)throw new Error('Post unavailable');
+      postRequest.current?.abort();setLoadingPosts(false);setMorePosts(false);intent.complete(scope);setPosts(previous=>previous.some(post=>post.id===data.post.id)?previous:[...previous,data.post]);setPostContent('');if(selectedMilestone&&typeof data.milestonePostCount==='number')setMilestones(previous=>previous.map(item=>item.id===selectedMilestone?{...item,post_count:data.milestonePostCount}:item));
+    }catch{setPostError(t('postFailed'));}
+    finally{postBusy.current=false;setPosting(false);}
   }
 
-  async function handleAddMilestone(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newMilestoneTitle.trim() || !newMilestoneDate) return;
-    setAddingMilestone(true);
-    setMilestoneError('');
-
-    const res = await fetch(`/api/reading-rooms/${roomId}/milestones`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newMilestoneTitle.trim(), unlock_date: new Date(newMilestoneDate).toISOString() }),
-    });
-
-    const data = await res.json() as { milestone?: Milestone; error?: string };
-    if (!res.ok) {
-      setMilestoneError(data.error ?? 'Failed to add milestone');
-    } else if (data.milestone) {
-      setMilestones((prev) => [...prev, data.milestone!].sort((a, b) => a.unlock_date.localeCompare(b.unlock_date)));
-      setNewMilestoneTitle('');
-      setNewMilestoneDate('');
-    }
-    setAddingMilestone(false);
+  async function handleAddMilestone(e:React.FormEvent){
+    e.preventDefault();if(!newMilestoneTitle.trim()||!newMilestoneDate||milestoneBusy.current)return;
+    milestoneBusy.current=true;setAddingMilestone(true);setMilestoneError('');
+    const scope='room-milestone:'+roomId;
+    try{
+      const unlockDate=readingRoomUnlockDate(newMilestoneDate);if(!unlockDate)throw Error();const payload={title:newMilestoneTitle.trim(),unlock_date:unlockDate};
+      const res=await fetch(`/api/reading-rooms/${roomId}/milestones`,{method:'POST',headers:{'Content-Type':'application/json',...await intent.durableHeaders(payload,scope)},body:JSON.stringify(payload)}),data=await res.json();
+      if(!res.ok||data.actorId!==currentUserId||data.roomId!==roomId||typeof data.milestone?.id!=='string'||data.milestone.created_by!==currentUserId)throw new Error('Milestone unavailable');
+      milestoneRequest.current?.abort();setLoadingMilestones(false);setMoreMilestones(false);intent.complete(scope);if(typeof data.milestoneTotal==='number')setMilestoneTotal(data.milestoneTotal);setMilestones(previous=>previous.some(milestone=>milestone.id===data.milestone.id)?previous:[...previous,data.milestone].sort((a,b)=>a.unlock_date.localeCompare(b.unlock_date)));setNewMilestoneTitle('');setNewMilestoneDate('');
+    }catch{setMilestoneError(t('milestoneFailed'));}
+    finally{milestoneBusy.current=false;setAddingMilestone(false);}
   }
 
-  async function handleDeleteMilestone(milestoneId: string) {
-    await fetch(`/api/reading-rooms/${roomId}/milestones?milestone_id=${milestoneId}`, { method: 'DELETE' });
-    setMilestones((prev) => prev.filter((m) => m.id !== milestoneId));
-    setPosts((prev) => prev.map((p) => p.milestone_id === milestoneId ? { ...p, milestone_id: null } : p));
+  async function handleDeleteMilestone(milestoneId:string){
+    if(deleteBusy.current)return;deleteBusy.current=true;setDeleting(true);setMilestoneError('');
+    try{
+      const res=await fetch(`/api/reading-rooms/${roomId}/milestones?milestone_id=${encodeURIComponent(milestoneId)}`,{method:'DELETE',headers:{'X-Liravo-Actor':currentUserId}}),data=await res.json();
+      if(!res.ok||data.deleted!==true||data.actorId!==currentUserId||data.roomId!==roomId||data.milestoneId!==milestoneId)throw new Error('Milestone deletion unavailable');
+      if(typeof data.milestoneTotal==='number')setMilestoneTotal(data.milestoneTotal);
+      setMilestones(previous=>previous.filter(m=>m.id!==milestoneId));setPosts(previous=>previous.map(post=>post.milestone_id===milestoneId?{...post,milestone_id:null}:post));setSelectedMilestone(previous=>previous===milestoneId?null:previous);
+    }catch{setMilestoneError(t('deleteFailed'));}
+    finally{deleteBusy.current=false;setDeleting(false);}
   }
 
-  const filteredPosts = selectedMilestone
-    ? posts.filter((p) => p.milestone_id === selectedMilestone)
-    : posts.filter((p) => !p.milestone_id);
+  const filteredPosts=posts.filter(post=>post.milestone_id===(selectedMilestone??null)).sort((a,b)=>a.created_at.localeCompare(b.created_at)||a.id.localeCompare(b.id));
 
-  const canPost = isCreator || isMember;
+  const canManage=isActive&&isCreator,canPost=isActive&&(isCreator||isMember);
 
   if (loading) {
     return (
-      <div className="space-y-3 animate-pulse">
+      <div role="status" aria-label={common('loading')} className="space-y-3 animate-pulse">
         <div className="h-10 bg-muted rounded w-40" />
         <div className="h-32 bg-muted rounded" />
       </div>
     );
   }
 
+  if(loadError&&!milestones.length&&!posts.length)return <div role="alert" className="text-sm text-destructive">{t('loadFailed')} <button onClick={()=>setRevision(value=>value+1)} className="underline">{common('retry')}</button></div>;
+
   return (
     <div className="space-y-6">
+      {loadError&&<p role="alert" className="text-sm text-destructive">{t('loadFailed')} <button type="button" onClick={()=>{if(milestonesFailed)void loadMilestones(lastMilestoneCursor.current);if(postsFailed)void loadPosts(lastPostCursor.current);}} className="underline">{common('retry')}</button></p>}
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-border">
         {(['discussion', 'milestones'] as const).map((tab) => (
           <button
-            key={tab}
+            key={tab} aria-pressed={activeTab===tab} aria-controls={panelId+tab}
             onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
               activeTab === tab
@@ -144,10 +117,10 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            {tab}
+            {t(tab)}
             {tab === 'milestones' && milestones.length > 0 && (
               <span className="ml-1 text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">
-                {milestones.length}
+                {milestoneTotal}
               </span>
             )}
           </button>
@@ -155,14 +128,14 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
       </div>
 
       {activeTab === 'milestones' && (
-        <div className="space-y-4">
-          {milestones.length === 0 && !isCreator && (
-            <p className="text-sm text-muted-foreground">No milestones set for this room.</p>
+        <div id={panelId+'milestones'} className="space-y-4">
+          {milestones.length === 0 && !canManage&&!milestonesFailed && (
+            <p className="text-sm text-muted-foreground">{t('noMilestones')}</p>
           )}
 
           {milestones.map((m) => {
-            const unlocked = new Date(m.unlock_date) <= new Date();
-            const mPosts = posts.filter((p) => p.milestone_id === m.id);
+            const unlocked=m.is_unlocked;
+
             return (
               <div
                 key={m.id}
@@ -176,8 +149,7 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
                     <div>
                       <p className="font-semibold text-sm text-foreground">{m.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {unlocked ? 'Unlocked' : 'Unlocks'}{' '}
-                        {new Date(m.unlock_date).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                        {t(unlocked?'unlocked':'unlocks',{date:formatter.dateTime(new Date(m.unlock_date),{dateStyle:'medium'})})}
                       </p>
                     </div>
                   </div>
@@ -190,15 +162,15 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
                         }}
                         className="text-xs text-accent hover:underline"
                       >
-                        {mPosts.length} post{mPosts.length !== 1 ? 's' : ''} →
+                        {t('postCount',{count:m.post_count})} →
                       </button>
                     )}
-                    {isCreator && (
+                    {canManage && (
                       <button
-                        onClick={() => handleDeleteMilestone(m.id)}
+                        disabled={deleting} onClick={() => handleDeleteMilestone(m.id)}
                         className="text-xs text-red-500 hover:underline"
                       >
-                        Delete
+                        {common('delete')}
                       </button>
                     )}
                   </div>
@@ -207,53 +179,55 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
             );
           })}
 
-          {isCreator && (
+          {milestoneCursor&&<button type="button" disabled={moreMilestones} onClick={()=>void loadMilestones(milestoneCursor)} className="text-sm underline">{rooms('moreMilestones')}</button>}
+          {canManage && (
             <form onSubmit={handleAddMilestone} className="rounded-xl border border-dashed border-border p-4 space-y-3">
-              <p className="font-medium text-sm">Add Milestone</p>
+              <p className="font-medium text-sm">{t('addMilestone')}</p>
               <input
                 type="text"
-                placeholder="Chapter name or page range..."
+                aria-label={t('milestoneTitle')} disabled={addingMilestone} placeholder={t('milestonePlaceholder')}
                 value={newMilestoneTitle}
                 onChange={(e) => setNewMilestoneTitle(e.target.value)}
                 maxLength={200}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
               />
-              <input
-                type="datetime-local"
+<label className="block text-sm space-y-1"><span>{rooms('dateLabel')}</span><input
+                type="datetime-local" aria-label={rooms('dateLabel')} disabled={addingMilestone}
                 value={newMilestoneDate}
                 onChange={(e) => setNewMilestoneDate(e.target.value)}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-              {milestoneError && <p className="text-xs text-red-500">{milestoneError}</p>}
+              /></label>
+
               <button
                 type="submit"
-                disabled={addingMilestone || !newMilestoneTitle.trim() || !newMilestoneDate}
+                disabled={addingMilestone || !newMilestoneTitle.trim() || !readingRoomUnlockDate(newMilestoneDate)}
                 className="rounded-lg bg-accent text-white text-sm font-medium px-4 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
               >
-                {addingMilestone ? 'Adding…' : 'Add Milestone'}
+                {addingMilestone?t('adding'):t('addMilestone')}
               </button>
             </form>
           )}
         </div>
       )}
 
+      {milestoneError&&<p role="alert" className="text-xs text-red-500">{milestoneError}</p>}
       {activeTab === 'discussion' && (
-        <div className="space-y-4">
+        <div id={panelId+'discussion'} className="space-y-4">
           {/* Milestone filter pills */}
           {milestones.length > 0 && (
             <div className="flex gap-2 flex-wrap">
               <button
-                onClick={() => setSelectedMilestone(null)}
+                aria-pressed={selectedMilestone===null} onClick={() => setSelectedMilestone(null)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                   !selectedMilestone ? 'bg-accent text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
-                General
+                {t('general')}
               </button>
-              {milestones.filter((m) => new Date(m.unlock_date) <= new Date()).map((m) => (
+              {milestones.filter(m=>m.is_unlocked).map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => setSelectedMilestone(m.id)}
+                  disabled={posting} aria-pressed={selectedMilestone===m.id} onClick={() => setSelectedMilestone(m.id)}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     selectedMilestone === m.id ? 'bg-accent text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                   }`}
@@ -264,15 +238,17 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
             </div>
           )}
 
+          {milestoneCursor&&<button type="button" disabled={moreMilestones} onClick={()=>void loadMilestones(milestoneCursor)} className="text-sm underline">{rooms('moreMilestones')}</button>}
+          {postCursor&&<button type="button" disabled={morePosts} onClick={()=>void loadPosts(postCursor)} className="text-sm underline">{rooms('olderPosts')}</button>}
           {/* Posts */}
           <div className="space-y-3 min-h-[200px] max-h-[600px] overflow-y-auto pr-1">
-            {filteredPosts.length === 0 ? (
+            {postsFailed?null:filteredPosts.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
-                {canPost ? 'No messages yet. Start the conversation!' : 'No messages yet.'}
+                {t(canPost?'startConversation':'noMessages')}
               </p>
             ) : (
               filteredPosts.map((post) => {
-                const isOwn = post.users?.id === currentUserId;
+                const isOwn=post.user_id===currentUserId||post.users?.id===currentUserId;
                 return (
                   <div key={post.id} className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : ''}`}>
                     <div className="flex-shrink-0">
@@ -293,7 +269,7 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
                     <div className={`max-w-[75%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
                       {!isOwn && (
                         <Link href={`/user/${post.users?.username ?? ''}`} className="text-xs text-muted-foreground hover:underline">
-                          {post.users?.display_name ?? 'Unknown'}
+                          {post.users?.display_name??t('unknown')}
                         </Link>
                       )}
                       <div className={`rounded-2xl px-3 py-2 text-sm ${
@@ -302,9 +278,7 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
                         {post.content}
                       </div>
                       <span className="text-[10px] text-muted-foreground">
-                        {new Date(post.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                        {' · '}
-                        {new Date(post.created_at).toLocaleDateString()}
+                        {formatter.dateTime(new Date(post.created_at),{dateStyle:'medium',timeStyle:'short'})}
                       </span>
                     </div>
                   </div>
@@ -320,12 +294,12 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
               <textarea
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
-                placeholder={selectedMilestone ? 'Discuss this milestone…' : 'Say something…'}
+                disabled={posting} aria-label={t('message')} placeholder={t(selectedMilestone?'discussMilestone':'saySomething')}
                 rows={2}
                 maxLength={2000}
                 className="flex-1 rounded-xl border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing) {
                     e.preventDefault();
                     handlePost(e as unknown as React.FormEvent);
                   }
@@ -336,17 +310,18 @@ export function RoomBoard({ roomId, isCreator, isMember, currentUserId }: Props)
                 disabled={posting || !postContent.trim()}
                 className="rounded-xl bg-accent text-white px-4 py-2 text-sm font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
               >
-                {posting ? '…' : 'Post'}
+                {posting?common('submitting'):t('post')}
               </button>
             </form>
           ) : (
             <p className="text-sm text-muted-foreground text-center py-2">
-              Join this room to participate in the discussion.
+              {isActive?t('joinToDiscuss'):rooms('readOnly')}
             </p>
           )}
-          {postError && <p className="text-xs text-red-500">{postError}</p>}
+          {postError && <p role="alert" className="text-xs text-red-500">{postError}</p>}
         </div>
       )}
+      <button type="button" disabled={posting||addingMilestone||deleting} onClick={()=>setRevision(value=>value+1)} className="text-sm underline">{rooms('refresh')}</button>
     </div>
   );
 }

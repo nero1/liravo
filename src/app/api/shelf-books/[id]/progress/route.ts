@@ -6,6 +6,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 export const dynamic='force-dynamic';
 export async function PATCH(request:Request,{params}:{params:{id:string}}){
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  if(request.headers.has('X-Liravo-Actor')&&request.headers.get('X-Liravo-Actor')!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid shelf entry'},{status:400});
   const parsed=z.object({progress_pages:z.number().int().min(0).max(100000).optional(),progress_percent:z.number().min(0).max(100).optional()}).refine(body=>body.progress_pages!==undefined||body.progress_percent!==undefined).safeParse(await request.json().catch(()=>null));
   if(!parsed.success)return NextResponse.json({error:'Invalid progress'},{status:422});

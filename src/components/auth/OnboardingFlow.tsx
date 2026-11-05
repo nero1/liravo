@@ -316,7 +316,7 @@ export function OnboardingFlow({ actorId,initialUsername, initialDisplayName }: 
                 </div>
                 <input
                   ref={fileRef}
-                  type="file"
+                  type="file" aria-label={imports('choose')}
                   accept=".csv"
                   className="hidden"
                   onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}

@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -87,7 +88,7 @@ it('times out an ambiguous mobile request and preserves its mutation key for ret
     runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
     const pending=expect(exports.api!.post('/api/quotes',{content:'Quote'})).rejects.toThrow('timed out');
     const first=transport.mock.calls[0][1].headers['Idempotency-Key'];
-    await vi.advanceTimersByTimeAsync(15000);await pending;
+    await vi.advanceTimersByTimeAsync(25000);await pending;
     transport.mockResolvedValueOnce({ok:true,status:204});
     await expect(exports.api!.post('/api/quotes',{content:'Quote'})).resolves.toBeUndefined();
     expect(transport.mock.calls[1][1].headers['Idempotency-Key']).toBe(first);
@@ -104,6 +105,7 @@ it('renders numeric-string ratings safely in both mobile book card layouts',()=>
     if(name==='expo-image')return {Image:'Image'};
     if(name==='lucide-react-native')return {Star:'Star'};
     if(name==='expo-router')return {useRouter:()=>({push:()=>{}})};
+    if(name==='@/hooks/useTranslations')return {useTranslations:()=>({locale:'en',t:(key:string)=>key})};
     throw new Error(`Unexpected mobile dependency: ${name}`);
   }});
   const content=(node:unknown):string=>{
@@ -139,13 +141,49 @@ it('restores native financial keys from secure storage across remounts and omits
   const code=ts.transpileModule(readFileSync('mobile/hooks/useRequestIntent.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
   runInNewContext(code,{exports,require:(name:string)=>{
     if(name==='react')return {useRef:(current:unknown)=>({current})};
-    if(name==='expo-secure-store')return {getItemAsync:async(key:string)=>saved.get(key)??null,setItemAsync:async(key:string,value:string)=>{saved.set(key,value);},deleteItemAsync:async(key:string)=>{saved.delete(key);}};
+    if(name==='expo-secure-store')return {getItemAsync:async(key:string)=>saved.get(key)??null,setItemAsync:async(key:string,value:string)=>{expect(Buffer.byteLength(value,'utf8')).toBeLessThan(2048);saved.set(key,value);},deleteItemAsync:async(key:string)=>{saved.delete(key);}};
+    if(name==='expo-crypto')return {CryptoDigestAlgorithm:{SHA256:'SHA256'},digestStringAsync:async(_algorithm:string,value:string)=>createHash('sha256').update(value).digest('hex')};
     throw new Error('Unexpected dependency');
   }});
   const payload={amount:'5',currency:'USD',pin:'2468'},first=exports.useRequestIntent!('reader-a');
   const key=(await first.durableHeaders(payload,'payout:USD'))['Idempotency-Key'];
   const restored=exports.useRequestIntent!('reader-a');expect((await restored.durableHeaders({...payload,pin:'1357'},'payout:USD'))['Idempotency-Key']).toBe(key);
-  const record=JSON.parse(saved.get('financial.reader-a.payout_USD')!);expect(JSON.parse(record.payload)).toEqual({amount:'5',currency:'USD'});
+  const record=JSON.parse(saved.get('financial.reader-a.payout_USD')!);expect(record).not.toHaveProperty('payload');expect(record.fingerprint).toBe(createHash('sha256').update(JSON.stringify({amount:'5',currency:'USD'})).digest('hex'));
+  const longBody={body:'😀'.repeat(50000)},longIntent=exports.useRequestIntent!('reader-a');await longIntent.durableHeaders(longBody,'long-draft');expect(saved.get('financial.reader-a.long-draft')!.length).toBeLessThan(300);
+  saved.set('financial.reader-a.legacy-draft',JSON.stringify({payload:JSON.stringify({body:'Legacy text'}),key:'legacy-writing-intent-key'}));expect((await exports.useRequestIntent!('reader-a').durableHeaders({body:'Legacy text'},'legacy-draft'))['Idempotency-Key']).toBe('legacy-writing-intent-key');expect(JSON.parse(saved.get('financial.reader-a.legacy-draft')!)).not.toHaveProperty('payload');
   expect((await exports.useRequestIntent!('reader-b').durableHeaders(payload,'payout:USD'))['Idempotency-Key']).not.toBe(key);
   await restored.complete('payout:USD');expect(saved.has('financial.reader-a.payout_USD')).toBe(false);
+});
+
+it('sends native file uploads as multipart without inventing a JSON body or caching file intents',async()=>{
+  const state={user:{id:'reader-a'},token:'token-a'},transport=vi.fn().mockResolvedValue({ok:true,json:async()=>({uploadId:'owned-upload'})});
+  const exports:{api?:{upload(path:string,body:FormData,headers:Record<string,string>):Promise<unknown>}}={};
+  const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,FormData,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
+  const body=new FormData();body.set('file',new File(['fixture'],'photo.jpg',{type:'image/jpeg'}));
+  await exports.api!.upload('/api/users/avatar',body,{'X-Liravo-Actor':'reader-a'});const options=transport.mock.calls[0][1];
+  expect(options.body).toBe(body);expect(options.headers).not.toHaveProperty('Content-Type');expect(options.headers).not.toHaveProperty('Idempotency-Key');expect(options.headers.Authorization).toBe('Bearer token-a');expect(options.headers['X-Liravo-Actor']).toBe('reader-a');
+});
+
+it('preserves structured challenge failures without retaining primary credentials as mutation intents',async()=>{
+  const state={user:null,token:null},transport=vi.fn().mockResolvedValue({ok:false,status:400,json:async()=>({error:'CAPTCHA_REQUIRED',code:'CAPTCHA_REQUIRED',requireCaptcha:true})});
+  const exports:{api?:{post(path:string,body:unknown):Promise<unknown>}}={};
+  const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>state}}});
+  await expect(exports.api!.post('/api/auth/login',{email:'fixture@example.test',password:'fixture-password'})).rejects.toMatchObject({status:400,code:'CAPTCHA_REQUIRED',requireCaptcha:true});
+  expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Idempotency-Key');expect(transport.mock.calls[0][1].headers).not.toHaveProperty('Authorization');
+});
+
+it('cancels obsolete native search transport without leaving the timeout active',async()=>{
+  const transport=vi.fn((_url,options)=>new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Error('Cancelled'))))),exports:any={};
+  const code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>name==='@/constants/api'?{API_BASE:'https://app.test'}:{useAuthStore:{getState:()=>({token:'isolated-token',user:{id:'reader'}})}}});
+  const controller=new AbortController(),pending=expect(exports.api.get('/api/books/search',{q:'obsolete'},controller.signal)).rejects.toThrow('Cancelled');
+  controller.abort();await pending;expect(transport.mock.calls[0][1].signal.aborted).toBe(true);
+});
+
+it('sends explicit actor metadata on native deletions',async()=>{
+  const transport=vi.fn().mockResolvedValue({ok:true,json:async()=>({deleted:true})}),exports:{api?:{delete(path:string,headers:Record<string,string>):Promise<unknown>}}={},code=ts.transpileModule(readFileSync('mobile/lib/api.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+  runInNewContext(code,{exports,fetch:transport,AbortController,setTimeout,clearTimeout,require:(name:string)=>{if(name==='@/constants/api')return {API_BASE:'https://app.test'};if(name==='@/stores/auth')return {useAuthStore:{getState:()=>({user:{id:'reader'},token:'token'})}};throw Error(name);}});
+  await exports.api!.delete('/api/reading-rooms/room/milestones?milestone_id=chapter',{'X-Liravo-Actor':'reader'});expect(transport.mock.calls[0][1]).toMatchObject({method:'DELETE',headers:{'X-Liravo-Actor':'reader',Authorization:'Bearer token'}});
 });

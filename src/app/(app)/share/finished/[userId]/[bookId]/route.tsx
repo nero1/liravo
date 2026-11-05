@@ -1,53 +1,20 @@
+import {ShareRating} from '@/components/books/ShareRating';
 import { ImageResponse } from '@vercel/og';
-import { createServiceClient } from '@/lib/supabase/server';
+import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { userId: string; bookId: string } }
 ) {
-  const supabase = createServiceClient();
-
-  const [bookResult, userResult, reviewResult] = await Promise.all([
-    supabase
-      .from('books')
-      .select('title, author_name, cover_url')
-      .eq('id', params.bookId)
-      .single(),
-    supabase
-      .from('users')
-      .select('display_name, avatar_url')
-      .eq('id', params.userId)
-      .single(),
-    supabase
-      .from('reviews')
-      .select('rating, content')
-      .eq('book_id', params.bookId)
-      .eq('user_id', params.userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single(),
-  ]);
-
-  const book = bookResult.data;
-  const user = userResult.data;
-  const review = reviewResult.data;
-
-  if (!book) {
-    return new Response('Not found', { status: 404 });
-  }
-
-  const title = book.title ?? 'A great book';
-  const authorName = book.author_name ?? '';
-  const displayName = user?.display_name ?? 'A reader';
-  const rating = review?.rating ?? null;
-  const snippet =
-    review?.content
-      ? review.content.slice(0, 100) + (review.content.length > 100 ? '…' : '')
-      : null;
-  const stars = rating ? '★'.repeat(rating) + '☆'.repeat(5 - rating) : null;
+  try {
+  const {data,t}=await getShareCard(request,'finished',params.bookId,params.userId);
+  const {book,reader:user,review}=data;
+  const title=book.title,authorName=book.author_name,displayName=user.display_name;
+  const rating=review?.rating??null;
+  const snippet=review?.content?review.content.slice(0,100)+(review.content.length>100?'…':''):null;
 
   return new ImageResponse(
     (
@@ -121,7 +88,7 @@ export async function GET(
           {/* Main content */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.65)', margin: 0 }}>
-              {displayName} just finished reading
+              {t('finished',{name:displayName})}
             </p>
 
             <h1
@@ -138,15 +105,11 @@ export async function GET(
 
             {authorName && (
               <p style={{ fontSize: '20px', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
-                by {authorName}
+                {t('by',{author:authorName})}
               </p>
             )}
 
-            {stars && (
-              <p style={{ fontSize: '28px', color: '#d97706', margin: '4px 0 0' }}>
-                {stars}
-              </p>
-            )}
+            {rating!==null&&<ShareRating rating={rating}/>}
 
             {snippet && (
               <p
@@ -195,6 +158,7 @@ export async function GET(
         </div>
       </div>
     ),
-    { width: 1200, height: 630 }
+    { width: 1200, height: 630,headers:SHARE_IMAGE_HEADERS }
   );
+  } catch(error) { return shareCardFailure(error); }
 }
