@@ -14,13 +14,13 @@ export async function POST(request:Request){
   const ip=getClientIp(request);if(ip!=='unknown'&&!(await checkCriticalRateLimit('avatar:ip:'+ip)).allowed)return NextResponse.json({error:'Too many uploads'},{status:429});
   try{
     const file=await avatarFile(request),{body,hash}=await normalizeAvatar(file),{backend,bucket,storage}=avatarStorage(),service=createServiceClient();
-    const staged=await service.rpc('begin_avatar_upload' as never,{p_user_id:user.id,p_hash:hash,p_backend:backend,p_bucket:bucket} as never);
+    const staged=await service.rpc('begin_avatar_upload',{p_user_id:user.id,p_hash:hash,p_backend:backend,p_bucket:bucket});
     if(staged.error)return NextResponse.json({error:'AVATAR_UNAVAILABLE'},{status:staged.error.code==='P1001'?409:503});
     const upload=staged.data as unknown as {id:string;path:string;bucket:string;state:string;public_url:string|null};if(!upload?.id||!upload.path)throw new Error('Upload unavailable');
     const publicUrl=upload.public_url??storage.getPublicUrl(upload.bucket,upload.path),url=new URL(publicUrl);if(!['https:','http:'].includes(url.protocol)||url.username||url.password)throw new Error('Invalid storage URL');
     if(upload.state==='pending'){
       const saved=await storageDeadline(storage.upload(upload.bucket,upload.path,body,{contentType:'image/webp',upsert:true}));if(saved.error||!saved.data)throw new Error('Storage unavailable');
-      const receipt=await service.rpc('finish_avatar_upload' as never,{p_user_id:user.id,p_upload_id:upload.id,p_public_url:publicUrl} as never);if(receipt.error||receipt.data!==true)throw new Error('Upload receipt unavailable');
+      const receipt=await service.rpc('finish_avatar_upload',{p_user_id:user.id,p_upload_id:upload.id,p_public_url:publicUrl});if(receipt.error||receipt.data!==true)throw new Error('Upload receipt unavailable');
     }
     return NextResponse.json({uploadId:upload.id,publicUrl},{headers:{'Cache-Control':'private, no-store'}});
   }catch(error){return NextResponse.json({error:error instanceof AvatarError?error.code:'AVATAR_UNAVAILABLE'},{status:error instanceof AvatarError?error.status:503});}

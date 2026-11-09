@@ -9,7 +9,8 @@ import {WorkshopCreateForm} from '@/components/writing/WorkshopCreateForm';
 export const dynamic='force-dynamic';
 export async function generateMetadata(){const t=await getTranslations('nativeWriting');return {title:t('workshops'),description:t('workshopDescription'),alternates:languageAlternates('/write/workshops')};}
 interface Workshop {id:string;name:string;topic:string|null;member_count:number;max_members:number;facilitator:{display_name:string;username:string}|null;}
-export default async function WorkshopsPage({searchParams}:{searchParams?:{cursor?:string}}){
+export default async function WorkshopsPage(props:{searchParams?: Promise<{cursor?:string}>}) {
+  const searchParams = (await props.searchParams)??{};
   const user=await getCurrentUser();if(!user)redirect('/login');
   const [t,writing,common]=await Promise.all([getTranslations('nativeWriting'),getTranslations('writing'),getTranslations('common')]);
   let cursor;try{cursor=decodeCursor(searchParams?.cursor??null);}catch{notFound();}

@@ -12,15 +12,17 @@ export async function generateMetadata(): Promise<Metadata> { return { title: (a
 const PAGE_SIZE = 20;
 
 interface PageProps {
-  params: { id: string };
-  searchParams: { page?: string };
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string }>;
 }
 
-export default async function PromptResponsesPage({ params, searchParams }: PageProps) {
+export default async function PromptResponsesPage(props: PageProps) {
+  const searchParams = (await props.searchParams)??{};
+  const params = await props.params;
   const t = await getTranslations('writing');
   const formatter = await getFormatter();
   if (!z.string().uuid().safeParse(params.id).success) notFound();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const { data: prompt, error: promptError } = await supabase
     .from('writing_prompts')

@@ -123,7 +123,7 @@ export function OwnedMoodAiScreen({actorId}:{actorId:string|undefined}) {
             <ActivityIndicator color="#d97706" />
             <Text className="text-muted-foreground mt-2 text-sm">{t('aiLoading')}</Text>
           </View>
-        ) : null}
+        ) : undefined}
       />
     </SafeAreaView>
   );

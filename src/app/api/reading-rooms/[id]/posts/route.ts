@@ -6,7 +6,8 @@ import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 import {getRoomPosts,getRoomCount,decodeRoomCursor,ReadingRoomError} from '@/lib/reading-rooms';
 export const dynamic='force-dynamic';
 const schema=z.object({content:z.string().trim().min(1).max(2000),milestone_id:z.string().uuid().nullable().optional()});
-export async function GET(request:Request,{params}:{params:{id:string}}){
+export async function GET(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   const query=new URL(request.url).searchParams,milestone=query.get('milestone')??'all',cursor=query.get('cursor');
@@ -15,7 +16,8 @@ export async function GET(request:Request,{params}:{params:{id:string}}){
   try{return NextResponse.json(await getRoomPosts(user.id,params.id,milestone,cursor),{headers:{'Cache-Control':'private, no-store'}});}
   catch(error){return NextResponse.json({error:'Discussion unavailable'},{status:error instanceof ReadingRoomError?error.status:503});}
 }
-export async function POST(request:Request,{params}:{params:{id:string}}){
+export async function POST(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid room'},{status:400});
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});

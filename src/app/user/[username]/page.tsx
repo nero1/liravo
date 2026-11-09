@@ -13,10 +13,11 @@ export const dynamic = 'force-dynamic';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
 
 interface ProfilePageProps {
-  params: { username: string };
+  params: Promise<{ username: string }>;
 }
 
-export async function generateMetadata({ params }: ProfilePageProps): Promise<Metadata> {
+export async function generateMetadata(props: ProfilePageProps): Promise<Metadata> {
+  const params = await props.params;
   const t=await getTranslations('profile');
   const supabase = createServiceClient();
   const { data } = await supabase
@@ -42,7 +43,8 @@ export async function generateMetadata({ params }: ProfilePageProps): Promise<Me
   };
 }
 
-export default async function PublicProfilePage({ params }: ProfilePageProps) {
+export default async function PublicProfilePage(props: ProfilePageProps) {
+  const params = await props.params;
   const t=await getTranslations('profile');
   const supabase = createServiceClient();
   const { data: profile } = await supabase
@@ -55,7 +57,7 @@ export default async function PublicProfilePage({ params }: ProfilePageProps) {
 
   if (!profile) notFound();
 
-  const { data: { user } } = await createClient().auth.getUser();
+  const { data: { user } } = await (await createClient()).auth.getUser();
   const isOwner = user?.id === profile.id;
   const isAdmin = false; // Admin check happens inside ProfileView if needed
 

@@ -1,5 +1,5 @@
 import {ShareRating} from '@/components/books/ShareRating';
-import { ImageResponse } from '@vercel/og';
+import { ImageResponse } from 'next/og';
 import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
@@ -7,8 +7,9 @@ export const runtime = 'nodejs';
 
 export async function GET(
   request: Request,
-  { params }: { params: { userId: string; bookId: string } }
+  props: { params: Promise<{ userId: string; bookId: string }> }
 ) {
+  const params = await props.params;
   try {
   const {data,t}=await getShareCard(request,'finished',params.bookId,params.userId);
   const {book,reader:user,review}=data;

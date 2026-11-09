@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import IntlMessageFormat from 'intl-messageformat';
+import {IntlMessageFormat} from 'intl-messageformat';
 import { useAuthStore } from '@/stores/auth';
 import {useLocales} from 'expo-localization';
 import {usePreferences,supportedLocale} from '@/stores/preferences';

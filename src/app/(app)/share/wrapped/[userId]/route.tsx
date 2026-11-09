@@ -8,15 +8,13 @@ export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
-export async function GET(
-  request: Request,
-  { params }: { params: { userId: string } }
-) {
+export async function GET(request: Request, props: { params: Promise<{ userId: string }> }) {
+  const params = await props.params;
   if(!z.string().uuid().safeParse(params.userId).success)return NextResponse.json({error:'Invalid reader'},{status:400});
   const {searchParams}=new URL(request.url),format=searchParams.get('format'),requestedLocale=searchParams.get('locale');
   if(format&&format!=='stories')return NextResponse.json({error:'Invalid format'},{status:400});
   if(requestedLocale&&!['en','fr','de'].includes(requestedLocale))return NextResponse.json({error:'Invalid locale'},{status:400});
-  const locale=requestedLocale??await getLocale(),t=await getTranslations({locale,namespace:'wrapped'}),genres=await getTranslations({locale,namespace:'aiProfiles'}),isStories=format==='stories';
+  const locale=requestedLocale??(await getLocale()),t=await getTranslations({locale,namespace:'wrapped'}),genres=await getTranslations({locale,namespace:'aiProfiles'}),isStories=format==='stories';
   let summary;try{summary=await getPublicReadingYear(params.userId);}catch{return NextResponse.json({error:'Reading summary unavailable'},{status:503});}
   if(!summary)return NextResponse.json({error:'Reader not found'},{status:404});
   const displayName=summary.displayName,booksRead=summary.booksRead,pagesRead=summary.pagesRead,currentYear=summary.year,genre=summary.topGenres[0],topGenre=genre?(genres.has('genreLabels.'+genre)?genres('genreLabels.'+genre):genre):t('unknownGenre'),number=(value:number)=>new Intl.NumberFormat(locale).format(value);

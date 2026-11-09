@@ -19,6 +19,7 @@ class ApiError extends Error {
     message: string,
     public code?:string,
     public requireCaptcha=false,
+    public retryAfter=0,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -95,7 +96,7 @@ async function request<T>(
       requireCaptcha=json.requireCaptcha===true;
     } catch {}
     if(trackIntent&&!suppliedKey&&[400,401,403,404,405,410,413,415,422].includes(res.status))pendingIntents.delete(signature);
-    throw new ApiError(res.status,message,code,requireCaptcha);
+    throw new ApiError(res.status,message,code,requireCaptcha,Math.min(120,Math.max(0,Number(res.headers?.get('Retry-After'))||0)));
   }
 
   const data = res.status===204?undefined as T:await res.json() as T;

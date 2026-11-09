@@ -52,15 +52,15 @@ it('does not acknowledge pending purchases or report them as active',async()=>{
 });
 
 it('selects an actual monthly base-plan offer and its recurring price',()=>{
-  const phase=(billingPeriod:string,formattedPrice:string)=>({billingPeriod,formattedPrice});
-  const product={productId:'premium',subscriptionOfferDetails:[
-    {offerId:null,offerToken:'year',pricingPhases:{pricingPhaseList:[phase('P1Y','$40')]}},
-    {offerId:'trial',offerToken:'trial',pricingPhases:{pricingPhaseList:[phase('P1W','$0'),phase('P1M','$5')]}},
-    {offerId:null,offerToken:'monthly',pricingPhases:{pricingPhaseList:[phase('P1M','€4.99')]}},
+  const phase=(billingPeriod:string,formattedPrice:string)=>({billingPeriod,formattedPrice,recurrenceMode:1});
+  const product={id:'premium',subscriptionOffers:[
+    {id:'base',basePlanIdAndroid:'base',offerTokenAndroid:'year',pricingPhasesAndroid:{pricingPhaseList:[phase('P1Y','$40')]}},
+    {id:'trial',basePlanIdAndroid:'base',offerTokenAndroid:'trial',pricingPhasesAndroid:{pricingPhaseList:[phase('P1W','$0'),phase('P1M','$5')]}},
+    {id:'base',basePlanIdAndroid:'base',offerTokenAndroid:'monthly',pricingPhasesAndroid:{pricingPhaseList:[phase('P1M','€4.99')]}},
   ]};
   expect(monthlyGooglePlayOffer(product,'premium')).toEqual({sku:'premium',offerToken:'monthly',formattedPrice:'€4.99'});
   expect(monthlyGooglePlayOffer(product,'other')).toBeNull();
-  expect(monthlyGooglePlayOffer({...product,subscriptionOfferDetails:product.subscriptionOfferDetails.slice(0,2)},'premium')).toBeNull();
+  expect(monthlyGooglePlayOffer({...product,subscriptionOffers:product.subscriptionOffers.slice(0,2)},'premium')).toBeNull();
 });
 
 it('returns committed receipt state when a concurrent observation supersedes this response',async()=>{

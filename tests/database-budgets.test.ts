@@ -1,5 +1,6 @@
 import {beforeAll,afterAll,expect,it,vi} from 'vitest';
 import postgres from 'postgres';
+import {sql as drizzleSql}from'drizzle-orm';
 import {readFileSync} from 'node:fs';
 const url=process.env.SCALE_TEST_DATABASE_URL;
 if(url&&!['localhost','127.0.0.1'].includes(new URL(url).hostname))throw Error('Database budgets require isolated loopback PostgreSQL');
@@ -16,6 +17,7 @@ const test=it.skipIf(!url);
 test('rejects invalid pool settings and cancels a slow statement without replaying it',async()=>{
  vi.stubEnv('DATABASE_POOL_MAX','NaN');expect(()=>db.databaseLimits()).toThrow('DATABASE_POOL_MAX');vi.stubEnv('DATABASE_POOL_MAX','1');
  const started=performance.now();await expect(db.withDatabaseOperation(()=>db.executeQuery(db.getSql()`select pg_sleep(2)`))).rejects.toMatchObject({code:'57014'});expect(performance.now()-started).toBeLessThan(1500);
+ await expect(db.withDatabaseOperation(()=>db.getDrizzle().select({value:drizzleSql`pg_sleep(2)`}).from(drizzleSql`(select 1) input`).execute())).rejects.toMatchObject({cause:{code:'57014'}});
  expect((await db.withDatabaseOperation(()=>db.executeQuery(db.getSql()`select 1 value`)))[0].value).toBe(1);
 });
 test('bounds queued callers and recovers immediately after pressure clears',async()=>{
@@ -27,5 +29,12 @@ test('fails bounded lock contention and does not leave a poisoned connection',as
  let release!:()=>void,entered!:()=>void;const ready=new Promise<void>(resolve=>entered=resolve),gate=new Promise<void>(resolve=>release=resolve);
  const holder=fixture!.begin(async tx=>{await tx`update feature_flags set enabled=enabled where name='creator_tips'`;entered();await gate;});await ready;
  try{const started=performance.now();await expect(db.withDatabaseOperation(()=>db.executeQuery(db.getSql()`update feature_flags set enabled=enabled where name='creator_tips'`))).rejects.toMatchObject({code:'55P03'});expect(performance.now()-started).toBeLessThan(1000);}finally{release();await holder;}
+ expect((await db.withDatabaseOperation(()=>db.executeQuery(db.getSql()`select 1 value`)))[0].value).toBe(1);
+});
+
+test('rejects detached work after its database operation has completed',async()=>{
+ let resume!:()=>void,late!:Promise<unknown>;const gate=new Promise<void>(resolve=>{resume=resolve;});
+ await db.withDatabaseOperation(async()=>{late=gate.then(()=>db.withDatabaseOperation(()=>db.getDrizzle().select({value:drizzleSql`1`}).from(drizzleSql`(select 1) input`).execute()));});
+ resume();await expect(late).rejects.toThrow('Database operation completed');
  expect((await db.withDatabaseOperation(()=>db.executeQuery(db.getSql()`select 1 value`)))[0].value).toBe(1);
 });

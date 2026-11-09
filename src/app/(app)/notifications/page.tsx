@@ -11,7 +11,7 @@ export async function generateMetadata(){const t=await getTranslations('nav');re
 
 export default async function NotificationsPage() {
   const t=await getTranslations('nav');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 

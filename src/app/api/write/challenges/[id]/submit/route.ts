@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 
 const schema = z.object({ title: z.string().trim().min(1).max(200), body: z.string().trim().min(1).max(50000), word_count: z.number().int().min(1).optional() });
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const parsed = schema.safeParse(await request.json().catch(() => null));

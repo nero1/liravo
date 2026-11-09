@@ -11,7 +11,7 @@ export async function POST(request:Request){
   let body:unknown;try{body=JSON.parse(raw);}catch{return emailResponse({error:'Invalid JSON'},400);}
   const parsed=emailProof.safeParse(body);if(!parsed.success)return emailResponse({error:'INVALID_EMAIL_LINK'},422);
   try{
-    const {data,error}=await createServiceClient().rpc('consume_email_challenge' as never,{p_hash:emailHash(parsed.data.token),p_purpose:'verify'} as never);
+    const {data,error}=await createServiceClient().rpc('consume_email_challenge',{p_hash:emailHash(parsed.data.token),p_purpose:'verify'});
     if(error)return emailResponse({error:error.code==='P1001'||error.code==='23505'?'EMAIL_UNAVAILABLE':'EMAIL_CONFIRMATION_UNAVAILABLE'},['P1001','23505'].includes(error.code)?409:503);
     return data?emailResponse({ok:true}):emailResponse({error:'INVALID_EMAIL_LINK'},410);
   }catch{return emailResponse({error:'EMAIL_CONFIRMATION_UNAVAILABLE'},503);}

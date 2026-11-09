@@ -55,10 +55,10 @@ export default function FeedScreen() {
             <View className="py-4 items-center">
               <ActivityIndicator color="#d97706" />
             </View>
-          ) : null
+          ) : undefined
         }
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#d97706" />
+          <RefreshControl refreshing={isRefetching} onRefresh={()=>{void refetch();}} tintColor="#d97706" />
         }
         contentContainerStyle={{ paddingBottom: 20 }}
       />

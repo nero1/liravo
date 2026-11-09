@@ -1,11 +1,10 @@
-import { QueryError } from '@/components/ui/EmptyState';
+import { QueryError , EmptyState } from '@/components/ui/EmptyState';
 import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export default function ResourcesScreen() {

@@ -6,7 +6,7 @@ async function loadPipeline(){
  if(!loading)loading=(async()=>{
   try{
    const {pipeline:createPipeline,env}=await import('@huggingface/transformers');env.allowLocalModels=false;
-   const model=await createPipeline('text-classification','Xenova/toxic-bert',{device:'wasm'});
+   const model=await createPipeline('text-classification','Xenova/toxic-bert',{device:'wasm',dtype:'q8'});
    pipeline=async text=>await model(text,{top_k:6}) as Score[];
   }catch{retryAfter=Date.now()+60000;}finally{loading=null;}
  })();

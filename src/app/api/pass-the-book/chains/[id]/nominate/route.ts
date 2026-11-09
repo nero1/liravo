@@ -8,7 +8,8 @@ export const dynamic='force-dynamic';
 
 const schema=z.object({nominee_id:z.string().uuid(),note:z.string().max(500).optional()});
 
-export async function POST(request:Request,{params}:{params:{id:string}}) {
+export async function POST(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   if(request.headers.has('X-Liravo-Actor')&&request.headers.get('X-Liravo-Actor')!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid chain'},{status:400});

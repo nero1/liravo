@@ -20,13 +20,13 @@ export function cron(name: string, task: (request: Request) => Promise<Response>
     const started = Date.now();
     try {
       const result=await withRedisLock(`cron:${name}`,120,async()=>{
-        const service=createServiceClient(),owner=randomUUID(),{data,error}=await service.rpc('claim_maintenance_job' as never,{p_name:name,p_owner:owner} as never);
+        const service=createServiceClient(),owner=randomUUID(),{data,error}=await service.rpc('claim_maintenance_job',{p_name:name,p_owner:owner});
         if(error)throw new Error('Job claim unavailable');if(!data)return null;
         const fence=data as {name:string;owner:string;epoch:number};
         if(fence.name!==name||fence.owner!==owner||!Number.isSafeInteger(fence.epoch)||fence.epoch<1)throw new Error('Invalid job claim');
         const signal=AbortSignal.any([AbortSignal.timeout(50000),request.signal,...(leaseSignal()?[leaseSignal()!]:[])]);
         try{return await withDatabaseFence(fence,()=>task(new Request(forwarded,{signal})));}
-        finally{const {error:releaseError}=await service.rpc('release_maintenance_job' as never,{p_name:name,p_owner:owner,p_epoch:fence.epoch} as never);if(releaseError)throw new Error('Job release unavailable');}
+        finally{const {error:releaseError}=await service.rpc('release_maintenance_job',{p_name:name,p_owner:owner,p_epoch:fence.epoch});if(releaseError)throw new Error('Job release unavailable');}
       });
       if (!result) await observeOperationalSignal('cronOverlaps',correlationId);
       else if (!result.ok) await observeOperationalSignal('cronFailures',correlationId);

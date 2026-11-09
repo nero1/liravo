@@ -25,7 +25,7 @@ async function verifyTransfer(payout:Payout,recipient:string) {
 }
 export async function processPayout(payoutId:string,actorId:string|null,correlationId:string) {
   const client=createServiceClient();
-  const {data,error}=await client.rpc('claim_payout_request' as never,{p_actor_id:actorId,p_payout_id:payoutId,p_correlation_id:correlationId} as never);
+  const {data,error}=await client.rpc('claim_payout_request',{p_actor_id:actorId,p_payout_id:payoutId,p_correlation_id:correlationId});
   if(error) throw Object.assign(new Error('Payout claim unavailable'),{code:error.code});
   const claim=z.object({claimed:z.boolean(),status:z.string()}).parse(data);
   if(!claim.claimed) return {processed:claim.status==='completed',status:claim.status,pending:['pending','processing'].includes(claim.status)};
@@ -47,14 +47,14 @@ export async function processPayout(payoutId:string,actorId:string|null,correlat
     if(!transfer) throw new Error('Transfer confirmation pending');
     const status=transfer.status==='success'?'completed':['failed','reversed'].includes(transfer.status)?transfer.status:null;
     if(status) {
-      const {error:settleError}=await client.rpc('settle_payout_request' as never,{p_actor_id:actorId,p_payout_id:payout.id,p_status:status,p_reference:transfer.reference,p_amount:new Decimal(payout.amount).toFixed(2),p_currency:payout.currency,p_provider_code:transfer.transfer_code,p_correlation_id:correlationId} as never);
+      const {error:settleError}=await client.rpc('settle_payout_request',{p_actor_id:actorId,p_payout_id:payout.id,p_status:status,p_reference:transfer.reference,p_amount:new Decimal(payout.amount).toFixed(2),p_currency:payout.currency,p_provider_code:transfer.transfer_code,p_correlation_id:correlationId});
       if(settleError) throw new Error('Payout settlement unavailable');
       return {processed:status==='completed',status:status==='reversed'?'failed':status,pending:false};
     }
     throw new PendingTransfer('Transfer awaiting provider confirmation');
   }catch(error) {
     if(!(error instanceof PendingTransfer)||payout.attempts>=10)await observeOperationalSignal('payoutFailures',correlationId);
-    const {error:retryError}=await client.rpc('defer_payout_request' as never,{p_payout_id:payout.id,p_attempt:payout.attempts,p_error:'Transfer confirmation pending; reservation retained'} as never);
+    const {error:retryError}=await client.rpc('defer_payout_request',{p_payout_id:payout.id,p_attempt:payout.attempts,p_error:'Transfer confirmation pending; reservation retained'});
     recordMetric('payout_confirmation_pending',{payoutId:payout.id,correlationId,attempt:payout.attempts},'warn');
     if(retryError) throw new Error('Payout retry persistence unavailable');
     return {processed:false,status:'processing',pending:true};

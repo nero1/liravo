@@ -1581,7 +1581,7 @@
   },
   "accountData": {
     "exportTitle": "Daten exportieren",
-    "exportDescription": "Lade dein Profil, deinen Leseverlauf, Rezensionen, Zitate, Schreibantworten, den XP-Verlauf und gesendete Trinkgelder herunter.",
+    "exportDescription": "Lade eine Momentaufnahme deines Profils, deiner Lese- und Schreibaktivitäten, deiner Community-Aktivitäten und deines Finanzverlaufs herunter.",
     "export": "Daten exportieren",
     "exporting": "Export wird vorbereitet…",
     "exportFailed": "Deine Daten konnten nicht exportiert werden. Bitte versuche es erneut.",

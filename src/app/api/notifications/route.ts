@@ -7,7 +7,7 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request:Request) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

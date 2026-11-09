@@ -26,12 +26,13 @@ interface Listing {
   book: { title: string; author_name: string } | null;
 }
 
-export default async function PromotedListingsPage({searchParams={}}:{searchParams?:{error?:string;cursor?:string}}) {
+export default async function PromotedListingsPage(props:{searchParams?: Promise<{error?:string;cursor?:string}>}) {
+  const searchParams = (await props.searchParams)??{};
   const formatter = await getFormatter();
   const t = await getTranslations('admin');
   const user = await getCurrentUser();
   if (!user) redirect('/login');
-  if (!await isAdmin(user.id)) redirect('/');
+  if (!(await isAdmin(user.id))) redirect('/');
   const catalog=await readAdminCatalog<Listing>(user.id,'promotions',{cursor:searchParams.cursor}),items=catalog.items,action='/api/admin/promoted-listings'+(searchParams.cursor?'?cursor='+encodeURIComponent(searchParams.cursor):'');
   const now = new Date();
 

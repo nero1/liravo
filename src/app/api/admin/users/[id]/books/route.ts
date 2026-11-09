@@ -8,7 +8,8 @@ import {checkRouteRateLimit} from '@/lib/rate-limit';
 import {z} from 'zod';
 export const dynamic='force-dynamic';
 const schema=z.object({book_id:z.string().uuid(),granted:z.boolean()}).strict();
-export async function GET(request:Request,{params}:{params:{id:string}}){
+export async function GET(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const auth=await requireAdmin();if(auth instanceof NextResponse)return auth;
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid author'},{status:400});
   const url=new URL(request.url),cursor=url.searchParams.get('cursor'),q=(url.searchParams.get('q')??'').trim();
@@ -32,13 +33,14 @@ export async function GET(request:Request,{params}:{params:{id:string}}){
     return NextResponse.json({actorId:auth.userId,author:authorResult.data,verification:verificationResult.data,...catalog,matches},{headers:{'Cache-Control':'private, no-store'}});
   }catch{return NextResponse.json({error:'Author catalog unavailable'},{status:503});}
 }
-export async function PUT(request:Request,{params}:{params:{id:string}}){
+export async function PUT(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const auth=await requireAdmin();if(auth instanceof NextResponse)return auth;
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==auth.userId)return NextResponse.json({error:'Account changed'},{status:409});
   const key=request.headers.get('Idempotency-Key'),parsed=schema.safeParse(await request.json().catch(()=>null));
   if(!z.string().uuid().safeParse(params.id).success||!key||key.length<8||key.length>200||!parsed.success)return NextResponse.json({error:'Invalid author catalog intent'},{status:400});
-  if(!await checkRouteRateLimit(auth.userId,'social'))return NextResponse.json({error:'Too many requests'},{status:429});
-  const {data,error}=await createServiceClient().rpc('set_author_work_claim' as never,{p_actor:auth.userId,p_author:params.id,p_book:parsed.data.book_id,p_granted:parsed.data.granted,p_key:key} as never);
+  if(!(await checkRouteRateLimit(auth.userId,'social')))return NextResponse.json({error:'Too many requests'},{status:429});
+  const {data,error}=await createServiceClient().rpc('set_author_work_claim',{p_actor:auth.userId,p_author:params.id,p_book:parsed.data.book_id,p_granted:parsed.data.granted,p_key:key});
   if(error)return NextResponse.json({error:'Author catalog update failed'},{status:({P1001:409,P1003:403,P1004:422,P1005:404} as Record<string,number>)[error.code]??503});
   return NextResponse.json({actorId:auth.userId,...data as Record<string,unknown>},{headers:{'Cache-Control':'private, no-store'}});
 }

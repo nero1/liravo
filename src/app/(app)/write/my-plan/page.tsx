@@ -7,7 +7,8 @@ import Link from 'next/link';
 
 export const dynamic='force-dynamic';
 export async function generateMetadata(){const t=await getTranslations('aiProfiles');return {title:t('planTitle')};}
-export default async function MyWritingPlanPage({searchParams}:{searchParams:{error?:string}}){
+export default async function MyWritingPlanPage(props:{searchParams: Promise<{error?:string}>}) {
+  const searchParams = (await props.searchParams)??{};
   const user=await getCurrentUser();if(!user)redirect('/login');
   const t=await getTranslations('aiProfiles'),format=await getFormatter();
   let data:Awaited<ReturnType<typeof readWritingPlan>>|undefined,error:string|undefined;

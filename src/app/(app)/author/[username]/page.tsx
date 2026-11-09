@@ -23,13 +23,14 @@ export const dynamic = 'force-dynamic';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://liravo.org';
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { username: string };
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    params: Promise<{ username: string }>;
+  }
+): Promise<Metadata> {
+  const params = await props.params;
   const t=await getTranslations('authorProfile');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: author } = await supabase
     .from('users')
     .select('display_name, bio, avatar_url, profile_visibility, is_banned')
@@ -58,10 +59,14 @@ export async function generateMetadata({
   };
 }
 
-export default async function AuthorProfilePage({params,searchParams}:{params:{username:string};searchParams?:{cursor?:string;qaCursor?:string;postCursor?:string}}) {
+export default async function AuthorProfilePage(
+  props:{params: Promise<{username:string}>;searchParams?: Promise<{cursor?:string;qaCursor?:string;postCursor?:string}>}
+) {
+  const searchParams = (await props.searchParams)??{};
+  const params = await props.params;
   const common=await getTranslations('common'),t=await getTranslations('authorProfile');
   try{decodeCursor(searchParams?.cursor??null);decodeCursor(searchParams?.postCursor??null);}catch{notFound();}
-  const supabase = createClient();
+  const supabase = (await createClient());
   const {
     data: { user: currentUser },
   } = await supabase.auth.getUser();
@@ -82,7 +87,7 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
     author.is_verified_author || (author.user_types ?? []).includes('author');
 
   if (!isAuthorProfile) notFound();
-  if(!await profileVisibleTo(author.id,currentUser?.id??null))notFound();
+  if(!(await profileVisibleTo(author.id,currentUser?.id??null)))notFound();
 
   const {books:bookDetails,nextCursor}=await getAuthorCatalog(author.id,searchParams?.cursor??null);
 
@@ -150,176 +155,176 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
 
   return (
     <>
-      <script nonce={headers().get('x-nonce')??undefined} type="application/ld+json"  dangerouslySetInnerHTML={{ __html: jsonForHtml(jsonLd) }} />
-    <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
-      {/* Header */}
-      <div className="space-y-4">
-        {author.banner_url && (
-          <div className="relative w-full h-32 rounded-xl overflow-hidden">
-            <Image
-              src={author.banner_url}
-              alt={t('banner')}
-              fill
-              className="object-cover"
-              sizes="672px"
-            />
-          </div>
-        )}
-        <div className="flex items-start gap-4">
-          {author.avatar_url ? (
-            <Image
-              src={author.avatar_url}
-              alt={author.display_name}
-              width={72}
-              height={72}
-              className="rounded-full object-cover flex-shrink-0"
-            />
-          ) : (
-            <div className="w-18 h-18 rounded-full bg-accent flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 w-[72px] h-[72px]">
-              {author.display_name[0]}
+      <script nonce={(await headers()).get('x-nonce')??undefined} type="application/ld+json"  dangerouslySetInnerHTML={{ __html: jsonForHtml(jsonLd) }} />
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
+        {/* Header */}
+        <div className="space-y-4">
+          {author.banner_url && (
+            <div className="relative w-full h-32 rounded-xl overflow-hidden">
+              <Image
+                src={author.banner_url}
+                alt={t('banner')}
+                fill
+                className="object-cover"
+                sizes="672px"
+              />
             </div>
           )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-display text-2xl font-bold">{author.display_name}</h1>
-              {author.is_verified_author && (
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent">
-                  {t('verified')}
-                </span>
+          <div className="flex items-start gap-4">
+            {author.avatar_url ? (
+              <Image
+                src={author.avatar_url}
+                alt={author.display_name}
+                width={72}
+                height={72}
+                className="rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-18 h-18 rounded-full bg-accent flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 w-[72px] h-[72px]">
+                {author.display_name[0]}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="font-display text-2xl font-bold">{author.display_name}</h1>
+                {author.is_verified_author && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent">
+                    {t('verified')}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                @{author.username}
+              </p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                {t('followers',{count:followerCount??0})}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {currentUser && currentUser.id !== author.id && (
+                <>
+                  <FollowButton
+                    targetUserId={author.id}
+                    currentUserId={currentUser.id}
+                    initialFollowing={isFollowing}
+                  />
+                  <Link
+                    href={`/author/${author.username}/ask`}
+                    className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+                  >
+                    {t('ask')}
+                  </Link>
+                </>
               )}
             </div>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              @{author.username}
-            </p>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              {t('followers',{count:followerCount??0})}
-            </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {currentUser && currentUser.id !== author.id && (
-              <>
-                <FollowButton
-                  targetUserId={author.id}
-                  currentUserId={currentUser.id}
-                  initialFollowing={isFollowing}
-                />
-                <Link
-                  href={`/author/${author.username}/ask`}
-                  className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
-                >
-                  {t('ask')}
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-        {author.bio && (
-          <p className="text-sm text-neutral-700 dark:text-neutral-300">{author.bio}</p>
-        )}
-      </div>
-
-      {/* Books Catalog */}
-      {bookDetails.length > 0 && (
-        <section id="books">
-          <h2 className="font-display text-xl font-bold mb-4">{t('books')}</h2>
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-            {bookDetails.map((book) => (
-              <Link
-                key={book.id}
-                href={`/book/${book.id}`}
-                className="flex flex-col gap-1 hover:opacity-80 transition-opacity"
-              >
-                <div className="relative w-full aspect-[2/3] rounded overflow-hidden bg-neutral-200 dark:bg-neutral-700">
-                  {book.cover_url ? (
-                    <Image
-                      src={book.cover_url}
-                      alt={book.title}
-                      fill
-                      className="object-cover"
-                      sizes="120px"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-2xl">📚</div>
-                  )}
-                </div>
-                <p className="text-xs font-medium line-clamp-2 leading-tight">{book.title}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {nextCursor&&<Link href={`/author/${encodeURIComponent(params.username)}?${new URLSearchParams({cursor:nextCursor,...(searchParams?.qaCursor?{qaCursor:searchParams.qaCursor}:{})})}#books`} className="text-sm underline">{common('loadMore')}</Link>}
-
-      {arcs.length>0&&<section className="space-y-3"><h2 className="font-display text-xl font-bold">{t('arcs')}</h2>{arcs.map(arc=><ArcOfferCard key={arc.id} arc={arc} actorId={currentUser?.id??null}/>)}<Link href={'/arcs?authorId='+author.id} className="text-sm underline">{common('loadMore')}</Link></section>}
-
-      {/* From the Author Posts */}
-      {posts.length > 0 && (
-        <section id="author-posts">
-          <h2 className="font-display text-xl font-bold mb-4">{t('posts')}</h2>
-          <div className="space-y-4">
-            {posts.map((post) => (
-              <AuthorPostCard
-                key={post.id}
-                post={post}
-                author={{
-                  username: author.username,
-                  display_name: author.display_name,
-                  avatar_url: author.avatar_url,
-                  is_verified_author: author.is_verified_author,
-                }}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {postsCursor&&<Link href={'/author/'+encodeURIComponent(params.username)+'?'+new URLSearchParams({...(searchParams?.cursor?{cursor:searchParams.cursor}:{}),...(searchParams?.qaCursor?{qaCursor:searchParams.qaCursor}:{}),postCursor:postsCursor})+'#author-posts'} className="text-sm underline">{common('loadMore')}</Link>}
-
-      {/* Books that inspired me */}
-      {inspiredBooks.length > 0 && (
-        <section>
-          <h2 className="font-display text-xl font-bold mb-4">{t('inspired')}</h2>
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-            {inspiredBooks.map((book) => (
-              <Link
-                key={book.id}
-                href={`/book/${book.id}`}
-                className="flex flex-col gap-1 hover:opacity-80 transition-opacity"
-              >
-                <div className="relative w-full aspect-[2/3] rounded overflow-hidden bg-neutral-200 dark:bg-neutral-700">
-                  {book.cover_url ? (
-                    <Image
-                      src={book.cover_url}
-                      alt={book.title}
-                      fill
-                      className="object-cover"
-                      sizes="120px"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-2xl">📚</div>
-                  )}
-                </div>
-                <p className="text-xs font-medium line-clamp-2 leading-tight">{book.title}</p>
-              </Link>
-            ))}
-          </div>
-          {inspiredListRaw && (
-            <Link
-              href={`/lists/${inspiredListRaw.id}`}
-              className="mt-2 inline-block text-xs text-accent hover:underline"
-            >
-              {t('fullList')}
-            </Link>
+          {author.bio && (
+            <p className="text-sm text-neutral-700 dark:text-neutral-300">{author.bio}</p>
           )}
-        </section>
-      )}
+        </div>
 
-      <section id="author-qa" className="space-y-4">
-        <div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">{t('qa')}</h2>{currentUser&&currentUser.id!==author.id&&<Link href={'/author/'+encodeURIComponent(author.username)+'/ask'} className="text-sm text-accent hover:underline">{t('askQuestion')}</Link>}</div>
-        {!questions?<p role="alert">{qaText('loadFailed')} <Link href={questionLink(searchParams?.qaCursor)} className="underline">{common('retry')}</Link></p>:<><p className="text-sm text-muted-foreground">{qaText('answeredCount',{count:questions.total})}</p>{!qaItems.length&&<p>{qaText('empty')}</p>}{qaItems.map(item=><article key={item.id} className="rounded-xl border border-border bg-card p-4 space-y-2"><p className="text-sm font-semibold whitespace-pre-wrap">{item.question}</p><p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.answer_text??item.answer}</p></article>)}{questions.nextCursor&&<Link href={questionLink(questions.nextCursor)} className="text-sm underline">{common('loadMore')}</Link>}{searchParams?.qaCursor&&<Link href={questionLink()} className="block text-sm underline">{common('back')}</Link>}</>}
-      </section>
-    </div>
+        {/* Books Catalog */}
+        {bookDetails.length > 0 && (
+          <section id="books">
+            <h2 className="font-display text-xl font-bold mb-4">{t('books')}</h2>
+            <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+              {bookDetails.map((book) => (
+                <Link
+                  key={book.id}
+                  href={`/book/${book.id}`}
+                  className="flex flex-col gap-1 hover:opacity-80 transition-opacity"
+                >
+                  <div className="relative w-full aspect-[2/3] rounded overflow-hidden bg-neutral-200 dark:bg-neutral-700">
+                    {book.cover_url ? (
+                      <Image
+                        src={book.cover_url}
+                        alt={book.title}
+                        fill
+                        className="object-cover"
+                        sizes="120px"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-2xl">📚</div>
+                    )}
+                  </div>
+                  <p className="text-xs font-medium line-clamp-2 leading-tight">{book.title}</p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {nextCursor&&<Link href={`/author/${encodeURIComponent(params.username)}?${new URLSearchParams({cursor:nextCursor,...(searchParams?.qaCursor?{qaCursor:searchParams.qaCursor}:{})})}#books`} className="text-sm underline">{common('loadMore')}</Link>}
+
+        {arcs.length>0&&<section className="space-y-3"><h2 className="font-display text-xl font-bold">{t('arcs')}</h2>{arcs.map(arc=><ArcOfferCard key={arc.id} arc={arc} actorId={currentUser?.id??null}/>)}<Link href={'/arcs?authorId='+author.id} className="text-sm underline">{common('loadMore')}</Link></section>}
+
+        {/* From the Author Posts */}
+        {posts.length > 0 && (
+          <section id="author-posts">
+            <h2 className="font-display text-xl font-bold mb-4">{t('posts')}</h2>
+            <div className="space-y-4">
+              {posts.map((post) => (
+                <AuthorPostCard
+                  key={post.id}
+                  post={post}
+                  author={{
+                    username: author.username,
+                    display_name: author.display_name,
+                    avatar_url: author.avatar_url,
+                    is_verified_author: author.is_verified_author,
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {postsCursor&&<Link href={'/author/'+encodeURIComponent(params.username)+'?'+new URLSearchParams({...(searchParams?.cursor?{cursor:searchParams.cursor}:{}),...(searchParams?.qaCursor?{qaCursor:searchParams.qaCursor}:{}),postCursor:postsCursor})+'#author-posts'} className="text-sm underline">{common('loadMore')}</Link>}
+
+        {/* Books that inspired me */}
+        {inspiredBooks.length > 0 && (
+          <section>
+            <h2 className="font-display text-xl font-bold mb-4">{t('inspired')}</h2>
+            <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+              {inspiredBooks.map((book) => (
+                <Link
+                  key={book.id}
+                  href={`/book/${book.id}`}
+                  className="flex flex-col gap-1 hover:opacity-80 transition-opacity"
+                >
+                  <div className="relative w-full aspect-[2/3] rounded overflow-hidden bg-neutral-200 dark:bg-neutral-700">
+                    {book.cover_url ? (
+                      <Image
+                        src={book.cover_url}
+                        alt={book.title}
+                        fill
+                        className="object-cover"
+                        sizes="120px"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-2xl">📚</div>
+                    )}
+                  </div>
+                  <p className="text-xs font-medium line-clamp-2 leading-tight">{book.title}</p>
+                </Link>
+              ))}
+            </div>
+            {inspiredListRaw && (
+              <Link
+                href={`/lists/${inspiredListRaw.id}`}
+                className="mt-2 inline-block text-xs text-accent hover:underline"
+              >
+                {t('fullList')}
+              </Link>
+            )}
+          </section>
+        )}
+
+        <section id="author-qa" className="space-y-4">
+          <div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">{t('qa')}</h2>{currentUser&&currentUser.id!==author.id&&<Link href={'/author/'+encodeURIComponent(author.username)+'/ask'} className="text-sm text-accent hover:underline">{t('askQuestion')}</Link>}</div>
+          {!questions?<p role="alert">{qaText('loadFailed')} <Link href={questionLink(searchParams?.qaCursor)} className="underline">{common('retry')}</Link></p>:<><p className="text-sm text-muted-foreground">{qaText('answeredCount',{count:questions.total})}</p>{!qaItems.length&&<p>{qaText('empty')}</p>}{qaItems.map(item=><article key={item.id} className="rounded-xl border border-border bg-card p-4 space-y-2"><p className="text-sm font-semibold whitespace-pre-wrap">{item.question}</p><p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.answer_text??item.answer}</p></article>)}{questions.nextCursor&&<Link href={questionLink(questions.nextCursor)} className="text-sm underline">{common('loadMore')}</Link>}{searchParams?.qaCursor&&<Link href={questionLink()} className="block text-sm underline">{common('back')}</Link>}</>}
+        </section>
+      </div>
     </>
   );
 }

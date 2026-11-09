@@ -30,7 +30,7 @@ async function processEvent(event:OutboxEventRow){
  if(event.event_type==='moderate_review'){
   const {data:review,error}=await service.from('reviews').select('id,content,moderation_status').eq('id',String(event.payload.reviewId)).maybeSingle();if(error)throw new Error('Review unavailable');if(!review){await completeClaim(event);return;}
   const tone=review.moderation_status==='pending'?await classifyTone(String(review.content)):'neutral';if(tone==='unavailable')throw new Error('Review moderation unavailable');
-  const {data,error:finishError}=await service.rpc('finish_review_moderation' as never,{p_review:review.id,p_status:tone==='toxic'?'removed':'published',p_event:event.id,p_attempt:event.attempts} as never);if(finishError||!data)throw new Error('Review moderation persistence unavailable');
+  const {data,error:finishError}=await service.rpc('finish_review_moderation',{p_review:review.id,p_status:tone==='toxic'?'removed':'published',p_event:event.id,p_attempt:event.attempts});if(finishError||!data)throw new Error('Review moderation persistence unavailable');
   return;
  }
  if(event.event_type==='deliver_push'){
@@ -39,20 +39,20 @@ async function processEvent(event:OutboxEventRow){
    title:String(payload.title??'New tip'),body:String(payload.body??('You received a '+(payload.currency??'USD')+' '+payload.amount+' tip!')),url:String(payload.url??'/notifications'),tag:'outbox:'+event.aggregate_type+':'+event.id,notificationType:type,
    messageKey:type==='tip'?'tipAmount':type==='follow'?'follow':undefined,messageValues:type==='tip'?{amount:payload.amount,currency:payload.currency??'USD'}:{},
   },{delivered:Array.isArray(payload.deliveryReceipts)?payload.deliveryReceipts.filter((id):id is string=>typeof id==='string'):[],ack:async id=>{
-   const {data,error}=await service.rpc('ack_push_delivery' as never,{p_event:event.id,p_attempt:event.attempts,p_subscription:id} as never);if(error||data!==true)throw new Error('Push acknowledgement unavailable');
+   const {data,error}=await service.rpc('ack_push_delivery',{p_event:event.id,p_attempt:event.attempts,p_subscription:id});if(error||data!==true)throw new Error('Push acknowledgement unavailable');
   }});
   await completeClaim(event);
   return;
  }
  if(event.event_type==='check_badges')await checkAndAwardBadges(String(event.payload.userId),String(event.payload.trigger));
- const {error}=await service.rpc('process_outbox_event_atomic' as never,{p_event_id:event.id} as never);if(error)throw new Error('Outbox processing unavailable');
+ const {error}=await service.rpc('process_outbox_event_atomic',{p_event_id:event.id});if(error)throw new Error('Outbox processing unavailable');
 }
 
 export async function drainOutbox(batchSize=50){
  const service=createServiceClient(),limit=Math.min(200,Math.max(1,Math.floor(batchSize))),deadline=Date.now()+25000;
  let processed=0,failed=0,scanned=0;
  while(scanned<limit&&Date.now()<deadline){
-  const {data,error}=await service.rpc('claim_outbox_events' as never,{p_batch_size:Math.min(3,limit-scanned)} as never);if(error)throw new Error('Outbox claim unavailable');
+  const {data,error}=await service.rpc('claim_outbox_events',{p_batch_size:Math.min(3,limit-scanned)});if(error)throw new Error('Outbox claim unavailable');
   const events=(data??[])as OutboxEventRow[];if(!events.length)break;scanned+=events.length;
   await Promise.all(events.map(async event=>{
    try{await processEvent(event);processed++;}

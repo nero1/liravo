@@ -24,8 +24,9 @@ const reviewSchema = z.object({
   edition_read: z.string().max(100).optional(),
 });
 
-export async function GET(request:Request,{params}:{params:{id:string}}){
-  if(!await getCurrentUser())return NextResponse.json({error:'Unauthorized'},{status:401});
+export async function GET(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
+  if(!(await getCurrentUser()))return NextResponse.json({error:'Unauthorized'},{status:401});
   const query=new URL(request.url).searchParams;
   try{
     const page=await getBookReviews(params.id,query.get('cursor'),Number(query.get('limit')??50));
@@ -33,10 +34,8 @@ export async function GET(request:Request,{params}:{params:{id:string}}){
   }catch(error){return NextResponse.json({error:error instanceof ReviewCursorError?'Invalid review page':'Reviews unavailable'},{status:error instanceof ReviewCursorError?400:503});}
 }
 
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -66,7 +65,7 @@ export async function POST(
     }
     review = await intent.insert();
     if(!intent.existing&&tone&&tone!=='unavailable'){
-      const {data,error}=await createServiceClient().rpc('finish_review_moderation' as never,{p_review:review.id,p_status:'published',p_owner:user.id} as never);
+      const {data,error}=await createServiceClient().rpc('finish_review_moderation',{p_review:review.id,p_status:'published',p_owner:user.id});
       if(error||!data||(data as {reviewId?:string}).reviewId!==review.id||!['pending','published','removed'].includes((data as {status:string}).status))throw new Error('Review publication unavailable');
       review={...review,moderation_status:(data as {status:string}).status};
     }

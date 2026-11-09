@@ -33,7 +33,7 @@ export async function verifyPaymentReturn(provider:Job['provider'],refundId:stri
   const evidence=await readPaymentReturn(provider,refundId,paymentId);
   if(evidence.refund){
     const refund=evidence.refund;
-    const {data:applied,error}=await createServiceClient().rpc('process_refund_event' as never,{p_provider:provider,p_refund_id:refund.refundId,p_payment_id:refund.paymentId,p_amount_minor:refund.amountMinor,p_currency:refund.currency,p_correlation_id:correlationId} as never);
+    const {data:applied,error}=await createServiceClient().rpc('process_refund_event',{p_provider:provider,p_refund_id:refund.refundId,p_payment_id:refund.paymentId,p_amount_minor:refund.amountMinor,p_currency:refund.currency,p_correlation_id:correlationId});
     if(error||typeof applied!=='boolean')throw new Error('Refund settlement unavailable');
     return 'verified' as const;
   }
@@ -41,13 +41,13 @@ export async function verifyPaymentReturn(provider:Job['provider'],refundId:stri
 }
 
 export async function drainPaymentReturns(correlationId:string){
-  const db=createServiceClient(),{data,error}=await db.rpc('claim_payment_returns' as never,{p_limit:3} as never);
+  const db=createServiceClient(),{data,error}=await db.rpc('claim_payment_returns',{p_limit:3});
   if(error)throw new Error('Payment return queue unavailable');
   const claimed=jobs.parse(data);let completed=0,failed=0;
   await Promise.all(claimed.map(async job=>{
     let state=job.status;
     const persist=async(status:string,id:string|null,reason:string|null)=>{
-      const {data:updated,error:updateError}=await db.rpc('update_payment_return' as never,{p_provider:job.provider,p_payment_id:job.payment_id,p_claim:job.claim_token,p_status:status,p_refund_id:id,p_error:reason} as never);
+      const {data:updated,error:updateError}=await db.rpc('update_payment_return',{p_provider:job.provider,p_payment_id:job.payment_id,p_claim:job.claim_token,p_status:status,p_refund_id:id,p_error:reason});
       if(updateError)throw new Error('Payment return persistence unavailable');
       return updated===true;
     };

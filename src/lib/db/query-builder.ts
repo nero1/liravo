@@ -1,10 +1,14 @@
 import { buildPgProjection } from './relations';
-import type { PendingQuery, Row, ParameterOrJSON, SerializableParameter } from 'postgres';
-import {getSql,withDatabaseOperation,executeQuery} from './pg';
+import type {Row,ParameterOrJSON}from'postgres';
+import {sql as dsql,and,eq,ne,gt,gte,lt,lte,inArray,arrayContains,arrayOverlaps,ilike,isNull,isNotNull,asc,desc,getTableColumns,type SQL}from'drizzle-orm';
+import type {PgTable,PgColumn}from'drizzle-orm/pg-core';
+import {schema,primaryKeys}from'./schema';
+import {getSql,getDrizzle,withDatabaseOperation,executeQuery} from './pg';
 
 type QueryResult<T> = { data: T | null; error: { message: string; code?: string } | null; count?: number };
 
 function queryError(error: unknown): { message: string; code?: string } {
+  if(error&&typeof error==='object'&&'cause'in error&&error.cause)return queryError(error.cause);
   if (error && typeof error === 'object' && 'message' in error) {
     return { message: String(error.message), ...('code' in error && typeof error.code === 'string' ? { code: error.code } : {}) };
   }
@@ -187,43 +191,50 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
     return this;
   }
 
-  private buildWhere() {
-    const sql = getSql();
-    const parts: PendingQuery<Row[]>[] = [];
-
-    for (const f of this._filters) {
-      switch (f.op) {
-        case '=':   parts.push(sql`${sql(f.col)} = ${f.val as SerializableParameter<never>}`); break;
-        case '!=':  parts.push(sql`${sql(f.col)} != ${f.val as SerializableParameter<never>}`); break;
-        case '>':   parts.push(sql`${sql(f.col)} > ${f.val as SerializableParameter<never>}`); break;
-        case '>=':  parts.push(sql`${sql(f.col)} >= ${f.val as SerializableParameter<never>}`); break;
-        case '<':   parts.push(sql`${sql(f.col)} < ${f.val as SerializableParameter<never>}`); break;
-        case '<=':  parts.push(sql`${sql(f.col)} <= ${f.val as SerializableParameter<never>}`); break;
-        case 'IN':  parts.push(sql`${sql(f.col)} = ANY(${f.val as SerializableParameter<never>[]})`); break;
-        case '@>': parts.push(sql`${sql(f.col)} @> ${f.val as SerializableParameter<never>}`); break;
-        case '&&': parts.push(sql`${sql(f.col)} && ${f.val as SerializableParameter<never>}`); break;
-        case 'ILIKE': parts.push(sql`${sql(f.col)} ILIKE ${f.val as string}`); break;
-        case 'IS NOT':
-          if (f.val === null) parts.push(sql`${sql(f.col)} IS NOT NULL`);
-          else if (f.val === true) parts.push(sql`${sql(f.col)} IS NOT TRUE`);
-          else if (f.val === false) parts.push(sql`${sql(f.col)} IS NOT FALSE`);
-          break;
-        case '@@websearch': parts.push(sql`${sql(f.col)} @@ websearch_to_tsquery(${f.config??'english'}::regconfig,${f.val as string})`); break;
-        case '@@plain': parts.push(sql`${sql(f.col)} @@ plainto_tsquery(${f.config??'english'}::regconfig,${f.val as string})`); break;
-        case 'IS':
-          if (f.val === null)       parts.push(sql`${sql(f.col)} IS NULL`);
-          else if (f.val === true)  parts.push(sql`${sql(f.col)} IS TRUE`);
-          else if (f.val === false) parts.push(sql`${sql(f.col)} IS FALSE`);
-          break;
+  private table(){
+    const table=(schema as Record<string,PgTable>)[this._table];if(!table)throw Error('Unknown database table');return table;
+  }
+  private column(name:string){const column=getTableColumns(this.table())[name];if(!column)throw Error('Unknown database column: '+name);return column;}
+  private buildWhere():SQL|undefined{
+    const parts:SQL[]=[];
+    for(const f of this._filters){
+      const column=this.column(f.col);
+      switch(f.op){
+        case '=':parts.push(eq(column,f.val));break;
+        case '!=':parts.push(ne(column,f.val));break;
+        case '>':parts.push(gt(column,f.val));break;
+        case '>=':parts.push(gte(column,f.val));break;
+        case '<':parts.push(lt(column,f.val));break;
+        case '<=':parts.push(lte(column,f.val));break;
+        case 'IN':parts.push(inArray(column,f.val as unknown[]));break;
+        case '@>':parts.push(Array.isArray(f.val)?f.val.length?arrayContains(column,f.val):dsql`${column} @> ${dsql.param(f.val,column)}`:dsql`${column} @> ${dsql.param(f.val,column)}`);break;
+        case '&&':parts.push(Array.isArray(f.val)?f.val.length?arrayOverlaps(column,f.val):dsql`false`:dsql`${column} && ${f.val}`);break;
+        case 'ILIKE':parts.push(ilike(column,String(f.val)));break;
+        case 'IS':parts.push(f.val===null?isNull(column):f.val===true?dsql`${column} IS TRUE`:dsql`${column} IS FALSE`);break;
+        case 'IS NOT':parts.push(f.val===null?isNotNull(column):f.val===true?dsql`${column} IS NOT TRUE`:dsql`${column} IS NOT FALSE`);break;
+        case '@@websearch':parts.push(dsql`${column} @@ websearch_to_tsquery(${f.config??'english'}::regconfig,${f.val})`);break;
+        case '@@plain':parts.push(dsql`${column} @@ plainto_tsquery(${f.config??'english'}::regconfig,${f.val})`);break;
+        default:throw Error('Unsupported database filter');
       }
     }
-
-    for (const fragment of this._orFragments) {
-      parts.push(sql`(${sql.unsafe(this._buildOrSql(fragment))})`);
-    }
-
-    if (parts.length === 0) return sql``;
-    return parts.reduce((acc, cur) => sql`${acc} AND ${cur}`);
+    for(const fragment of this._orFragments)parts.push(dsql.raw('('+this._buildOrSql(fragment)+')'));
+    return and(...parts);
+  }
+  private async projection():Promise<Record<string,PgColumn|SQL|SQL.Aliased>>{
+    const expression=await buildPgProjection(getSql(),this._table,this._selectCols),fields:Record<string,PgColumn|SQL|SQL.Aliased>={};
+    let depth=0,start=0;const parts:string[]=[];
+    for(let index=0;index<expression.length;index++){if(expression[index]==='(')depth++;if(expression[index]===')')depth--;if(expression[index]===','&&depth===0){parts.push(expression.slice(start,index).trim());start=index+1;}}
+    parts.push(expression.slice(start).trim());
+    for(const field of parts){
+      if(field===`"${this._table}".*`){Object.assign(fields,getTableColumns(this.table()));continue;}
+      const scalar=field.match(/^"\w+"\."(\w+)"$/);if(scalar){fields[scalar[1]]=this.column(scalar[1]);continue;}
+      const aliased=field.match(/^([\s\S]*) AS "(\w+)"$/);if(!aliased)throw Error('Invalid database projection');fields[aliased[2]]=dsql.raw(aliased[1]).as(aliased[2]);
+    }return fields;
+  }
+  private async run(query:{execute():Promise<unknown>}):Promise<Row[]>{
+    const rows=await query.execute();if(!Array.isArray(rows))throw Error('Invalid database result');
+    const normalize=(value:unknown):unknown=>typeof value==='bigint'?value.toString():Array.isArray(value)?value.map(normalize):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,normalize(item)])):value;
+    return rows.map(row=>normalize(row)as Row);
   }
 
   private _buildOrSql(filter: string): string {
@@ -243,7 +254,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
       const group = part.match(/^(and|or)\((.*)\)$/);
       if (group) return `(${split(group[2]).map(parse).join(group[1] === 'and' ? ' AND ' : ' OR ')})`;
       const [column, op, ...rest] = part.split('.');
-      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(column)) throw new Error('Invalid filter column');
+      this.column(column);
       const value = rest.join('.');
       const operators: Record<string, string> = { eq: '=', neq: '!=', gt: '>', gte: '>=', lt: '<', lte: '<=' };
       if (op === 'is' && ['null','true','false'].includes(value)) return `"${column}" IS ${value.toUpperCase()}`;
@@ -264,149 +275,36 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
     try{return await withDatabaseOperation(()=>this.executeInScope());}catch(error){return {data:null,error:queryError(error)};}
   }
 
-  private async executeInScope(): Promise<QueryResult<T>> {
-    const sql = getSql();
-    try {
-      if (this._mutation) {
-        return await this._executeMutation(sql);
+  private async executeInScope():Promise<QueryResult<T>>{
+    const db=getDrizzle(),table=this.table(),where=this.buildWhere();let count:number|undefined;
+    if(this._mutation){
+      const mutation=this._mutation,returning=mutation.returning?await this.projection():null;
+      if(mutation.type==='delete'||mutation.type==='update'){
+        if(!where)throw Error(mutation.type+'() requires at least one filter');
+        if(mutation.type==='update')for(const key of Object.keys(mutation.data??{}))this.column(key);
+        if(mutation.type==='delete'){const query=db.delete(table).where(where);if(returning)return this.mutationResult(await this.run(query.returning(returning)));await this.run(query);}
+        else{const query=db.update(table).set(mutation.data as Record<string,unknown>).where(where);if(returning)return this.mutationResult(await this.run(query.returning(returning)));await this.run(query);}return {data:null,error:null};
       }
-
-      let count: number | undefined;
-      if (this._countOnly) {
-        const where = this.buildWhere();
-        const hasWhere = this._filters.length > 0 || this._orFragments.length > 0;
-        const rows = hasWhere
-          ? await executeQuery(sql`SELECT COUNT(*) AS count FROM ${sql(this._table)} WHERE ${where}`)
-          : await executeQuery(sql`SELECT COUNT(*) AS count FROM ${sql(this._table)}`);
-        count = parseInt(rows[0]?.count ?? '0', 10);
-        if (this._head) return { data: null, error: null, count };
+      const rows=Array.isArray(mutation.data)?mutation.data:[mutation.data!];
+      if(!rows.length)throw Error('Empty database mutation');for(const row of rows)for(const key of Object.keys(row))this.column(key);
+      let query=db.insert(table).values(rows).$dynamic();
+      if(mutation.type==='upsert'){
+        const keys=Object.keys(rows[0]),conflict:readonly string[]=mutation.onConflict?.split(',').map(key=>key.trim())??primaryKeys.find(key=>key.table_name===this._table)?.columns??[];
+        if(!conflict.length)throw Error('Upsert requires a conflict target');
+        const target=conflict.map(key=>this.column(key)),updates=keys.filter(key=>!conflict.includes(key));
+        query=mutation.ignoreDuplicates||!updates.length?query.onConflictDoNothing({target}):query.onConflictDoUpdate({target,set:Object.fromEntries(updates.map(key=>[key,dsql`excluded.${dsql.identifier(key)}`]))});
       }
-
-      const selectExpr = await buildPgProjection(sql, this._table, this._selectCols);
-      const hasWhere = this._filters.length > 0 || this._orFragments.length > 0;
-      const where = this.buildWhere();
-
-      let query: unknown;
-
-      if (hasWhere) {
-        if (this._orderCol && this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} WHERE ${where} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))} LIMIT ${this._limit} OFFSET ${this._offset}`;
-        } else if (this._orderCol && this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} WHERE ${where} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))} LIMIT ${this._limit}`;
-        } else if (this._orderCol) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} WHERE ${where} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))}`;
-        } else if (this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} WHERE ${where} LIMIT ${this._limit} OFFSET ${this._offset}`;
-        } else if (this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} WHERE ${where} LIMIT ${this._limit}`;
-        } else {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} WHERE ${where}`;
-        }
-      } else {
-        if (this._orderCol && this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))} LIMIT ${this._limit} OFFSET ${this._offset}`;
-        } else if (this._orderCol && this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))} LIMIT ${this._limit}`;
-        } else if (this._orderCol) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} ORDER BY ${sql.unsafe(this._orders.map(o => `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`).join(', '))}`;
-        } else if (this._limit !== null && this._offset !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} LIMIT ${this._limit} OFFSET ${this._offset}`;
-        } else if (this._limit !== null) {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)} LIMIT ${this._limit}`;
-        } else {
-          query = sql`SELECT ${sql.unsafe(selectExpr)} FROM ${sql(this._table)}`;
-        }
-      }
-
-      const rows = await executeQuery(query as ReturnType<typeof sql>);
-
-      if (this._head) return { data: null, error: null };
-      if (this._isSingle) {
-        if (rows.length !== 1) return { data: null, error: { message: 'Expected one row', code: 'PGRST116' } };
-        return { data: rows[0] as T, error: null, count };
-      }
-      if (this._isMaybeSingle) {
-        if (rows.length > 1) return { data: null, error: { message: 'Expected at most one row', code: 'PGRST116' } };
-        return { data: rows.length > 0 ? rows[0] as T : null, error: null, count };
-      }
-      return { data: rows as unknown as T, error: null, count };
-    } catch (err) {
-      return { data: null, error: queryError(err) };
+      if(returning)return this.mutationResult(await this.run(query.returning(returning)));
+      await this.run(query);return {data:null,error:null};
     }
-  }
-
-  private async _executeMutation(sql: ReturnType<typeof getSql>): Promise<QueryResult<T>> {
-    const m = this._mutation!;
-    const returning = m.returning ? await buildPgProjection(sql, this._table, this._selectCols) : '';
-    const hasWhere = this._filters.length > 0 || this._orFragments.length > 0;
-    const where = this.buildWhere();
-
-    try {
-      switch (m.type) {
-        case 'insert': {
-          const rows = Array.isArray(m.data) ? m.data : [m.data!];
-          if (m.returning) {
-            const result = await executeQuery(sql`INSERT INTO ${sql(this._table)} ${sql(rows)} RETURNING ${sql.unsafe(returning)}`);
-            return this.mutationResult(result);
-          }
-          await executeQuery(sql`INSERT INTO ${sql(this._table)} ${sql(rows)}`);
-          return { data: null, error: null };
-        }
-
-        case 'upsert': {
-          const rows = Array.isArray(m.data) ? m.data : [m.data!];
-          const keys = Object.keys(rows[0]);
-          const conflictCols = m.onConflict
-            ? m.onConflict.split(',').map((c) => c.trim())
-            : [keys[0]];
-          const updateCols = keys.filter((k) => !conflictCols.includes(k));
-
-          // Build conflict and SET clauses using double-quoted identifiers.
-          // Column names come from application data objects, not user input.
-          const safeId = (c: string) => `"${c.replace(/[^a-zA-Z0-9_]/g, '')}"`;
-          const conflictExpr = conflictCols.map(safeId).join(', ');
-          const updateExpr = !m.ignoreDuplicates && updateCols.length > 0
-            ? `DO UPDATE SET ${updateCols.map((c) => `${safeId(c)} = EXCLUDED.${safeId(c)}`).join(', ')}`
-            : 'DO NOTHING';
-
-          if (m.returning) {
-            const result = await executeQuery(sql.unsafe(
-              `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr} RETURNING ${returning}`,
-              rows.flatMap((r) => keys.map((k) => r[k])) as ParameterOrJSON<never>[]
-            ));
-            return this.mutationResult(result);
-          }
-          await executeQuery(sql.unsafe(
-            `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr}`,
-            rows.flatMap((r) => keys.map((k) => r[k])) as ParameterOrJSON<never>[]
-          ));
-          return { data: null, error: null };
-        }
-
-        case 'update': {
-          if (!hasWhere) throw new Error('update() requires at least one filter');
-          if (m.returning) {
-            const result = await executeQuery(sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where} RETURNING ${sql.unsafe(returning)}`);
-            return this.mutationResult(result);
-          }
-          await executeQuery(sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where}`);
-          return { data: null, error: null };
-        }
-
-        case 'delete': {
-          if (!hasWhere) throw new Error('delete() requires at least one filter');
-          if (m.returning) {
-            const result = await executeQuery(sql`DELETE FROM ${sql(this._table)} WHERE ${where} RETURNING ${sql.unsafe(returning)}`);
-            return this.mutationResult(result);
-          }
-          await executeQuery(sql`DELETE FROM ${sql(this._table)} WHERE ${where}`);
-          return { data: null, error: null };
-        }
-      }
-    } catch (err) {
-      return { data: null, error: queryError(err) };
-    }
-    return { data: null, error: null };
+    if(this._countOnly){const rows=await this.run(db.select({count:dsql`count(*)`}).from(table).where(where));count=Number(rows[0]?.count??0);if(this._head)return {data:null,error:null,count};}
+    let query=db.select(await this.projection()).from(table).where(where).$dynamic();
+    if(this._orders.length)query=query.orderBy(...this._orders.map(order=>order.ascending?asc(this.column(order.column)):desc(this.column(order.column))));
+    if(this._limit!==null){if(!Number.isSafeInteger(this._limit)||this._limit<0)throw Error('Invalid query limit');query=query.limit(this._limit);}
+    if(this._offset!==null){if(!Number.isSafeInteger(this._offset)||this._offset<0)throw Error('Invalid query offset');query=query.offset(this._offset);}
+    const rows=await this.run(query);if(this._head)return {data:null,error:null,count};
+    if((this._isSingle&&rows.length!==1)||(this._isMaybeSingle&&rows.length>1))return {data:null,error:{message:'Expected one row',code:'PGRST116'}};
+    return {data:(this._isSingle||this._isMaybeSingle?rows[0]??null:rows)as T,error:null,count};
   }
 
   // Thenable — allows `await builder` without explicit .execute()

@@ -9,9 +9,14 @@ import Link from 'next/link';
 import {ReadingProgressBar} from '@/components/shelf/ReadingProgressBar';
 import {LogReadingSessionButton} from '@/components/shelf/LogReadingSessionButton';
 export const dynamic='force-dynamic';
-type Props={params:{slug:string};searchParams?:{cursor?:string}};
-export async function generateMetadata({params}:Props){const t=await getTranslations('shelves'),books=await getTranslations('books'),user=await getCurrentUser();let title=t('title');if(user)try{const shelf=await getShelfForSlug(user.id,params.slug);title=shelf.default_type?books({currently_reading:'currentlyReading',have_read:'haveRead',want_to_read:'wantToRead'}[shelf.default_type]):shelf.name;}catch{}return{title,robots:{index:false,follow:false}};}
-export default async function ShelfDetailPage({params,searchParams}:Props){
+type Props={params: Promise<{slug:string}>;searchParams?: Promise<{cursor?:string}>};
+export async function generateMetadata(props:Props) {
+ const params = await props.params;
+ const t=await getTranslations('shelves'),books=await getTranslations('books'),user=await getCurrentUser();let title=t('title');if(user)try{const shelf=await getShelfForSlug(user.id,params.slug);title=shelf.default_type?books({currently_reading:'currentlyReading',have_read:'haveRead',want_to_read:'wantToRead'}[shelf.default_type]):shelf.name;}catch{}return{title,robots:{index:false,follow:false}};
+}
+export default async function ShelfDetailPage(props:Props) {
+ const searchParams = (await props.searchParams)??{};
+ const params = await props.params;
  const user=await getCurrentUser();if(!user)redirect('/login');const t=await getTranslations('shelves'),books=await getTranslations('books'),common=await getTranslations('common'),formatter=await getFormatter(),locale=await getLocale();let data;
  const path='/shelf/'+encodeURIComponent(params.slug),retry=path+(searchParams?.cursor?'?cursor='+encodeURIComponent(searchParams.cursor):'');
  try{data=await getShelfDetail(user.id,(await getShelfForSlug(user.id,params.slug)).id,searchParams?.cursor??null);}catch(error){if(error instanceof ShelfError&&error.status===404)notFound();return <div className="max-w-2xl mx-auto px-4 py-6 space-y-4"><Link href="/shelf" className="underline">{t('title')}</Link><p role="alert">{t(error instanceof ShelfError&&error.status===400?'invalidCursor':'loadFailed')}</p><Link href={error instanceof ShelfError&&error.status===400?path:retry} className="underline">{common('retry')}</Link></div>;}

@@ -11,7 +11,7 @@ interface ReadingGoalFormProps {
 
 export function ReadingGoalForm(props:ReadingGoalFormProps){return <OwnedReadingGoalForm key={props.userId} {...props}/>;}
 function OwnedReadingGoalForm({userId,currentGoal}:ReadingGoalFormProps){
-  const t=useTranslations('readingGoalForm'),common=useTranslations('common'),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>();
+  const t=useTranslations('readingGoalForm'),common=useTranslations('common'),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   useEffect(()=>()=>clearTimeout(timer.current),[]);
   const [goal, setGoal] = useState(currentGoal?.toString() ?? '');
   const [loading, setLoading] = useState(false);

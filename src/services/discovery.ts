@@ -16,7 +16,7 @@ export async function getMoodBooks(mood:string,cursor:string|null=null,limit=30)
     try{if(cursor.length>1000||!/^[A-Za-z0-9_-]+$/.test(cursor))throw new Error();after=cursorSchema.parse(JSON.parse(Buffer.from(cursor,'base64url').toString()));if(after.mood!==mood)throw new Error();}
     catch{throw new MoodCursorError('Invalid mood cursor');}
   }
-  const {data,error}=await createServiceClient().rpc('discover_mood_books' as never,{p_mood:mood,p_limit:limit,p_after_count:after?.count??null,p_after_id:after?.id??null} as never);
+  const {data,error}=await createServiceClient().rpc('discover_mood_books',{p_mood:mood,p_limit:limit,p_after_count:after?.count??null,p_after_id:after?.id??null});
   if(error||!data||!Array.isArray((data as {books?:unknown}).books))throw new Error('Mood discovery unavailable');
   const page=data as {books:(BookRow&{mood_count:number})[];nextCursor:{count:number;id:string}|null};
   return {books:page.books.map(book=>({...clientBook(book),mood_count:book.mood_count})),nextCursor:page.nextCursor?Buffer.from(JSON.stringify({mood,...page.nextCursor})).toString('base64url'):null};

@@ -7,7 +7,7 @@ export type Locale = typeof locales[number];
 export const defaultLocale: Locale = 'en';
 
 export default getRequestConfig(async ({locale:override}) => {
-  const preferred = override ?? headers().get('x-liravo-locale') ?? cookies().get('NEXT_LOCALE')?.value;
+  const preferred = override ?? (await headers()).get('x-liravo-locale') ?? (await cookies()).get('NEXT_LOCALE')?.value;
   const locale = locales.includes(preferred as Locale) ? preferred as Locale : defaultLocale;
   return {
     locale,

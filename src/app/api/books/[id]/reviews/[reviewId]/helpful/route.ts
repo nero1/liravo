@@ -6,7 +6,11 @@ import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request, { params }: { params: { id: string; reviewId: string } }) {
+export async function POST(
+  request: Request,
+  props: { params: Promise<{ id: string; reviewId: string }> }
+) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!z.object({ id: z.string().uuid(), reviewId: z.string().uuid() }).safeParse(params).success) return NextResponse.json({ error: 'Invalid target' }, { status: 400 });
@@ -14,10 +18,10 @@ export async function POST(request: Request, { params }: { params: { id: string;
   if (!key || key.length < 8 || key.length > 200) return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
   const value = z.enum(['true','false']).safeParse(new URL(request.url).searchParams.get('value'));
   if (!value.success) return NextResponse.json({ error: 'Invalid value' }, { status: 400 });
-  if (!await checkRouteRateLimit(user.id,'social')) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-  const { data, error } = await createServiceClient().rpc('apply_book_interaction' as never, {
+  if (!(await checkRouteRateLimit(user.id,'social'))) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const { data, error } = await createServiceClient().rpc('apply_book_interaction', {
     p_user_id: user.id, p_book_id: params.id, p_action: 'helpfulness', p_key: key, p_review_id: params.reviewId, p_value: value.data === 'true',
-  } as never);
+  });
   if (error) {
     const status = error.code === 'P1001' ? 409 : error.code === 'P1003' ? 404 : 503;
     return NextResponse.json({ error: status === 409 ? 'Conflicting idempotency key' : status === 404 ? 'Target unavailable' : 'Interaction unavailable' }, { status });

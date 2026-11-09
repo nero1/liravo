@@ -118,7 +118,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
 type Supabase = ReturnType<typeof createServiceClient>;
 
 async function awardBadge(supabase: Supabase, userId: string, badge: BadgeDefinition): Promise<boolean> {
-  const {data,error}=await supabase.rpc('award_badge_atomic' as never,{p_user_id:userId,p_badge_id:badge.id,p_xp:badge.xp_reward,p_name:badge.name,p_icon:badge.icon} as never);
+  const {data,error}=await supabase.rpc('award_badge_atomic',{p_user_id:userId,p_badge_id:badge.id,p_xp:badge.xp_reward,p_name:badge.name,p_icon:badge.icon});
   if(error)throw new Error('Badge award unavailable');
   return data===true;
 }
@@ -137,7 +137,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
   if (!profile) return [];
   const awarded:string[]=[];
   if(trigger==='finish_book'){
-    const {data:completed,error}=await supabase.rpc('count_verified_books' as never,{p_user_id:userId} as never);
+    const {data:completed,error}=await supabase.rpc('count_verified_books',{p_user_id:userId});
     if(error||typeof completed!=='number')throw new Error('Reading milestones unavailable');
     profile.books_read_count=completed;
   }
@@ -225,14 +225,14 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
       // ── Influencer: 100 want-to-reads triggered ──
       case 'influencer': {
-        const { count, error:countError} = await supabase.from('review_conversions' as never).select('*', { count: 'exact', head: true }).eq('reviewer_id', userId);
+        const { count, error:countError} = await supabase.from('review_conversions').select('*', { count: 'exact', head: true }).eq('reviewer_id', userId);
         if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 100; break;
       }
 
       // ── Spark: first want-to-read triggered ──
       case 'spark': {
-        const { count, error:countError} = await supabase.from('review_conversions' as never).select('*', { count: 'exact', head: true }).eq('reviewer_id', userId);
+        const { count, error:countError} = await supabase.from('review_conversions').select('*', { count: 'exact', head: true }).eq('reviewer_id', userId);
         if(countError)throw new Error('Badge eligibility unavailable');
         qualifies = (count ?? 0) >= 1; break;
       }
@@ -285,20 +285,20 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
         if(pSubsError)throw new Error('Badge eligibility unavailable');
         const { data: cEntries, error:cEntriesError} = await supabase.from('writing_challenge_submissions').select('word_count').eq('user_id', userId);
         if(cEntriesError)throw new Error('Badge eligibility unavailable');
-        const total = (pSubs ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0)
-          + (cEntries ?? []).reduce((s: number, r: { word_count?: number }) => s + (r.word_count ?? 0), 0);
+        const total = (pSubs ?? []).reduce((s: number, r: { word_count?: number|null }) => s + (r.word_count ?? 0), 0)
+          + (cEntries ?? []).reduce((s: number, r: { word_count?: number|null }) => s + (r.word_count ?? 0), 0);
         qualifies = total >= 10000; break;
       }
 
       // ── Craft Scholar: shelved 10 craft books ──
       case 'craft_scholar': {
-        const {data:count,error}=await supabase.rpc('count_reading_works' as never,{p_user_id:userId,p_genres:['Writing','Craft','Creative Writing','How to Write'],p_finished:false} as never);
+        const {data:count,error}=await supabase.rpc('count_reading_works',{p_user_id:userId,p_genres:['Writing','Craft','Creative Writing','How to Write'],p_finished:false});
         if(error||typeof count!=='number')throw new Error('Badge eligibility unavailable');
         qualifies=count>=10;break;
       }
       case 'speed_reader_month': {
         const now=new Date(),monthStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));
-        const {data:count,error}=await supabase.rpc('count_reading_works' as never,{p_user_id:userId,p_since:monthStart.toISOString()} as never);
+        const {data:count,error}=await supabase.rpc('count_reading_works',{p_user_id:userId,p_since:monthStart.toISOString()});
         if(error||typeof count!=='number')throw new Error('Badge eligibility unavailable');
         qualifies=count>=5;break;
       }
@@ -344,7 +344,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
         for (const g of GENRE_BADGES_DEF) {
           for (const t of GENRE_BADGE_TIERS) {
             if (badge.id === `${g.id}${t.suffix}`) {
-              const {data:count,error}=await supabase.rpc('count_reading_works' as never,{p_user_id:userId,p_genres:[g.genre]} as never);
+              const {data:count,error}=await supabase.rpc('count_reading_works',{p_user_id:userId,p_genres:[g.genre]});
               if(error||typeof count!=='number')throw new Error('Badge eligibility unavailable');
               qualifies=count>=t.count;
             }
@@ -362,7 +362,7 @@ export async function checkAndAwardBadges(userId: string, trigger: string): Prom
 
 // ── Writing streak increment (separate from reading streak) ──────────────────
 export async function incrementWritingStreak(userId: string): Promise<void> {
-  const { error } = await createServiceClient().rpc('increment_streak_atomic' as never, { p_user_id: userId, p_kind: 'writing' } as never);
+  const { error } = await createServiceClient().rpc('increment_streak_atomic', { p_user_id: userId, p_kind: 'writing' });
   if (error) throw new Error('Writing streak update unavailable');
   await checkAndAwardBadges(userId, 'writing_streak');
 }

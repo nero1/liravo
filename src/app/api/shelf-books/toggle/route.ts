@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { shelfId, bookId, action } = parsed.data;
-  const {data,error}=await createServiceClient().rpc('apply_shelf_membership_intent' as never,{p_user_id:user.id,p_shelf_id:shelfId,p_book_id:bookId,p_add:action==='add',p_key:key} as never);
+  const {data,error}=await createServiceClient().rpc('apply_shelf_membership_intent',{p_user_id:user.id,p_shelf_id:shelfId,p_book_id:bookId,p_add:action==='add',p_key:key});
   if(error)return NextResponse.json({error:'Shelf update unavailable'},{status:({P1001:409,P1003:403,P1004:422,P1005:404} as Record<string,number>)[error.code]??503});
   const result=z.object({ok:z.literal(true),defaultType:z.string().nullable(),xp_awarded:z.number().int().nonnegative(),new_total:z.number().int().nonnegative()}).safeParse(data);
   if(!result.success)return NextResponse.json({error:'Shelf receipt unavailable'},{status:503});const shelf=result.data;

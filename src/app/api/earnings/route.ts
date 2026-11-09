@@ -18,7 +18,7 @@ export async function GET(request:Request) {
   catch {return NextResponse.json({error:'Invalid cursor'},{status:400});}
   try {
     const summary=await getCreatorBalance(user.id,currency as typeof PAYOUT_CURRENCIES[number]);
-    let query=createServiceClient().from('payout_requests').select('id,amount,currency,status,method,created_at').eq('user_id',user.id).eq('currency',currency).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(51);
+    let query=createServiceClient().from('payout_requests').select('id,amount,currency,status,method,created_at').eq('user_id',user.id).eq('currency',currency as typeof PAYOUT_CURRENCIES[number]).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(51);
     if(cursor) query=query.or(`created_at.lt.${cursor.at},and(created_at.eq.${cursor.at},id.lt.${cursor.id})`);
     const {data,error}=await query;
     if(error || !Array.isArray(data)) throw new Error('Payout history unavailable');

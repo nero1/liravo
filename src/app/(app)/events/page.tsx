@@ -10,11 +10,11 @@ export async function generateMetadata():Promise<Metadata>{const t=await getTran
 interface Event {
   id: string;
   title: string;
-  description: string;
+  description: string|null;
   event_date: string;
   is_paid: boolean;
-  price: number | null;
-  currency: string;
+  price: number|string|null;
+  currency: string|null;
   host_id: string;
   book_id: string | null;
   max_attendees: number | null;
@@ -22,7 +22,7 @@ interface Event {
 }
 
 export default async function EventsPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user=await getCurrentUser();
   const t=await getTranslations('events'),formatter=await getFormatter();
 
@@ -107,7 +107,7 @@ export default async function EventsPage() {
                       <h2 className="font-semibold">{event.title}</h2>
                       {event.is_paid ? (
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent">
-                          {formatter.number(Number(event.price??0),{style:'currency',currency:event.currency})}
+                          {formatter.number(Number(event.price??0),{style:'currency',currency:event.currency??'USD'})}
                         </span>
                       ) : (
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">

@@ -6,7 +6,8 @@ import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 import {readingSessionPage} from '@/lib/content-history';
 import {decodeCursor} from '@/lib/pagination';
 import {RefreshButton} from '@/components/layout/RefreshButton';
-export default async function ReadingHistory({searchParams}:{searchParams?:{book_id?:string;cursor?:string}}){
+export default async function ReadingHistory(props:{searchParams?: Promise<{book_id?:string;cursor?:string}>}) {
+ const searchParams = (await props.searchParams)??{};
  const user=await getCurrentUser();if(!user)redirect('/login');
  const book=searchParams?.book_id??null,cursor=searchParams?.cursor??null;
  try{if(book&&!z.string().uuid().safeParse(book).success)throw Error();decodeCursor(cursor);}catch{notFound();}

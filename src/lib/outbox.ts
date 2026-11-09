@@ -1,3 +1,4 @@
+import {z}from'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 
 export async function enqueueOutboxEvent(params: {
@@ -12,7 +13,7 @@ export async function enqueueOutboxEvent(params: {
     aggregate_type: params.aggregateType,
     aggregate_id: params.aggregateId,
     event_type: params.eventType,
-    payload: params.payload,
+    payload: z.json().parse(params.payload),
     status: 'pending',
   });
 

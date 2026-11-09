@@ -1,3 +1,4 @@
+import type {RpcFunctions}from'@/types/database.generated';
 import {z} from 'zod';
 import {createServiceClient} from '@/lib/supabase/server';
 import {getRedisClient} from '@/lib/redis';
@@ -10,7 +11,7 @@ export type DiscoveryBook=z.infer<typeof book>;
 export type RankedDiscoveryBook=z.infer<typeof ranked>;
 export type DiscoveryGem=z.infer<typeof gem>;
 export class DiscoveryError extends Error{constructor(message:string,public status:number){super(message);}}
-async function read<T>(name:string,args:Record<string,unknown>,schema:z.ZodType<T>):Promise<T>{const{data,error}=await createServiceClient().rpc(name as never,args as never),parsed=schema.safeParse(data);if(error||!parsed.success)throw new DiscoveryError('Discovery unavailable',({P1003:403,P1004:400,P1005:404}as Record<string,number>)[error?.code??'']??503);return parsed.data;}
+async function read<T,N extends keyof RpcFunctions>(name:N,args:RpcFunctions[N]['Args'],schema:z.ZodType<T>):Promise<T>{const{data,error}=await createServiceClient().rpc(name,args),parsed=schema.safeParse(data);if(error||!parsed.success)throw new DiscoveryError('Discovery unavailable',({P1003:403,P1004:400,P1005:404}as Record<string,number>)[error?.code??'']??503);return parsed.data;}
 export const getTrendingBooks=(country:string|null=null)=>read('discovery_trending_snapshot',{p_country:country,p_limit:10},z.array(ranked).max(10));
 export const getHiddenGems=()=>read('discovery_gems_snapshot',{p_limit:10},z.array(gem).max(10));
 export const getFriendRecommendations=(actorId:string)=>read('discovery_friends_snapshot',{p_user:actorId,p_limit:10},z.array(ranked).max(10));

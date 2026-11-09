@@ -6,6 +6,7 @@
  * that source files contain the expected patterns.
  */
 
+import {writingPromptResponse}from'@/lib/writing-intents';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -217,7 +218,7 @@ describe('query-builder.ts — structure', () => {
 
   it('has COUNT support', () => {
     const src = readSrc('lib', 'db', 'query-builder.ts');
-    expect(src).toContain('COUNT');
+    expect(src).toContain('count(*)');
   });
 
   it('parses OR filter string', () => {
@@ -302,16 +303,16 @@ describe('auth routes — source patterns', () => {
   });
 });
 
-// ── middleware.ts — DO mode session cookie ───────────────────────────────────
+// ── proxy.ts — DO mode session cookie ───────────────────────────────────
 
-describe('middleware.ts — DO mode', () => {
+describe('proxy.ts — DO mode', () => {
   it('keeps Node session validation out of Edge middleware', () => {
-    expect(readSrc('middleware.ts')).not.toContain('getDoUserFromRequest');
+    expect(readSrc('proxy.ts')).not.toContain('getDoUserFromRequest');
     expect(readSrc('app', '(app)', 'layout.tsx')).toContain('getCurrentUser');
   });
 
   it('has isDirectPostgresMode check', () => {
-    const src = readSrc('middleware.ts');
+    const src = readSrc('proxy.ts');
     expect(src).toContain('isDirectPostgresMode');
   });
 });
@@ -391,7 +392,6 @@ describe('audit — zero raw supabase.auth.getUser() calls in API routes', () =>
 });
 
 it('normalizes PostgreSQL DATE objects and PostgREST date strings to the same prompt contract', async () => {
-  const { writingPromptResponse } = await import('@/lib/writing-intents');
   for (const date of [new Date('2026-10-26T00:00:00Z'),'2026-10-26']) {
     const response=writingPromptResponse({prompt_date:date,prompt_text:'Daily prompt',topic_seed:'Adventure'});
     expect(response).toMatchObject({date:'2026-10-26',prompt_date:'2026-10-26',prompt:'Daily prompt',genre:'Adventure'});

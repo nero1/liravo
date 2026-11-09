@@ -59,7 +59,7 @@ Redis is required for rate limits, job locks, caching, and direct PostgreSQL ses
 
 1. Sign in at [vercel.com](https://vercel.com).
 2. Click **Add New → Project → Import Git Repository** and select `nero1/liravo` or your fork.
-3. Keep the **Next.js** preset and repository root directory.
+3. Keep the **Next.js** preset and repository root directory. Under **Settings → Build and Deployment**, select **Node.js 24.x**.
 4. Open **Environment Variables** and add the values below. Use your own deployment URL for `NEXT_PUBLIC_APP_URL`.
 5. Leave unconfigured optional integrations blank; do not enter placeholder keys.
 
@@ -200,7 +200,7 @@ Use the provider's sandbox to verify checkout, payment, cancellation, and refund
 ## 11. Verify and protect the deployment
 
 1. Open `https://YOUR-DOMAIN/api/health`. Confirm HTTP 200 and healthy database/Redis checks. HTTP 503 means a dependency is unavailable.
-2. Sign in, search for a book, add it to a shelf, upload an avatar, and save a reading update.
+2. Sign in, search for a book, add it to a shelf, upload an avatar, and save a reading update. In **Settings**, test the JSON account export and CSV reading-history export; keep the page open until the download finishes.
 3. Switch between English, French, and German and check that pages load.
 4. Open **Admin → Cron Status** and the **Admin Dashboard** and check job errors, payout requests, and payment returns.
 5. Enable automated backups in your database provider's dashboard. Verify a backup restore into a separate test database before launch.

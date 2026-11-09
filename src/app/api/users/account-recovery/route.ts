@@ -15,7 +15,7 @@ export async function POST(request:Request){
   if(!(await checkCriticalRateLimit('recovery:address:'+emailHash(parsed.data.email))).allowed)return emailResponse({error:'Too many requests'},429);
   try{
     const service=createServiceClient(),token=factorToken(),hash=emailHash(token);
-    const {data,error}=await service.rpc('issue_account_recovery' as never,{p_email:parsed.data.email,p_hash:hash} as never);
+    const {data,error}=await service.rpc('issue_account_recovery',{p_email:parsed.data.email,p_hash:hash});
     if(error)throw new Error('Account lookup unavailable');
     const user=data as unknown as {id:string;display_name:string|null;username:string}|null;
     if(user){

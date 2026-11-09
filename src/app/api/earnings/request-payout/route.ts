@@ -77,14 +77,14 @@ export async function POST(req: Request) {
   }
   let pinHash:string|null;try{pinHash=await verifyAccountPin(user.id,parsed.data.pin,req);}catch(error){return NextResponse.json({error:'Confirm your PIN',code:error instanceof PinError?error.code:'PIN_UNAVAILABLE'},{status:error instanceof PinError?error.status:503});}
   // Balance reservation and its audit record must commit together.
-  const rpcReserve = await supabase.rpc('create_payout_request_atomic' as never, {
+  const rpcReserve = await supabase.rpc('create_payout_request_atomic', {
     p_user_id: user.id,
     p_amount: amount.toFixed(2),
     p_method: parsed.data.method ?? 'manual',
     p_currency:parsed.data.currency,p_pin_hash:pinHash,
     p_idempotency_key: idempotencyKey,
     p_correlation_id: correlationId,
-  } as never);
+  });
   if (!rpcReserve.error) {
     recordMetric('payout_request_success', { route: 'src/app/api/earnings/request-payout/route.ts', amount: amount.toFixed(2), correlationId, mode: 'rpc' });
     return NextResponse.json({ requested: true, payoutId:rpcReserve.data, mode: 'rpc' }, { status: 201 });

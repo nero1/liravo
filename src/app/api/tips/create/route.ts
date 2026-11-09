@@ -85,7 +85,7 @@ export async function POST(req: Request) {
   const platformFee = decAmount.times(0.1).toDecimalPlaces(2);
   const recipientAmount = decAmount.minus(platformFee).toDecimalPlaces(2);
 
-  const rpcResponse = await supabase.rpc('create_tip_transaction' as never, {
+  const rpcResponse = await supabase.rpc('create_tip_transaction', {
     p_user_id: user.id,
     p_recipient_id: recipientId,
     p_amount: decAmount.toFixed(2),
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
     p_currency: currency,
     p_idempotency_key: idempotencyKey,
     p_correlation_id: correlationId,
-  } as never);
+  });
 
   if (rpcResponse.error) {
     recordMetric('tip_create_error', { correlationId, code: rpcResponse.error.code }, 'error');
@@ -102,25 +102,26 @@ export async function POST(req: Request) {
   }
   const tip = rpcResponse.data as { id?: string } | null;
   if (!tip?.id) return NextResponse.json({ error: 'Missing tip identifier', correlationId }, { status: 503 });
+  const tipId=tip.id;
   try {
-    const result = await withRedisLock(`tip-checkout:${tip.id}`, 30, async () => {
-      const { data, error } = await supabase.from('tips').select('id,amount,currency,status,checkout_url').eq('id', tip.id!).eq('user_id',user.id).single();
+    const result = await withRedisLock(`tip-checkout:${tipId}`, 30, async () => {
+      const { data, error } = await supabase.from('tips').select('id,amount,currency,status,checkout_url').eq('id', tipId!).eq('user_id',user.id).single();
       if (error || !data) throw new Error('Tip lookup failed');
       const saved = data as unknown as { id: string; amount: string; currency: string; status: string; checkout_url: string | null };
-      if (saved.status === 'completed'||saved.status==='refunded'||(await readPaymentRecovery(user.id,'tip',tip.id)).length) return { redirectUrl: `/tips/${tip.id}` };
+      if (saved.status === 'completed'||saved.status==='refunded'||(await readPaymentRecovery(user.id,'tip',tipId)).length) return { redirectUrl: `/tips/${tipId}` };
       if (saved.checkout_url) return { redirectUrl: validateCheckoutUrl(saved.currency==='NGN'?'paystack':'dodopayments',saved.checkout_url) };
       if (!z.email().safeParse(user.email).success) throw new Error('Payment contact email is required');
       const checkout = await createTipCheckout(saved, user.email);
       const checkoutUrl=checkout.url;
-      const { error: saveError } = await supabase.rpc('record_checkout_session' as never,{p_user_id:user.id,p_kind:'tip',p_entity_id:tip.id,p_provider:saved.currency==='NGN'?'paystack':'dodopayments',p_checkout_id:checkout.checkoutId,p_url:checkoutUrl} as never);
+      const { error: saveError } = await supabase.rpc('record_checkout_session',{p_user_id:user.id,p_kind:'tip',p_entity_id:tipId,p_provider:saved.currency==='NGN'?'paystack':'dodopayments',p_checkout_id:checkout.checkoutId??null,p_url:checkoutUrl});
       if (saveError) throw new Error('Checkout persistence failed');
       return { redirectUrl: checkoutUrl };
     });
     if (!result) return NextResponse.json({ error: 'Checkout is processing; retry with the same key', correlationId }, { status: 409 });
-    return NextResponse.json({ tipId: tip.id, ...result, correlationId });
+    return NextResponse.json({ tipId: tipId, ...result, correlationId });
   } catch (error) {
     await observeOperationalSignal('paymentFailures',correlationId);
-    recordMetric('tip_checkout_error', { correlationId, tipId: tip.id, name: error instanceof Error ? error.name : 'Unknown' }, 'error');
+    recordMetric('tip_checkout_error', { correlationId, tipId: tipId, name: error instanceof Error ? error.name : 'Unknown' }, 'error');
     return NextResponse.json({ error: 'Checkout unavailable; retry with the same key', correlationId }, { status: 502 });
   }
 }

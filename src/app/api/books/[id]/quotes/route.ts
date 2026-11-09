@@ -5,11 +5,9 @@ import {cursorFilter,decodeCursor,encodeCursor} from '@/lib/pagination';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabase=createClient();
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase=(await createClient());
   let editionIds:string[];try{editionIds=await getEditionIds(params.id);}catch{return NextResponse.json({error:'Edition identities unavailable'},{status:503});}
 
   const { searchParams } = new URL(request.url);

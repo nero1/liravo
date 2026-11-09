@@ -6,7 +6,8 @@ import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 import {getRoomMilestones,getRoomCount,getReadingRoom,decodeRoomCursor,ReadingRoomError} from '@/lib/reading-rooms';
 export const dynamic='force-dynamic';
 const schema=z.object({title:z.string().trim().min(1).max(200),unlock_date:z.string().datetime({offset:true})});
-export async function GET(request:Request,{params}:{params:{id:string}}){
+export async function GET(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid room'},{status:400});
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
@@ -14,7 +15,8 @@ export async function GET(request:Request,{params}:{params:{id:string}}){
   try{return NextResponse.json(await getRoomMilestones(user.id,params.id,cursor),{headers:{'Cache-Control':'private, no-store'}});}
   catch(error){return NextResponse.json({error:'Milestones unavailable'},{status:error instanceof ReadingRoomError?error.status:503});}
 }
-export async function POST(request:Request,{params}:{params:{id:string}}){
+export async function POST(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid room'},{status:400});
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
@@ -24,7 +26,8 @@ export async function POST(request:Request,{params}:{params:{id:string}}){
   try{const intent=await contentIntent(request,user.id,'reading_room_milestones',{room_id:params.id,title:parsed.data.title,unlock_date:parsed.data.unlock_date}),milestone=await intent.insert(),milestoneTotal=await getRoomCount(user.id,params.id,'milestones');return NextResponse.json({milestoneTotal,milestone:{...milestone,is_unlocked:new Date(String(milestone.unlock_date)).getTime()<=Date.now(),post_count:0},actorId:user.id,roomId:params.id},{status:201});}
   catch(error){return NextResponse.json({error:'Milestone unavailable'},{status:error instanceof ContentIntentError?error.status:503});}
 }
-export async function DELETE(request:Request,{params}:{params:{id:string}}){
+export async function DELETE(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   const milestoneId=new URL(request.url).searchParams.get('milestone_id');if(!z.string().uuid().safeParse(params.id).success||!z.string().uuid().safeParse(milestoneId).success)return NextResponse.json({error:'Invalid milestone'},{status:400});

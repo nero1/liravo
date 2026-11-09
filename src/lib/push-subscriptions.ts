@@ -26,13 +26,13 @@ export const pushAgent=new Agent({lookup:(hostname,options,callback)=>{
 }});
 export async function registerPush(userId:string,channel:'web'|'expo',endpoint:string,keys?:{p256dh:string;auth:string},platform?:string){
  const session=await currentFactorSessionHash(userId);
- const {data,error}=await createServiceClient().rpc('register_push_subscription' as never,{p_user:userId,p_session:session,p_channel:channel,p_endpoint:endpoint,p_p256dh:keys?.p256dh??null,p_auth:keys?.auth??null,p_platform:platform??'web'} as never);
+ const {data,error}=await createServiceClient().rpc('register_push_subscription',{p_user:userId,p_session:session,p_channel:channel,p_endpoint:endpoint,p_p256dh:keys?.p256dh??null,p_auth:keys?.auth??null,p_platform:platform??'web'});
  if(error||typeof data!=='string'||! /^[a-f0-9-]{36}$/i.test(data))throw new PushSubscriptionError(error?.code==='P1003'?403:error?.code==='P1004'?409:503);
 }
 export async function revokePushSession(session:string,knownSession=false){
- const {error}=await createServiceClient().rpc('revoke_push_session' as never,{p_session:session,p_known:knownSession} as never);if(error)throw new Error('Push revocation unavailable');
+ const {error}=await createServiceClient().rpc('revoke_push_session',{p_session:session,p_known:knownSession});if(error)throw new Error('Push revocation unavailable');
 }
 export async function unregisterPush(userId:string,endpoint?:string){
  const session=await currentFactorSessionHash(userId);
- const {error}=await createServiceClient().rpc('unregister_push_subscription' as never,{p_user:userId,p_session:session,p_endpoint:endpoint??null} as never);if(error)throw new Error('Push revocation unavailable');
+ const {error}=await createServiceClient().rpc('unregister_push_subscription',{p_user:userId,p_session:session,p_endpoint:endpoint??null});if(error)throw new Error('Push revocation unavailable');
 }

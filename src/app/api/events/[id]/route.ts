@@ -4,7 +4,8 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 import { readEvent } from '@/services/events';
 
 export const dynamic='force-dynamic';
-export async function GET(_request:Request,{params}:{params:{id:string}}){
+export async function GET(_request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid event'},{status:400});
   try{

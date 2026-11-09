@@ -6,7 +6,8 @@ import Link from 'next/link';
 import {Plus} from 'lucide-react';
 export const dynamic='force-dynamic';
 export async function generateMetadata(){const t=await getTranslations('shelves');return{title:t('title'),robots:{index:false,follow:false}};}
-export default async function ShelfPage({searchParams}:{searchParams?:{cursor?:string}}){
+export default async function ShelfPage(props:{searchParams?: Promise<{cursor?:string}>}) {
+ const searchParams = (await props.searchParams)??{};
  const user=await getCurrentUser();if(!user)redirect('/login');const t=await getTranslations('shelves'),books=await getTranslations('books'),common=await getTranslations('common'),goals=await getTranslations('readingGoals');let data;
  try{data=await getShelfCatalog(user.id,null,searchParams?.cursor??null);}catch(error){return <div className="max-w-2xl mx-auto px-4 py-6 space-y-4"><h1 className="font-display text-2xl font-bold">{t('title')}</h1><p role="alert">{t(error instanceof ShelfError&&error.status===400?'invalidCursor':'loadFailed')}</p><Link href={error instanceof ShelfError&&error.status===400?'/shelf':'/shelf'+(searchParams?.cursor?'?cursor='+encodeURIComponent(searchParams.cursor):'')} className="underline">{common('retry')}</Link></div>;}
  const labels={currently_reading:'currentlyReading',have_read:'haveRead',want_to_read:'wantToRead'}as const,icons={currently_reading:'📖',have_read:'✅',want_to_read:'🔖'},goal=data.reading.goal,progress=data.reading.progress;

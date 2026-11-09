@@ -12,7 +12,7 @@ export async function readAdminCatalog<T=Record<string,unknown>>(actorId:string,
   if(search.length>200||!Number.isInteger(page)||page<1||page>10001||raw&&raw.length>2000||raw&&page!==1)throw new AdminCatalogError('Invalid admin page',400);
   let cursor:z.infer<typeof cursorSchema>|null=null;
   if(raw)try{cursor=cursorSchema.parse(JSON.parse(Buffer.from(raw,'base64url').toString()));if(cursor.actorId!==actorId||cursor.scope!==scope||cursor.search!==search)throw Error();}catch{throw new AdminCatalogError('Invalid admin cursor',400);}
-  const {data,error}=await createServiceClient().rpc('admin_catalog_snapshot' as never,{p_user:actorId,p_scope:scope,p_search:search,p_at:cursor?.at??null,p_key:cursor?.key??null,p_limit:25,p_offset:(page-1)*25} as never);
+  const {data,error}=await createServiceClient().rpc('admin_catalog_snapshot',{p_user:actorId,p_scope:scope,p_search:search,p_at:cursor?.at??null,p_key:cursor?.key??null,p_limit:25,p_offset:(page-1)*25});
   if(error||!data)throw new AdminCatalogError('Admin catalog unavailable',error?.code==='P1003'?403:503);
   const snapshot=data as {total:number;rows:{item:T;at:string;key:string}[]},rows=snapshot.rows.slice(0,25),last=rows.at(-1),nextCursor=snapshot.rows.length>25&&last?Buffer.from(JSON.stringify({actorId,scope,search,at:last.at,key:last.key})).toString('base64url'):null;
   return {items:rows.map(row=>row.item),total:snapshot.total,nextCursor,actorId,page,pageSize:25};

@@ -14,13 +14,13 @@ export async function readModeration<T extends ModerationReport|ModerationLog>(a
   return {items,total:data.total,actorId,page,pageSize:20,nextCursor:data.rows.length>20&&last?Buffer.from(JSON.stringify({actorId,scope,status,at:last.at,key:last.key})).toString('base64url'):null};
 }
 async function snapshot(actorId:string,scope:string,params:Record<string,unknown>={}){
-  const{data,error}=await createServiceClient().rpc('moderation_catalog_snapshot' as never,{p_user:actorId,p_scope:scope,...params}as never);
+  const{data,error}=await createServiceClient().rpc('moderation_catalog_snapshot',{p_user:actorId,p_scope:scope,...params});
   if(error||!data)throw new ModerationReadError('Moderation unavailable',error?.code==='P1003'?403:503);return data;
 }
 export async function readModerationDashboard(actorId:string){return await snapshot(actorId,'dashboard')as{isAdmin:boolean;pending:number;today:number};}
 export async function readModerationReceipt(actorId:string,reportId:string,key:string){
   if(!z.string().uuid().safeParse(reportId).success||key.length<8||key.length>200)throw new ModerationReadError('Invalid receipt',400);
-  const{data,error}=await createServiceClient().rpc('moderation_receipt_snapshot'as never,{p_user:actorId,p_report:reportId,p_key:key}as never);
+  const{data,error}=await createServiceClient().rpc('moderation_receipt_snapshot',{p_user:actorId,p_report:reportId,p_key:key});
   if(error||!data)throw new ModerationReadError('Receipt unavailable',error?.code==='P1003'?403:error?.code==='P1005'?404:503);
   const report=(data as {report:ContentReportRow}).report;
   if(report?.id!==reportId)throw new ModerationReadError('Receipt unavailable',503);

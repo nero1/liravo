@@ -11,7 +11,7 @@ export async function POST(request:Request){
   let body:unknown;try{body=JSON.parse(raw);}catch{return emailResponse({error:'Invalid JSON'},400);}
   const parsed=emailProof.safeParse(body);if(!parsed.success)return emailResponse({error:'INVALID_EMAIL_LINK'},422);
   try{
-    const {data,error}=await createServiceClient().rpc('consume_email_challenge' as never,{p_hash:emailHash(parsed.data.token),p_purpose:'recover'} as never);
+    const {data,error}=await createServiceClient().rpc('consume_email_challenge',{p_hash:emailHash(parsed.data.token),p_purpose:'recover'});
     if(error)throw new Error('Recovery unavailable');
     if(!data)return emailResponse({error:'INVALID_EMAIL_LINK'},410);
     return await recoverySession(data as unknown as {id:string;email:string},request);

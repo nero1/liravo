@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
   let genres: string[] = [];
   let locale:'en'|'fr'|'de'='en';
   if (userId) {
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { data: profile,error } = await supabase
       .from('users')
       .select('genres,preferred_locale')

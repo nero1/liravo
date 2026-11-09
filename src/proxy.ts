@@ -1,7 +1,7 @@
 import {contentSecurityPolicy} from '@/lib/security-policy';
 import { CSRF_COOKIE, CSRF_HEADER, validCsrf, sameOrigin, getRequestOrigin, isStatelessNativeAuth } from '@/lib/csrf';
 import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import type { Database } from '@/types/database';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { LOCALES } from '@/constants/config';
@@ -20,7 +20,7 @@ async function formCsrf(request:NextRequest){
   }finally{clearTimeout(timer);void reader.cancel().catch(()=>{});reader.releaseLock();}
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const correlationId = getRequestCorrelationId(request);
   const nonce=btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))),policy=contentSecurityPolicy(nonce,!isDirectPostgresMode,process.env.NODE_ENV!=='production');
   request.headers.set('x-nonce',nonce);request.headers.set('Content-Security-Policy',policy);
@@ -93,22 +93,14 @@ export async function middleware(request: NextRequest) {
     supabaseUrl,
     supabaseAnonKey,
     {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options });
-          const previous=response.cookies.getAll();response = NextResponse.next({ request: { headers: request.headers } });
+      cookies:{
+        getAll:()=>request.cookies.getAll(),
+        setAll(values){
+          for(const {name,value}of values)request.cookies.set(name,value);
+          const previous=response.cookies.getAll();response=NextResponse.next({request:{headers:request.headers}});
           for(const cookie of previous)response.cookies.set(cookie);
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options });
-          const previous=response.cookies.getAll();response = NextResponse.next({ request: { headers: request.headers } });
-          for(const cookie of previous)response.cookies.set(cookie);
-          response.cookies.set({ name, value: '', ...options });
-        },
+          for(const {name,value,options}of values)response.cookies.set(name,value,options);
+        }
       },
     }
   );

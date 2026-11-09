@@ -1,4 +1,4 @@
-import { QueryError } from '@/components/ui/EmptyState';
+import { QueryError , EmptyState } from '@/components/ui/EmptyState';
 import {useTranslations} from '@/hooks/useTranslations';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,6 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
 import { Badge } from '@/components/ui/Badge';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import type { WritingChallengeRow } from '@/types';
 

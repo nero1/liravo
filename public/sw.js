@@ -1,4 +1,5 @@
-const STATIC_CACHE = 'liravo-static-v2';
+const STATIC_CACHE = 'liravo-static-v3';
+const exportDownloads = new Map();
 const OFFLINE_PATH = '/offline';
 const PUBLIC_ASSETS = ['/offline', '/offline.js', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/badge-72.png'];
 
@@ -68,6 +69,17 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('message', event => {
+  if(event.data?.type==='LIRAVO_EXPORT'){
+    const port=event.ports[0],client=event.source,{id,filename,format}=event.data;
+    if(!port||!client?.id||new URL(client.url).origin!==self.location.origin||!/^[a-f0-9-]{36}$/.test(id)||!/^liravo-export-\d{4}-\d{2}-\d{2}\.(json|csv)$/.test(filename)||!['json','csv'].includes(format))return;
+    if(exportDownloads.size>=32){port.postMessage({type:'cancel'});port.close();return;}
+    const path='/__exports/'+id;
+    const registration={port,clientId:client.id,filename,format,timer:setTimeout(()=>{exportDownloads.delete(path);port.postMessage({type:'cancel'});port.close();},60000)};
+    exportDownloads.set(path,registration);
+    port.onmessage=message=>{if(message.data?.type==='download')port.postMessage({type:'url',url:self.location.origin+path});};
+    port.postMessage({type:'ready'});
+    return;
+  }
   if (event.data?.type === 'LIRAVO_CACHE_PUBLIC_SHELL') event.waitUntil(clearLegacyCaches().catch(() => {}).then(refreshPublicShell).catch(() => {}));
 });
 
@@ -76,6 +88,19 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET' || request.headers.has('Authorization')) return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if(url.pathname.startsWith('/__exports/')){
+    const entry=exportDownloads.get(url.pathname);
+    if(!entry||event.clientId&&event.clientId!==entry.clientId&&request.mode!=='navigate'){event.respondWith(new Response('Download unavailable',{status:404}));return;}
+    exportDownloads.delete(url.pathname);clearTimeout(entry.timer);
+    let waiting=null,closed=false;
+    const fail=()=>{if(closed)return;closed=true;if(waiting){waiting.reject(Error('Download interrupted'));waiting=null;}entry.port.close();};
+    const stream=new ReadableStream({
+      start(controller){entry.port.onmessage=message=>{const data=message.data;if(!waiting)return;const pending=waiting;waiting=null;clearTimeout(pending.timer);if(data?.type==='chunk'&&data.bytes instanceof Uint8Array&&data.bytes.byteLength<=4000000){controller.enqueue(data.bytes);pending.resolve();}else if(data?.type==='end'){closed=true;controller.close();entry.port.postMessage({type:'complete'});entry.port.close();pending.resolve();}else{closed=true;controller.error(Error('Download interrupted'));entry.port.close();pending.reject(Error('Download interrupted'));}};},
+      pull(){if(closed)return;return new Promise((resolve,reject)=>{waiting={resolve,reject,timer:setTimeout(fail,180000)};entry.port.postMessage({type:'pull'});});},
+      cancel(){entry.port.postMessage({type:'cancel'});fail();}
+    },{highWaterMark:1});
+    event.respondWith(new Response(stream,{headers:{'Content-Type':entry.format==='csv'?'text/csv; charset=utf-8':'application/json','Content-Disposition':'attachment; filename="'+entry.filename+'"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}}));return;
+  }
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(async () => { try { return (await (await caches.open(STATIC_CACHE)).match(new URL(OFFLINE_PATH, self.location.origin).href)) ?? Response.error(); } catch { return Response.error(); } }));
     return;

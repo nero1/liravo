@@ -1,16 +1,10 @@
-import {executeQuery,type getSql} from './pg';
+import type {getSql}from'./pg';
+import {schema,foreignKeys,primaryKeys}from'./schema';
+import {getTableColumns}from'drizzle-orm';
 
 type Sql = ReturnType<typeof getSql>;
-interface ForeignKey {
-  name: string;
-  source_table: string;
-  target_table: string;
-  source_columns: string[];
-  target_columns: string[];
-  source_unique: boolean;
-}
-interface TableInfo { keys: ForeignKey[]; primary: string[] }
-const metadata = new WeakMap<Sql, Map<string, Promise<TableInfo>>>();
+interface ForeignKey{name:string;source_table:string;target_table:string;source_columns:readonly string[];target_columns:readonly string[];source_unique:boolean;}
+const relationKeys:readonly ForeignKey[]=foreignKeys;
 const identifier = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
@@ -27,31 +21,9 @@ function splitColumns(value: string): string[] {
   return [...columns, value.slice(start).trim()];
 }
 
-async function tableInfo(sql: Sql, table: string): Promise<TableInfo> {
-  let cache = metadata.get(sql);
-  if (!cache) { cache = new Map(); metadata.set(sql, cache); }
-  let pending = cache.get(table);
-  if (!pending) {
-    pending = (async () => {
-      const [keys, primary] = await Promise.all([
-        executeQuery(sql<ForeignKey[]>`select c.conname as name,s.relname as source_table,t.relname as target_table,
-          array(select a.attname from unnest(c.conkey) with ordinality k(num,pos) join pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.num order by k.pos) as source_columns,
-          array(select a.attname from unnest(c.confkey) with ordinality k(num,pos) join pg_attribute a on a.attrelid=c.confrelid and a.attnum=k.num order by k.pos) as target_columns,
-          exists(select 1 from pg_constraint u where u.conrelid=c.conrelid and u.contype in ('p','u') and cardinality(u.conkey)=cardinality(c.conkey) and u.conkey @> c.conkey) as source_unique
-          from pg_constraint c join pg_class s on s.oid=c.conrelid join pg_class t on t.oid=c.confrelid
-          join pg_namespace sn on sn.oid=s.relnamespace join pg_namespace tn on tn.oid=t.relnamespace
-          where c.contype='f' and sn.nspname='public' and tn.nspname='public' and (s.relname=${table} or t.relname=${table})`),
-        executeQuery(sql<{ columns: string[] | null }[]>`select array_agg(a.attname order by k.pos) as columns
-          from pg_constraint c join pg_class t on t.oid=c.conrelid join pg_namespace n on n.oid=t.relnamespace
-          cross join lateral unnest(c.conkey) with ordinality k(num,pos) join pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.num
-          where c.contype='p' and n.nspname='public' and t.relname=${table}`),
-      ]);
-      return { keys: [...keys], primary: primary[0]?.columns ?? [] };
-    })();
-    cache.set(table, pending);
-  }
-  try { return await pending; }
-  catch (error) { cache.delete(table); throw error; }
+async function tableInfo(_sql:Sql,table:string){
+ if(!(table in schema))throw Error('Unknown database table');
+ return {keys:relationKeys.filter(key=>key.source_table===table||key.target_table===table),primary:primaryKeys.find(key=>key.table_name===table)?.columns??[]};
 }
 
 /** Resolves named/FK relationships from the actual schema, preserving object/array cardinality. */
@@ -65,6 +37,7 @@ export async function buildPgProjection(sql: Sql, table: string, columns: string
       if (!relation) {
         const scalar = field.match(/^(?:(\w+):)?(\w+)$/);
         if (!scalar) throw new Error('Unsupported select column');
+        if(!(scalar[2]in getTableColumns(schema[parentTable as keyof typeof schema])))throw Error('Unknown database column');
         return `${quote(parentAlias)}.${quote(scalar[2])}${scalar[1] ? ` AS ${quote(scalar[1])}` : ''}`;
       }
       const [, alias, token, hint, childColumns] = relation;

@@ -3,7 +3,8 @@ import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 import {getArcApplications,decodeApplicationCursor,applicationStatus,ArcError} from '@/lib/arcs';
 import {z} from 'zod';
 export const dynamic='force-dynamic';
-export async function GET(request:Request,{params}:{params:{id:string}}){
+export async function GET(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   const url=new URL(request.url),status=applicationStatus.safeParse(url.searchParams.get('status')??'all'),cursor=url.searchParams.get('cursor');

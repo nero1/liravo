@@ -10,10 +10,10 @@ vi.mock('@/lib/supabase/server',()=>({createServiceClient:()=>({rpc:author.rpc,f
 beforeEach(()=>{author.rpc.mockReset();author.viewer=null;});
 
 it('uses the shared database visibility rule before returning privileged author fields',async()=>{
- author.rpc.mockResolvedValue({data:false});const denied=await authorProfile(new Request('https://app.test/api/author/private_writer'),{params:{username:'private_writer'}});expect(denied.status).toBe(404);expect(await denied.text()).not.toContain('Private biography');
+ author.rpc.mockResolvedValue({data:false});const denied=await authorProfile(new Request('https://app.test/api/author/private_writer'),{params:Promise.resolve({username:'private_writer'})});expect(denied.status).toBe(404);expect(await denied.text()).not.toContain('Private biography');
  expect(author.rpc).toHaveBeenCalledWith('reading_author_visible',{p_user:null,p_author:'writer'});
- author.viewer={id:'follower'};author.rpc.mockResolvedValue({data:true});const allowed=await authorProfile(new Request('https://app.test/api/author/private_writer'),{params:{username:'private_writer'}});expect(allowed.status).toBe(200);expect(await allowed.json()).toMatchObject({author:{bio:'Private biography'}});
- author.rpc.mockResolvedValue({error:{code:'XX000'}});expect((await authorProfile(new Request('https://app.test/api/author/private_writer'),{params:{username:'private_writer'}})).status).toBe(503);
+ author.viewer={id:'follower'};author.rpc.mockResolvedValue({data:true});const allowed=await authorProfile(new Request('https://app.test/api/author/private_writer'),{params:Promise.resolve({username:'private_writer'})});expect(allowed.status).toBe(200);expect(await allowed.json()).toMatchObject({author:{bio:'Private biography'}});
+ author.rpc.mockResolvedValue({error:{code:'XX000'}});expect((await authorProfile(new Request('https://app.test/api/author/private_writer'),{params:Promise.resolve({username:'private_writer'})})).status).toBe(503);
 });
 
 it('allowlists client profile responses and keeps new columns private', () => {

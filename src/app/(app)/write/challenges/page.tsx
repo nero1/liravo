@@ -16,13 +16,13 @@ interface Challenge {
   type: string;
   goal_type: string;
   goal_value: number;
-  start_date: string;
-  end_date: string;
+  start_date: string|null;
+  end_date: string|null;
   participant_count: number;
 }
 
-function daysRemaining(endDate: string): number {
-  const end = new Date(endDate);
+function daysRemaining(endDate: string|null): number {
+  const end = new Date(endDate??'');
   const now = new Date();
   const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   return Math.max(0, diff);
@@ -30,7 +30,7 @@ function daysRemaining(endDate: string): number {
 
 export default async function WritingChallengesPage() {
   const t = await getTranslations('writing');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const {
     data: { user },
   } = await supabase.auth.getUser();

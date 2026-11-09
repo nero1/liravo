@@ -152,10 +152,10 @@ export async function POST(req: Request) {
   if (!idemKey || (idemKey.length < 8 || idemKey.length > 200)) return NextResponse.json({ error: 'Missing/invalid idempotency key' }, { status: 400 });
 
   const amount = currency === 'NGN' ? PRICE_NGN.toFixed(2) : PRICE_USD.toFixed(2);
-  const { data, error: intentError } = await supabase.rpc('create_subscription_intent' as never, {
+  const { data, error: intentError } = await supabase.rpc('create_subscription_intent', {
     p_user_id: user.id, p_provider: provider, p_currency: currency, p_amount: amount,
     p_key: idemKey, p_correlation_id: correlationId,
-  } as never);
+  });
   if (intentError) return NextResponse.json({ error: 'Subscription unavailable', correlationId }, { status: 503 });
   const parsedIntent=z.object({id:z.string().uuid(),checkout_url:z.string().nullable()}).safeParse(data);
   if(!parsedIntent.success)return NextResponse.json({error:'Subscription intent unavailable'},{status:503});
@@ -208,7 +208,7 @@ export async function POST(req: Request) {
   }
 
   const checkoutUrl=checkout.url;
-  const {error:checkoutError}=await supabase.rpc('record_checkout_session' as never,{p_user_id:user.id,p_kind:'subscription',p_entity_id:sub.id,p_provider:provider,p_checkout_id:checkout.checkoutId,p_url:checkoutUrl} as never);
+  const {error:checkoutError}=await supabase.rpc('record_checkout_session',{p_user_id:user.id,p_kind:'subscription',p_entity_id:sub.id,p_provider:provider,p_checkout_id:checkout.checkoutId,p_url:checkoutUrl});
   if (checkoutError) return NextResponse.json({ error: 'Checkout persistence failed; retry with the same key', correlationId }, { status: 503 });
 
   if (!wantsJson) {

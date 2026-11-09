@@ -26,7 +26,7 @@ export async function POST(request:Request){
   try{
     const value=body.data,evidence=await readPaymentReturn(value.provider,value.refund_id,value.payment_id);
     if(evidence.status==='failed')return NextResponse.json({error:'Provider refund failed'},{status:409});
-    const {data,error}=await createServiceClient().rpc('reconcile_payment_return' as never,{p_actor:guard.userId,p_provider:value.provider,p_payment_id:value.payment_id,p_refund_id:value.refund_id,p_key:key,p_evidence:evidence,p_correlation_id:getRequestCorrelationId(request)} as never);
+    const {data,error}=await createServiceClient().rpc('reconcile_payment_return',{p_actor:guard.userId,p_provider:value.provider,p_payment_id:value.payment_id,p_refund_id:value.refund_id,p_key:key,p_evidence:evidence,p_correlation_id:getRequestCorrelationId(request)});
     if(error)return NextResponse.json({error:'Refund reconciliation unavailable'},{status:({P1001:409,P1003:403,P1004:422,P1005:404} as Record<string,number>)[error.code]??503});
     return NextResponse.json(data);
   }catch{return NextResponse.json({error:'Verified provider refund unavailable'},{status:503});}

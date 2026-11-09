@@ -40,7 +40,7 @@
           "photosPermission": "Allow Liravo to access your photos to set a profile picture."
         }
       ],
-      "react-native-iap",
+      ["expo-iap",{"android":{"store":"play"}}],
       "expo-localization"
     ],
     "experiments": {

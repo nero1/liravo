@@ -24,11 +24,11 @@ export async function GET(request: Request) {
   const refCode = searchParams.get('ref');
 
   if (code) {
-    const supabase = createClient();
+    const supabase = (await createClient());
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      const {data:{user:primaryUser}}=await createClient({skipMfa:true}).auth.getUser();
-      if(primaryUser){const {error:localeError}=await createServiceClient().rpc('initialize_account_locale' as never,{p_user_id:primaryUser.id,p_locale:accountLocale(request)} as never);if(localeError)return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);}
+      const {data:{user:primaryUser}}=await (await createClient({skipMfa:true})).auth.getUser();
+      if(primaryUser){const {error:localeError}=await createServiceClient().rpc('initialize_account_locale',{p_user_id:primaryUser.id,p_locale:accountLocale(request)});if(localeError)return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);}
       if(primaryUser&&(await factorProfile(primaryUser.id))?.totp_enabled)return NextResponse.redirect(`${origin}/login?mfa=required&next=${encodeURIComponent(next)}`);
       const user = await getCurrentUser();
       if (user) {
@@ -39,9 +39,9 @@ export async function GET(request: Request) {
           .single();
 
         if (refCode) {
-          const { data: referrerId, error: referralError } = await createServiceClient().rpc('attribute_referral_atomic' as never, {
+          const { data: referrerId, error: referralError } = await createServiceClient().rpc('attribute_referral_atomic', {
             p_user_id: user.id, p_code: refCode,
-          } as never);
+          });
           if (referralError) recordMetric('referral_attribution_error', { userId: user.id, correlationId: getRequestCorrelationId(request), code: referralError.code }, 'error');
           else if (referrerId) await checkAndAwardBadges(String(referrerId), 'referral');
         }

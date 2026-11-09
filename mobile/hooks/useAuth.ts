@@ -24,12 +24,13 @@ export function useAuth(initialize=false) {
         if(result.mfaRequired){setUser(null);setMfaChallenge(result.challengeToken!);}else{setMfaChallenge(null);setUser(result.user??null);}setAuthUnavailable(false);
       }catch(error){if(current(accessToken))await rejectSession(error);}finally{if(current(accessToken))setLoading(false);}
     };
-    if(isSupabaseMode){
-      const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{queueMicrotask(()=>{
+    const provider=supabase;
+    if(isSupabaseMode&&provider){
+      const {data:{subscription}}=provider.auth.onAuthStateChange((event,session)=>{queueMicrotask(()=>{
         if(!active)return;if(session){void authenticate(session.access_token);return;}
         if(event==='SIGNED_OUT'){void signOut();return;}
         const started=useAuthStore.getState().token;
-        void(async()=>{try{const result=await supabase.auth.getSession();if(!active||useAuthStore.getState().token!==started)return;if(result.error)throw result.error;if(result.data.session)await authenticate(result.data.session.access_token);else await signOut();}catch(error){if(active&&useAuthStore.getState().token===started){await rejectSession(error);setLoading(false);}}})();
+        void(async()=>{try{const result=await provider.auth.getSession();if(!active||useAuthStore.getState().token!==started)return;if(result.error)throw result.error;if(result.data.session)await authenticate(result.data.session.access_token);else await signOut();}catch(error){if(active&&useAuthStore.getState().token===started){await rejectSession(error);setLoading(false);}}})();
       });});
       return()=>{active=false;subscription.unsubscribe();};
     }
@@ -63,7 +64,7 @@ export function useAuth(initialize=false) {
     if(useAuthStore.getState().token!==started)return;
     try{await unregisterDevicePush();}catch{}
     if(useAuthStore.getState().token!==started)return;
-    try{if(isSupabaseMode)await supabase.auth.signOut({scope:'local'});}finally{if(useAuthStore.getState().token===started)await signOut();}
+    try{if(isSupabaseMode&&supabase)await supabase.auth.signOut({scope:'local'});}finally{if(useAuthStore.getState().token===started)await signOut();}
   }
 
   type LoginResult={token?:string;user?:UserRow;mfaRequired?:boolean;challengeToken?:string};

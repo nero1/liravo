@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   const [pending, failed, snapshot, operations] = await Promise.all([
     client.from('outbox_events').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     client.from('outbox_events').select('id', { count: 'exact', head: true }).eq('status', 'failed'),
-    client.rpc('financial_integrity_snapshot' as never),
+    client.rpc('financial_integrity_snapshot'),
     operationalSnapshot().catch(() => null),
   ]);
   const anomalies = z.record(z.enum(INTEGRITY_SIGNALS),z.number().int().nonnegative()).safeParse(snapshot.data);

@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { getSql } from '@/lib/db/pg';
 import { PgQueryBuilder } from '@/lib/db/query-builder';
 
-vi.mock('@/lib/db/pg',()=>({getSql:vi.fn(),withDatabaseOperation:async(work:()=>Promise<unknown>)=>work()}));
+vi.mock('@/lib/db/pg',()=>({getSql:vi.fn(),getDrizzle:()=>{throw Error('Database offline');},withDatabaseOperation:async(work:()=>Promise<unknown>)=>work()}));
 
 it('returns dependency errors through Promise.all without hanging',async()=>{
   vi.mocked(getSql).mockImplementation(()=>{throw new Error('Database offline');});

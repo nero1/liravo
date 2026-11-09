@@ -23,7 +23,7 @@ export async function POST(request:Request){
     const {data:profile,error:profileError}=await db.from('users').select('country,preferred_locale').eq('id',user.id).single();if(profileError||!profile)throw new Error('Profile lookup unavailable');
     let link=null,lookupFailed=false;
     try{const country=profile.country?.toUpperCase()??'US',locale=profile.preferred_locale??'en',links=await buildAffiliateLinks(book,country,locale),audio=getAudibleLink(book,locale,country);link=[...links,...(audio?[audio]:[])].find(value=>value.linkId===parsed.data.linkId)??null;}catch{lookupFailed=true;}
-    const {data,error}=await db.rpc('record_book_link_click' as never,{p_user_id:user.id,p_book_id:parsed.data.bookId,p_link_id:parsed.data.linkId,p_key:key,p_link:link} as never);
+    const {data,error}=await db.rpc('record_book_link_click',{p_user_id:user.id,p_book_id:parsed.data.bookId,p_link_id:parsed.data.linkId,p_key:key,p_link:link?{...link}:null});
     if(error){const status=error.code==='P1005'&&lookupFailed?503:({P1001:409,P1003:403,P1004:422,P1005:404} as Record<string,number>)[error.code]??503;if(status===503)throw new Error('Click storage unavailable');return NextResponse.json({error:'Book link unavailable'},{status});}
     const result=z.object({ok:z.literal(true),clickId:z.string().uuid()}).safeParse(data);if(!result.success)throw new Error('Invalid click receipt');return NextResponse.json(result.data);
   }catch{recordMetric('book_click_error',{correlationId:getRequestCorrelationId(request),userId:user.id},'warn');return NextResponse.json({error:'Click recording unavailable'},{status:503});}

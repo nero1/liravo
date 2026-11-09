@@ -6,7 +6,8 @@ import {z} from 'zod';
 import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 export const dynamic='force-dynamic';
 const schema=z.object({answer:z.string().trim().min(20).max(5000)}).strict();
-export async function POST(request:Request,{params}:{params:{id:string}}){
+export async function POST(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid question'},{status:400});

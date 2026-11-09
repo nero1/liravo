@@ -26,15 +26,15 @@ it('returns current weekly ranking data and does not fall back to arbitrary user
   rpc.mockResolvedValueOnce({data:null,error:{code:'08006'}});expect((await leaderboard()).status).toBe(503);
 });
 it('passes reviewed source and desired shelf state through the atomic interaction contract',async()=>{
-  rpc.mockResolvedValueOnce({data:{reacted:true},error:null});const response=await reaction(request({reviewId:review,active:true}),{params:{id:book}});expect(response.status).toBe(200);expect(await response.json()).toEqual({reacted:true});
+  rpc.mockResolvedValueOnce({data:{reacted:true},error:null});const response=await reaction(request({reviewId:review,active:true}),{params:Promise.resolve({id:book})});expect(response.status).toBe(200);expect(await response.json()).toEqual({reacted:true});
   expect(rpc).toHaveBeenCalledWith('apply_book_interaction',{p_user_id:actor,p_book_id:book,p_action:'reaction',p_key:'fixture-conversion-key',p_review_id:review,p_value:true});
 });
 it('rejects malformed sources, account switches and unbounded bodies before mutation',async()=>{
-  for(const [body,headers,status] of [[{reviewId:'foreign-id'},{},400],[{reviewId:review,active:'true'},{},400],[{reviewId:review,reviewerId:actor},{},400],[{active:true},{'X-Liravo-Actor':review},409],[{padding:'x'.repeat(2100)},{},413]] as [unknown,Record<string,string>,number][])expect((await reaction(request(body,headers),{params:{id:book}})).status).toBe(status);
+  for(const [body,headers,status] of [[{reviewId:'foreign-id'},{},400],[{reviewId:review,active:'true'},{},400],[{reviewId:review,reviewerId:actor},{},400],[{active:true},{'X-Liravo-Actor':review},409],[{padding:'x'.repeat(2100)},{},413]] as [unknown,Record<string,string>,number][])expect((await reaction(request(body,headers),{params:Promise.resolve({id:book})})).status).toBe(status);
   expect(rpc).not.toHaveBeenCalled();
 });
 it('retains legacy toggle requests and reports intent conflicts or unavailable reviews',async()=>{
-  rpc.mockResolvedValueOnce({data:{reacted:true},error:null});expect((await reaction(new Request('https://app.test/reaction',{method:'POST',headers:{'Idempotency-Key':'legacy-conversion-key'}}),{params:{id:book}})).status).toBe(200);
+  rpc.mockResolvedValueOnce({data:{reacted:true},error:null});expect((await reaction(new Request('https://app.test/reaction',{method:'POST',headers:{'Idempotency-Key':'legacy-conversion-key'}}),{params:Promise.resolve({id:book})})).status).toBe(200);
   expect(rpc).toHaveBeenCalledWith('apply_book_interaction',expect.objectContaining({p_review_id:null,p_value:null}));
-  for(const [code,status] of [['P1001',409],['P1003',404],['08006',503]] as const){rpc.mockResolvedValueOnce({data:null,error:{code}});expect((await reaction(request({active:true}),{params:{id:book}})).status).toBe(status);}
+  for(const [code,status] of [['P1001',409],['P1003',404],['08006',503]] as const){rpc.mockResolvedValueOnce({data:null,error:{code}});expect((await reaction(request({active:true}),{params:Promise.resolve({id:book})})).status).toBe(status);}
 });

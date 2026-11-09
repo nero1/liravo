@@ -41,7 +41,7 @@ export async function DELETE(req: Request) {
   // Sign the user out immediately
   if (isDirectPostgres()) {
     // Direct-postgres mode: destroy Redis session and clear the session cookie
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const token = req.headers.get('authorization')?.match(/^Bearer (.+)$/i)?.[1]??cookieStore.get(SESSION_COOKIE)?.value;
     try{if(token)await destroySession(token);}catch{recordMetric('account_session_cleanup_error',{user_id:user.id},'error');}
     const response = NextResponse.json({ deleted: true, status: 'deactivated' });
@@ -49,7 +49,7 @@ export async function DELETE(req: Request) {
     recordMetric('account_deleted', { user_id: user.id });
     return response;
   } else {
-    const supabase = createClient();
+    const supabase = (await createClient());
     await supabase.auth.signOut();
   }
 

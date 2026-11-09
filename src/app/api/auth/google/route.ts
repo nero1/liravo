@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  const {data:user,error}=await supabase.rpc('resolve_localized_social_identity' as never,{p_locale:accountLocale(request),p_provider:'google',p_subject:googleInfo.sub,p_email:googleInfo.email.toLowerCase(),p_display_name:googleInfo.name??googleInfo.email.split('@')[0],p_avatar_url:googleInfo.picture??null} as never);
+  const {data:user,error}=await supabase.rpc('resolve_localized_social_identity',{p_locale:accountLocale(request),p_provider:'google',p_subject:googleInfo.sub,p_email:googleInfo.email.toLowerCase(),p_display_name:googleInfo.name??googleInfo.email.split('@')[0],p_avatar_url:googleInfo.picture??null});
   if(error||!user)return NextResponse.json({error:'Authentication unavailable',code:error?.code==='P1001'?'ACCOUNT_LINK_REQUIRED':'AUTH_UNAVAILABLE'},{status:error?.code==='P1003'?403:error?.code==='P1001'?409:503});
   return directLoginResponse(user as unknown as {id:string;email:string|null},clientUser(user),request);
 }

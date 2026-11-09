@@ -8,7 +8,8 @@ export const dynamic='force-dynamic';
 
 const schema=z.object({action:z.enum(['approve','remove','warn','escalate']),reason:z.string().max(1000).optional()});
 
-export async function POST(request:Request,{params}:{params:{id:string}}) {
+export async function POST(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const auth=await requireModerator();if(auth instanceof NextResponse)return auth;
   if(request.headers.has('X-Liravo-Actor')&&request.headers.get('X-Liravo-Actor')!==auth.userId)return NextResponse.json({error:'Account changed'},{status:409});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid report'},{status:400});

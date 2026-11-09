@@ -15,7 +15,7 @@ const patchSchema = z.object({
   is_suspended: z.boolean().optional(),
 }).strict().refine(value=>['is_moderator','is_premium','is_suspended'].some(key=>key in value));
 
-async function checkAdmin(supabase: ReturnType<typeof createClient>, userId: string) {
+async function checkAdmin(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data } = await supabase
     .from('users')
     .select('is_admin')
@@ -27,7 +27,7 @@ async function checkAdmin(supabase: ReturnType<typeof createClient>, userId: str
 export const GET=(request:Request)=>adminCatalogResponse(request,'users','users');
 
 export async function PATCH(req: Request) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!(await checkAdmin(supabase, user.id))) {

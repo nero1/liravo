@@ -13,7 +13,7 @@ it('preserves lazy browser inference, model reuse and warning thresholds',async(
   expect(await classifyReviewTone('A sufficiently long review.')).toBe('toxic');
   model.mockResolvedValueOnce([{label:'toxic',score:0.7}]);expect(await classifyReviewTone('Another sufficiently long review.')).toBe('warning');
   model.mockResolvedValueOnce([{label:'toxic',score:0.2}]);expect(await classifyReviewTone('A third sufficiently long review.')).toBe('safe');
-  expect(createPipeline).toHaveBeenCalledTimes(1);expect(createPipeline).toHaveBeenCalledWith('text-classification','Xenova/toxic-bert',{device:'wasm'});
+  expect(createPipeline).toHaveBeenCalledTimes(1);expect(createPipeline).toHaveBeenCalledWith('text-classification','Xenova/toxic-bert',{device:'wasm',dtype:'q8'});
 });
 
 it('reports unavailable inference, retries failed loads and shares concurrent model initialization',async()=>{

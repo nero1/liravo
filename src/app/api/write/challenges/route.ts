@@ -18,7 +18,7 @@ const CreateChallengeSchema = z.object({
 }).refine(value => value.end_date >= value.start_date, {message:'End date must follow start date'});
 
 export async function GET() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const today = new Date().toISOString();
 

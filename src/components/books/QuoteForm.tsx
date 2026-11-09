@@ -16,7 +16,7 @@ interface QuoteFormProps {
 
 export function QuoteForm(props:QuoteFormProps){return <OwnedQuoteForm key={props.userId+':'+props.bookId} {...props}/>;}
 function OwnedQuoteForm({bookId,userId,onSuccess}:QuoteFormProps){
-  const intent=useRequestIntent(userId),t=useTranslations('books'),common=useTranslations('common'),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>();
+  const intent=useRequestIntent(userId),t=useTranslations('books'),common=useTranslations('common'),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   useEffect(()=>()=>clearTimeout(timer.current),[]);
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState('');

@@ -48,7 +48,7 @@ export function providerSessionHash(userId:string,accessToken:string) {
   }catch{throw new Error('Provider session identity unavailable');}
 }
 async function readGrant(hash:string) {
-  const {data,error}=await (await service()).rpc('read_factor_session' as never,{p_hash:hash} as never);
+  const {data,error}=await (await service()).rpc('read_factor_session',{p_hash:hash});
   if(error)throw new Error('Session proof unavailable');
   return data as {id:string;email:string;mfaVersion:number}|null;
 }
@@ -77,13 +77,13 @@ export async function readDirectSession(token:string) {
 }
 export async function beginLoginChallenge(userId:string,sessionHash:string|null=null) {
   const token=factorToken();
-  const {error}=await (await service()).rpc('begin_factor_challenge' as never,{p_user_id:userId,p_hash:factorHash(token),p_kind:'login',p_session_hash:sessionHash} as never);
+  const {error}=await (await service()).rpc('begin_factor_challenge',{p_user_id:userId,p_hash:factorHash(token),p_kind:'login',p_session_hash:sessionHash});
   if(error)throw new Error('Login challenge unavailable');
   return {mfaRequired:true,challengeToken:token};
 }
 export async function claimFactorChallenge(token:string,kind:'login'|'setup') {
   if(!/^[a-f0-9]{64}$/.test(token))return null;
-  const {data,error}=await (await service()).rpc('claim_factor_challenge' as never,{p_hash:factorHash(token),p_kind:kind} as never);
+  const {data,error}=await (await service()).rpc('claim_factor_challenge',{p_hash:factorHash(token),p_kind:kind});
   if(error)throw new Error('Factor challenge unavailable');
   return data as FactorChallenge|null;
 }
@@ -112,16 +112,17 @@ export function factorSessionResponse(data:unknown,token?:string,status=200,requ
 }
 
 export async function currentFactorSessionHash(userId:string) {
-  const {headers,cookies}=await import('next/headers');
-  const authorization=headers().get('authorization');
+  const {headers,cookies}=await
+  import('next/headers');
+  const authorization=(await headers()).get('authorization');
   const bearer=authorization?.startsWith('Bearer ')?authorization.slice(7):undefined;
   if((await import('@/lib/db/provider')).isDirectPostgres()){
-    const token=bearer??cookies().get('liravo-session')?.value;
+    const token=bearer??(await cookies()).get('liravo-session')?.value;
     if(!token)throw new Error('Authenticated session required');
     return factorHash(token);
   }
   const {createClient}=await import('@/lib/supabase/server');
-  const token=bearer??(await createClient({skipMfa:true}).auth.getSession()).data.session?.access_token;
+  const token=bearer??(await (await createClient({skipMfa:true})).auth.getSession()).data.session?.access_token;
   if(!token)throw new Error('Authenticated provider session required');
   return providerSessionHash(userId,token);
 }

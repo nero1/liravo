@@ -9,10 +9,8 @@ const goalSchema = z.object({
   goal: z.number().int().min(1).max(10000),
 });
 
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -28,7 +26,7 @@ export async function PUT(
 
   const { goal } = parsed.data;
 
-  const {error}=await createServiceClient().rpc('set_reading_goal' as never,{p_user_id:user.id,p_year:new Date().getUTCFullYear(),p_target:goal} as never);
+  const {error}=await createServiceClient().rpc('set_reading_goal',{p_user_id:user.id,p_year:new Date().getUTCFullYear(),p_target:goal});
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,4 +1,4 @@
-import { QueryError } from '@/components/ui/EmptyState';
+import { QueryError , EmptyState } from '@/components/ui/EmptyState';
 import {useTranslations} from '@/hooks/useTranslations';
 import { Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,6 @@ import {Button} from '@/components/ui/Button';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/constants/api';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export default function WorkshopsScreen() {
@@ -25,7 +24,7 @@ export default function WorkshopsScreen() {
           {item.topic && <Text className="text-sm text-muted-foreground" numberOfLines={2}>{item.topic}</Text>}
           <Text className="text-xs text-muted-foreground">{ui('nativeWriting.members',{count:item.member_count??0})}</Text>
         </TouchableOpacity>
-      )} ListEmptyComponent={<EmptyState title={ui('nativeWriting.noWorkshops')}/>} ListFooterComponent={hasNextPage?<Button variant="ghost" loading={isFetchingNextPage} onPress={()=>void fetchNextPage()}>{ui(isFetchNextPageError?'common.retry':'common.loadMore')}</Button>:null} contentContainerStyle={{ paddingBottom: 24 }} />
+      )} ListEmptyComponent={<EmptyState title={ui('nativeWriting.noWorkshops')}/>} ListFooterComponent={hasNextPage?<Button variant="ghost" loading={isFetchingNextPage} onPress={()=>void fetchNextPage()}>{ui(isFetchNextPageError?'common.retry':'common.loadMore')}</Button>:undefined} contentContainerStyle={{ paddingBottom: 24 }} />
     </SafeAreaView>
   );
 }

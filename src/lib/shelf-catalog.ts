@@ -1,3 +1,4 @@
+import type {RpcCall}from'@/types/database.generated';
 import {z} from 'zod';
 import {createServiceClient} from '@/lib/supabase/server';
 import type {ShelfRow,ShelfBookRow,BookRow,ReadingGoalData} from '@/types/database';
@@ -7,7 +8,7 @@ export class ShelfError extends Error{constructor(message:string,public status:n
 const position=z.object({actorId:z.string().uuid(),scope:z.string(),at:z.string().datetime({offset:true}),id:z.string().uuid(),isDefault:z.boolean().optional()}).strict();
 function cursor(value:string|null,actorId:string,scope:string){if(!value)return null;try{if(value.length>1000)throw Error();const parsed=position.parse(JSON.parse(Buffer.from(value,'base64url').toString()));if(parsed.actorId!==actorId||parsed.scope!==scope)throw Error();return parsed;}catch{throw new ShelfError('Invalid shelf cursor',400);}}
 const encode=(value:z.infer<typeof position>)=>Buffer.from(JSON.stringify(value)).toString('base64url');
-async function rpc<T>(name:string,body:Record<string,unknown>):Promise<T>{const{data,error}=await createServiceClient().rpc(name as never,body as never);if(error||!data)throw new ShelfError('Shelf unavailable',({P1003:403,P1004:400,P1005:404}as Record<string,number>)[error?.code??'']??503);return data as T;}
+async function rpc<T>(...[name,body]:RpcCall):Promise<T>{const{data,error}=await createServiceClient().rpc(name,body);if(error||!data)throw new ShelfError('Shelf unavailable',({P1003:403,P1004:400,P1005:404}as Record<string,number>)[error?.code??'']??503);return data as T;}
 export async function getShelfCatalog(actorId:string,bookId:string|null=null,raw:string|null=null,limit=50){
  if(bookId&&!z.string().uuid().safeParse(bookId).success||!Number.isInteger(limit)||limit<1||limit>100)throw new ShelfError('Invalid shelf query',400);
  const scope='catalog.'+(bookId??''),before=cursor(raw,actorId,scope);if(before&&typeof before.isDefault!=='boolean')throw new ShelfError('Invalid shelf cursor',400);

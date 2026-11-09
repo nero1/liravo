@@ -1581,7 +1581,7 @@
   },
   "accountData": {
     "exportTitle": "Exporter vos données",
-    "exportDescription": "Téléchargez votre profil, vos lectures, avis, citations, réponses d’écriture, historique XP et pourboires envoyés.",
+    "exportDescription": "Téléchargez un instantané de votre profil, de vos lectures, de vos écrits, de vos activités communautaires et de votre historique financier.",
     "export": "Exporter les données",
     "exporting": "Préparation de l’export…",
     "exportFailed": "Impossible d’exporter vos données. Réessayez.",

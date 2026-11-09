@@ -24,12 +24,13 @@ interface SeasonalEvent {
   is_published: boolean;
 }
 
-export default async function SeasonalEventsPage({searchParams={}}:{searchParams?:{cursor?:string}}) {
+export default async function SeasonalEventsPage(props:{searchParams?: Promise<{cursor?:string}>}) {
+  const searchParams = (await props.searchParams)??{};
   const formatter = await getFormatter();
   const t = await getTranslations('admin');
   const user = await getCurrentUser();
   if (!user) redirect('/login');
-  if (!await isAdmin(user.id)) redirect('/');
+  if (!(await isAdmin(user.id))) redirect('/');
   const catalog=await readAdminCatalog<SeasonalEvent>(user.id,'seasons',{cursor:searchParams.cursor}),items=catalog.items;
   const now = new Date();
 

@@ -36,7 +36,7 @@ export async function recoverySession(user:{id:string;email:string},request:Requ
   }
   const generated=await service.auth.admin.generateLink({type:'magiclink',email:providerEmail});
   if(generated.error||generated.data.user?.id!==user.id||!generated.data.properties?.hashed_token)throw new Error('Provider recovery unavailable');
-  const client=createClient({skipMfa:true});
+  const client=(await createClient({skipMfa:true}));
   const verified=await client.auth.verifyOtp({type:'magiclink',token_hash:generated.data.properties.hashed_token});
   if(verified.error||verified.data.user?.id!==user.id||!verified.data.session){await client.auth.signOut({scope:'local'});throw new Error('Provider recovery unavailable');}
   const session=verified.data.session;

@@ -14,6 +14,6 @@ export async function POST(request:Request){
  if(request.headers.get('Content-Type')?.includes('application/json')){try{const parsed=z.object({token:tokenSchema}).strict().parse(JSON.parse(raw));token=parsed.token;}catch{return NextResponse.json({error:'Invalid link'},{status:410,headers});}}
  else if(request.headers.get('Content-Type')?.includes('application/x-www-form-urlencoded')&&new URLSearchParams(raw).get('List-Unsubscribe')==='One-Click')token=new URL(request.url).searchParams.get('token');
  if(!tokenSchema.safeParse(token).success)return NextResponse.json({error:'Invalid link'},{status:410,headers});
- try{const{data,error}=await createServiceClient().rpc('consume_email_unsubscribe'as never,{p_hash:createHash('sha256').update(token as string).digest('hex')}as never);if(error)return NextResponse.json({error:'Unsubscribe unavailable'},{status:503,headers});if(data!==true)return NextResponse.json({error:'Invalid link'},{status:410,headers});return NextResponse.json({ok:true},{headers});}
+ try{const{data,error}=await createServiceClient().rpc('consume_email_unsubscribe',{p_hash:createHash('sha256').update(token as string).digest('hex')});if(error)return NextResponse.json({error:'Unsubscribe unavailable'},{status:503,headers});if(data!==true)return NextResponse.json({error:'Invalid link'},{status:410,headers});return NextResponse.json({ok:true},{headers});}
  catch{return NextResponse.json({error:'Unsubscribe unavailable'},{status:503,headers});}
 }

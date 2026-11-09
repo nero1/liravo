@@ -16,11 +16,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('bookManagement') };
 }
 
-export default async function AdminBooksPage({searchParams={}}:{searchParams?:{cursor?:string;search?:string}}) {
+export default async function AdminBooksPage(props:{searchParams?: Promise<{cursor?:string;search?:string}>}) {
+  const searchParams = (await props.searchParams)??{};
   const t = await getTranslations('admin'),common=await getTranslations('common'),formatter=await getFormatter(),bookText=await getTranslations('books'),editionText=await getTranslations('editions');
   const user = await getCurrentUser();
   if (!user) redirect('/login');
-  if (!await isAdmin(user.id)) redirect('/');
+  if (!(await isAdmin(user.id))) redirect('/');
   const catalog=await readAdminCatalog<BookRow&{affiliate_click_count:number}>(user.id,'books',{cursor:searchParams.cursor,search:searchParams.search}),books=catalog.items;
 
   return (

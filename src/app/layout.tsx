@@ -68,7 +68,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <NextIntlClientProvider messages={messages}>
-          <ThemeProvider nonce={headers().get('x-nonce')??undefined}>
+          <ThemeProvider nonce={(await headers()).get('x-nonce')??undefined}>
             <ServiceWorkerRegister />
             {children}
           </ThemeProvider>
