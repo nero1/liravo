@@ -4,6 +4,7 @@
  *
  * Circuit breaker: 3 DeepSeek failures within 5 min → open circuit for 10 min (all traffic → Gemini).
  */
+import {leaseSignal} from '@/lib/locks';
 import { getRedisClient } from '@/lib/redis';
 import { AI_MODELS } from '@/constants/ai';
 import { safeModelText } from '@/lib/ai-safety';
@@ -98,7 +99,7 @@ export async function callAI(
   prompt: string,
   opts: AICallOptions = {}
 ): Promise<{ text: string; provider: 'deepseek' | 'gemini' }> {
-  const signal=AbortSignal.any([AbortSignal.timeout(18000),...(opts.signal?[opts.signal]:[])]);opts={...opts,signal};
+  const lease=leaseSignal();const signal=AbortSignal.any([AbortSignal.timeout(18000),...(lease?[lease]:[]),...(opts.signal?[opts.signal]:[])]);opts={...opts,signal};
   let cancel!:()=>void;
   const deadline=new Promise<never>((_,reject)=>{cancel=()=>reject(new Error('AI deadline exceeded'));if(signal.aborted)cancel();else signal.addEventListener('abort',cancel,{once:true});});
   const run=async():Promise<{text:string;provider:'deepseek'|'gemini'}>=>{

@@ -2526,5 +2526,12 @@
     "writingChallenge": "Schreiben auf Liravo",
     "writingMessage": "Nimm an der Challenge teil und teile deine Texte.",
     "submissionCount": "{count, plural, one {# Beitrag} other {# Beiträge}}"
+  },
+  "readingHistory": {
+    "title": "Lesesitzungen",
+    "empty": "Noch keine Lesesitzungen.",
+    "viewBook": "Buch ansehen",
+    "pages": "{count, plural, one {# Seite gelesen} other {# Seiten gelesen}}",
+    "failed": "Lesesitzungen konnten nicht geladen werden. Versuche es erneut."
   }
 }

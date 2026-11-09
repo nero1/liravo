@@ -49,7 +49,9 @@ export function OwnedAuthorProfileScreen() {
     queryFn:async({pageParam})=>{const result=await api.get<{qa:QAItem[];total:number;authorId:string;nextCursor:string|null}>('/api/author/qa',{author_id:data?.author?.id,cursor:pageParam??undefined});if(result.authorId!==data?.author?.id||!Array.isArray(result.qa)||typeof result.total!=='number'||!(result.nextCursor===null||typeof result.nextCursor==='string'))throw Error('Invalid questions');return result;},
     getNextPageParam:page=>page.nextCursor,enabled:!!data?.author?.id,
   });
-  const author=data?.author,posts=data?.posts??[],qa=qaQuery.data?.pages.flatMap(page=>page.qa)??[];
+  const postsQuery=useInfiniteQuery({queryKey:['author-posts',data?.author?.id,currentUser?.id],initialPageParam:null as string|null,enabled:!!data?.author?.id,
+    queryFn:({pageParam})=>api.get<{posts:AuthorPost[];nextCursor:string|null}>('/api/author/posts',{authorId:data!.author.id,cursor:pageParam??undefined}),getNextPageParam:page=>page.nextCursor});
+  const author=data?.author,posts=postsQuery.data?.pages.flatMap(page=>page.posts)??data?.posts??[],qa=qaQuery.data?.pages.flatMap(page=>page.qa)??[];
   function validReceipt(value:unknown):value is {qa:{id:string}}{const result=value as {actorId?:string;authorId?:string;qa?:{id?:string;author_id?:string;asked_by?:string}}|null;return result?.actorId===currentUser?.id&&result?.authorId===author?.id&&result?.qa?.author_id===author?.id&&result?.qa?.asked_by===currentUser?.id&&typeof result?.qa?.id==='string';}
   async function receipt(key:string){const result=await api.get<unknown>('/api/author/qa',{receipt:key});if(!validReceipt(result))throw Error('Invalid question receipt');return result;}
   async function acknowledge(key:string){if(!alive.current||useAuthStore.getState().user?.id!==currentUser?.id)return;await intent.complete('author.qa.'+author?.id,key);if(!alive.current)return;setAskQuestion('');setAskOpen(false);Alert.alert(ui('authorQA.questionSubmitted'));}
@@ -167,6 +169,8 @@ export function OwnedAuthorProfileScreen() {
           </View>
         )}
 
+        {postsQuery.error&&<QueryError error={postsQuery.error} retry={()=>void postsQuery.refetch()}/>}
+        {postsQuery.hasNextPage&&<Button loading={postsQuery.isFetchingNextPage} onPress={()=>void postsQuery.fetchNextPage()}>{ui('common.loadMore')}</Button>}
         {qaQuery.error&&<QueryError error={qaQuery.error} retry={()=>void(qaQuery.data?qaQuery.fetchNextPage():qaQuery.refetch())}/>}
         {qaQuery.hasNextPage&&<Button loading={qaQuery.isFetchingNextPage} onPress={()=>void qaQuery.fetchNextPage()}>{ui('common.loadMore')}</Button>}
         {/* Q&A */}

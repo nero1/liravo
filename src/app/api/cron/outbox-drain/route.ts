@@ -13,6 +13,7 @@ import {cleanupAvatarUploads} from '@/lib/profile-avatars';
 
 async function run(req: Request) {
 
+  const {data:retention,error:retentionError}=await createServiceClient().rpc('prune_operational_history' as never);if(retentionError)throw new Error('Operational retention failed');
   const batch = Number(req.headers.get('x-outbox-batch') ?? '50');
   const batchSize = Number.isFinite(batch) ? Math.min(200, Math.max(1, batch)) : 50;
 
@@ -25,7 +26,7 @@ async function run(req: Request) {
   if (error) throw new Error('Financial reconciliation failed');
   const anomalies = data as Record<string, number>;
   recordMetric('financial_integrity_snapshot', { ...anomalies, correlationId: getRequestCorrelationId(req) }, Object.values(anomalies).some(value => value > 0) ? 'error' : 'info');
-  return NextResponse.json({ ...result, failed: result.failed + cancellations.failed + refunds.failed + checkouts.failed+returns.failed+avatars.failed, cancellations, payouts, refunds, checkouts, returns, avatars, anomalies });
+  return NextResponse.json({ ...result, retention, failed: result.failed + cancellations.failed + refunds.failed + checkouts.failed+returns.failed+avatars.failed, cancellations, payouts, refunds, checkouts, returns, avatars, anomalies });
 }
 
 export const GET = cron('outbox-drain', run);

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {useTranslations} from 'next-intl';
@@ -9,7 +10,7 @@ import {useRequestIntent} from '@/lib/client/useRequestIntent';
 type Props={bookId:string;userId:string;onLogged?:(pagesRead:number)=>void};
 export function LogReadingSessionButton(props:Props){return <OwnedSessionButton key={props.userId+':'+props.bookId} {...props}/>;}
 function OwnedSessionButton({bookId,userId,onLogged}:Props){
-  const t=useTranslations('books'),common=useTranslations('common'),intent=useRequestIntent(userId),router=useRouter(),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>();
+  const history=useTranslations('readingHistory'),t=useTranslations('books'),common=useTranslations('common'),intent=useRequestIntent(userId),router=useRouter(),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>();
   const [open,setOpen]=useState(false),[pages,setPages]=useState(''),[saving,setSaving]=useState(false),[done,setDone]=useState(false),[error,setError]=useState(false);
   useEffect(()=>()=>clearTimeout(timer.current),[]);
   async function submit(event:React.FormEvent){
@@ -22,6 +23,6 @@ function OwnedSessionButton({bookId,userId,onLogged}:Props){
     }catch{setError(true);}finally{busy.current=false;setSaving(false);}
   }
   if(done)return <span role="status" className="text-xs text-green-600 font-medium">{t('sessionLogged')}</span>;
-  if(!open)return <button type="button" onClick={()=>setOpen(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent transition-colors"><BookOpen size={12} aria-hidden="true"/>{t('logSession')}</button>;
+  if(!open)return <div className="flex gap-2"><Link className="text-xs text-accent" href={'/reading-sessions?book_id='+bookId}>{history('title')}</Link><button type="button" onClick={()=>setOpen(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent transition-colors"><BookOpen size={12} aria-hidden="true"/>{t('logSession')}</button></div>;
   return <form onSubmit={submit} className="flex flex-wrap items-center gap-1.5 mt-1">{error&&<span role="alert" className="text-xs text-destructive">{t('sessionFailed')}</span>}<label htmlFor={'session-pages-'+bookId} className="sr-only">{t('pagesRead')}</label><input id={'session-pages-'+bookId} type="number" min={1} max={9999} step={1} disabled={saving} value={pages} onChange={event=>setPages(event.target.value)} placeholder={t('pagesRead')} className="w-24 text-xs rounded border border-border bg-card px-2 py-1 focus:outline-none focus:ring-1 focus:ring-accent"/><button type="submit" disabled={saving} className="text-xs px-2 py-1 rounded bg-accent text-accent-foreground hover:opacity-90 disabled:opacity-50">{saving?common('loading'):t('log')}</button><button type="button" disabled={saving} onClick={()=>setOpen(false)} aria-label={common('close')} className="text-xs text-muted-foreground hover:text-foreground">{common('cancel')}</button></form>;
 }

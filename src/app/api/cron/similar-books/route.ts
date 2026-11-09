@@ -1,70 +1,19 @@
-import { cron } from '@/lib/cron';
-import { NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-
-export const dynamic = 'force-dynamic';
-
-const BATCH_SIZE = 100;
-
-async function run() {
-
-  const supabase = createServiceClient();
-
-  const { data: books, error } = await supabase
-    .from('books')
-    .select('id, author_name, genres, language')
-    .limit(5000);
-
-  if (error || !books || books.length === 0) {
-    return NextResponse.json({ processed: 0 });
-  }
-
-  let processed = 0;
-
-  for (let i = 0; i < books.length; i += BATCH_SIZE) {
-    const batch = books.slice(i, i + BATCH_SIZE);
-
-    const upserts = batch.map((book) => {
-      const scores: Record<string, number> = {};
-
-      for (const candidate of books) {
-        if (candidate.id === book.id) continue;
-
-        let score = 0;
-        if (candidate.author_name === book.author_name) score += 3;
-        if (candidate.language === book.language) score += 1;
-
-        const overlap = (candidate.genres ?? []).filter((g: string) =>
-          (book.genres ?? []).includes(g)
-        ).length;
-        score += overlap;
-
-        if (score > 0) scores[candidate.id] = score;
-      }
-
-      const similarIds = Object.entries(scores)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([id]) => id);
-
-      return {
-        book_id: book.id,
-        similar_book_ids: similarIds,
-        computed_at: new Date().toISOString(),
-      };
-    });
-
-    await supabase
-      .from('similar_books_computed')
-      .upsert(upserts, { onConflict: 'book_id' });
-
-    processed += batch.length;
-  }
-
-  return NextResponse.json({ processed });
+import {cron} from '@/lib/cron';
+import {createServiceClient} from '@/lib/supabase/server';
+import {NextResponse} from 'next/server';
+export const dynamic='force-dynamic';
+async function run(request:Request){
+ const service=createServiceClient(),deadline=Date.now()+20000;let total=0,scanned=0,complete=false;
+ do{
+  request.signal.throwIfAborted();
+  const {data,error}=await service.rpc('compute_similar_books_batch' as never);
+  const receipt=data as {processed?:number;scanned?:number;complete?:boolean}|null;
+  if(error||!receipt||!Number.isSafeInteger(receipt.processed)||!Number.isSafeInteger(receipt.scanned)||typeof receipt.complete!=='boolean')throw new Error('Job batch unavailable');
+  total+=receipt.processed!;scanned+=receipt.scanned!;complete=receipt.complete;
+  if(!receipt.scanned&&!complete)throw new Error('Job cursor did not advance');
+ }while(!complete&&Date.now()<deadline);
+ return NextResponse.json({processed:total,scanned,complete});
 }
-
-export const GET = cron('similar-books', run);
-export const POST = GET;
-
-export const maxDuration = 60;
+export const GET=cron('similar-books',run);
+export const POST=GET;
+export const maxDuration=60;

@@ -6,7 +6,7 @@ import { safeModelText } from '../src/lib/ai-safety';
 
 vi.mock('@/lib/premium-access',()=>({hasPremiumAccess:vi.fn().mockResolvedValue(false)}));
 vi.mock('@/lib/operational-alerts',()=>({observeOperationalSignal:vi.fn()}));
-vi.mock('@/lib/locks', () => ({ withRedisLock: vi.fn() }));
+vi.mock('@/lib/locks',async original=>({...await original<typeof import('@/lib/locks')>(), withRedisLock: vi.fn() }));
 import { withRedisLock } from '../src/lib/locks';
 import { cron } from '../src/lib/cron';
 

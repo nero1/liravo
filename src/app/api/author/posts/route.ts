@@ -1,3 +1,5 @@
+import {authorPostPage} from '@/lib/content-history';
+import {decodeCursor} from '@/lib/pagination';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
@@ -14,27 +16,11 @@ const postSchema = z.object({
   type: z.enum(['announcement', 'blog', 'arc_invite']),
 }).refine(value=>value.type!=='arc_invite'||!!value.book_id,{message:'ARC invites require an approved book'});
 
-export async function GET(req: Request) {
-  const supabase = createClient();
-  const { searchParams } = new URL(req.url);
-  const authorId = searchParams.get('authorId');
-
-  if (!authorId) {
-    return NextResponse.json({ error: 'authorId required' }, { status: 400 });
-  }
-
-  const { data, error } = await supabase
-    .from('author_posts')
-    .select('id, title, body, type, book_id, author_id, created_at')
-    .eq('author_id', authorId)
-    .order('created_at', { ascending: false })
-    .limit(20);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ posts: data ?? [] });
+export async function GET(req:Request){
+ const query=new URL(req.url).searchParams,author=query.get('authorId'),cursor=query.get('cursor');
+ try{if(!z.string().uuid().safeParse(author).success)throw Error();decodeCursor(cursor);}catch{return NextResponse.json({error:'Invalid history query'},{status:400});}
+ const viewer=await getCurrentUser();
+ try{return NextResponse.json({authorId:author,...await authorPostPage(author!,viewer?.id??null,cursor)},{headers:{'Cache-Control':'private, no-store'}});}catch{return NextResponse.json({error:'Posts unavailable'},{status:503});}
 }
 
 export async function POST(req: Request) {

@@ -1,6 +1,6 @@
 # Custom Bugs Report
 
-Date/time: 05 November 2026, 03:55 PM WAT (Africa/Lagos)
+Date/time: 09 November 2026, 02:47 AM WAT (Africa/Lagos)
 
 Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed and verified; 🟡 partial; 🔵 pending. Original findings remain below; STATUS records describe the verified changes.
 
@@ -18,25 +18,25 @@ Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed an
 10: ✅ BUG-20261105-010: [Medium] Native authentication destroys valid sessions during temporary outages
 11: ✅ BUG-20261105-011: [Medium] Sensitive administrative SQL routines accept deleted administrators
 12: ✅ BUG-20261105-012: [Medium] Onboarding follow buttons call a nonexistent endpoint
-13: 🔵 BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
+13: ✅ BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
 14: ✅ BUG-20261105-014: [Medium] Author inspiration shelves query a nonexistent reading-list title
 15: ✅ BUG-20261105-015: [Medium] Quote pagination loses records with matching timestamps
-16: 🔵 BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
-17: 🔵 GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
-18: 🔵 BUG-20261105-018: [Medium] Several cron jobs report success after database failures
+16: ✅ BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
+17: ✅ GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
+18: ✅ BUG-20261105-018: [Medium] Several cron jobs report success after database failures
 19: ✅ BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
 20: ✅ BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
 21: ✅ BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
 22: ✅ GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
 23: 🔵 GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
 24: 🔵 GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
-25: 🔵 BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
-26: 🔵 BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
-27: 🔵 GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
-28: 🔵 GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
-29: 🔵 GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
+25: ✅ BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
+26: ✅ BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
+27: ✅ GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
+28: ✅ GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
+29: ✅ GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
 30: 🔵 GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
-31: 🔵 BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
+31: ✅ BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
 32: ✅ BUG-20261105-032: [Medium] The health endpoint reports HTTP success when all dependencies fail
 33: ✅ GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
 34: ✅ GAP-20261105-034: [Medium] Two AI routes bypass the existing shared request deadline
@@ -162,13 +162,15 @@ FIX: Use the existing target-specific follow route and its expected method and a
 
 STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
 
-### 13: 🔵 BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
+### 13: ✅ BUG-20261105-013: [Medium] Computed book recommendations use a column absent from the schema
 
 FILES: `src/app/api/cron/similar-books/route.ts:55`, `src/app/(app)/book/[id]/page.tsx:170`, `supabase/migrations/001_schema.sql:1317`
 
 PROBLEM: similar_books_computed defines similar_ids, while the cron writes and book page selects similar_book_ids. Executing the select against the complete schema raised PostgreSQL 42703. Ignored query/upsert errors hide the failure behind fallback recommendations and successful processed counts. The page also uses maybeSingle across an edition family, which needs a defined selection rule when multiple computed rows exist.
 
 FIX: Align writer, reader and typed schema on one field and canonical edition/work identity. Select one deterministic recommendation record or deliberately aggregate the family. Propagate persistence errors and verify the cron-to-page round trip, including aliases, merged editions, multiple records and empty results.
+
+STATUS: ✅ Computed recommendations now use similar_ids keyed by canonical work, with deterministic canonical-edition readers; PostgreSQL round-trip checks pass.
 
 ### 14: ✅ BUG-20261105-014: [Medium] Author inspiration shelves query a nonexistent reading-list title
 
@@ -190,7 +192,7 @@ FIX: Use a validated composite created_at/id cursor and matching deterministic o
 
 STATUS: ✅ Fixed in the foundation batch. Verified with browser-role SQL checks, handler/component regressions, and the full PostgreSQL/Redis-backed suite (639 passing tests).
 
-### 16: 🔵 BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
+### 16: ✅ BUG-20261105-016: [Medium] Writing leaderboards aggregate truncated or unbounded client-side result sets
 
 FILES: `src/app/api/write/prompts/leaderboard/route.ts`, `src/app/api/write/challenges/[id]/route.ts`
 
@@ -198,7 +200,9 @@ PROBLEM: Both routes retrieve individual submissions and aggregate them in JavaS
 
 FIX: Aggregate and rank in SQL with indexed period/challenge predicates and bounded output. Apply account visibility and inactive-user rules before ranking, validate period inputs and distinguish dependency errors from an empty leaderboard. Verify datasets above the configured Data API cap and equivalent results across providers.
 
-### 17: 🔵 GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
+STATUS: ✅ Writing rankings aggregate complete histories in SQL and apply profile visibility; more than 1000 submissions are verified without Data API truncation.
+
+### 17: ✅ GAP-20261105-017: [Medium] Similar-book computation scales quadratically and never resumes past its cap
 
 FILES: `src/app/api/cron/similar-books/route.ts`
 
@@ -206,13 +210,17 @@ PROBLEM: The cron compares every selected book against every other book, sorts e
 
 FIX: Generate bounded candidates using indexed genre/language/author or similarity queries and compute top results per canonical work. Process stable cursor batches with a persisted checkpoint and deadline. Verify coverage above 5,000 books, partial-run recovery and measured cost within the configured hosting budget.
 
-### 18: 🔵 BUG-20261105-018: [Medium] Several cron jobs report success after database failures
+STATUS: ✅ Indexed bounded candidate batches persist their work cursor and resume beyond 5000 works; PostgreSQL recovery and coverage checks pass.
+
+### 18: ✅ BUG-20261105-018: [Medium] Several cron jobs report success after database failures
 
 FILES: `src/app/api/cron/account-hardening/route.ts`, `src/app/api/cron/affiliate-health/route.ts`, `src/app/api/cron/similar-books/route.ts`, `src/lib/cron.ts`
 
 PROBLEM: Account-hardening ignores user-query and notification-insert errors; affiliate-health ignores read/count/log errors; similar-books returns processed:0 on a failed read and ignores upsert results. Counters advance despite failed writes. Since the shared wrapper observes response.ok, these HTTP 200 responses suppress normal failure signals and scheduler retries.
 
 FIX: Inspect every database result, count only acknowledged effects and return failure or an explicit partial/retryable result. Persist resumable progress where a batch can partially commit. Make notification/log writes idempotent under retries. Inject read, count and write failures and verify scheduler status, operational alerts and counters.
+
+STATUS: ✅ Reminder and affiliate jobs use acknowledged transactional batches and durable deduplication; failures propagate through scheduled-job monitoring.
 
 ### 19: ✅ BUG-20261105-019: [Medium] Unavailable tone classifiers are reported as safe or neutral
 
@@ -270,7 +278,7 @@ PROBLEM: The export RPC performs unrestricted JSON aggregation of the account's 
 
 FIX: Produce exports in bounded, consistent-snapshot chunks or an asynchronous export job with a signed, expiring download. Stream file generation where supported and download directly to native storage. Retain ownership checks and cleanup. Verify large histories above hosting response limits, interrupted downloads and account changes during export.
 
-### 25: 🔵 BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
+### 25: ✅ BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
 
 FILES: `src/app/sitemap.ts`, `src/app/(app)/book/[id]/page.tsx`, `src/app/user/[username]/page.tsx`
 
@@ -278,7 +286,9 @@ PROBLEM: Sitemap queries cap books at 5,000 and authors/lists at 2,000 without p
 
 FIX: Generate indexed sitemap partitions using stable keyset pagination and explicit canonical/public visibility rules shared with readers. Exclude redirects, private/inactive owners and authentication-only pages. Surface generation failures, use actual modification dates and verify a catalog larger than every page/provider cap.
 
-### 26: 🔵 BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
+STATUS: ✅ Sitemap indexes and bounded keyset partitions cover the complete canonical public catalog. Reading-list visibility is shared across RLS, readers, follows and forks; PostgreSQL and XML regressions pass.
+
+### 26: ✅ BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
 
 FILES: `public/robots.txt`, `src/app/layout.tsx`, `src/constants/config.ts`
 
@@ -286,7 +296,9 @@ PROBLEM: robots.txt always advertises the liravo.org sitemap, and root Open Grap
 
 FIX: Generate robots metadata and root social URLs from the validated application origin already used for canonical URLs. Verify a custom-domain deployment and production separately, including sitemap discovery and absolute image/canonical URLs.
 
-### 27: 🔵 GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
+STATUS: ✅ Robots and social metadata use a validated configured origin; custom-domain and sitemap-discovery checks pass.
+
+### 27: ✅ GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
 
 FILES: `src/app/api/author/posts/route.ts`, `src/app/api/reading-sessions/route.ts`, `src/app/(app)/author/[username]/page.tsx`
 
@@ -294,7 +306,9 @@ PROBLEM: The author-post API returns only 20 records, the author page returns 10
 
 FIX: Keep bounded previews and add explicit history readers with composite timestamp/id cursors and load-more controls. Preserve owner and profile-visibility rules. Verify more records than each limit, tied timestamps, loading failures and access after account changes.
 
-### 28: 🔵 GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
+STATUS: ✅ Web/native history readers use timestamp/id cursors and older-record controls. PostgreSQL verifies tied timestamps, account isolation and private authors.
+
+### 28: ✅ GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
 
 FILES: `src/app/api/cron/affiliate-health/route.ts`, `src/lib/outbox-worker.ts`, `supabase/migrations/001_schema.sql`
 
@@ -302,13 +316,17 @@ PROBLEM: Processed outbox payloads, notifications and affiliate health logs have
 
 FIX: Define retention by record type, deduplicate repeated health findings and archive/purge eligible nonfinancial payloads in indexed batches. Monitor row counts and storage growth. Preserve immutable financial records and sufficient replay-prevention tombstones; verify that cleanup cannot re-enable duplicate payments or rewards.
 
-### 29: 🔵 GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
+STATUS: ✅ Operational retention runs in bounded batches, deduplicates affiliate logs and removes expired device data while preserving financial and replay proofs.
+
+### 29: ✅ GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
 
 FILES: `src/lib/db/pg.ts`, `src/lib/db/query-builder.ts`, `.env.local.example`
 
 PROBLEM: The direct driver configures connection and idle timeouts but no query/statement deadline or bounded waiting policy. DATABASE_POOL_MAX is parsed without validating its range, and each warm instance creates its own pool. An externally configured pooler helps connection count, but slow or locked queries can still occupy every local slot and accumulate waiting work.
 
 FIX: Validate pool settings and enforce request-aware statement/lock deadlines, bounded queueing and dependency-failure handling. Size per-instance pools against the external pooler's total capacity and deployment concurrency. Avoid automatic retries of ambiguous writes. Verify lock contention, slow queries, pool exhaustion and recovery with measured concurrent traffic.
+
+STATUS: ✅ Validated pool limits, bounded queues, statement/lock deadlines and cancellation are implemented. PostgreSQL contention, saturation and recovery checks pass.
 
 ### 30: 🔵 GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
 
@@ -318,13 +336,15 @@ PROBLEM: No Drizzle dependency or import exists. The custom query builder accept
 
 FIX: Generate accurate table and RPC contracts from the canonical schema and remove unchecked casts. Introduce typed Drizzle schema/query coverage for direct database access in measured stages, retaining transactional SQL routines for financial invariants. Track coverage explicitly and exercise contract queries against both direct PostgreSQL and Supabase.
 
-### 31: 🔵 BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
+### 31: ✅ BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
 
 FILES: `src/lib/locks.ts`, `src/lib/cron.ts`, `src/app/api/ai/recommendations/route.ts`
 
 PROBLEM: The heartbeat ignores compareExpire returning zero and suppresses renewal errors. The task keeps running after ownership is lost; an isolated execution completed its task after a zero renewal result. Once the lease expires, another worker may acquire it concurrently. Existing database financial claims limit their own effects, but raw cron writes and expensive generation do not gain that protection automatically.
 
 FIX: Propagate lease loss through an abort signal and require fencing tokens or durable database claims for effects that must exclude stale workers. Make remaining effects idempotent and report renewal failures. Verify ownership replacement, prolonged Redis loss, overlapping invocations and cancellation before the next irreversible effect.
+
+STATUS: ✅ Lease loss cancels shared generation and transport; cache writes compare ownership atomically. Scheduled writes use database fencing epochs across both providers; stale-worker regressions pass.
 
 ### 32: ✅ BUG-20261105-032: [Medium] The health endpoint reports HTTP success when all dependencies fail
 
@@ -393,4 +413,4 @@ Engineering assessment, not a benchmark or security certification:
 
 Proposed batches after plan review: first address findings 1–7 and 11 (dependencies, privacy, SSRF, sessions and sensitive authorization); then 8–10, 12–22 and 31–32 (correctness, delivery and failure handling); then 23–30 and 33–35 (portability, scale, typing, CSP and public navigation). Acceptance requires targeted regression checks, existing tests, lint/types, service-backed schema tests, production bundle limits and device/provider/restore/load checks where applicable. Ratings after remediation are estimates until those validations pass.
 
-Report updated: 05 November 2026, 03:55 PM WAT (Africa/Lagos)
+Report updated: 09 November 2026, 02:47 AM WAT (Africa/Lagos)

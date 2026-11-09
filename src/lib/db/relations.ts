@@ -1,4 +1,4 @@
-import type { getSql } from './pg';
+import {executeQuery,type getSql} from './pg';
 
 type Sql = ReturnType<typeof getSql>;
 interface ForeignKey {
@@ -34,17 +34,17 @@ async function tableInfo(sql: Sql, table: string): Promise<TableInfo> {
   if (!pending) {
     pending = (async () => {
       const [keys, primary] = await Promise.all([
-        sql<ForeignKey[]>`select c.conname as name,s.relname as source_table,t.relname as target_table,
+        executeQuery(sql<ForeignKey[]>`select c.conname as name,s.relname as source_table,t.relname as target_table,
           array(select a.attname from unnest(c.conkey) with ordinality k(num,pos) join pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.num order by k.pos) as source_columns,
           array(select a.attname from unnest(c.confkey) with ordinality k(num,pos) join pg_attribute a on a.attrelid=c.confrelid and a.attnum=k.num order by k.pos) as target_columns,
           exists(select 1 from pg_constraint u where u.conrelid=c.conrelid and u.contype in ('p','u') and cardinality(u.conkey)=cardinality(c.conkey) and u.conkey @> c.conkey) as source_unique
           from pg_constraint c join pg_class s on s.oid=c.conrelid join pg_class t on t.oid=c.confrelid
           join pg_namespace sn on sn.oid=s.relnamespace join pg_namespace tn on tn.oid=t.relnamespace
-          where c.contype='f' and sn.nspname='public' and tn.nspname='public' and (s.relname=${table} or t.relname=${table})`,
-        sql<{ columns: string[] | null }[]>`select array_agg(a.attname order by k.pos) as columns
+          where c.contype='f' and sn.nspname='public' and tn.nspname='public' and (s.relname=${table} or t.relname=${table})`),
+        executeQuery(sql<{ columns: string[] | null }[]>`select array_agg(a.attname order by k.pos) as columns
           from pg_constraint c join pg_class t on t.oid=c.conrelid join pg_namespace n on n.oid=t.relnamespace
           cross join lateral unnest(c.conkey) with ordinality k(num,pos) join pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.num
-          where c.contype='p' and n.nspname='public' and t.relname=${table}`,
+          where c.contype='p' and n.nspname='public' and t.relname=${table}`),
       ]);
       return { keys: [...keys], primary: primary[0]?.columns ?? [] };
     })();

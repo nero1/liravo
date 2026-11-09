@@ -34,6 +34,13 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC, anon, authenticated;
 
 -- Tables and constraints.
 
+CREATE TABLE public.account_hardening_notices (
+ user_id uuid NOT NULL,
+ stage integer NOT NULL CHECK(stage in(7,30)),
+ notified_at timestamp with time zone DEFAULT now() NOT NULL,
+ PRIMARY KEY(user_id,stage)
+);
+
 CREATE TABLE public.affiliate_health_log (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     book_id uuid NOT NULL,
@@ -740,6 +747,16 @@ CREATE TABLE public.legacy_goodreads_import_intents (
     CONSTRAINT legacy_goodreads_import_intents_pkey PRIMARY KEY (actor_id, intent_key)
 );
 
+CREATE TABLE public.maintenance_jobs (
+ name text PRIMARY KEY CHECK(length(name)between 1 and 256),
+ owner uuid,
+ epoch bigint DEFAULT 0 NOT NULL,
+ lease_until timestamp with time zone DEFAULT '-infinity' NOT NULL,
+ after_id uuid,
+ cycle_started_at timestamp with time zone DEFAULT now() NOT NULL,
+ updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE public.moderation_log (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     moderator_id uuid,
@@ -1315,12 +1332,9 @@ CREATE TABLE public.shelves (
 );
 
 CREATE TABLE public.similar_books_computed (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    book_id uuid NOT NULL,
-    similar_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
-    computed_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT similar_books_computed_book_id_key UNIQUE (book_id),
-    CONSTRAINT similar_books_computed_pkey PRIMARY KEY (id)
+ work_id uuid PRIMARY KEY,
+ similar_ids uuid[] DEFAULT '{}' NOT NULL CHECK(cardinality(similar_ids)<=5),
+ computed_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE public.social_intents (
@@ -3022,6 +3036,174 @@ begin
   return prefix||((10-total%10)%10)::text;
 end $$;
 
+CREATE FUNCTION public.check_maintenance_lease(p_name text,p_owner uuid,p_epoch bigint)RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare item maintenance_jobs;
+begin
+ select * into item from maintenance_jobs where name=p_name for update;
+ if not found or item.owner is distinct from p_owner or item.epoch is distinct from p_epoch or item.lease_until<=clock_timestamp()then raise exception 'Job ownership lost'using errcode='P1001';end if;
+end $$;
+
+CREATE FUNCTION public.claim_maintenance_job(p_name text,p_owner uuid)RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp SET lock_timeout TO '1s' AS $$
+declare item maintenance_jobs;
+begin
+ if p_name is null or length(p_name)not between 1 and 256 or p_owner is null then raise exception 'Invalid job'using errcode='P1004';end if;
+ insert into maintenance_jobs(name)values(p_name)on conflict do nothing;
+ select * into item from maintenance_jobs where name=p_name for update;
+ if item.lease_until>clock_timestamp()and item.owner is distinct from p_owner then return null;end if;
+ if item.owner is distinct from p_owner then item.epoch:=item.epoch+1;end if;
+ update maintenance_jobs set owner=p_owner,epoch=item.epoch,lease_until=clock_timestamp()+interval '55 seconds',updated_at=clock_timestamp()where name=p_name;
+ return jsonb_build_object('name',p_name,'owner',p_owner,'epoch',item.epoch);
+end $$;
+
+CREATE FUNCTION public.release_maintenance_job(p_name text,p_owner uuid,p_epoch bigint)RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp SET lock_timeout TO '1s' AS $$
+begin
+ update maintenance_jobs set owner=null,lease_until=clock_timestamp(),updated_at=clock_timestamp()where name=p_name and owner=p_owner and epoch=p_epoch;
+ return found;
+end $$;
+
+CREATE FUNCTION public.guard_maintenance_write()RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp SET lock_timeout TO '1s' AS $$
+declare fence jsonb;
+begin
+ fence:=coalesce(nullif(current_setting('liravo.maintenance',true),'')::jsonb,(nullif(current_setting('request.headers',true),'')::jsonb->>'x-liravo-maintenance')::jsonb);
+ if fence is not null then perform check_maintenance_lease(fence->>'name',(fence->>'owner')::uuid,(fence->>'epoch')::bigint);end if;
+ return null;
+end $$;
+
+CREATE FUNCTION public.run_maintenance_rpc(p_name text,p_owner uuid,p_epoch bigint,p_function text,p_args jsonb DEFAULT '{}')RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp SET lock_timeout TO '1s' AS $$
+declare target record;arguments text;result jsonb;matches integer;
+begin
+ perform check_maintenance_lease(p_name,p_owner,p_epoch);
+ perform set_config('liravo.maintenance',jsonb_build_object('name',p_name,'owner',p_owner,'epoch',p_epoch)::text,true);
+ if p_function is null or p_function!~'^[a-z_][a-z0-9_]*$'or p_function in('run_maintenance_rpc','claim_maintenance_job','release_maintenance_job','check_maintenance_lease')or p_args is null or jsonb_typeof(p_args)<>'object'then raise exception 'Invalid job operation'using errcode='P1004';end if;
+ select count(*)into matches from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+ where n.nspname='public'and p.proname=p_function and p.prokind='f'and has_function_privilege('service_role',p.oid,'EXECUTE')
+ and not exists(select 1 from jsonb_object_keys(p_args)k where not(k=any(p.proargnames[1:p.pronargs])))
+ and not exists(select 1 from unnest(p.proargnames)with ordinality a(name,position)where position<=p.pronargs-p.pronargdefaults and not(p_args?name));
+ if matches<>1 then raise exception 'Unsupported job operation'using errcode='P1004';end if;
+ select p.* into target from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+ where n.nspname='public'and p.proname=p_function and p.prokind='f'and has_function_privilege('service_role',p.oid,'EXECUTE')
+ and not exists(select 1 from jsonb_object_keys(p_args)k where not(k=any(p.proargnames[1:p.pronargs])))
+ and not exists(select 1 from unnest(p.proargnames)with ordinality a(name,position)where position<=p.pronargs-p.pronargdefaults and not(p_args?name));
+ select string_agg(format('%I => %s',a.name,case
+  when p_args->a.name='null'::jsonb then format('NULL::%s',format_type(a.type,null))
+  when a.type in('json'::regtype,'jsonb'::regtype)then format('($1->%L)::%s',a.name,format_type(a.type,null))
+  when t.typelem<>0 then format('ARRAY(select jsonb_array_elements_text($1->%L))::%s',a.name,format_type(a.type,null))
+  else format('($1->>%L)::%s',a.name,format_type(a.type,null))end),','order by a.position)into arguments
+ from unnest(coalesce(target.proallargtypes,target.proargtypes::oid[]),target.proargnames,coalesce(target.proargmodes,array_fill('i'::"char",array[target.pronargs])))with ordinality a(type,name,mode,position)
+ join pg_type t on t.oid=a.type where a.mode in('i','b')and p_args?a.name;
+ if target.proretset then execute format('select coalesce(jsonb_agg(to_jsonb(item)),''[]''::jsonb)from public.%I(%s)item',p_function,coalesce(arguments,''))into result using p_args;
+ else execute format('select to_jsonb(public.%I(%s))',p_function,coalesce(arguments,''))into result using p_args;end if;
+ return result;
+end $$;
+
+CREATE FUNCTION public.maintenance_batch_cursor(p_name text)RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare fence jsonb;cursor_id uuid;
+begin
+ fence:=nullif(current_setting('liravo.maintenance',true),'')::jsonb;
+ if fence is null or fence->>'name' is distinct from p_name then raise exception 'Job claim required'using errcode='P1003';end if;
+ perform check_maintenance_lease(p_name,(fence->>'owner')::uuid,(fence->>'epoch')::bigint);
+ select after_id into cursor_id from maintenance_jobs where name=p_name;return cursor_id;
+end $$;
+
+CREATE FUNCTION public.compute_similar_books_batch(p_limit integer DEFAULT 25)RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare cursor_id uuid;item record;source books;ids uuid[];processed integer:=0;scanned integer:=0;done boolean;started timestamp with time zone:=clock_timestamp();
+begin
+ if p_limit is null or p_limit not between 1 and 50 then raise exception 'Invalid batch'using errcode='P1004';end if;
+ cursor_id:=maintenance_batch_cursor('similar-books');
+ for item in select id from book_works where merged_into is null and(cursor_id is null or id>cursor_id)order by id limit p_limit loop
+  select * into source from books where work_id=item.id and canonical_edition_id is null order by id limit 1;
+  if found then
+   with candidates as(
+    (select b.id from books b where canonical_edition_id is null and work_id<>item.id and b.id=(select representative.id from books representative where representative.work_id=b.work_id and representative.canonical_edition_id is null order by representative.id limit 1)and author_name=source.author_name order by id limit 100)
+    union(select b.id from books b where canonical_edition_id is null and work_id<>item.id and b.id=(select representative.id from books representative where representative.work_id=b.work_id and representative.canonical_edition_id is null order by representative.id limit 1)and genres&&source.genres order by id limit 100)
+    union(select b.id from books b where canonical_edition_id is null and work_id<>item.id and b.id=(select representative.id from books representative where representative.work_id=b.work_id and representative.canonical_edition_id is null order by representative.id limit 1)and language=source.language order by id limit 50)
+   ),ranked as(
+    select b.id,b.work_id,(case when b.author_name=source.author_name then 3 else 0 end+case when b.language=source.language then 1 else 0 end+(select count(*)from(select unnest(b.genres)intersect select unnest(source.genres))g))score
+    from candidates c join books b on b.id=c.id join book_works w on w.id=b.work_id where w.merged_into is null
+   ),works as(select distinct on(work_id)id,work_id,score from ranked order by work_id,score desc,id)
+   select coalesce(array_agg(id order by score desc,id),'{}'::uuid[])into ids from(select * from works where score>0 order by score desc,id limit 5)top;
+   insert into similar_books_computed(work_id,similar_ids,computed_at)values(item.id,ids,clock_timestamp())on conflict(work_id)do update set similar_ids=excluded.similar_ids,computed_at=excluded.computed_at;
+   processed:=processed+1;
+  end if;
+  cursor_id:=item.id;scanned:=scanned+1;
+  exit when clock_timestamp()-started>interval '1500 milliseconds';
+ end loop;
+ done:=not exists(select 1 from book_works where merged_into is null and(cursor_id is null or id>cursor_id));
+ update maintenance_jobs set after_id=case when done then null else cursor_id end,cycle_started_at=case when done then clock_timestamp()else cycle_started_at end,updated_at=clock_timestamp()where name='similar-books';
+ return jsonb_build_object('processed',processed,'scanned',scanned,'complete',done);
+end $$;
+
+CREATE FUNCTION public.similar_book_snapshot(p_book uuid)RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare source books;work uuid;ids uuid[];
+begin
+ select b.* into source from books alias join books b on b.id=coalesce(alias.canonical_edition_id,alias.id)where alias.id=p_book;
+ if not found then return '[]'::jsonb;end if;work:=canonical_book_work(source.work_id);
+ select similar_ids into ids from similar_books_computed where work_id=work;
+ if not found then ids:=source.similar_book_ids;end if;
+ if coalesce(cardinality(ids),0)=0 then select array_agg(id)into ids from(select id from books where canonical_edition_id is null and work_id<>work and genres&&source.genres order by id limit 100)fallback;end if;
+ return coalesce((select jsonb_agg(jsonb_build_object('id',id,'title',title,'author_name',author_name,'cover_url',cover_url)order by position,id)from(select * from(
+  select distinct on(canonical_book_work(b.work_id))b.id,b.title,b.author_name,b.cover_url,requested.position
+  from unnest(ids[1:100])with ordinality requested(id,position)join books alias on alias.id=requested.id join books b on b.id=coalesce(alias.canonical_edition_id,alias.id)
+  where canonical_book_work(b.work_id)<>work order by canonical_book_work(b.work_id),position,b.id
+ )unique_works order by position,id limit 5)page),'[]'::jsonb);
+end $$;
+
+CREATE FUNCTION public.account_hardening_batch(p_limit integer DEFAULT 500)RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare cursor_id uuid;last_id uuid;scanned integer;notified integer;done boolean;
+begin
+ if p_limit is null or p_limit not between 1 and 1000 then raise exception 'Invalid batch'using errcode='P1004';end if;
+ cursor_id:=maintenance_batch_cursor('account-hardening');
+ with candidates as materialized(
+  select id,case when created_at<=now()-interval '30 days'then 30 else 7 end stage from users
+  where email is null and not is_banned and deleted_at is null and created_at<=now()-interval '7 days'and(cursor_id is null or id>cursor_id)order by id limit p_limit
+ ),receipts as(
+  insert into account_hardening_notices(user_id,stage)select id,stage from candidates on conflict do nothing returning user_id,stage
+ ),notices as(
+  insert into notifications(user_id,type,message,message_key,message_values)select user_id,'account_hardening','Secure your account — add an email address to prevent lockout.','accountHardening',jsonb_build_object('stage',stage)from receipts returning id
+ )select(select count(*)from candidates),(select id from candidates order by id desc limit 1),(select count(*)from notices)into scanned,last_id,notified;
+ cursor_id:=coalesce(last_id,cursor_id);
+ done:=not exists(select 1 from users where email is null and not is_banned and deleted_at is null and created_at<=now()-interval '7 days'and(cursor_id is null or id>cursor_id));
+ update maintenance_jobs set after_id=case when done then null else cursor_id end,cycle_started_at=case when done then clock_timestamp()else cycle_started_at end,updated_at=clock_timestamp()where name='account-hardening';
+ return jsonb_build_object('scanned',scanned,'notified',notified,'complete',done);
+end $$;
+
+CREATE FUNCTION public.check_affiliate_health()RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare checked integer;flagged integer;logged integer;
+begin
+ perform maintenance_batch_cursor('affiliate-health');
+ with candidates as materialized(select id,title from books where canonical_edition_id is null order by have_read_count desc,id limit 500),missing as materialized(
+  select c.* from candidates c where not exists(select 1 from affiliate_link_clicks a where a.book_id=c.id and a.is_affiliate)
+ ),logs as(
+  insert into affiliate_health_log(book_id,book_title,issue)select id,title,'no_affiliate_clicks'from missing on conflict do nothing returning id
+ )select(select count(*)from candidates),(select count(*)from missing),(select count(*)from logs)into checked,flagged,logged;
+ return jsonb_build_object('checked',checked,'flagged',flagged,'logged',logged);
+end $$;
+
+CREATE FUNCTION public.prune_operational_history(p_limit integer DEFAULT 1000)RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare notifications_removed integer;events_removed integer;events_compacted integer;health_removed integer;devices_removed integer;sessions_removed integer;
+begin
+ if p_limit is null or p_limit not between 1 and 2000 then raise exception 'Invalid retention batch'using errcode='P1004';end if;
+ delete from notifications where id in(select id from notifications where created_at<now()-interval '180 days'or is_read and created_at<now()-interval '90 days'order by created_at,id limit p_limit for update skip locked);get diagnostics notifications_removed=row_count;
+ delete from outbox_events where id in(select id from outbox_events where (status='processed'and processed_at<now()-interval '30 days'or status='failed'and created_at<now()-interval '90 days')and aggregate_type not in('tip','tips','payout','payouts','referrals','referral_commissions','payment','payments','subscriptions')and event_type<>'deliver_push'order by created_at,id limit p_limit for update skip locked);get diagnostics events_removed=row_count;
+ update outbox_events set payload='{}',last_error=null where id in(select id from outbox_events where status='processed'and processed_at<now()-interval '30 days'and payload<>'{}'::jsonb order by processed_at,id limit p_limit for update skip locked);get diagnostics events_compacted=row_count;
+ delete from outbox_events where id in(select id from outbox_events where event_type='deliver_push'and(status='processed'and processed_at<now()-interval '30 days'or status='failed'and created_at<now()-interval '90 days')order by created_at,id limit p_limit for update skip locked);
+ delete from affiliate_health_log where id in(select id from affiliate_health_log where flagged_at<now()-interval '90 days'order by flagged_at,id limit p_limit for update skip locked);get diagnostics health_removed=row_count;
+ delete from push_subscriptions where id in(select id from push_subscriptions where expires_at<=now()order by expires_at,id limit p_limit for update skip locked);get diagnostics devices_removed=row_count;
+ delete from revoked_push_sessions where session_hash in(select session_hash from revoked_push_sessions where revoked_at<now()-interval '60 days'order by revoked_at,session_hash limit p_limit for update skip locked);get diagnostics sessions_removed=row_count;
+ return jsonb_build_object('notifications',notifications_removed,'events',events_removed,'compacted',events_compacted,'affiliateHealth',health_removed,'devices',devices_removed,'sessions',sessions_removed);
+end $$;
+
 CREATE FUNCTION public.claim_avatar_cleanup(p_backend text, p_limit integer DEFAULT 5) RETURNS SETOF public.profile_avatar_uploads
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -4028,7 +4210,7 @@ begin
     if previous.fingerprint<>fingerprint then raise exception 'Conflicting fork intent' using errcode='P1001'; end if;
     return previous.response;
   end if;
-  select * into source from reading_lists where id=p_source_id and is_public for share;
+  select * into source from reading_lists where id=p_source_id and is_public and reading_list_visible(p_user_id,id)for share;
   if not found then raise exception 'Source list unavailable' using errcode='P1005'; end if;
   insert into reading_lists(user_id,name,description,is_public,forked_from) values(p_user_id,source.name,source.description,false,source.id) returning * into target;
   insert into reading_list_books(list_id,book_id,position) select target.id,book_id,position from reading_list_books where list_id=source.id;
@@ -4837,7 +5019,7 @@ CREATE FUNCTION public.page_followed_lists(p_user_id uuid, p_before timestamp wi
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-  select l.* from reading_lists l where l.is_public
+  select l.* from reading_lists l where l.is_public and reading_list_visible(p_user_id,l.id)
     and (p_before is null or (l.created_at,l.id)<(p_before,p_before_id))
     and exists(select 1 from reading_list_follows f where f.user_id=p_user_id and f.list_id=l.id)
     order by l.created_at desc,l.id desc limit greatest(1,least(p_limit,51));
@@ -5726,6 +5908,43 @@ CREATE FUNCTION public.reading_goal_snapshot(p_user_id uuid, p_year integer) RET
   ) select jsonb_build_object('goal',(select to_jsonb(goal) from goal),'progress',jsonb_build_object('books_read',completed.count,'year',p_year,'percentage',(select least(100,round(completed.count*100.0/target_books)) from goal))) from completed;
 $$;
 
+CREATE FUNCTION public.reading_list_visible(p_viewer uuid,p_list uuid)RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+ select exists(select 1 from reading_lists l where l.id=p_list and reading_author_visible(p_viewer,l.user_id)and(l.is_public or l.user_id=p_viewer))
+$$;
+
+CREATE FUNCTION public.public_sitemap_partition_count()RETURNS integer
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+ select greatest(1,ceil(sum(parts)/5000.0)::integer)from(
+  select ceil(count(*)/1000.0)parts from books where canonical_edition_id is null
+  union all select ceil(count(*)/1000.0)from users where is_verified_author and not is_banned and deleted_at is null and profile_visibility='public'
+  union all select ceil(count(*)/1000.0)from reading_lists l join users u on u.id=l.user_id where l.is_public and not u.is_banned and u.deleted_at is null and u.profile_visibility='public'
+ )counts
+$$;
+
+CREATE FUNCTION public.public_sitemap_partitions(p_page integer DEFAULT 0)RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+begin
+ if p_page is null or p_page<0 or p_page>214748 then raise exception 'Invalid sitemap index'using errcode='P1004';end if;
+ return(with entries as(
+  select 'books'kind,id from books where canonical_edition_id is null
+  union all select 'authors',id from users where is_verified_author and not is_banned and deleted_at is null and profile_visibility='public'
+  union all select 'lists',l.id from reading_lists l join users u on u.id=l.user_id where l.is_public and not u.is_banned and u.deleted_at is null and u.profile_visibility='public'
+ ),numbered as(select kind,id,row_number()over(partition by kind order by id)position from entries),anchors as(
+  select kind,case when position=1 then '00000000-0000-0000-0000-000000000000'::uuid else id end first,lead(id)over(partition by kind order by id)until from numbered where(position-1)%1000=0
+ ),page as(select * from anchors order by kind,first limit 5000 offset p_page*5000)
+ select coalesce(jsonb_agg(to_jsonb(page)order by kind,first),'[]'::jsonb)from page);
+end $$;
+
+CREATE FUNCTION public.public_sitemap_page(p_kind text,p_first uuid,p_until uuid DEFAULT NULL)RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+begin
+ if p_kind is null or p_kind not in('books','authors','lists')or p_first is null or p_until<=p_first then raise exception 'Invalid sitemap page'using errcode='P1004';end if;
+ if p_kind='books'then return(select coalesce(jsonb_agg(to_jsonb(page)order by id),'[]'::jsonb)from(select id,'/book/'||id path,updated_at from books where canonical_edition_id is null and id>=p_first and(p_until is null or id<p_until)order by id limit 5001)page);
+ elsif p_kind='authors'then return(select coalesce(jsonb_agg(to_jsonb(page)order by id),'[]'::jsonb)from(select id,'/author/'||username path,updated_at from users where is_verified_author and not is_banned and deleted_at is null and profile_visibility='public'and id>=p_first and(p_until is null or id<p_until)order by id limit 5001)page);
+ else return(select coalesce(jsonb_agg(to_jsonb(page)order by id),'[]'::jsonb)from(select l.id,'/lists/'||l.id path,l.updated_at from reading_lists l join users u on u.id=l.user_id where l.is_public and not u.is_banned and u.deleted_at is null and u.profile_visibility='public'and l.id>=p_first and(p_until is null or l.id<p_until)order by l.id limit 5001)page);end if;
+end $$;
+
 CREATE FUNCTION public.reading_list_catalog_snapshot(p_user uuid, p_scope text DEFAULT 'mine'::text, p_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 50) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -5734,7 +5953,7 @@ begin
   if p_scope not in('mine','followed') then raise exception 'Invalid scope' using errcode='P1004';end if;
   if not exists(select 1 from users where id=p_user and not is_banned and deleted_at is null) then raise exception 'Account unavailable' using errcode='P1003';end if;
   return(with page as materialized(select l.id,l.created_at from reading_lists l where
-    (case when p_scope='mine' then l.user_id=p_user else l.is_public and exists(select 1 from reading_list_follows where list_id=l.id and user_id=p_user) end)
+    (case when p_scope='mine' then l.user_id=p_user else l.is_public and reading_list_visible(p_user,l.id)and exists(select 1 from reading_list_follows where list_id=l.id and user_id=p_user) end)
     and(p_at is null or(l.created_at,l.id)<(p_at,p_id)) order by l.created_at desc,l.id desc limit greatest(1,least(coalesce(p_limit,50),50))+1)
     select jsonb_build_object('lists',coalesce((select jsonb_agg(reading_list_document(p_user,id) order by created_at desc,id desc) from page),'[]'::jsonb)));
 end $$;
@@ -5761,7 +5980,7 @@ CREATE FUNCTION public.reading_list_document(p_user uuid, p_list uuid) RETURNS j
   select jsonb_build_object('id',l.id,'user_id',l.user_id,'name',l.name,'description',l.description,'is_public',l.is_public,'created_at',l.created_at,'updated_at',l.updated_at,
     'book_count',(select count(distinct coalesce(b.canonical_edition_id,b.id)) from reading_list_books lb join books b on b.id=lb.book_id where lb.list_id=l.id),
     'follower_count',(select count(*) from reading_list_follows where list_id=l.id),'is_following',exists(select 1 from reading_list_follows where list_id=l.id and user_id=p_user))
-  from reading_lists l where l.id=p_list and(l.is_public or l.user_id=p_user);
+  from reading_lists l where l.id=p_list and reading_list_visible(p_user,l.id);
 $$;
 
 CREATE FUNCTION public.reading_room_catalog_snapshot(p_user uuid, p_scope text DEFAULT 'public'::text, p_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_id uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 20) RETURNS jsonb
@@ -6742,7 +6961,7 @@ begin
     raise exception 'List unavailable' using errcode='P1005';
   end if;
   if p_following then
-    if not target.is_public and target.user_id<>p_user_id then raise exception 'List unavailable' using errcode='P1003'; end if;
+    if not reading_list_visible(p_user_id,p_list_id)then raise exception 'List unavailable' using errcode='P1003'; end if;
     insert into reading_list_follows(list_id,user_id) values(p_list_id,p_user_id) on conflict do nothing;
   else delete from reading_list_follows where list_id=p_list_id and user_id=p_user_id; end if;
   return p_following;
@@ -7448,6 +7667,29 @@ CREATE FUNCTION public.writer_question_thread(p_question uuid, p_viewer uuid DEF
     'canAnswer',exists(select 1 from users where id=p_viewer and not is_banned and deleted_at is null and(is_verified_author or xp>1000))) from question q;
 $$;
 
+CREATE FUNCTION public.writing_prompt_leaderboard(p_period text,p_viewer uuid DEFAULT NULL)RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare since timestamp with time zone;
+begin
+ if p_period is null or p_period not in('weekly','monthly','all_time')then raise exception 'Invalid period'using errcode='P1004';end if;
+ since:=case p_period when 'weekly'then now()-interval '7 days'when 'monthly'then now()-interval '1 month'else '-infinity'::timestamp with time zone end;
+ return coalesce((select jsonb_agg(to_jsonb(ranked)order by rank)from(
+  select row_number()over(order by count(*)desc,u.id)rank,u.id user_id,u.display_name,u.username,u.avatar_url,u.xp,count(*)submissions_count
+  from writing_prompt_submissions s join users u on u.id=s.user_id
+  where s.created_at>=since and reading_author_visible(p_viewer,u.id)
+  group by u.id order by count(*)desc,u.id limit 20
+ )ranked),'[]'::jsonb);
+end $$;
+CREATE FUNCTION public.writing_challenge_leaderboard(p_challenge uuid,p_viewer uuid DEFAULT NULL)RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+ select coalesce(jsonb_agg(to_jsonb(ranked)order by total_words desc,user_id),'[]'::jsonb)from(
+  select u.id user_id,coalesce(sum(s.word_count),0)total_words,count(*)submission_count,jsonb_build_object('display_name',u.display_name,'username',u.username)users
+  from writing_challenge_submissions s join users u on u.id=s.user_id
+  where s.challenge_id=p_challenge and reading_author_visible(p_viewer,u.id)
+  group by u.id order by total_words desc,u.id limit 100
+ )ranked
+$$;
+
 CREATE FUNCTION public.writing_plan_input(p_user_id uuid) RETURNS jsonb
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -7589,6 +7831,26 @@ CREATE INDEX idx_author_qa_asked_by ON public.author_qa USING btree (asked_by);
 
 CREATE INDEX idx_author_qa_author ON public.author_qa USING btree (author_id);
 
+CREATE INDEX writing_prompt_ranking ON public.writing_prompt_submissions(created_at,user_id);
+CREATE INDEX writing_challenge_ranking ON public.writing_challenge_submissions(challenge_id,user_id)INCLUDE(word_count);
+
+CREATE INDEX maintenance_jobs_retention ON public.maintenance_jobs(lease_until,updated_at);
+
+ALTER TABLE public.account_hardening_notices ADD FOREIGN KEY(user_id)REFERENCES public.users(id)ON DELETE CASCADE;
+CREATE INDEX books_similarity_author ON public.books(author_name,id)WHERE canonical_edition_id IS NULL;
+CREATE INDEX books_similarity_language ON public.books(language,id)WHERE canonical_edition_id IS NULL;
+CREATE INDEX books_similarity_genres ON public.books USING gin(genres)WHERE canonical_edition_id IS NULL;
+CREATE INDEX books_affiliate_health ON public.books(have_read_count DESC,id)WHERE canonical_edition_id IS NULL;
+CREATE INDEX affiliate_health_retention ON public.affiliate_health_log(flagged_at,id);
+CREATE UNIQUE INDEX affiliate_health_daily ON public.affiliate_health_log(book_id,issue,((flagged_at AT TIME ZONE 'UTC')::date));
+CREATE INDEX affiliate_clicks_health ON public.affiliate_link_clicks(book_id)WHERE is_affiliate;
+CREATE INDEX outbox_processed_retention ON public.outbox_events(processed_at,id)WHERE status='processed';
+CREATE INDEX outbox_failed_retention ON public.outbox_events(created_at,id)WHERE status='failed';
+CREATE INDEX revoked_push_retention ON public.revoked_push_sessions(revoked_at,session_hash);
+
+CREATE INDEX author_posts_cursor ON public.author_posts(author_id,created_at DESC,id DESC);
+CREATE INDEX reading_sessions_cursor ON public.reading_sessions(user_id,created_at DESC,id DESC);
+
 CREATE INDEX idx_books_author ON public.books USING btree (author_name);
 
 CREATE INDEX idx_books_google_id ON public.books USING btree (google_books_id);
@@ -7653,7 +7915,7 @@ CREATE INDEX idx_shelf_books_user ON public.shelf_books USING btree (user_id);
 
 CREATE INDEX idx_shelves_user ON public.shelves USING btree (user_id);
 
-CREATE INDEX idx_similar_books_book ON public.similar_books_computed USING btree (book_id);
+
 
 CREATE INDEX idx_sub_status ON public.subscriptions USING btree (status);
 
@@ -7790,6 +8052,12 @@ CREATE INDEX writing_admin_created ON public.writing_challenges USING btree (cre
 CREATE UNIQUE INDEX writing_participant_identity ON public.writing_challenge_participants USING btree (challenge_id, user_id);
 
 CREATE INDEX xp_ledger_period_user ON public.xp_ledger USING btree (created_at, user_id) INCLUDE (amount);
+
+DO $$DECLARE item record;BEGIN
+ FOR item IN select tablename from pg_tables where schemaname='public'and tablename<>'maintenance_jobs'LOOP
+  EXECUTE format('CREATE TRIGGER maintenance_write_fence BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.guard_maintenance_write()',item.tablename);
+ END LOOP;
+END $$;
 
 CREATE TRIGGER aa_author_post_body BEFORE INSERT OR UPDATE ON public.author_posts FOR EACH ROW EXECUTE FUNCTION public.synchronize_content_aliases('content', 'body');
 
@@ -8490,7 +8758,7 @@ ALTER TABLE ONLY public.shelves
     ADD CONSTRAINT shelves_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.similar_books_computed
-    ADD CONSTRAINT similar_books_computed_book_id_fkey FOREIGN KEY (book_id) REFERENCES public.books(id) ON DELETE CASCADE;
+    ADD CONSTRAINT similar_books_computed_work_id_fkey FOREIGN KEY (work_id) REFERENCES public.book_works(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.social_intents
     ADD CONSTRAINT social_intents_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.users(id);
@@ -8911,7 +9179,7 @@ CREATE POLICY author_posts_delete_own ON public.author_posts FOR DELETE USING ((
 
 CREATE POLICY author_posts_insert_own ON public.author_posts FOR INSERT WITH CHECK ((author_id = auth.uid()));
 
-CREATE POLICY author_posts_select_all ON public.author_posts FOR SELECT USING (true);
+CREATE POLICY author_posts_select_all ON public.author_posts FOR SELECT USING(public.reading_author_visible(auth.uid(),author_id));
 
 CREATE POLICY author_posts_update_own ON public.author_posts FOR UPDATE USING ((author_id = auth.uid()));
 
@@ -9161,7 +9429,7 @@ CREATE POLICY reading_list_follows_delete_own ON public.reading_list_follows FOR
 
 CREATE POLICY reading_list_follows_insert_own ON public.reading_list_follows FOR INSERT WITH CHECK ((user_id = auth.uid()));
 
-CREATE POLICY reading_list_follows_select_all ON public.reading_list_follows FOR SELECT USING (true);
+CREATE POLICY reading_list_follows_select_all ON public.reading_list_follows FOR SELECT USING(user_id=auth.uid()or public.reading_list_visible(auth.uid(),list_id));
 
 ALTER TABLE public.reading_lists ENABLE ROW LEVEL SECURITY;
 
@@ -9223,13 +9491,11 @@ CREATE POLICY rl_delete_own ON public.reading_lists FOR DELETE USING ((user_id =
 
 CREATE POLICY rl_insert_own ON public.reading_lists FOR INSERT WITH CHECK ((user_id = auth.uid()));
 
-CREATE POLICY rl_select_public ON public.reading_lists FOR SELECT USING ((is_public OR (user_id = auth.uid())));
+CREATE POLICY rl_select_public ON public.reading_lists FOR SELECT USING(public.reading_list_visible(auth.uid(),id));
 
 CREATE POLICY rl_update_own ON public.reading_lists FOR UPDATE USING ((user_id = auth.uid()));
 
-CREATE POLICY rlb_select ON public.reading_list_books FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM public.reading_lists rl
-  WHERE ((rl.id = reading_list_books.list_id) AND (rl.is_public OR (rl.user_id = auth.uid()))))));
+CREATE POLICY rlb_select ON public.reading_list_books FOR SELECT USING(public.reading_list_visible(auth.uid(),list_id));
 
 CREATE POLICY room_milestone_visibility ON public.reading_room_milestones FOR SELECT TO authenticated USING (public.can_read_reading_room(room_id));
 
@@ -9997,7 +10263,18 @@ GRANT EXECUTE ON FUNCTION validate_appeal_report() TO PUBLIC;
 GRANT EXECUTE ON FUNCTION writer_question_catalog(text,jsonb,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION writer_question_thread(uuid,uuid,timestamp with time zone,uuid,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION writing_plan_input(uuid) TO service_role;
+ALTER TABLE public.account_hardening_notices ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.account_hardening_notices TO service_role;
+GRANT EXECUTE ON FUNCTION public.maintenance_batch_cursor(text),public.compute_similar_books_batch(integer),public.similar_book_snapshot(uuid),public.account_hardening_batch(integer),public.check_affiliate_health(),public.prune_operational_history(integer)TO service_role;
+ALTER TABLE public.maintenance_jobs ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.maintenance_jobs TO service_role;
+GRANT EXECUTE ON FUNCTION public.check_maintenance_lease(text,uuid,bigint),public.claim_maintenance_job(text,uuid),public.release_maintenance_job(text,uuid,bigint),public.run_maintenance_rpc(text,uuid,bigint,text,jsonb)TO service_role;
+GRANT EXECUTE ON FUNCTION public.reading_list_visible(uuid,uuid)TO anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.public_sitemap_partition_count(),public.public_sitemap_partitions(integer),public.public_sitemap_page(text,uuid,uuid)TO service_role;
 GRANT EXECUTE ON FUNCTION writing_progress_snapshot(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.writing_prompt_leaderboard(text,uuid),public.writing_challenge_leaderboard(uuid,uuid)FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.writing_prompt_leaderboard(text,uuid),public.writing_challenge_leaderboard(uuid,uuid)TO service_role;
+
 
 GRANT SELECT, INSERT, DELETE ON public.review_likes TO service_role;
 GRANT SELECT ON public.review_likes TO authenticated;

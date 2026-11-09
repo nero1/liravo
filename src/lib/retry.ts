@@ -1,3 +1,4 @@
+import {leaseSignal} from '@/lib/locks';
 import { getRedisClient } from '@/lib/redis';
 
 export interface RetryOptions {
@@ -33,6 +34,7 @@ export async function withExponentialBackoff<T>(op: () => Promise<T>, options: R
 
 /** Per-provider circuit: 5 transient failures/minute opens for 30s; at most 20 retries/minute. */
 export async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {
+  const lease=leaseSignal(),signal=AbortSignal.any([init?.signal??AbortSignal.timeout(15000),...(lease?[lease]:[])]);
   const redis = getRedisClient();
   const provider = new URL(input).hostname;
   const prefix = `dependency:${provider}`;
@@ -42,7 +44,8 @@ export async function fetchWithRetry(input: string, init?: RequestInit): Promise
     if (await redis.get(`${prefix}:open`)) throw new Error('Dependency circuit open');
     if (attempt++ > 0 && await redis.incrementWindow(`${prefix}:retries`, 60) > 20) throw new Error('Dependency retry budget exceeded');
     try {
-      const response = await fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(15_000) });
+      signal.throwIfAborted();
+      const response = await fetch(input, { ...init, signal });
       if (!response.ok) throw new HttpError(response.status);
       await redis.del(`${prefix}:failures`);
       return response;

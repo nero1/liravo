@@ -17,7 +17,7 @@ vi.mock('@/lib/payment-recovery',()=>({readPaymentRecovery:vi.fn()}));
 vi.mock('@/lib/metrics',()=>({recordMetric:vi.fn()}));
 vi.mock('@/lib/operational-alerts',()=>({observeOperationalSignal:vi.fn()}));
 vi.mock('@/lib/rate-limit',()=>({checkMoneyRateLimit:async()=>({allowed:true})}));
-vi.mock('@/lib/locks',()=>({withRedisLock:async(_key:string,_ttl:number,task:()=>Promise<unknown>)=>task()}));
+vi.mock('@/lib/locks',async original=>({...await original<typeof import('@/lib/locks')>(),withRedisLock:async(_key:string,_ttl:number,task:()=>Promise<unknown>)=>task()}));
 const user='00000000-0000-4000-8000-000000000001';
 const recipient='00000000-0000-4000-8000-000000000002';
 const tip='00000000-0000-4000-8000-000000000003';

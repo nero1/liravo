@@ -2526,5 +2526,12 @@
     "writingChallenge": "Écrire sur Liravo",
     "writingMessage": "Rejoignez le défi et partagez vos écrits.",
     "submissionCount": "{count, plural, one {# contribution} other {# contributions}}"
+  },
+  "readingHistory": {
+    "title": "Séances de lecture",
+    "empty": "Aucune séance de lecture pour le moment.",
+    "viewBook": "Voir le livre",
+    "pages": "{count, plural, one {# page lue} other {# pages lues}}",
+    "failed": "Impossible de charger les séances de lecture. Réessayez."
   }
 }
