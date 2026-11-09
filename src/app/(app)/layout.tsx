@@ -14,10 +14,10 @@ export const dynamic = 'force-dynamic';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user=await getCurrentUser();
   if(!isDirectPostgres()&&!user){
-    const {data:{user:primaryUser}}=await createClient({skipMfa:true}).auth.getUser();
+    const {data:{user:primaryUser}}=await (await createClient({skipMfa:true})).auth.getUser();
     if(primaryUser)redirect('/login?mfa=required');
   }
-  if(!user&&!publicAppPath(headers().get('x-liravo-pathname')??''))redirect('/login');
+  if(!user&&!publicAppPath((await headers()).get('x-liravo-pathname')??''))redirect('/login');
 
   const moderator = user ? await isModerator(user.id) : false;
 

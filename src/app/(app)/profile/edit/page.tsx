@@ -10,7 +10,7 @@ export async function generateMetadata(){const t=await getTranslations('profile'
 
 export default async function ProfileEditPage() {
   const t=await getTranslations('profile');
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 

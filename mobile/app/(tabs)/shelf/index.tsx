@@ -51,7 +51,7 @@ export default function ShelfScreen() {
           />
         }
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#d97706" />
+          <RefreshControl refreshing={isLoading} onRefresh={()=>{void refetch();}} tintColor="#d97706" />
         }
         contentContainerStyle={{ paddingBottom: 24 }}
       />

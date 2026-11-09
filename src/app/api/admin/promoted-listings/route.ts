@@ -34,7 +34,7 @@ async function mutate(request:Request,method:'create'|'update'|'delete'){
   const body=Object.fromEntries(Object.entries(raw).filter(([name])=>name!=='id'));
   const parsed=action==='delete'?z.object({}).strict().safeParse(body):(action==='create'?createSchema:updateSchema).safeParse(body);
   if(!parsed.success)return NextResponse.json({error:'Invalid promotion dates or fields'},{status:422});
-  const {data,error}=await createServiceClient().rpc('apply_promotion_intent' as never,{p_actor:guard.userId,p_action:action,p_id:id,p_key:key,p_data:parsed.data,p_correlation_id:getRequestCorrelationId(request)} as never);
+  const {data,error}=await createServiceClient().rpc('apply_promotion_intent',{p_actor:guard.userId,p_action:action,p_id:typeof id==='string'?id:null,p_key:key,p_data:parsed.data,p_correlation_id:getRequestCorrelationId(request)});
   if(error){
     if(form)return new Response(null,{status:303,headers:{Location:errorPath}});
     return NextResponse.json({error:'Promotion update unavailable'},{status:({P1001:409,P1003:403,P1004:422,P1005:404} as Record<string,number>)[error.code]??503});
@@ -43,7 +43,7 @@ async function mutate(request:Request,method:'create'|'update'|'delete'){
   const acknowledged=action==='delete'?z.object({deleted:z.literal(true)}).safeParse(data).success:receipt.success&&(action!=='update'||receipt.data.id===String(id).toLowerCase())&&(!('is_active'in parsed.data)||receipt.data.is_active===parsed.data.is_active);
   if(!acknowledged)return form?new Response(null,{status:303,headers:{Location:errorPath}}):NextResponse.json({error:'Promotion update unavailable'},{status:503});
   if(form)return new Response(null,{status:303,headers:{Location:returnPath}});
-  return NextResponse.json(action==='delete'?{...data,actorId:guard.userId}:{listing:data,actorId:guard.userId},{status:action==='create'?201:200});
+  return NextResponse.json(action==='delete'?{deleted:true,actorId:guard.userId}:{listing:data,actorId:guard.userId},{status:action==='create'?201:200});
 }
 export const POST=(request:Request)=>mutate(request,'create');
 export const PATCH=(request:Request)=>mutate(request,'update');

@@ -11,10 +11,11 @@ import Image from 'next/image';
 export const dynamic = 'force-dynamic';
 export async function generateMetadata(){const t=await getTranslations('authorAnalytics');return {title:t('title'),alternates:languageAlternates('/author/analytics')};}
 
-export default async function AuthorAnalyticsPage({searchParams}:{searchParams?:{cursor?:string}}) {
+export default async function AuthorAnalyticsPage(props:{searchParams?: Promise<{cursor?:string}>}) {
+  const searchParams = (await props.searchParams)??{};
   const t=await getTranslations('authorAnalytics'),common=await getTranslations('common'),format=await getFormatter();
   try{decodeCursor(searchParams?.cursor??null);}catch{notFound();}
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 

@@ -49,7 +49,7 @@ export async function createNotification(params: {
     title,
     body: params.message,
     url: params.pushUrl ?? '/notifications',
-    tag: params.type,notificationType:params.type,entityType:params.entityType,messageKey:data.message_key,messageValues:data.message_values,
+    tag: params.type,notificationType:params.type,entityType:params.entityType,messageKey:data.message_key,messageValues:data.message_values&&typeof data.message_values==='object'&&!Array.isArray(data.message_values)?data.message_values:null,
   }).catch(() => {
     // Non-critical — push failures don't fail the notification write
   });

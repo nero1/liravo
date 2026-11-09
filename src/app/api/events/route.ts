@@ -18,7 +18,7 @@ const createSchema = z.object({
 }).refine(value=>!value.is_paid||value.price!==undefined).refine(value=>Date.parse(value.event_date)>Date.now());
 
 export async function GET(req: Request) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { searchParams } = new URL(req.url);
   const limit = Math.max(1,Math.min(parseInt(searchParams.get('limit') ?? '20')||20, 50));
   const now = new Date().toISOString();
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await getCurrentUser();
 
   if (!user) {

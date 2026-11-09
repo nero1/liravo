@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 // Priority: verified authors, then high-XP readers
 export async function GET() {
   const user = await getCurrentUser();
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Get users the current user is already following
   const alreadyFollowing = new Set<string>();

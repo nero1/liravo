@@ -38,12 +38,12 @@ export async function storageDeadline<T>(operation:Promise<T>):Promise<T>{
 }
 export async function cleanupAvatarUploads(){
   const {backend,storage}=avatarStorage(),service=createServiceClient();
-  const {data,error}=await service.rpc('claim_avatar_cleanup' as never,{p_backend:backend,p_limit:5} as never);if(error)throw new Error('Avatar cleanup unavailable');
+  const {data,error}=await service.rpc('claim_avatar_cleanup',{p_backend:backend,p_limit:5});if(error)throw new Error('Avatar cleanup unavailable');
   const uploads=(data??[]) as {id:string;claim_token:string;bucket:string;path:string}[];let processed=0,failed=0;
   for(const upload of uploads){
     let success=false;
     try{const removed=await storageDeadline(storage.remove(upload.bucket,[upload.path]));success=!removed.error;}catch{}
-    const receipt=await service.rpc('finish_avatar_cleanup' as never,{p_id:upload.id,p_claim:upload.claim_token,p_success:success} as never);
+    const receipt=await service.rpc('finish_avatar_cleanup',{p_id:upload.id,p_claim:upload.claim_token,p_success:success});
     if(success&&!receipt.error&&receipt.data===true)processed++;else failed++;
   }
   recordMetric('avatar_cleanup_run',{processed,failed,scanned:uploads.length},failed?'error':'info');return {processed,failed,scanned:uploads.length};

@@ -6,7 +6,7 @@ async function run(request:Request){
  const service=createServiceClient(),deadline=Date.now()+20000;let total=0,scanned=0,complete=false;
  do{
   request.signal.throwIfAborted();
-  const {data,error}=await service.rpc('compute_similar_books_batch' as never);
+  const {data,error}=await service.rpc('compute_similar_books_batch');
   const receipt=data as {processed?:number;scanned?:number;complete?:boolean}|null;
   if(error||!receipt||!Number.isSafeInteger(receipt.processed)||!Number.isSafeInteger(receipt.scanned)||typeof receipt.complete!=='boolean')throw new Error('Job batch unavailable');
   total+=receipt.processed!;scanned+=receipt.scanned!;complete=receipt.complete;

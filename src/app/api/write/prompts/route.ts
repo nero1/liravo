@@ -14,7 +14,7 @@ const CreatePromptSchema = z.object({
 });
 
 export async function GET() {
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   const today = new Date().toISOString().split('T')[0];
   const sevenDaysAgo = new Date();
@@ -53,9 +53,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  const { data, error } = await createServiceClient().rpc('publish_writing_prompt' as never, {
+  const { data, error } = await createServiceClient().rpc('publish_writing_prompt', {
     p_date: parsed.data.date, p_text: parsed.data.prompt_text, p_theme: parsed.data.theme ?? null,
-  } as never);
+  });
   if (error) return NextResponse.json({ error: 'Prompt publication unavailable' }, { status: 503 });
   const result = data as { prompt: Record<string, unknown>; created: boolean };
   return NextResponse.json({ prompt: writingPromptResponse(result.prompt), created: result.created }, { status: result.created ? 201 : 200 });

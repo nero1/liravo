@@ -34,7 +34,7 @@ export async function capturedPaymentEvent(provider:'paystack'|'dodopayments',da
 
 export async function drainRefundReconciliation(correlationId:string) {
   const client=createServiceClient();
-  const {data,error}=await client.rpc('claim_refund_reconciliation' as never,{p_limit:3} as never);
+  const {data,error}=await client.rpc('claim_refund_reconciliation',{p_limit:3});
   if(error)throw new Error('Refund queue unavailable');
   const events=refunds.parse(data);let completed=0;
   await Promise.all(events.map(async event=>{
@@ -43,7 +43,7 @@ export async function drainRefundReconciliation(correlationId:string) {
       const {data:capture,error:lookupError}=await client.from('payment_captures').select('payment_id').eq('provider',event.provider).eq('payment_id',event.payment_id).maybeSingle();
       if(lookupError)throw new Error('Payment capture lookup unavailable');
       const payment=capture?null:await fetchCapturedPayment(event.provider,event.payment_id);
-      const {data:applied,error:refundError}=await client.rpc((payment?'reconcile_capture_and_refund':'process_refund_event') as never,{p_provider:event.provider,p_refund_id:event.refund_id,p_payment_id:event.payment_id,p_amount_minor:event.amount_minor,p_currency:event.currency,p_correlation_id:requestId,...(payment?{p_event_id:payment.eventId,p_payload:payment.payload}:{})} as never);
+      const {data:applied,error:refundError}=await client.rpc((payment?'reconcile_capture_and_refund':'process_refund_event'),{p_provider:event.provider,p_refund_id:event.refund_id,p_payment_id:event.payment_id,p_amount_minor:event.amount_minor,p_currency:event.currency,p_correlation_id:requestId,...(payment?{p_event_id:payment.eventId,p_payload:payment.payload}:{})});
       if(refundError||typeof applied!=='boolean')throw new Error('Refund reconciliation unavailable');
       completed++;
     }catch{

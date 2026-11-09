@@ -23,7 +23,7 @@ export default function MoodDiscoverScreen(){
       data={books} keyExtractor={book=>book.id} renderItem={({item})=><View className="px-4 py-2"><BookCard book={item} compact/><Text className="text-xs text-muted-foreground">{t('moodReaderCount',{count:item.mood_count})}</Text></View>}
       onEndReached={()=>{if(result.hasNextPage&&!result.isFetchingNextPage&&!result.isFetchNextPageError)void result.fetchNextPage();}} onEndReachedThreshold={0.4}
       ListEmptyComponent={<EmptyState title={t('moodNoBooks')} description={t('moodEmpty')}/>}
-      ListFooterComponent={result.isFetchingNextPage?<ActivityIndicator color="#d97706"/>:result.isFetchNextPageError?<TouchableOpacity accessibilityRole="button" onPress={()=>void result.fetchNextPage()} className="p-4"><Text className="text-accent">{common('retry')}</Text></TouchableOpacity>:null}
+      ListFooterComponent={result.isFetchingNextPage?<ActivityIndicator color="#d97706"/>:result.isFetchNextPageError?<TouchableOpacity accessibilityRole="button" onPress={()=>void result.fetchNextPage()} className="p-4"><Text className="text-accent">{common('retry')}</Text></TouchableOpacity>:undefined}
       contentContainerStyle={{paddingBottom:24}}/>}
   </SafeAreaView>;
 }

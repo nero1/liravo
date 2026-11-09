@@ -20,11 +20,11 @@ export async function POST(request:Request) {
     const proof=challenge.verified_at?{step:null,recoveryHash:null}:await verifyFactorProof(profile,parsed.data);
     if(!proof)return NextResponse.json({error:'Invalid verification code'},{status:422});
     const token=challenge.provider_session_hash?undefined:factorSessionToken(parsed.data.challengeToken);
-    const {error}=await createServiceClient().rpc('finish_factor_challenge' as never,{
+    const {error}=await createServiceClient().rpc('finish_factor_challenge',{
       p_hash:factorHash(parsed.data.challengeToken),p_kind:'login',p_version:challenge.expected_version,p_step:proof.step,p_recovery_hash:proof.recoveryHash,
       p_grant_hash:challenge.provider_session_hash??factorHash(token!),
       p_secret:profile.totp_secret&&!profile.totp_secret.startsWith('v1:')&&process.env.AUTH_ENCRYPTION_KEY?encryptFactor(profile.totp_secret):null,
-    } as never);
+    });
     if(error)return NextResponse.json({error:'Code already used or challenge changed'},{status:['P1001','P1003'].includes(error.code)?409:503});
     const {data:user,error:userError}=await createServiceClient().from('users').select('*').eq('id',profile.id).single();
     if(userError)throw new Error('Profile unavailable');

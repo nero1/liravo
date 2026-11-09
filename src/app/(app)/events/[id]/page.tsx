@@ -9,7 +9,11 @@ import type { Metadata } from 'next';
 
 export const dynamic='force-dynamic';
 export async function generateMetadata():Promise<Metadata>{const t=await getTranslations('events');return {title:t('event')};}
-export default async function EventDetailPage({params,searchParams}:{params:{id:string};searchParams:{error?:string}}){
+export default async function EventDetailPage(
+  props:{params: Promise<{id:string}>;searchParams: Promise<{error?:string}>}
+) {
+  const searchParams = (await props.searchParams)??{};
+  const params = await props.params;
   if(!z.string().uuid().safeParse(params.id).success)notFound();
   const user=await getCurrentUser(),event=await readEvent(params.id,user?.id);
   if(!event)notFound();

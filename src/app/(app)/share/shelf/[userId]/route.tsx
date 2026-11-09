@@ -1,14 +1,12 @@
-import { ImageResponse } from '@vercel/og';
+import { ImageResponse } from 'next/og';
 import {getShareCard,shareCardFailure,SHARE_IMAGE_HEADERS} from '@/lib/share-cards';
 
 export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
-export async function GET(
-  request: Request,
-  { params }: { params: { userId: string } }
-) {
+export async function GET(request: Request, props: { params: Promise<{ userId: string }> }) {
+  const params = await props.params;
   try {
   const {data,t}=await getShareCard(request,'shelf',params.userId,params.userId);
   const displayName=data.reader.display_name,covers=data.books.map(book=>book.cover_url??'');

@@ -123,12 +123,12 @@ export default function DiscoverScreen() {
               <View className="py-4 items-center">
                 <ActivityIndicator color="#d97706" />
               </View>
-            ) : error?<TouchableOpacity accessibilityRole="button" onPress={()=>void refetch()} className="p-4"><Text className="text-accent">{common('retry')}</Text></TouchableOpacity>:null
+            ) : error?<TouchableOpacity accessibilityRole="button" onPress={()=>void refetch()} className="p-4"><Text className="text-accent">{common('retry')}</Text></TouchableOpacity>:undefined
           }
           ListEmptyComponent={
             !isLoading && !isFetching ? (
               <EmptyState title={error?common('error'):booksText('noResults')} description={error?undefined:booksText('noBooksFor',{query})} />
-            ) : null
+            ) : undefined
           }
           contentContainerStyle={{ paddingBottom: 20 }}
         />

@@ -5,11 +5,9 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 export const dynamic = 'force-dynamic';
 
 // GET /api/write/challenges/[id]/submissions — list public submissions for a challenge (sorted by votes)
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = (await createClient());
 
   const { data, error } = await supabase
     .from('writing_challenge_submissions')

@@ -7,10 +7,10 @@ const leaderboardSchema=z.object({week_start:z.string(),leaderboard:z.array(z.ob
 export type CreatorAnalytics=z.infer<typeof analyticsSchema>;
 export type CreatorLeaderboard=z.infer<typeof leaderboardSchema>;
 export async function getCreatorAnalytics(userId:string):Promise<CreatorAnalytics>{
-  const {data,error}=await createServiceClient().rpc('read_creator_analytics' as never,{p_user_id:userId} as never),parsed=analyticsSchema.safeParse(data);
+  const {data,error}=await createServiceClient().rpc('read_creator_analytics',{p_user_id:userId}),parsed=analyticsSchema.safeParse(data);
   if(error||!parsed.success)throw new Error('Creator analytics unavailable');return parsed.data;
 }
 export async function getCreatorLeaderboard():Promise<CreatorLeaderboard>{
-  const {data,error}=await createServiceClient().rpc('read_creator_leaderboard' as never),parsed=leaderboardSchema.safeParse(data);
+  const {data,error}=await createServiceClient().rpc('read_creator_leaderboard'),parsed=leaderboardSchema.safeParse(data);
   if(error||!parsed.success)throw new Error('Creator leaderboard unavailable');return parsed.data;
 }

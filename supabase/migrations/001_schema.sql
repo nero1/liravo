@@ -34,6 +34,19 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC, anon, authenticated;
 
 -- Tables and constraints.
 
+CREATE SEQUENCE public.account_export_epoch START WITH 1;
+SELECT setval('public.account_export_epoch',1,true);
+CREATE SEQUENCE public.account_export_floor START WITH 2;
+SELECT setval('public.account_export_floor',2,true);
+CREATE TABLE public.account_export_jobs(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid NOT NULL,request_key text NOT NULL CHECK(length(request_key)between 8 and 200),
+ format text NOT NULL CHECK(format in('json','csv')),epoch bigint NOT NULL,datasets jsonb NOT NULL,
+ created_at timestamp with time zone DEFAULT clock_timestamp()NOT NULL,expires_at timestamp with time zone DEFAULT(clock_timestamp()+interval '24 hours')NOT NULL,
+ UNIQUE(user_id,request_key)
+);
+CREATE TABLE public.account_export_current(table_name text NOT NULL,row_key jsonb NOT NULL,epoch bigint NOT NULL,PRIMARY KEY(table_name,row_key));
+CREATE TABLE public.account_export_versions(table_name text NOT NULL,row_key jsonb NOT NULL,born_epoch bigint NOT NULL,removed_epoch bigint NOT NULL,data jsonb NOT NULL,PRIMARY KEY(table_name,row_key,born_epoch,removed_epoch));
+
 CREATE TABLE public.account_hardening_notices (
  user_id uuid NOT NULL,
  stage integer NOT NULL CHECK(stage in(7,30)),
@@ -530,7 +543,7 @@ CREATE TABLE public.community_notes (
     status text DEFAULT 'pending'::text NOT NULL,
     idempotency_key text,
     request_hash text,
-    CONSTRAINT community_notes_content_type_check CHECK ((content_type = ANY (ARRAY['review'::text, 'quote'::text, 'post'::text, 'comment'::text]))),
+    CONSTRAINT community_notes_content_type_check CHECK ((content_type = ANY (ARRAY['review'::text, 'quote'::text, 'profile'::text, 'debate'::text, 'post'::text, 'comment'::text]))),
     CONSTRAINT community_notes_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
     CONSTRAINT community_notes_pkey PRIMARY KEY (id)
 );
@@ -1700,26 +1713,171 @@ CREATE TABLE public.xp_reversals (
 
 -- Functions.
 
-CREATE FUNCTION public.account_data_export(p_user_id uuid) RETURNS jsonb
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-declare profile jsonb;
+CREATE FUNCTION public.insert_owned_content(p_actor uuid,p_table text,p_payload jsonb,p_key text,p_hash text)RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare owner text;document jsonb;columns text;result jsonb;
 begin
-  select jsonb_build_object('id',u.id,'username',u.username,'display_name',u.display_name,'email',u.email,'bio',u.bio,'country',u.country,'genres',u.genres,'user_types',u.user_types,'preferred_locale',u.preferred_locale,'created_at',u.created_at) into profile
-    from users u where u.id=p_user_id and u.deleted_at is null and not u.is_banned;
-  if profile is null then raise exception 'Account unavailable' using errcode='P1003';end if;
-  return jsonb_build_object('exported_at',now(),'profile',profile,
-    'shelves',coalesce((select jsonb_agg(to_jsonb(s) order by s.created_at,s.id) from shelves s where s.user_id=p_user_id),'[]'::jsonb),
-    'reading_history',coalesce((select jsonb_agg(to_jsonb(sb)||jsonb_build_object('books',jsonb_build_object('id',b.id,'work_id',b.work_id,'title',b.title,'author_name',b.author_name,'isbn_10',b.isbn_10,'isbn_13',b.isbn_13,'language',b.language,'format',b.format,'publisher',b.publisher,'published_year',b.published_year,'page_count',b.page_count,'google_books_id',b.google_books_id,'open_library_id',b.open_library_id,'goodreads_id',(select min(identifier) from book_edition_identifiers where book_id=b.id and provider='goodreads'),'identifiers',coalesce((select jsonb_agg(jsonb_build_object('provider',provider,'identifier',identifier) order by provider,identifier) from book_edition_identifiers where book_id=b.id),'[]'::jsonb)),'shelves',jsonb_build_object('id',s.id,'name',s.name,'default_type',s.default_type)) order by sb.added_at,sb.id)
-      from shelf_books sb left join shelves s on s.id=sb.shelf_id and s.user_id=p_user_id join books original on original.id=sb.book_id join books b on b.id=coalesce(original.canonical_edition_id,original.id) where sb.user_id=p_user_id),'[]'::jsonb),
-    'reviews',coalesce((select jsonb_agg(to_jsonb(r)-array['idempotency_key','request_hash'] order by r.created_at,r.id) from reviews r where r.user_id=p_user_id),'[]'::jsonb),
-    'quotes',coalesce((select jsonb_agg(to_jsonb(q)-array['idempotency_key','request_hash'] order by q.created_at,q.id) from quotes q where q.user_id=p_user_id),'[]'::jsonb),
-    'reading_sessions',coalesce((select jsonb_agg(to_jsonb(r)-array['idempotency_key','request_hash'] order by r.created_at,r.id) from reading_sessions r where r.user_id=p_user_id),'[]'::jsonb),
-    'reading_goals',coalesce((select jsonb_agg(to_jsonb(g) order by g.year) from reading_goals g where g.user_id=p_user_id),'[]'::jsonb),
-    'writing_prompt_submissions',coalesce((select jsonb_agg(to_jsonb(s) order by s.created_at,s.id) from writing_prompt_submissions s where s.user_id=p_user_id),'[]'::jsonb),
-    'xp_history',coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at,x.event_key) from xp_ledger x where x.user_id=p_user_id),'[]'::jsonb),
-    'tips_sent',coalesce((select jsonb_agg(jsonb_build_object('id',t.id,'recipient_id',t.recipient_id,'amount',t.amount,'currency',t.currency,'status',t.status,'created_at',t.created_at) order by t.created_at,t.id) from tips t where t.user_id=p_user_id),'[]'::jsonb));
+ owner:='{"shelves":"user_id","reviews":"user_id","quotes":"user_id","buddy_reads":"created_by","ask_writer_questions":"user_id","ask_writer_answers":"user_id","reading_sessions":"user_id","reading_lists":"user_id","content_reports":"reporter_id","events":"organizer_id","reading_rooms":"created_by","book_debates":"user_id","book_passes":"sender_id","author_posts":"author_id","author_qa":"asked_by","arcs":"author_id","workshop_rooms":"facilitator_id","workshop_submissions":"user_id","workshop_feedback":"user_id","buddy_read_notes":"user_id","reading_room_posts":"user_id","reading_room_milestones":"created_by","author_verification_requests":"user_id","appeals":"user_id","community_notes":"author_id"}'::jsonb->>p_table;
+ if owner is null or jsonb_typeof(p_payload) is distinct from 'object'or p_key is null or length(p_key)not between 8 and 200 or p_hash is null or p_hash!~'^[a-f0-9]{64}$'then raise exception 'Invalid content request'using errcode='P1004';end if;
+ perform 1 from users where id=p_actor and not is_banned and deleted_at is null for update;if not found then raise exception 'Account unavailable'using errcode='P1003';end if;
+ document:=p_payload||jsonb_build_object(owner,p_actor,'idempotency_key',p_key,'request_hash',p_hash);
+ if exists(select 1 from jsonb_object_keys(document)key where not exists(select 1 from pg_attribute a where a.attrelid=format('public.%I',p_table)::regclass and a.attname=key and a.attnum>0 and not a.attisdropped))then raise exception 'Unknown content field'using errcode='P1004';end if;
+ select string_agg(format('%I',key),','order by key)into columns from jsonb_object_keys(document)key;
+ execute format('insert into public.%I(%s)select %s from jsonb_populate_record(null::public.%I,$1)returning to_jsonb(%I.*)',p_table,columns,columns,p_table,p_table)into result using document;
+ return result;
+end $$;
+
+CREATE FUNCTION public.account_export_sources()RETURNS jsonb
+LANGUAGE sql IMMUTABLE SET search_path TO public,pg_temp AS $sources$
+ SELECT '[{"dataset":"profile","relation":"users","owners":["id"],"columns":["id","username","display_name","bio","avatar_url","banner_url","country","user_types","genres","is_admin","is_moderator","is_verified_author","is_creator","is_suspended","is_banned","suspension_reason","xp","reading_streak","streak_freeze_tokens","last_streak_date","annual_reading_goal","books_read_count","referral_code","referred_by","email","email_verified","totp_enabled","external_links","profile_visibility","shelf_visibility","show_referrer","onboarding_complete","email_prompt_shown_at","email_prompt_dismissed_at","created_at","updated_at","email_digest_enabled","is_premium","account_hardening_email_prompted_at","account_hardening_2fa_prompted_at","writing_streak","last_writing_date","writing_freeze_tokens","max_reading_streak","hardening_prompt_7d_sent_at","hardening_prompt_30d_sent_at","notify_follows","notify_likes","notify_replies","notify_mentions","notify_author_announcements","notify_new_releases","notify_challenge_completions","notify_arc_grants","preferred_locale","premium_override","deleted_at","locale_initialized"],"numeric":[],"keys":["id"],"types":["uuid"],"single":true,"metadataOnly":false},{"dataset":"shelves","relation":"shelves","owners":["user_id"],"columns":["id","user_id","name","slug","is_default","default_type","is_public","description","created_at","updated_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_history","relation":"shelf_books","owners":["user_id"],"columns":["id","shelf_id","book_id","user_id","progress_pages","progress_percent","started_at","finished_at","edition_read","added_at","updated_at"],"numeric":["progress_percent"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reviews","relation":"reviews","owners":["user_id"],"columns":["id","user_id","book_id","review_type","rating","content","mood_tags","has_spoilers","read_date","edition_read","likes_count","want_to_read_count","helpful_votes","unhelpful_votes","is_hidden","moderation_status","created_at","updated_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"review_replies","relation":"review_replies","owners":["user_id"],"columns":["id","review_id","user_id","content","created_at","updated_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"review_likes","relation":"review_likes","owners":["user_id"],"columns":["review_id","user_id","created_at"],"numeric":[],"keys":["review_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"review_helpfulness_votes","relation":"review_helpfulness_votes","owners":["user_id"],"columns":["id","review_id","user_id","is_helpful","created_at","cast_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"review_conversions","relation":"review_conversions","owners":["actor_id"],"columns":["actor_id","book_id","review_id","reviewer_id","created_at"],"numeric":[],"keys":["actor_id","book_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"quotes","relation":"quotes","owners":["user_id"],"columns":["id","user_id","book_id","content","page_number","is_hidden","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_sessions","relation":"reading_sessions","owners":["user_id"],"columns":["id","user_id","book_id","shelf_book_id","started_at","ended_at","pages_read","notes","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_goals","relation":"reading_goals","owners":["user_id"],"columns":["id","user_id","year","target_books","created_at","updated_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_activity_days","relation":"reading_activity_days","owners":["user_id"],"columns":["user_id","activity_date"],"numeric":[],"keys":["user_id","activity_date"],"types":["uuid","date"],"single":false,"metadataOnly":false},{"dataset":"reading_completions","relation":"reading_completions","owners":["user_id"],"columns":["user_id","book_id","source","completed_at"],"numeric":[],"keys":["user_id","book_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_work_completions","relation":"reading_work_completions","owners":["user_id"],"columns":["user_id","work_id","book_id","source","completed_at","rewarded_at"],"numeric":[],"keys":["user_id","work_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_goal_milestones","relation":"reading_goal_milestones","owners":["user_id"],"columns":["id","user_id","year","milestone","fired_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"user_badges","relation":"user_badges","owners":["user_id"],"columns":["id","user_id","badge_id","awarded_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"xp_ledger","relation":"xp_ledger","owners":["user_id"],"columns":["user_id","event_key","amount","reason","created_at"],"numeric":[],"keys":["user_id","event_key"],"types":["uuid","text"],"single":false,"metadataOnly":false},{"dataset":"xp_reversals","relation":"xp_reversals","owners":["user_id"],"columns":["user_id","event_key","amount","created_at"],"numeric":[],"keys":["user_id","event_key"],"types":["uuid","text"],"single":false,"metadataOnly":false},{"dataset":"follows","relation":"follows","owners":["follower_id","following_id"],"columns":["follower_id","following_id","created_at"],"numeric":[],"keys":["follower_id","following_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_lists","relation":"reading_lists","owners":["user_id"],"columns":["id","user_id","name","description","cover_url","is_public","forked_from","follower_count","created_at","updated_at","list_type"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_list_books","relation":"reading_list_books","owners":["$list_owner"],"columns":["list_id","book_id","position","added_at"],"numeric":[],"keys":["list_id","book_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_list_follows","relation":"reading_list_follows","owners":["user_id"],"columns":["list_id","user_id","followed_at"],"numeric":[],"keys":["list_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"writing_prompt_submissions","relation":"writing_prompt_submissions","owners":["user_id"],"columns":["id","prompt_id","user_id","content","word_count","ai_feedback","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"writing_challenge_submissions","relation":"writing_challenge_submissions","owners":["user_id"],"columns":["id","challenge_id","user_id","content","word_count","ai_feedback","community_votes","submitted_at","title","body"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"writing_challenge_participants","relation":"writing_challenge_participants","owners":["user_id"],"columns":["challenge_id","user_id","joined_at"],"numeric":[],"keys":["challenge_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"writing_challenge_votes","relation":"writing_challenge_votes","owners":["user_id"],"columns":["submission_id","user_id","voted_at"],"numeric":[],"keys":["submission_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"writing_plans","relation":"writing_plans","owners":["user_id"],"columns":["id","user_id","plan_text","week_start","created_at","tasks","policy_version","source_hash","locale","provider"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"ai_taste_profiles","relation":"ai_taste_profiles","owners":["user_id"],"columns":["id","user_id","profile_text","generated_at","profile_data","policy_version","source_hash","locale","provider"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"workshop_rooms","relation":"workshop_rooms","owners":["facilitator_id"],"columns":["id","facilitator_id","name","topic","max_members","is_active","created_at","member_count"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"workshop_members","relation":"workshop_members","owners":["user_id"],"columns":["room_id","user_id","joined_at"],"numeric":[],"keys":["room_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"workshop_submissions","relation":"workshop_submissions","owners":["user_id"],"columns":["id","room_id","user_id","excerpt","word_count","created_at","title"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"workshop_feedback","relation":"workshop_feedback","owners":["user_id"],"columns":["id","submission_id","user_id","what_worked","what_to_improve","specific_suggestion","created_at","comment"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"book_debates","relation":"book_debates","owners":["user_id"],"columns":["id","book_id","user_id","question","yes_count","no_count","created_at","is_active"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"debate_votes","relation":"debate_votes","owners":["user_id"],"columns":["debate_id","user_id","vote","argument","voted_at"],"numeric":[],"keys":["debate_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"ask_writer_questions","relation":"ask_writer_questions","owners":["user_id"],"columns":["id","user_id","question","best_answer_id","created_at","tags","answer_count"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"ask_writer_answers","relation":"ask_writer_answers","owners":["user_id"],"columns":["id","question_id","user_id","answer","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"author_posts","relation":"author_posts","owners":["author_id"],"columns":["id","author_id","title","content","book_id","created_at","updated_at","body","type","followers_notified"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"author_qa","relation":"author_qa","owners":["author_id","asked_by"],"columns":["id","author_id","asked_by","question","answer","is_public","answered_at","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"author_books","relation":"author_books","owners":["author_id"],"columns":["author_id","book_id","created_at"],"numeric":[],"keys":["author_id","book_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"author_work_claims","relation":"author_work_claims","owners":["author_id"],"columns":["author_id","work_id","verified_at"],"numeric":[],"keys":["author_id","work_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"author_verification_requests","relation":"author_verification_requests","owners":["user_id"],"columns":["id","user_id","pen_name","publisher","book_titles","website_url","social_proof_url","status","created_at","reviewed_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"arcs","relation":"arcs","owners":["author_id"],"columns":["id","author_id","book_id","description","reader_slots","close_date","is_active","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"arc_applications","relation":"arc_applications","owners":["reader_id"],"columns":["id","arc_id","reader_id","status","applied_at","reviewed_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"buddy_reads","relation":"buddy_reads","owners":["created_by"],"columns":["id","book_id","created_by","title","max_participants","is_private","created_at","updated_at","current_chapter","is_active"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"buddy_read_members","relation":"buddy_read_members","owners":["user_id"],"columns":["buddy_read_id","user_id","joined_at"],"numeric":[],"keys":["buddy_read_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"buddy_read_notes","relation":"buddy_read_notes","owners":["user_id"],"columns":["id","buddy_read_id","user_id","content","created_at","reply_to_id"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"buddy_read_messages","relation":"buddy_read_messages","owners":["user_id"],"columns":["id","buddy_read_id","user_id","content","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_rooms","relation":"reading_rooms","owners":["creator_id"],"columns":["id","book_id","creator_id","title","is_public","is_active","created_at","updated_at","created_by","name"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_room_members","relation":"reading_room_members","owners":["user_id"],"columns":["room_id","user_id","joined_at"],"numeric":[],"keys":["room_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"room_participants","relation":"room_participants","owners":["user_id"],"columns":["room_id","user_id","joined_at"],"numeric":[],"keys":["room_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_room_milestones","relation":"reading_room_milestones","owners":["created_by"],"columns":["id","room_id","title","unlock_date","created_at","created_by"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"reading_room_posts","relation":"reading_room_posts","owners":["user_id"],"columns":["id","room_id","milestone_id","user_id","content","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"pass_the_book_chains","relation":"pass_the_book_chains","owners":["creator_id"],"columns":["id","book_id","creator_id","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"pass_the_book_nodes","relation":"pass_the_book_nodes","owners":["user_id","nominee_id"],"columns":["id","chain_id","user_id","nominee_id","note","position","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"book_passes","relation":"book_passes","owners":["sender_id","recipient_id"],"columns":["id","sender_id","recipient_id","book_id","message","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"challenge_participants","relation":"challenge_participants","owners":["user_id"],"columns":["challenge_id","user_id","progress","completed","joined_at","completed_at"],"numeric":[],"keys":["challenge_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"seasonal_event_participants","relation":"seasonal_event_participants","owners":["user_id"],"columns":["event_id","user_id","joined_at"],"numeric":[],"keys":["event_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"community_notes","relation":"community_notes","owners":["author_id"],"columns":["id","content_type","content_id","author_id","note_text","helpful_votes","unhelpful_votes","is_visible","deleted_at","created_at","reviewed_at","status"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"community_note_ratings","relation":"community_note_ratings","owners":["user_id"],"columns":["note_id","user_id","is_helpful","rated_at"],"numeric":[],"keys":["note_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"events","relation":"events","owners":["organizer_id"],"columns":["id","organizer_id","book_id","title","description","event_date","external_url","is_paid","ticket_price","currency","platform_fee_pct","is_published","created_at","updated_at","max_attendees"],"numeric":["ticket_price","platform_fee_pct"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"event_rsvps","relation":"event_rsvps","owners":["user_id"],"columns":["event_id","user_id","rsvped_at"],"numeric":[],"keys":["event_id","user_id"],"types":["uuid","uuid"],"single":false,"metadataOnly":false},{"dataset":"event_tickets","relation":"event_tickets","owners":["user_id","organizer_id"],"columns":["id","event_id","user_id","amount_paid","currency","status","created_at","organizer_id","platform_fee","host_amount","provider","reserved_until"],"numeric":["amount_paid","platform_fee","host_amount"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"event_revenue","relation":"event_revenue","owners":["organizer_id"],"columns":["id","event_id","organizer_id","amount","currency","recorded_at","ticket_id","original_amount","verified"],"numeric":["amount","original_amount"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"tips","relation":"tips","owners":["user_id","recipient_id"],"columns":["id","user_id","recipient_id","creator_id","amount","platform_fee","recipient_amount","creator_amount","currency","status","provider_reference","created_at","updated_at","refunded_recipient_amount"],"numeric":["amount","platform_fee","recipient_amount","creator_amount","refunded_recipient_amount"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"payouts","relation":"payouts","owners":["recipient_id"],"columns":["id","tip_id","recipient_id","amount","currency","status","provider","created_at","updated_at"],"numeric":["amount"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"payout_requests","relation":"payout_requests","owners":["user_id"],"columns":["id","user_id","amount","method","status","created_at","updated_at","currency","transfer_reference","settlement_reference","claimed_at","next_attempt_at","attempts","last_error","completed_at"],"numeric":["amount"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"user_payout_methods","relation":"user_payout_methods","owners":["user_id"],"columns":["id","user_id","provider","display_name","account_number","bank_code","currency","is_default","created_at","updated_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"subscriptions","relation":"subscriptions","owners":["user_id"],"columns":["id","user_id","provider","status","amount","currency","provider_event_id","current_period_end","created_at","updated_at","provider_subscription_id","last_provider_event_at","activated_at","cancelled_at","provider_product_id","provider_account_id","provider_state","last_verified_at","provider_acknowledged","renewal_cancelled"],"numeric":["amount"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"payment_captures","relation":"payment_captures","owners":["user_id"],"columns":["provider","payment_id","entity_type","entity_id","user_id","recipient_id","currency","charged_minor","credited","refunded_minor","period_end","event_id","created_at"],"numeric":[],"keys":["provider","payment_id"],"types":["text","text"],"single":false,"metadataOnly":false},{"dataset":"payment_refunds","relation":"payment_refunds","owners":["$capture_owner"],"columns":["provider","refund_id","payment_id","amount_minor","currency","correlation_id","created_at"],"numeric":[],"keys":["provider","refund_id"],"types":["text","text"],"single":false,"metadataOnly":false},{"dataset":"referrals","relation":"referrals","owners":["referrer_id","referred_id"],"columns":["id","referrer_id","referred_id","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"referral_commissions","relation":"referral_commissions","owners":["referrer_id"],"columns":["id","referrer_id","referred_user_id","transaction_id","transaction_type","gross_transaction_amount","platform_fee_amount","commission_rate","commission_amount","credited_at","reversed_at","created_at","original_commission_amount","currency"],"numeric":["gross_transaction_amount","platform_fee_amount","commission_rate","commission_amount","original_commission_amount"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"notifications","relation":"notifications","owners":["user_id"],"columns":["id","user_id","type","actor_id","entity_type","entity_id","message","is_read","created_at","message_key","message_values"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"content_reports","relation":"content_reports","owners":["reporter_id"],"columns":["id","reporter_id","entity_type","entity_id","reason","status","created_at","resolved_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"appeals","relation":"appeals","owners":["user_id"],"columns":["id","user_id","report_id","reason","content_type","content_id","status","reviewer_note","reviewed_at","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"security_events","relation":"security_events","owners":["user_id"],"columns":["id","user_id","event_type","ip_hash","auth_provider","created_at"],"numeric":[],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":false},{"dataset":"books","relation":"books","owners":[],"columns":["id","google_books_id","open_library_id","isbn_10","isbn_13","title","subtitle","author_name","author_names","publisher","published_year","description","cover_url","page_count","genres","language","has_audiobook","average_rating","ratings_count","currently_reading_count","want_to_read_count","have_read_count","similar_book_ids","search_vector","created_at","updated_at","work_id","canonical_edition_id","edition_name","format","metadata_source","metadata_provenance"],"numeric":["average_rating"],"keys":["id"],"types":["uuid"],"single":false,"metadataOnly":true},{"dataset":"book_edition_identifiers","relation":"book_edition_identifiers","owners":["$library_book"],"columns":["provider","identifier","book_id"],"numeric":[],"keys":["provider","identifier"],"types":["text","text"],"single":false,"metadataOnly":false}]'::jsonb
+$sources$;
+
+CREATE FUNCTION public.account_export_key(p_row jsonb,p_source jsonb)RETURNS jsonb
+LANGUAGE sql IMMUTABLE SET search_path TO public,pg_temp AS $$
+ select jsonb_object_agg(name,p_row->>name)from jsonb_array_elements_text(p_source->'keys')name
+$$;
+
+CREATE FUNCTION public.account_export_project(p_row jsonb,p_source jsonb)RETURNS jsonb
+LANGUAGE sql IMMUTABLE SET search_path TO public,pg_temp AS $$
+ select coalesce(jsonb_object_agg(key,case when p_source->'numeric'?key and jsonb_typeof(value)='number'then to_jsonb(value#>>'{}')else value end),'{}'::jsonb)from jsonb_each(p_row)where p_source->'columns'?key
+$$;
+
+CREATE FUNCTION public.account_export_barrier()RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+begin
+ perform pg_advisory_xact_lock_shared(105,91);
+ if tg_op='TRUNCATE'and(select last_value from account_export_epoch)>=(select last_value from account_export_floor)then raise exception 'Export snapshots are active'using errcode='P1001';end if;
+ return null;
+end $$;
+
+CREATE FUNCTION public.capture_account_export_version()RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare source jsonb;key jsonb;born bigint;current_epoch bigint;floor_epoch bigint;
+begin
+ select last_value into current_epoch from account_export_epoch;select last_value into floor_epoch from account_export_floor;
+ if current_epoch>=floor_epoch then
+  select value into source from jsonb_array_elements(account_export_sources())where value->>'relation'=tg_table_name;
+  key:=account_export_key(to_jsonb(old),source);
+  select epoch into born from account_export_current where table_name=tg_table_name and row_key=key;born:=coalesce(born,0);
+  if born<current_epoch then insert into account_export_versions(table_name,row_key,born_epoch,removed_epoch,data)values(tg_table_name,key,born,current_epoch,account_export_project(to_jsonb(old),source))on conflict do nothing;end if;
+  delete from account_export_versions where(table_name,row_key,born_epoch,removed_epoch)in(select table_name,row_key,born_epoch,removed_epoch from account_export_versions where removed_epoch<floor_epoch order by removed_epoch limit 1 for update skip locked);
+ end if;
+ if tg_op='DELETE'then return old;else return new;end if;
+end $$;
+
+CREATE FUNCTION public.mark_account_export_version()RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare source jsonb;key jsonb;current_epoch bigint;floor_epoch bigint;
+begin
+ select last_value into current_epoch from account_export_epoch;select last_value into floor_epoch from account_export_floor;
+ if current_epoch>=floor_epoch then
+  select value into source from jsonb_array_elements(account_export_sources())where value->>'relation'=tg_table_name;
+  if tg_op in('UPDATE','DELETE')then delete from account_export_current where table_name=tg_table_name and row_key=account_export_key(to_jsonb(old),source);end if;
+  if tg_op<>'DELETE'then key:=account_export_key(to_jsonb(new),source);insert into account_export_current(table_name,row_key,epoch)values(tg_table_name,key,current_epoch)on conflict(table_name,row_key)do update set epoch=excluded.epoch;end if;
+  delete from account_export_current where(table_name,row_key)in(select table_name,row_key from account_export_current where epoch<floor_epoch order by epoch limit 1 for update skip locked);
+ end if;return null;
+end $$;
+
+CREATE FUNCTION public.cleanup_account_exports(p_limit integer DEFAULT 1000)RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp SET lock_timeout TO '1s' AS $$
+declare floor_epoch bigint;jobs_removed integer;versions_removed integer;maps_removed integer;
+begin
+ if p_limit is null or p_limit not between 1 and 5000 then raise exception 'Invalid cleanup batch'using errcode='P1004';end if;
+ if current_setting('transaction_isolation')<>'read committed'then raise exception 'Export cleanup requires read committed isolation'using errcode='P1004';end if;
+ perform pg_advisory_xact_lock(105,92);
+ select coalesce(min(epoch),(select last_value+1 from account_export_epoch))into floor_epoch from account_export_jobs where expires_at>clock_timestamp();
+ perform setval('account_export_floor',greatest(floor_epoch,(select last_value from account_export_floor)),true);
+ delete from account_export_jobs where id in(select id from account_export_jobs where expires_at<=clock_timestamp()order by expires_at,id limit p_limit for update skip locked);get diagnostics jobs_removed=row_count;
+ delete from account_export_versions where(table_name,row_key,born_epoch,removed_epoch)in(select table_name,row_key,born_epoch,removed_epoch from account_export_versions where removed_epoch<floor_epoch order by removed_epoch limit p_limit for update skip locked);get diagnostics versions_removed=row_count;
+ delete from account_export_current where(table_name,row_key)in(select table_name,row_key from account_export_current where epoch<floor_epoch order by epoch limit p_limit for update skip locked);get diagnostics maps_removed=row_count;
+ return jsonb_build_object('jobs',jobs_removed,'versions',versions_removed,'maps',maps_removed);
+end $$;
+
+CREATE FUNCTION public.start_account_export(p_user uuid,p_format text,p_key text)RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp SET lock_timeout TO '2s' AS $$
+declare job account_export_jobs;manifest jsonb;next_epoch bigint;
+begin
+ if p_format is null or p_format not in('json','csv')or p_key is null or length(p_key)not between 8 and 200 then raise exception 'Invalid export request'using errcode='P1004';end if;
+ if current_setting('transaction_isolation')<>'read committed'then raise exception 'Export creation requires read committed isolation'using errcode='P1004';end if;
+ perform pg_advisory_xact_lock(105,91);perform pg_advisory_xact_lock(105,92);
+ if not exists(select 1 from users where id=p_user and not is_banned and deleted_at is null)then raise exception 'Account unavailable'using errcode='P1003';end if;
+ select * into job from account_export_jobs where user_id=p_user and request_key=p_key and expires_at>clock_timestamp();
+ if found then if job.format<>p_format then raise exception 'Conflicting export request'using errcode='P1001';end if;return jsonb_build_object('id',job.id,'actorId',job.user_id,'format',job.format,'createdAt',job.created_at,'expiresAt',job.expires_at,'datasets',job.datasets);end if;
+ delete from account_export_jobs where user_id=p_user and request_key=p_key and expires_at<=clock_timestamp();
+ perform cleanup_account_exports(1000);
+ if(select count(*)from account_export_jobs where expires_at>clock_timestamp())>=1000 then raise exception 'Export capacity unavailable'using errcode='P1001';end if;
+ select jsonb_agg(value order by position)into manifest from jsonb_array_elements(account_export_sources())with ordinality item(value,position)where not(value->>'metadataOnly')::boolean and(p_format='json'or value->>'dataset'='reading_history');
+ next_epoch:=nextval('account_export_epoch');
+ insert into account_export_jobs(user_id,request_key,format,epoch,datasets)values(p_user,p_key,p_format,next_epoch,manifest)returning * into job;
+ return jsonb_build_object('id',job.id,'actorId',job.user_id,'format',job.format,'createdAt',job.created_at,'expiresAt',job.expires_at,'datasets',job.datasets);
+end $$;
+
+CREATE FUNCTION public.account_export_record(p_job uuid,p_relation text,p_key jsonb)RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+declare source jsonb;job_epoch bigint;predicate text;result jsonb;
+begin
+ select epoch into job_epoch from account_export_jobs where id=p_job;
+ select value into source from jsonb_array_elements(account_export_sources())where value->>'relation'=p_relation;
+ if job_epoch is null or source is null then raise exception 'Export source unavailable'using errcode='P1004';end if;
+ select string_agg(format('r.%I=($2->>%L)::%s',name,name,source->'types'->>position), ' and ')into predicate from jsonb_array_elements_text(source->'keys')with ordinality item(name,ordinal),lateral(select(ordinal-1)::integer position)p;
+ execute format('select data from((select public.account_export_project(to_jsonb(r),$3)data,0 priority,0::bigint removed from public.%I r left join public.account_export_current m on m.table_name=%L and m.row_key=$2 where %s and coalesce(m.epoch,0)<$1)union all(select data,1,removed_epoch from public.account_export_versions where table_name=%L and row_key=$2 and born_epoch<$1 and removed_epoch>=$1))c order by priority,removed limit 1',p_relation,p_relation,predicate,p_relation)into result using job_epoch,p_key,source;
+ return result;
+end $$;
+
+CREATE FUNCTION public.account_export_has_book(p_user uuid,p_job uuid,p_book uuid)RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+ select exists(
+  select 1 from shelf_books r join account_export_jobs j on j.id=p_job left join account_export_current m on m.table_name='shelf_books'and m.row_key=jsonb_build_object('id',r.id::text)
+  where r.user_id=p_user and coalesce(m.epoch,0)<j.epoch and(r.book_id=p_book or account_export_record(p_job,'books',jsonb_build_object('id',r.book_id))->>'canonical_edition_id'=p_book::text)
+  union all
+  select 1 from account_export_versions v join account_export_jobs j on j.id=p_job where v.table_name='shelf_books'and v.born_epoch<j.epoch and v.removed_epoch>=j.epoch and v.data->>'user_id'=p_user::text
+  and(v.data->>'book_id'=p_book::text or account_export_record(p_job,'books',jsonb_build_object('id',v.data->>'book_id'))->>'canonical_edition_id'=p_book::text));
+$$;
+
+CREATE FUNCTION public.account_export_goodreads_id(p_job uuid,p_book uuid)RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO public,pg_temp AS $$
+ select identifier from(
+  select r.identifier from book_edition_identifiers r join account_export_jobs j on j.id=p_job left join account_export_current m on m.table_name='book_edition_identifiers'and m.row_key=jsonb_build_object('provider',r.provider,'identifier',r.identifier)
+  where r.book_id=p_book and r.provider='goodreads'and coalesce(m.epoch,0)<j.epoch
+  union
+  select v.data->>'identifier' from account_export_versions v join account_export_jobs j on j.id=p_job where v.table_name='book_edition_identifiers'and v.born_epoch<j.epoch and v.removed_epoch>=j.epoch and v.data->>'book_id'=p_book::text and v.data->>'provider'='goodreads'
+ )ids order by identifier limit 1;
+$$;
+
+CREATE FUNCTION public.account_export_page(p_user uuid,p_job uuid,p_dataset text,p_cursor jsonb DEFAULT NULL,p_limit integer DEFAULT 500)RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO public,pg_temp SET lock_timeout TO '2s' AS $$
+declare job account_export_jobs;source jsonb;owner_current text;owner_old text;keys_current text;keys_old text;cursor_values text;key_names text;query text;item record;records jsonb:='[]';next_key jsonb;finished boolean:=true;bytes integer:=0;size integer;row_count integer:=0;book jsonb;shelf jsonb;
+begin
+ if p_limit is null or p_limit not between 1 and 1000 or p_cursor is not null and jsonb_typeof(p_cursor)<>'object'then raise exception 'Invalid export page'using errcode='P1004';end if;
+ perform pg_advisory_xact_lock_shared(105,92);
+ select * into job from account_export_jobs where id=p_job and user_id=p_user and expires_at>clock_timestamp();
+ if not found then raise exception 'Export expired or unavailable'using errcode='P1005';end if;
+ if not exists(select 1 from users where id=p_user and not is_banned and deleted_at is null)then raise exception 'Account unavailable'using errcode='P1003';end if;
+ select value into source from jsonb_array_elements(job.datasets)where value->>'dataset'=p_dataset;
+ if source is null then raise exception 'Unknown export dataset'using errcode='P1004';end if;
+ select string_agg(case when name='$library_book'then 'public.account_export_has_book($2,$5,r.book_id)'when name='$list_owner'then 'public.account_export_record($5,''reading_lists'',jsonb_build_object(''id'',r.list_id))->>''user_id''=($2::uuid)::text'
+ when name='$capture_owner'then 'public.account_export_record($5,''payment_captures'',jsonb_build_object(''provider'',r.provider,''payment_id'',r.payment_id))->>''user_id''=($2::uuid)::text'
+ else format('r.%I=$2::uuid',name)end,' or '),string_agg(case when name='$library_book'then 'public.account_export_has_book($2,$5,(v.data->>''book_id'')::uuid)'when name='$list_owner'then 'public.account_export_record($5,''reading_lists'',jsonb_build_object(''id'',v.data->>''list_id''))->>''user_id''=($2::uuid)::text'
+ when name='$capture_owner'then 'public.account_export_record($5,''payment_captures'',jsonb_build_object(''provider'',v.data->>''provider'',''payment_id'',v.data->>''payment_id''))->>''user_id''=($2::uuid)::text'
+ else format('v.data->>%L=($2::uuid)::text',name)end,' or ')into owner_current,owner_old from jsonb_array_elements_text(source->'owners')name;
+ select string_agg(format('r.%I',name),','order by ordinal),string_agg(format('(v.row_key->>%L)::%s',name,source->'types'->>(ordinal-1)::integer),','order by ordinal),string_agg(format('($3->>%L)::%s',name,source->'types'->>(ordinal-1)::integer),','order by ordinal),string_agg(format('key_%s',ordinal),','order by ordinal)into keys_current,keys_old,cursor_values,key_names from jsonb_array_elements_text(source->'keys')with ordinality item(name,ordinal);
+ query:=format('with current_rows as(select public.account_export_project(to_jsonb(r),$6)data,public.account_export_key(to_jsonb(r),$6)row_key,%s,0 priority from public.%I r left join public.account_export_current m on m.table_name=%L and m.row_key=public.account_export_key(to_jsonb(r),$6)where(%s)and coalesce(m.epoch,0)<$1 and($3 is null or row(%s)>row(%s))order by %s limit $4),past_rows as(select distinct on(%s)v.data,v.row_key,%s,1 priority from public.account_export_versions v where v.table_name=%L and v.born_epoch<$1 and v.removed_epoch>=$1 and(%s)and($3 is null or row(%s)>row(%s))order by %s,v.removed_epoch limit $4),ranked as(select distinct on(row_key)*from(select *from current_rows union all select *from past_rows)c order by row_key,priority)select data,row_key from ranked order by %s limit $4',
+  (select string_agg(format('r.%I as key_%s',name,ordinal),','order by ordinal)from jsonb_array_elements_text(source->'keys')with ordinality k(name,ordinal)),source->>'relation',source->>'relation',owner_current,keys_current,cursor_values,keys_current,keys_old,
+  (select string_agg(format('(v.row_key->>%L)::%s as key_%s',name,source->'types'->>(ordinal-1)::integer,ordinal),','order by ordinal)from jsonb_array_elements_text(source->'keys')with ordinality k(name,ordinal)),source->>'relation',owner_old,keys_old,cursor_values,keys_old,key_names);
+ for item in execute query using job.epoch,p_user,p_cursor,p_limit+1,p_job,source loop
+  if p_dataset='reading_history'then
+   book:=account_export_record(p_job,'books',jsonb_build_object('id',item.data->>'book_id'));
+   if book->>'canonical_edition_id'is not null then book:=account_export_record(p_job,'books',jsonb_build_object('id',book->>'canonical_edition_id'));end if;
+   book:=book||jsonb_build_object('goodreads_id',account_export_goodreads_id(p_job,(book->>'id')::uuid));
+   shelf:=account_export_record(p_job,'shelves',jsonb_build_object('id',item.data->>'shelf_id'));
+   item.data:=item.data||jsonb_build_object('books',book,'shelves',shelf);
+  end if;
+  size:=octet_length(jsonb_build_object('key',item.row_key,'data',item.data)::text);
+  if size>900000 then raise exception 'Export record exceeds the supported record size'using errcode='P1004';end if;
+  if row_count>=p_limit or bytes+size>900000 then finished:=false;exit;end if;
+  records:=records||jsonb_build_array(jsonb_build_object('key',item.row_key,'data',item.data));bytes:=bytes+size;row_count:=row_count+1;next_key:=item.row_key;
+ end loop;
+ return jsonb_build_object('actorId',p_user,'jobId',p_job,'dataset',p_dataset,'records',records,'complete',finished,'nextKey',case when finished then null else next_key end);
 end $$;
 
 CREATE FUNCTION public.admin_catalog_snapshot(p_user uuid, p_scope text, p_search text DEFAULT ''::text, p_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_key text DEFAULT NULL::text, p_limit integer DEFAULT 25, p_offset integer DEFAULT 0) RETURNS jsonb
@@ -7851,6 +8009,11 @@ CREATE INDEX revoked_push_retention ON public.revoked_push_sessions(revoked_at,s
 CREATE INDEX author_posts_cursor ON public.author_posts(author_id,created_at DESC,id DESC);
 CREATE INDEX reading_sessions_cursor ON public.reading_sessions(user_id,created_at DESC,id DESC);
 
+CREATE INDEX account_exports_expiry ON public.account_export_jobs(expires_at,id);
+CREATE INDEX account_exports_epochs ON public.account_export_jobs(epoch,expires_at);
+CREATE INDEX account_export_version_cleanup ON public.account_export_versions(removed_epoch);
+CREATE INDEX account_export_current_cleanup ON public.account_export_current(epoch);
+
 CREATE INDEX idx_books_author ON public.books USING btree (author_name);
 
 CREATE INDEX idx_books_google_id ON public.books USING btree (google_books_id);
@@ -8056,6 +8219,14 @@ CREATE INDEX xp_ledger_period_user ON public.xp_ledger USING btree (created_at, 
 DO $$DECLARE item record;BEGIN
  FOR item IN select tablename from pg_tables where schemaname='public'and tablename<>'maintenance_jobs'LOOP
   EXECUTE format('CREATE TRIGGER maintenance_write_fence BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.guard_maintenance_write()',item.tablename);
+ END LOOP;
+END $$;
+
+DO $$DECLARE source jsonb;BEGIN
+ FOR source IN select value from jsonb_array_elements(public.account_export_sources())LOOP
+  EXECUTE format('CREATE TRIGGER account_export_barrier BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.account_export_barrier()',source->>'relation');
+  EXECUTE format('CREATE TRIGGER account_export_capture BEFORE UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.capture_account_export_version()',source->>'relation');
+  EXECUTE format('CREATE TRIGGER "00_account_export_mark" AFTER INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.mark_account_export_version()',source->>'relation');
  END LOOP;
 END $$;
 
@@ -9940,7 +10111,13 @@ GRANT UPDATE (question, is_active) ON TABLE book_debates TO authenticated;
 GRANT UPDATE (is_read) ON TABLE notifications TO authenticated;
 GRANT SELECT (id, username, display_name, bio, avatar_url, banner_url, country, user_types, genres, is_admin, is_moderator, is_verified_author, is_creator, is_suspended, is_banned, suspension_reason, xp, reading_streak, streak_freeze_tokens, last_streak_date, annual_reading_goal, books_read_count, referral_code, referred_by, email_verified, totp_enabled, external_links, profile_visibility, shelf_visibility, show_referrer, onboarding_complete, email_prompt_shown_at, email_prompt_dismissed_at, created_at, updated_at, email_digest_enabled, is_premium, account_hardening_email_prompted_at, account_hardening_2fa_prompted_at, writing_streak, last_writing_date, writing_freeze_tokens, max_reading_streak, hardening_prompt_7d_sent_at, hardening_prompt_30d_sent_at, notify_follows, notify_likes, notify_replies, notify_mentions, notify_author_announcements, notify_new_releases, notify_challenge_completions, notify_arc_grants, preferred_locale) ON TABLE users TO anon;
 GRANT SELECT (id, username, display_name, bio, avatar_url, banner_url, country, user_types, genres, is_admin, is_moderator, is_verified_author, is_creator, is_suspended, is_banned, suspension_reason, xp, reading_streak, streak_freeze_tokens, last_streak_date, annual_reading_goal, books_read_count, referral_code, referred_by, email_verified, totp_enabled, external_links, profile_visibility, shelf_visibility, show_referrer, onboarding_complete, email_prompt_shown_at, email_prompt_dismissed_at, created_at, updated_at, email_digest_enabled, is_premium, account_hardening_email_prompted_at, account_hardening_2fa_prompted_at, writing_streak, last_writing_date, writing_freeze_tokens, max_reading_streak, hardening_prompt_7d_sent_at, hardening_prompt_30d_sent_at, notify_follows, notify_likes, notify_replies, notify_mentions, notify_author_announcements, notify_new_releases, notify_challenge_completions, notify_arc_grants, preferred_locale) ON TABLE users TO authenticated;
-GRANT EXECUTE ON FUNCTION account_data_export(uuid) TO service_role;
+ALTER TABLE public.account_export_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.account_export_current ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.account_export_versions ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.account_export_jobs,public.account_export_current,public.account_export_versions TO service_role;
+GRANT USAGE,SELECT,UPDATE ON SEQUENCE public.account_export_epoch,public.account_export_floor TO service_role;
+GRANT EXECUTE ON FUNCTION public.insert_owned_content(uuid,text,jsonb,text,text)TO service_role;
+GRANT EXECUTE ON FUNCTION public.start_account_export(uuid,text,text),public.account_export_page(uuid,uuid,text,jsonb,integer),public.cleanup_account_exports(integer)TO service_role;
 GRANT EXECUTE ON FUNCTION admin_catalog_snapshot(uuid,text,text,timestamp with time zone,text,integer,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION admin_edition_audiobook_snapshot(uuid,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION ai_profile_authorized(text) TO authenticated;

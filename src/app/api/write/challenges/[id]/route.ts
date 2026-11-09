@@ -6,11 +6,9 @@ import { writingChallengeResponse } from '@/lib/writing-intents';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const supabase = createClient();
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = (await createClient());
 
   const { data: challenge, error } = await supabase
     .from('writing_challenges')
@@ -23,7 +21,7 @@ export async function GET(
   }
 
   const viewer=await getCurrentUser();
-  const {data:leaderboard,error:leaderboardError}=await createServiceClient().rpc('writing_challenge_leaderboard' as never,{p_challenge:params.id,p_viewer:viewer?.id??null} as never);
+  const {data:leaderboard,error:leaderboardError}=await createServiceClient().rpc('writing_challenge_leaderboard',{p_challenge:params.id,p_viewer:viewer?.id??null});
   if(leaderboardError||!Array.isArray(leaderboard))return NextResponse.json({error:'Leaderboard unavailable'},{status:503});
 
   const membership = viewer ? await supabase.from('writing_challenge_participants').select('user_id').eq('challenge_id',params.id).eq('user_id',viewer.id).maybeSingle() : null;

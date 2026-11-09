@@ -37,8 +37,9 @@ export default function WelcomeScreen() {
   async function signInWithGoogleSupabase() {
     setLoading(true);
     try {
+      const provider=supabase;if(!provider)throw Error('Supabase unavailable');
       const redirectUrl = makeRedirectUri();
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await provider.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
       });
@@ -48,7 +49,7 @@ export default function WelcomeScreen() {
       if (result.type === 'success' && result.url) {
         const url = new URL(result.url);
         const code = url.searchParams.get('code');
-        if (code) await supabase.auth.exchangeCodeForSession(code);
+        if (code) await provider.auth.exchangeCodeForSession(code);
       }
     } catch {
       Alert.alert(t('signIn'),t('signInFailed'));

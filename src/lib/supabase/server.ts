@@ -7,7 +7,7 @@ import type { Database } from '@/types/database';
 import { isDirectPostgres } from '@/lib/db/provider';
 import { createDoClient, createDoServiceClient } from '@/lib/db/unified-client';
 
-export function createClient(options?:{skipMfa?:boolean}): ReturnType<typeof createServerClient<Database>> {
+export async function createClient(options?:{skipMfa?:boolean}): Promise<ReturnType<typeof createServerClient<Database>>> {
   if (isDirectPostgres()) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return createDoClient() as any;
@@ -18,8 +18,10 @@ export function createClient(options?:{skipMfa?:boolean}): ReturnType<typeof cre
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error('Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
   }
-  const cookieStore = cookies();
-  const authorization=headers().get('authorization');
+  const cookieStore = (
+  (await cookies()));
+  const authorization=(
+  (await headers())).get('authorization');
   const bearer=authorization?.startsWith('Bearer ')?authorization.slice(7):undefined;
   const client=createServerClient<Database, 'public'>(
     supabaseUrl,
@@ -27,23 +29,8 @@ export function createClient(options?:{skipMfa?:boolean}): ReturnType<typeof cre
     {
       global:{fetch:serviceFetch,headers:bearer?{Authorization:`Bearer ${bearer}`}:{ }},
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: Record<string, unknown>) {
-          try {
-            cookieStore.set({ name, value, ...options });
-          } catch {
-            // Server component — cookie setting ignored
-          }
-        },
-        remove(name: string, options: Record<string, unknown>) {
-          try {
-            cookieStore.set({ name, value: '', ...options });
-          } catch {
-            // Server component — cookie removal ignored
-          }
-        },
+        getAll(){return cookieStore.getAll();},
+        setAll(values){try{for(const {name,value,options}of values)cookieStore.set(name,value,options);}catch{}}
       },
     }
   );
@@ -53,7 +40,7 @@ export function createClient(options?:{skipMfa?:boolean}): ReturnType<typeof cre
       const result=await getUser(token??bearer);
       if(!result.data.user)return result;
       const accessToken=token??bearer??(await client.auth.getSession()).data.session?.access_token;
-      if(!await providerFactorAuthorized(result.data.user.id,accessToken))return {data:{user:null},error:new AuthError('Second factor required',401)};
+      if(!(await providerFactorAuthorized(result.data.user.id,accessToken)))return {data:{user:null},error:new AuthError('Second factor required',401)};
       return result;
     };
   }
@@ -76,11 +63,7 @@ export function createServiceClient(): ReturnType<typeof createServerClient<Data
     serviceRoleKey,
     {
       global:{fetch:serviceFetch},
-      cookies: {
-        get() { return undefined; },
-        set() {},
-        remove() {},
-      },
+      cookies:{getAll:()=>[],setAll:()=>{}},
     }
   );
 }

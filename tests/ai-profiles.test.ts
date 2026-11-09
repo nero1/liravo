@@ -13,12 +13,12 @@ const rpc=vi.fn(),maybeSingle=vi.fn();
 beforeEach(()=>{
   vi.clearAllMocks();
   source={locale:'fr',books:[{genres:['Fiction'],review:{moods:['Hopeful']}},{genres:['History']},{genres:['Fiction']}]};stored=null;
-  maybeSingle.mockImplementation(async()=>({data:stored,error:null}));
+  maybeSingle.mockImplementation(async()=>({data:stored?{...stored,timestamp:stored.generated_at??stored.created_at,value:stored.profile_data??stored.tasks}:null,error:null}));
   const query={select:()=>query,eq:()=>query,maybeSingle};
   rpc.mockImplementation(async(name:string,args:Record<string,unknown>)=>{
     if(name==='taste_profile_input'||name==='writing_plan_input')return {data:source,error:null};
     stored={source_hash:args.p_hash,policy_version:args.p_policy,generated_at:new Date().toISOString(),created_at:new Date().toISOString(),profile_data:args.p_profile,tasks:args.p_tasks};
-    return {data:stored,error:null};
+    return {data:stored?{...stored,timestamp:stored.generated_at??stored.created_at,value:stored.profile_data??stored.tasks}:null,error:null};
   });
   vi.mocked(createServiceClient).mockReturnValue({from:()=>query,rpc} as unknown as ReturnType<typeof createServiceClient>);
   vi.mocked(hasPremiumAccess).mockResolvedValue(true);

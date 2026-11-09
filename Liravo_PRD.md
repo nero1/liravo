@@ -139,11 +139,11 @@ All tiers are prioritised by the existence and quality of their Amazon Associate
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14 (App Router) |
+| Frontend | Next.js 16 (App Router), React 19 |
 | Language | TypeScript throughout |
 | Deployment | Vercel (Hobby Plan for MVP) |
 | CI/CD | GitHub Actions auto-deploy to Vercel |
-| Database | PostgreSQL — provider-selectable via `DATABASE_PROVIDER` env var (Supabase · DigitalOcean · Railway) |
+| Database | PostgreSQL with Drizzle for direct queries — provider-selectable via `DATABASE_PROVIDER` env var (Supabase · DigitalOcean · Railway) |
 | Auth | Supabase Auth (Supabase mode) or custom Redis/cookie sessions (direct PostgreSQL mode) + Google OAuth + Telegram OAuth |
 | Cache / Sessions | Redis — ioredis (self-hosted) or Upstash, selected by `REDIS_PROVIDER` env var |
 | Payments | Paystack (Nigeria) + Dodopayments (global) |
@@ -242,7 +242,7 @@ To add a fourth provider (e.g. Neon, PlanetScale, Render):
 5. Add a storage branch in `src/lib/storage/provider.ts` if the provider ships its own storage SDK; otherwise the existing S3 adapter works.
 6. Document the required environment variables in SETUP.md.
 
-No query-builder code needs to change — `PgQueryBuilder` speaks standard PostgreSQL and works with any provider that accepts standard SQL over a `postgres` (npm) connection.
+No query-builder code needs to change — `PgQueryBuilder` uses generated Drizzle table definitions and standard PostgreSQL and works with any provider that accepts standard SQL over a `postgres` (npm) connection.
 
 ### Redis Configuration
 
@@ -742,7 +742,7 @@ When a book page is rendered, the server checks this table for the user's countr
 - AI-powered personalised writing challenges and weekly plan (for Newbie Writer users on premium)
 - Priority matching in buddy read finder
 - Exclusive seasonal badge designs
-- Export reading history as PDF or CSV
+- Export reading history as CSV; download full account data as JSON. Exports use consistent snapshots, bounded chunks and 24-hour download sessions, including writing, community, reading and financial history.
 - Early access to new features
 
 **Payment:** Dodopayments (global, Stripe-powered).

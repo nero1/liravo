@@ -21,7 +21,7 @@ export async function POST(request:Request) {
     if(previous)return previous.fingerprint===fingerprint?factorSessionResponse({ok:true}):NextResponse.json({error:'Conflicting request key'},{status:409});
     const profile=await factorProfile(user.id);if(!profile?.totp_enabled)return NextResponse.json({error:'2FA is not enabled'},{status:409});
     const proof=await verifyFactorProof(profile,parsed.data);if(!proof)return NextResponse.json({error:'Invalid verification code'},{status:422});
-    const {error}=await createServiceClient().rpc('disable_factor_atomic' as never,{p_user_id:user.id,p_version:profile.mfa_version,p_step:proof.step,p_recovery_hash:proof.recoveryHash,p_session_hash:await currentFactorSessionHash(user.id),p_key:key,p_fingerprint:fingerprint} as never);
+    const {error}=await createServiceClient().rpc('disable_factor_atomic',{p_user_id:user.id,p_version:profile.mfa_version,p_step:proof.step,p_recovery_hash:proof.recoveryHash,p_session_hash:await currentFactorSessionHash(user.id),p_key:key,p_fingerprint:fingerprint});
     if(error)return NextResponse.json({error:'Code already used or factor state changed'},{status:['P1001','P1003'].includes(error.code)?409:503});
     return factorSessionResponse({ok:true});
   }catch{return NextResponse.json({error:'Factor update unavailable'},{status:503});}

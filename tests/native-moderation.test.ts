@@ -30,7 +30,7 @@ it('renders translated actual audit actions and joined staff names instead of em
  const view=mount('log',{data:{pages:[{logs:[],total:0}]}}),list=view.all(view.render(),'FlatList')[0],row=list.props.renderItem({item:{id:'log',action:'approved',moderator:{username:'staff',display_name:'Équipe'},entity_type:'review',created_at:'2026-11-04T12:00:00Z'}});expect(JSON.stringify(row)).toContain(fr.moderation.statuses.approved);expect(JSON.stringify(row)).toContain('Équipe (@staff)');
 });
 it('does not turn failed reads into empty-success states',()=>{
- for(const file of['reports','log']){const view=mount(file,{isError:true,error:Error('Unavailable')}),list=view.all(view.render(),'FlatList')[0];expect(list.props.ListEmptyComponent).toBeNull();expect(view.all(list.props.ListFooterComponent,'QueryError')).toHaveLength(1);}
+ for(const file of['reports','log']){const view=mount(file,{isError:true,error:Error('Unavailable')}),list=view.all(view.render(),'FlatList')[0];expect(list.props.ListEmptyComponent).toBeUndefined();expect(view.all(list.props.ListFooterComponent,'QueryError')).toHaveLength(1);}
 });
 it('only offers permitted decisions and translates content context',()=>{
  const view=mount('reports'),tree=view.render({owner:'staff',report:{...report,allowed_actions:[]}},'NativeReportReview');expect(view.all(tree,'Button')).toHaveLength(0);expect(JSON.stringify(tree)).toContain(fr.moderation.noActions);expect(JSON.stringify(tree)).toContain('Safe & decoded preview');const account=view.render({owner:'staff',report:{...report,entity_type:'user',allowed_actions:['remove']}},'NativeReportReview');expect(JSON.stringify(account)).toContain(fr.moderation.actions.suspend);

@@ -17,7 +17,7 @@ export async function POST(request:Request){
     const service=createServiceClient(),token=factorToken(),hash=emailHash(token);
     const {data:profile,error:profileError}=await service.from('users').select('display_name,username,preferred_locale').eq('id',user.id).single();
     if(profileError||!profile)throw new Error('Profile unavailable');
-    const {data,error}=await service.rpc('issue_email_challenge' as never,{p_user_id:user.id,p_email:parsed.data.email,p_purpose:'verify',p_hash:hash,p_pin_hash:pinHash} as never);
+    const {data,error}=await service.rpc('issue_email_challenge',{p_user_id:user.id,p_email:parsed.data.email,p_purpose:'verify',p_hash:hash,p_pin_hash:pinHash});
     if(error)return emailResponse({error:error.code==='P1001'?'EMAIL_OR_PIN_CHANGED':'EMAIL_UNAVAILABLE'},error.code==='P1001'?409:503);
     if(!data)return emailResponse({error:'Account unavailable'},403);
     const message=buildVerificationEmail(profile.display_name??profile.username,emailLink('verify',token),profile.preferred_locale);

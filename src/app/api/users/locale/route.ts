@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest) {
 
   const { locale } = parsed.data;
 
-  const {data,error}=await supabase.rpc('initialize_account_locale' as never,{p_user_id:user.id,p_locale:locale,p_replace:true} as never);
+  const {data,error}=await supabase.rpc('initialize_account_locale',{p_user_id:user.id,p_locale:locale,p_replace:true});
 
   if (error||data!==locale) {
     return NextResponse.json({ error: 'Failed to update locale' }, { status: 503 });

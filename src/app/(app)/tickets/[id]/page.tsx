@@ -10,7 +10,11 @@ import type { Metadata } from 'next';
 
 export const dynamic='force-dynamic';
 export async function generateMetadata():Promise<Metadata>{const t=await getTranslations('events');return {title:t('viewTicket'),robots:{index:false,follow:false}};}
-export default async function TicketPage({params,searchParams}:{params:{id:string};searchParams:{verification?:string}}){
+export default async function TicketPage(
+  props:{params: Promise<{id:string}>;searchParams: Promise<{verification?:string}>}
+) {
+  const searchParams = (await props.searchParams)??{};
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)redirect('/login');
   if(!z.string().uuid().safeParse(params.id).success)notFound();
   const {data:ticket,error}=await createServiceClient().from('event_tickets').select('id,event_id,status,amount_paid,currency,reserved_until,checkout_url,provider,event:events(title)').eq('id',params.id).eq('user_id',user.id).maybeSingle();

@@ -71,19 +71,19 @@ describe('reading goal ownership', () => {
   const actor='00000000-0000-4000-8000-000000000001';
   it('rejects unauthenticated updates', async () => {
     vi.mocked(getCurrentUser).mockResolvedValue(null);
-    expect((await updateGoal(new Request('https://app.test'),{params:{id:actor}})).status).toBe(401);
+    expect((await updateGoal(new Request('https://app.test'),{params:Promise.resolve({id:actor})})).status).toBe(401);
   });
   it('denies cross-user mutations before touching the database', async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({id:actor,email:'reader@example.test'});
     const from=vi.fn(); vi.mocked(createClient).mockReturnValue({from} as unknown as ReturnType<typeof createClient>);
-    expect((await updateGoal(new Request('https://app.test'),{params:{id:crypto.randomUUID()}})).status).toBe(403);
+    expect((await updateGoal(new Request('https://app.test'),{params:Promise.resolve({id:crypto.randomUUID()})})).status).toBe(403);
     expect(from).not.toHaveBeenCalled();
   });
   it('updates only the authenticated owner', async () => {
     vi.mocked(getCurrentUser).mockResolvedValue({id:actor,email:'reader@example.test'});
     const rpc=vi.fn().mockResolvedValue({data:{},error:null});
     vi.mocked(createServiceClient).mockReturnValue({rpc} as unknown as ReturnType<typeof createServiceClient>);
-    const response=await updateGoal(new Request('https://app.test',{method:'PUT',body:JSON.stringify({goal:24})}),{params:{id:actor}});
+    const response=await updateGoal(new Request('https://app.test',{method:'PUT',body:JSON.stringify({goal:24})}),{params:Promise.resolve({id:actor})});
     expect(response.status).toBe(200); expect(rpc).toHaveBeenCalledWith('set_reading_goal',expect.objectContaining({p_user_id:actor,p_target:24}));
   });
 });

@@ -5,14 +5,14 @@ import { observeOperationalSignal } from '@/lib/operational-alerts';
 
 export async function drainSubscriptionCancellations(userId: string | null = null) {
   const client = createServiceClient();
-  const { data, error } = await client.rpc('claim_subscription_cancellations' as never, { p_user_id: userId, p_limit: 3 } as never);
+  const { data, error } = await client.rpc('claim_subscription_cancellations', { p_user_id: userId, p_limit: 3 });
   if (error) throw new Error('Cancellation claim failed');
   const events = (data ?? []) as { subscription_id: string; provider: string; provider_subscription_id: string | null; attempts: number; correlation_id: string }[];
   let completed = 0;
   await Promise.all(events.map(async event => {
     try {
       await cancelProviderSubscription(event.provider,event.provider_subscription_id,`cancel_${event.subscription_id}`);
-      const { error: commitError } = await client.rpc('complete_subscription_cancellation' as never, { p_subscription_id: event.subscription_id } as never);
+      const { error: commitError } = await client.rpc('complete_subscription_cancellation', { p_subscription_id: event.subscription_id });
       if (commitError) throw new Error('Cancellation commit failed');
       completed++;
     } catch {

@@ -7,7 +7,8 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request:Request,{params}:{params:{id:string}}){
+export async function GET(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid buddy read'},{status:400});
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   const actor=request.headers.get('X-Liravo-Actor');if(actor&&actor!==user.id)return NextResponse.json({error:'Account changed'},{status:409});
@@ -21,12 +22,10 @@ const NoteSchema = z.object({
   reply_to_id: z.string().uuid().nullable().optional(),
 });
 
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid buddy read'},{status:400});
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

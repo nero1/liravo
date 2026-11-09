@@ -15,7 +15,7 @@ async function run(){
     if(error)throw new Error('Reading goals unavailable');
     if(!data?.length){await redis.del(cursorKey);break;}
     for(let index=0;index<data.length;index+=10){
-      const results=await Promise.all(data.slice(index,index+10).map(row=>db.rpc('award_reading_goal_milestones' as never,{p_user_id:row.user_id,p_year:year} as never)));
+      const results=await Promise.all(data.slice(index,index+10).map(row=>db.rpc('award_reading_goal_milestones',{p_user_id:row.user_id,p_year:year})));
       for(const result of results){if(result.error)throw new Error('Goal milestone unavailable');milestonesAwarded+=Number(result.data);checked++;}
     }
     const next=data[data.length-1].user_id as string;

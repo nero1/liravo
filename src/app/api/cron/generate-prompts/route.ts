@@ -137,9 +137,9 @@ Example: 1. [Adventure] A cartographer discovers a map that leads not to a place
   const skipped: string[] = [];
   const errors: string[] = [];
   for (const prompt of prompts) {
-    const { data, error } = await supabase.rpc('publish_writing_prompt' as never, {
+    const { data, error } = await supabase.rpc('publish_writing_prompt', {
       p_date: prompt.date, p_text: prompt.prompt_text, p_theme: prompt.theme,
-    } as never);
+    });
     const result = data as { created?: boolean } | null;
     if (error || typeof result?.created !== 'boolean') errors.push(prompt.date);
     else if (result.created) inserted.push(prompt.date);

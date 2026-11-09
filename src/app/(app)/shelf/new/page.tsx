@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export async function generateMetadata(){const t=await getTranslations('shelfForm');return{title:t('title'),robots:{index:false,follow:false}};}
 
 export default async function NewShelfPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 

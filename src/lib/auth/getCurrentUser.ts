@@ -20,10 +20,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 }
 
 async function getDoUser(): Promise<SessionUser | null> {
-  const authHeader = headers().get('authorization');
+  const authHeader = (await headers()).get('authorization');
   if (authHeader?.startsWith('Bearer ')) return readDirectSession(authHeader.slice(7));
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
@@ -32,9 +32,9 @@ async function getDoUser(): Promise<SessionUser | null> {
 
 async function getSupabaseUser(): Promise<SessionUser | null> {
   const { createClient } = await import('@/lib/supabase/server');
-  const supabase = createClient();
+  const supabase = await createClient();
 
-  const authorization=headers().get('authorization');
+  const authorization=(await headers()).get('authorization');
   const bearer=authorization?.startsWith('Bearer ')?authorization.slice(7):undefined;
   const { data: { user },error } = await supabase.auth.getUser(bearer);
   assertSessionProviderAvailable(error);

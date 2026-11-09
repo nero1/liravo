@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!(await checkMoneyRateLimit(user.id,getClientIp(request))).allowed) return NextResponse.json({error:'Too many requests'},{status:429});
   try {
     const accountId = googlePlayAccountId(user.id);
-    const {data,error} = await createServiceClient().rpc('register_billing_account' as never,{p_user_id:user.id,p_account_id:accountId} as never);
+    const {data,error} = await createServiceClient().rpc('register_billing_account',{p_user_id:user.id,p_account_id:accountId});
     if (error || data !== accountId) throw new Error('Account binding unavailable');
     return NextResponse.json({accountId,actorId:user.id});
   } catch { return NextResponse.json({error:'Google Play billing is unavailable',code:'BILLING_CONFIGURATION_UNAVAILABLE'},{status:503}); }

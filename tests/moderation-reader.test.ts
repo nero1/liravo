@@ -33,8 +33,8 @@ it('exposes storage/role failures as errors rather than an empty queue',async()=
 it('returns owned report decisions, accepts the existing action payload and denies stale actors or empty patches',async()=>{
  vi.mocked(applyCommunityIntent).mockResolvedValue({report:{id,status:'approved',moderator_id:actor,moderator_note:null}});
  const request=(body:unknown,owner=actor)=>new Request('https://app.test/reports?reportId='+id,{method:'POST',headers:{'Content-Type':'application/json','X-Liravo-Actor':owner,'Idempotency-Key':'moderation089-owned'},body:JSON.stringify(body)});
- const response=await POST(request({action:'approve'}),{params:{id}});expect(await response.json()).toMatchObject({actorId:actor,reportId:id,report:{id,status:'approved'}});
- expect((await POST(request({action:'remove'},id),{params:{id}})).status).toBe(409);expect((await POST(request({action:'remove'}),{params:{id:'bad'}})).status).toBe(400);expect((await PATCH(request({}))).status).toBe(400);
+ const response=await POST(request({action:'approve'}),{params:Promise.resolve({id})});expect(await response.json()).toMatchObject({actorId:actor,reportId:id,report:{id,status:'approved'}});
+ expect((await POST(request({action:'remove'},id),{params:Promise.resolve({id})})).status).toBe(409);expect((await POST(request({action:'remove'}),{params:Promise.resolve({id:'bad'})})).status).toBe(400);expect((await PATCH(request({}))).status).toBe(400);
  expect(applyCommunityIntent).toHaveBeenCalledTimes(1);
 });
 it('recovers only an owned report receipt and distinguishes missing receipts',async()=>{

@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
 
   // Check email not already taken
-  const {data:existing,error:lookupError}=await supabase.rpc('find_direct_account' as never,{p_email:email} as never);
+  const {data:existing,error:lookupError}=await supabase.rpc('find_direct_account',{p_email:email});
 
   if(lookupError)return NextResponse.json({error:'Authentication unavailable'},{status:503});
   if (existing) {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   const emailPrefix = email.split('@')[0].replace(/[^a-z0-9_]/gi, '_').toLowerCase();
   const username = `${emailPrefix.slice(0,20)}_${id.slice(0,6)}`;
 
-  const {error}=await supabase.rpc('create_localized_direct_account' as never,{p_locale:accountLocale(request),p_id:id,p_email:email,p_username:username,p_display_name:emailPrefix.slice(0,50),p_password_hash:password_hash} as never);
+  const {error}=await supabase.rpc('create_localized_direct_account',{p_locale:accountLocale(request),p_id:id,p_email:email,p_username:username,p_display_name:emailPrefix.slice(0,50),p_password_hash:password_hash});
 
   if (error) {
     return NextResponse.json({error:error.code==='23505'?'Account already exists':'Failed to create account'},{status:error.code==='23505'?409:503});

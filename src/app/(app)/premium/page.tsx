@@ -19,10 +19,13 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const FEATURES = ['shelves', 'stats', 'taste', 'feedback', 'plan', 'digest', 'badge'] as const;
 
-export default async function PremiumPage({ searchParams }: { searchParams: { payment?: string;verification?:string } }) {
+export default async function PremiumPage(
+  props: { searchParams: Promise<{ payment?: string;verification?:string }> }
+) {
+  const searchParams = (await props.searchParams)??{};
   const t = await getTranslations('premium');
   const formatter = await getFormatter();
-  const supabase = createClient();
+  const supabase = (await createClient());
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -37,10 +40,10 @@ export default async function PremiumPage({ searchParams }: { searchParams: { pa
   const isPremium = await hasPremiumAccess(user.id);
   const {data:subscriptions,error:subscriptionError}=await createServiceClient().from('subscriptions').select('provider,current_period_end,renewal_cancelled').eq('user_id',user.id).eq('status','active').gt('current_period_end',new Date().toISOString());
   if(subscriptionError||!Array.isArray(subscriptions))throw new Error('Subscription management unavailable');
-  const paidUntil=subscriptions.reduce((latest:string|null,item:{current_period_end:string})=>!latest||item.current_period_end>latest?item.current_period_end:latest,null);
-  const canCancel=subscriptions.some((item:{provider:string;renewal_cancelled:boolean})=>item.provider==='dodopayments'&&!item.renewal_cancelled);
-  const googleManaged=subscriptions.some((item:{provider:string})=>item.provider==='google_play');
-  const paystackPass=subscriptions.some((item:{provider:string})=>item.provider==='paystack');
+  const paidUntil=subscriptions.reduce((latest:string|null,item)=>!latest||(item.current_period_end??'')>latest?item.current_period_end:latest,null);
+  const canCancel=subscriptions.some((item)=>item.provider==='dodopayments'&&!item.renewal_cancelled);
+  const googleManaged=subscriptions.some((item)=>item.provider==='google_play');
+  const paystackPass=subscriptions.some((item)=>item.provider==='paystack');
   const recovery=await readPaymentRecovery(user.id,'subscription');
 
 

@@ -10,7 +10,7 @@ import {useRequestIntent} from '@/lib/client/useRequestIntent';
 type Props={bookId:string;userId:string;onLogged?:(pagesRead:number)=>void};
 export function LogReadingSessionButton(props:Props){return <OwnedSessionButton key={props.userId+':'+props.bookId} {...props}/>;}
 function OwnedSessionButton({bookId,userId,onLogged}:Props){
-  const history=useTranslations('readingHistory'),t=useTranslations('books'),common=useTranslations('common'),intent=useRequestIntent(userId),router=useRouter(),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>();
+  const history=useTranslations('readingHistory'),t=useTranslations('books'),common=useTranslations('common'),intent=useRequestIntent(userId),router=useRouter(),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   const [open,setOpen]=useState(false),[pages,setPages]=useState(''),[saving,setSaving]=useState(false),[done,setDone]=useState(false),[error,setError]=useState(false);
   useEffect(()=>()=>clearTimeout(timer.current),[]);
   async function submit(event:React.FormEvent){

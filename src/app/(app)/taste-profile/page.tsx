@@ -7,7 +7,8 @@ import Link from 'next/link';
 
 export const dynamic='force-dynamic';
 export async function generateMetadata(){const t=await getTranslations('aiProfiles');return {title:t('tasteTitle')};}
-export default async function TasteProfilePage({searchParams}:{searchParams:{error?:string}}){
+export default async function TasteProfilePage(props:{searchParams: Promise<{error?:string}>}) {
+  const searchParams = (await props.searchParams)??{};
   const user=await getCurrentUser();if(!user)redirect('/login');
   const t=await getTranslations('aiProfiles'),moods=await getTranslations('moods'),format=await getFormatter();
   const genre=(value:string)=>t.has('genreLabels.'+value)?t('genreLabels.'+value):value,mood=(value:string)=>moods.has(value)?moods(value):value;

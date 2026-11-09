@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
 
   const question=sanitizeText(parsed.data.question);if(question.length<10||question.length>500)return NextResponse.json({error:'Invalid question'},{status:422});
-  const supabase = createClient();
+  const supabase = (await createClient());
 
   // Confirm the target is actually a verified author
   const { data: authorProfile,error:authorError } = await supabase

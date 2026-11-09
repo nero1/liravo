@@ -12,7 +12,7 @@ export interface WritingProgress {
 }
 
 export async function getWritingProgress(userId:string):Promise<WritingProgress>{
-  const {data,error}=await createServiceClient().rpc('writing_progress_snapshot' as never,{p_user_id:userId} as never);
+  const {data,error}=await createServiceClient().rpc('writing_progress_snapshot',{p_user_id:userId});
   if(error||!data)throw new Error('Writing progress unavailable');
   return data as WritingProgress;
 }

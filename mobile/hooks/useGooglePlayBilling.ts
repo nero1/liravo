@@ -1,7 +1,7 @@
 import {useEffect,useState,useRef,useCallback} from 'react';
 import {Platform,Alert} from 'react-native';
 import {useQueryClient} from '@tanstack/react-query';
-import {initConnection,endConnection,getSubscriptions,requestSubscription,finishTransaction,purchaseUpdatedListener,purchaseErrorListener,getAvailablePurchases,type SubscriptionPurchase,type ProductPurchase,type Subscription,type SubscriptionAndroid,PurchaseStateAndroid} from 'react-native-iap';
+import {initConnection,endConnection,fetchProducts,requestPurchase,finishTransaction,purchaseUpdatedListener,purchaseErrorListener,getAvailablePurchases,type Purchase,type ProductSubscription,ErrorCode} from 'expo-iap';
 import type {UserRow} from '@/types';
 import {api} from '@/lib/api';
 import {useAuthStore} from '@/stores/auth';
@@ -9,12 +9,11 @@ import {useTranslations} from '@/hooks/useTranslations';
 import {SUBSCRIPTION_SKUS,PREMIUM_MONTHLY_SKU} from '@/constants/iap';
 import {monthlyGooglePlayOffer} from '@/lib/google-play-offer';
 
-type Purchase=SubscriptionPurchase|ProductPurchase;
 let connection=Promise.resolve();
 type Receipt={actorId:string;user:UserRow;active:boolean;pending:boolean;acknowledged:boolean};
 export function useGooglePlayBilling(){
   const owner=useAuthStore(state=>state.user?.id),qc=useQueryClient(),{t}=useTranslations('nativeBilling'),text=useRef(t);text.current=t;
-  const [connected,setConnected]=useState(false),[products,setProducts]=useState<Subscription[]>([]),[connecting,setConnecting]=useState(false),[storeError,setStoreError]=useState(false),[attempt,setAttempt]=useState(0);
+  const [connected,setConnected]=useState(false),[products,setProducts]=useState<ProductSubscription[]>([]),[connecting,setConnecting]=useState(false),[storeError,setStoreError]=useState(false),[attempt,setAttempt]=useState(0);
   const [purchasing,setPurchasing]=useState(false),[verifying,setVerifying]=useState(false),[restoring,setRestoring]=useState(false),alive=useRef(false),busy=useRef<symbol|null>(null),inFlight=useRef(new Map<string,Promise<Receipt|null>>());
   const current=useCallback(()=>!!owner&&alive.current&&useAuthStore.getState().user?.id===owner,[owner]);
   const verify=useCallback(async(purchase:Purchase):Promise<Receipt|null>=>{
@@ -41,11 +40,11 @@ export function useGooglePlayBilling(){
       if(!mounted)return;
       try{
         const ok=await initConnection();if(!mounted)return;if(!ok)throw new Error('Store unavailable');
-        updates=purchaseUpdatedListener(purchase=>{if(!SUBSCRIPTION_SKUS.includes(purchase.productId as typeof SUBSCRIPTION_SKUS[number])||!purchase.purchaseToken||inFlight.current.has(owner+':'+purchase.purchaseToken)||purchase.purchaseStateAndroid!==undefined&&purchase.purchaseStateAndroid!==PurchaseStateAndroid.PURCHASED)return;
+        updates=purchaseUpdatedListener(purchase=>{if(!SUBSCRIPTION_SKUS.includes(purchase.productId as typeof SUBSCRIPTION_SKUS[number])||!purchase.purchaseToken||inFlight.current.has(owner+':'+purchase.purchaseToken)||purchase.purchaseState!=='purchased')return;
           void verify(purchase).then(result=>{if(!result||!current())return;if(result.pending)Alert.alert(text.current('pendingTitle'),text.current('pendingMessage'));else if(!result.active)Alert.alert(text.current('inactiveTitle'),text.current('inactiveMessage'));}).catch(()=>{if(current())Alert.alert(text.current('verificationFailedTitle'),text.current('verificationFailedMessage'));});});
-        errors=purchaseErrorListener(error=>{if(current()&&error.code!=='E_USER_CANCELLED')Alert.alert(text.current('purchaseFailedTitle'),text.current('purchaseFailedMessage'));});
-        const subscriptions=await getSubscriptions({skus:[...SUBSCRIPTION_SKUS]});if(!mounted)return;
-        setProducts(subscriptions);setConnected(true);
+        errors=purchaseErrorListener(error=>{if(current()&&error.code!==ErrorCode.UserCancelled)Alert.alert(text.current('purchaseFailedTitle'),text.current('purchaseFailedMessage'));});
+        const subscriptions=await fetchProducts({skus:[...SUBSCRIPTION_SKUS],type:'subs'});if(!mounted)return;
+        setProducts((subscriptions??[]).filter((item):item is ProductSubscription=>item.type==='subs'));setConnected(true);
       }catch{if(mounted)setStoreError(true);}finally{if(mounted)setConnecting(false);}
     });
     return()=>{mounted=false;alive.current=false;updates?.remove();errors?.remove();connection=connection.then(()=>endConnection()).then(()=>{},()=>{});};
@@ -53,14 +52,14 @@ export function useGooglePlayBilling(){
   const subscribe=useCallback(async()=>{
     if(!current()||busy.current)return;
     if(!connected){Alert.alert(text.current('storeUnavailableTitle'),text.current('storeUnavailableMessage'));return;}
-    const product=products.find(item=>item.productId===PREMIUM_MONTHLY_SKU) as SubscriptionAndroid|undefined,offer=monthlyGooglePlayOffer(product,PREMIUM_MONTHLY_SKU);
+    const product=products.find(item=>item.id===PREMIUM_MONTHLY_SKU),offer=monthlyGooglePlayOffer(product,PREMIUM_MONTHLY_SKU);
     if(!offer){Alert.alert(text.current('storeUnavailableTitle'),text.current('offerUnavailable'));return;}
     const lease=Symbol();busy.current=lease;setPurchasing(true);
     try{
       const result=await api.post<{actorId:string;accountId:string}>('/api/mobile/billing-account',undefined,{'X-Liravo-Actor':owner!});
       if(!current())return;if(result.actorId!==owner||!/^[a-f0-9]{64}$/.test(result.accountId))throw new Error('Invalid billing account');
-      await requestSubscription({subscriptionOffers:[{sku:offer.sku,offerToken:offer.offerToken}],obfuscatedAccountIdAndroid:result.accountId});
-    }catch(error){if(current()&&(error as {code?:string}).code!=='E_USER_CANCELLED')Alert.alert(text.current('purchaseFailedTitle'),text.current('purchaseFailedMessage'));}
+      await requestPurchase({type:'subs',request:{google:{skus:[offer.sku],subscriptionOffers:[{sku:offer.sku,offerToken:offer.offerToken}],obfuscatedAccountId:result.accountId}}});
+    }catch(error){if(current()&&(error as {code?:string}).code!==ErrorCode.UserCancelled)Alert.alert(text.current('purchaseFailedTitle'),text.current('purchaseFailedMessage'));}
     finally{if(busy.current===lease)busy.current=null;if(current())setPurchasing(false);}
   },[owner,current,connected,products]);
   const restorePurchases=useCallback(async()=>{
@@ -80,6 +79,6 @@ export function useGooglePlayBilling(){
     }catch{if(current())Alert.alert(text.current('restoreFailedTitle'),text.current('verificationFailedMessage'));}
     finally{if(busy.current===lease)busy.current=null;if(current())setRestoring(false);}
   },[current,connected,verify]);
-  const premiumProduct=products.find(product=>product.productId===PREMIUM_MONTHLY_SKU),offer=monthlyGooglePlayOffer(premiumProduct as SubscriptionAndroid|undefined,PREMIUM_MONTHLY_SKU);
+  const premiumProduct=products.find(product=>product.id===PREMIUM_MONTHLY_SKU),offer=monthlyGooglePlayOffer(premiumProduct,PREMIUM_MONTHLY_SKU);
   return{connected,connecting,storeError,premiumProduct,premiumPrice:offer?.formattedPrice??null,purchasing:purchasing||verifying,restoring,subscribe,restorePurchases,retryStore:()=>{if(current()&&!busy.current)setAttempt(value=>value+1);}};
 }

@@ -53,9 +53,9 @@ export async function PATCH(req: Request) {
   const { name, enabled } = parsed.data;
   const service = createServiceClient();
 
-  const { data: changed, error } = await service.rpc('set_feature_flag_atomic' as never, {
+  const { data: changed, error } = await service.rpc('set_feature_flag_atomic', {
     p_actor_id: user.id, p_name: name, p_enabled: enabled,
-  } as never);
+  });
   if (error) {
     const status = error.code === 'P1006' ? 409 : error.code === 'P1003' ? 404 : error.code === 'P1005' ? 403 : 503;
     return json({ error: status === 409 ? 'At least one sign-in provider must remain active' : 'Flag update unavailable', code: error.code }, { status });

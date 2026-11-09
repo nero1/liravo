@@ -4,7 +4,8 @@ import {getCurrentUser} from '@/lib/auth/getCurrentUser';
 import {checkRouteRateLimit} from '@/lib/rate-limit';
 import {CatalogIdentityError,discoverOpenLibraryEditions,getWorkCatalog,searchOpenLibrary,storeCatalogBook} from '@/services/books';
 export const dynamic='force-dynamic';
-export async function POST(request:Request,{params}:{params:{id:string}}){
+export async function POST(request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   if(request.headers.has('x-liravo-actor')&&request.headers.get('x-liravo-actor')!==user.id)return NextResponse.json({error:'ACCOUNT_CHANGED'},{status:409});
   if(!z.string().uuid().safeParse(params.id).success)return NextResponse.json({error:'Invalid work'},{status:400});
@@ -12,7 +13,7 @@ export async function POST(request:Request,{params}:{params:{id:string}}){
   if(!parsed.success)return NextResponse.json({error:'Invalid editions page'},{status:422});
   let offset=0;
   if(parsed.data.cursor){try{const cursor=z.object({workId:z.literal(params.id),offset:z.number().int().min(0).max(100000)}).parse(JSON.parse(Buffer.from(parsed.data.cursor,'base64url').toString()));offset=cursor.offset;}catch{return NextResponse.json({error:'Invalid editions cursor'},{status:400});}}
-  if(!await checkRouteRateLimit(user.id,'catalog'))return NextResponse.json({error:'Edition lookup limit reached'},{status:429});
+  if(!(await checkRouteRateLimit(user.id,'catalog')))return NextResponse.json({error:'Edition lookup limit reached'},{status:429});
   try{
     let catalog=await getWorkCatalog(params.id);if(!catalog)return NextResponse.json({error:'Work not found'},{status:404});
     const signal=AbortSignal.timeout(18000);

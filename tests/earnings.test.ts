@@ -53,19 +53,19 @@ it('binds payout destinations to the session and rejects implicit currency conve
 
 it('uses the caller identity for cancellation and reports processing conflicts',async()=>{
   rpc.mockResolvedValue({data:null,error:{code:'P1001'}});
-  expect((await DELETE(request(),{params:{id}})).status).toBe(409);
+  expect((await DELETE(request(),{params:Promise.resolve({id})})).status).toBe(409);
   expect(rpc).toHaveBeenCalledWith('cancel_payout_request',expect.objectContaining({p_user_id:user,p_payout_id:id}));
 });
 
 it('requires admin authorization for manual approval and a matching settlement receipt',async()=>{
   vi.mocked(isAdmin).mockResolvedValue(false);
-  expect((await process(new Request('https://app.test',{method:'POST'}),{params:{id}})).status).toBe(403);expect(rpc).not.toHaveBeenCalled();
+  expect((await process(new Request('https://app.test',{method:'POST'}),{params:Promise.resolve({id})})).status).toBe(403);expect(rpc).not.toHaveBeenCalled();
   vi.mocked(isAdmin).mockResolvedValue(true);
   rpc.mockResolvedValue({data:{claimed:true,status:'processing',method:'manual'},error:null});
-  const approval=await process(new Request('https://app.test',{method:'POST'}),{params:{id}});
+  const approval=await process(new Request('https://app.test',{method:'POST'}),{params:Promise.resolve({id})});
   expect(approval.status).toBe(202);expect(await approval.json()).toMatchObject({processed:false,pending:true});
   rpc.mockResolvedValue({data:null,error:{code:'P1002'}});
-  expect((await process(new Request('https://app.test',{method:'POST',body:JSON.stringify({settlementReference:'bank-receipt',amount:'25.00',currency:'USD'})}),{params:{id}})).status).toBe(409);
+  expect((await process(new Request('https://app.test',{method:'POST',body:JSON.stringify({settlementReference:'bank-receipt',amount:'25.00',currency:'USD'})}),{params:Promise.resolve({id})})).status).toBe(409);
   expect(rpc).toHaveBeenCalledWith('settle_payout_request',expect.objectContaining({p_actor_id:user,p_payout_id:id,p_amount:'25.00',p_currency:'USD',p_reference:'bank-receipt'}));
 });
 

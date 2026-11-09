@@ -1,3 +1,4 @@
+export type {Database} from './database.generated';
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 export interface UserRow {
@@ -239,88 +240,9 @@ export interface SecurityEventRow {
   created_at: string;
 }
 
-type NoRelationships = { Relationships: [] };
 
-export interface Database {
-  __InternalSupabase: {
-    PostgrestVersion: '12';
-  };
-  public: {
-    Tables: {
-      users: {
-        Row: UserRow;
-        Insert: Partial<UserRow> & { id: string; username: string; display_name: string; referral_code: string };
-        Update: Partial<UserRow>;
-      } & NoRelationships;
-      book_works: {Row:BookWorkRow;Insert:Partial<BookWorkRow>&{title:string;author_name:string};Update:Partial<BookWorkRow>} & NoRelationships;
-      book_edition_identifiers: {Row:{provider:string;identifier:string;book_id:string};Insert:{provider:string;identifier:string;book_id:string};Update:never} & NoRelationships;
-      books: {
-        Row: BookRow;
-        Insert: Partial<BookRow> & { title: string; author_name: string };
-        Update: Partial<BookRow>;
-      } & NoRelationships;
-      shelves: {
-        Row: ShelfRow;
-        Insert: Partial<ShelfRow> & { user_id: string; name: string; slug: string };
-        Update: Partial<ShelfRow>;
-      } & NoRelationships;
-      shelf_books: {
-        Row: ShelfBookRow;
-        Insert: Partial<ShelfBookRow> & { shelf_id: string; book_id: string; user_id: string };
-        Update: Partial<ShelfBookRow>;
-      } & { Relationships: [{ foreignKeyName: 'shelf_books_book_id_fkey'; columns: ['book_id']; isOneToOne: false; referencedRelation: 'books'; referencedColumns: ['id'] }, { foreignKeyName: 'shelf_books_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'users'; referencedColumns: ['id'] }, { foreignKeyName: 'shelf_books_shelf_id_fkey'; columns: ['shelf_id']; isOneToOne: false; referencedRelation: 'shelves'; referencedColumns: ['id'] }] };
-      reviews: {
-        Row: ReviewRow;
-        Insert: Partial<ReviewRow> & { user_id: string; book_id: string; rating: number };
-        Update: Partial<ReviewRow>;
-      } & { Relationships: [{ foreignKeyName: 'reviews_book_id_fkey'; columns: ['book_id']; isOneToOne: false; referencedRelation: 'books'; referencedColumns: ['id'] }, { foreignKeyName: 'reviews_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'users'; referencedColumns: ['id'] }] };
-      quotes: {
-        Row: QuoteRow;
-        Insert: Partial<QuoteRow> & { user_id: string; book_id: string; content: string };
-        Update: Partial<QuoteRow>;
-      } & { Relationships: [{ foreignKeyName: 'quotes_book_id_fkey'; columns: ['book_id']; isOneToOne: false; referencedRelation: 'books'; referencedColumns: ['id'] }, { foreignKeyName: 'quotes_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'users'; referencedColumns: ['id'] }] };
-      follows: {
-        Row: FollowRow;
-        Insert: { follower_id: string; following_id: string };
-        Update: never;
-      } & NoRelationships;
-      notifications: {
-        Row: NotificationRow;
-        Insert: Partial<NotificationRow> & { user_id: string; type: string; message: string };
-        Update: Partial<NotificationRow>;
-      } & NoRelationships;
-      feature_flags: {
-        Row: FeatureFlagRow;
-        Insert: Partial<FeatureFlagRow> & { name: string };
-        Update: Partial<FeatureFlagRow>;
-      } & NoRelationships;
-      affiliate_stores: {
-        Row: AffiliateStoreRow;
-        Insert: Partial<AffiliateStoreRow> & { name: string; url_template: string };
-        Update: Partial<AffiliateStoreRow>;
-      } & NoRelationships;
-      affiliate_link_clicks: {
-        Row: AffiliateLinkClickRow;
-        Insert: Partial<AffiliateLinkClickRow> & { book_id: string; link_type: string };
-        Update: never;
-      } & NoRelationships;
-      content_reports: {
-        Row: ContentReportRow;
-        Insert: Partial<ContentReportRow> & { reporter_id: string; entity_type: 'review' | 'quote' | 'comment' | 'user'; entity_id: string; reason: string };
-        Update: Partial<ContentReportRow>;
-      } & NoRelationships;
-      security_events: {
-        Row: SecurityEventRow;
-        Insert: Partial<SecurityEventRow> & { event_type: string };
-        Update: never;
-      } & NoRelationships;
-    };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
-}
+
+
 
 export interface ReviewStatistics {ratings_count:number;average_rating:number|null;distribution:Record<1|2|3|4|5,number>;}
 export interface BookReviewPage {

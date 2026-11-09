@@ -30,12 +30,13 @@ interface WritingPrompt {
   is_active: boolean;
 }
 
-export default async function WritingChallengesAdminPage({searchParams={}}:{searchParams?:{cursor?:string}}) {
+export default async function WritingChallengesAdminPage(props:{searchParams?: Promise<{cursor?:string}>}) {
+  const searchParams = (await props.searchParams)??{};
   const formatter = await getFormatter();
   const t = await getTranslations('admin');
   const user = await getCurrentUser();
   if (!user) redirect('/login');
-  if (!await isAdmin(user.id)) redirect('/');
+  if (!(await isAdmin(user.id))) redirect('/');
   const supabase = createServiceClient();
 
   const [catalog,{data:prompts,error:promptError}]=await Promise.all([readAdminCatalog<WritingChallenge>(user.id,'writing',{cursor:searchParams.cursor}),supabase.from('writing_prompts').select('id,prompt_text,prompt_date,is_active').order('prompt_date',{ascending:false}).limit(30)]);

@@ -23,6 +23,8 @@ Transactional SQL regression checks (isolated PGlite fixtures):
 npm test -- tests/financial-transactions.test.ts
 ```
 
+Generated database contracts are checked with `node scripts/generate-db-contracts.mjs --check` against `MIGRATION_TEST_DATABASE_URL`. Set `EXPORT_TEST_DATABASE_URL` to an initialized, isolated PostgreSQL database for the snapshot-export and Drizzle contract suites.
+
 ### API Endpoint Tests
 Requires a configured, healthy running server. The suite is explicitly skipped without `LIRAVO_BASE_URL`; a configured unreachable or degraded server fails.
 

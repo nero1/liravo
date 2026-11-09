@@ -24,7 +24,7 @@ export async function POST(request:Request){
       if(current&&(!parsed.data.currentPin||!await bcrypt.compare(parsed.data.currentPin,current)))throw new PinError('PIN_INVALID',403);
       next=await bcrypt.hash(parsed.data.pin,12);
     }
-    const {error}=await createServiceClient().rpc('set_account_pin' as never,{p_user_id:user.id,p_expected_hash:current,p_new_hash:next} as never);
+    const {error}=await createServiceClient().rpc('set_account_pin',{p_user_id:user.id,p_expected_hash:current,p_new_hash:next});
     if(error)throw new PinError(error.code==='P1001'?'PIN_CHANGED':error.code==='P1003'?'ACCOUNT_UNAVAILABLE':'PIN_UNAVAILABLE',({P1001:409,P1003:403,P1004:422} as Record<string,number>)[error.code]??503);
     return NextResponse.json({success:true,configured:true});
   }catch(error){return failure(error);}

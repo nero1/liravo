@@ -68,7 +68,7 @@
 
 ### Option B — CLI
 
-Use Node 24 and the committed mobile lockfile (Expo SDK 52 / React 18.3.1). CI checks mobile ESLint, types and the Android bundle separately from the web app. Native project generation can be checked with `npx expo prebuild --platform android --no-install`; signed builds and Play Billing still require EAS credentials and a real device. Default Expo artwork is used until project icons/splash assets are configured.
+Use Node 24 and the committed mobile lockfile (Expo SDK 58 / React 19.3.0). CI checks mobile ESLint, types and the Android bundle separately from the web app. Google Play purchases use `expo-iap` in development or production builds. Native project generation can be checked with `npx expo prebuild --platform android --no-install`; signed builds and Play Billing still require EAS credentials and a real device. Default Expo artwork is used until project icons/splash assets are configured.
 
 ```bash
 npm install -g eas-cli

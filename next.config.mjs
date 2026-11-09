@@ -32,7 +32,7 @@ const remotePatterns = [
 const nextConfig = {
   webpack(config, { isServer }) {
     if (isServer) config.resolve.alias['@huggingface/transformers'] = false;
-    // ONNX emits pre-minified ES module workers; Next 14's script minifier cannot parse import.meta.
+    // ONNX emits pre-minified ES module workers; the script minifier cannot parse import.meta.
     config.plugins.push({
       apply(compiler) {
         compiler.hooks.compilation.tap('OnnxModuleWorkers', compilation => {
@@ -58,9 +58,11 @@ const nextConfig = {
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
+  transpilePackages:['@huggingface/transformers'],
+  serverExternalPackages:['postgres'],
   experimental: {
     serverActions: { allowedOrigins: ['liravo.org', 'localhost:3000'] },
-    optimizePackageImports: isDirectPostgres ? ['postgres'] : ['@supabase/supabase-js'],
+    optimizePackageImports: isDirectPostgres ? [] : ['@supabase/supabase-js'],
   },
 };
 

@@ -35,7 +35,7 @@ export async function PUT(request:NextRequest){
     if(state.data.pin_hash){if(!await bcrypt.compare(pin,state.data.pin_hash))return NextResponse.json({error:'Incorrect current PIN'},{status:403});pinHash=state.data.pin_hash;}
     else{if(state.data.onboarding_complete)return NextResponse.json({error:'Use PIN settings after onboarding'},{status:422});pinHash=await bcrypt.hash(pin,12);}
   }
-  const {data,error}=await createServiceClient().rpc('update_profile_atomic' as never,{p_user_id:user.id,p_changes:changes,p_pin_hash:pinHash} as never);
+  const {data,error}=await createServiceClient().rpc('update_profile_atomic',{p_user_id:user.id,p_changes:changes,p_pin_hash:pinHash});
   if(error)return NextResponse.json({code:error.code==='23505'?'USERNAME_TAKEN':error.code==='P1001'?(pin!==undefined?'PIN_CHANGED':'PROFILE_CHANGED'):'PROFILE_UNAVAILABLE',error:error.code==='23505'?'Username is already taken':error.code==='P1004'?'Check your profile and choose at least five genres':'Profile update unavailable'},{status:({23505:409,P1001:409,P1003:403,P1004:422} as Record<string,number>)[error.code]??503});
   const safe=clientUser(data);if(!safe||safe.id!==user.id)return NextResponse.json({error:'Profile result unavailable'},{status:503});
   return NextResponse.json({ok:true,user:safe},{headers:{'Cache-Control':'private, no-store'}});
@@ -48,7 +48,7 @@ export async function PATCH(request:NextRequest){
   const parsed=NotificationSchema.safeParse(await request.json().catch(()=>null));
   if(!parsed.success)return NextResponse.json({error:'Invalid notification preferences'},{status:422});
   if(!await checkRouteRateLimit(user.id,'social'))return NextResponse.json({error:'Too many requests'},{status:429});
-  const {data,error}=await createServiceClient().from('users').update(parsed.data).eq('id',user.id).is('deleted_at',null).eq('is_banned',false).select(OWN_USER_COLUMNS).maybeSingle();
+  const {data,error}=await createServiceClient().from('users').update(Object.fromEntries(NOTIFICATION_KEYS.flatMap(key=>parsed.data[key]===undefined?[]:[[key,parsed.data[key]]])) as Partial<Pick<import('@/types/database.generated').Database['public']['Tables']['users']['Update'],typeof NOTIFICATION_KEYS[number]>>).eq('id',user.id).is('deleted_at',null).eq('is_banned',false).select(OWN_USER_COLUMNS).maybeSingle();
   const safe=clientUser(data);
   if(error||!safe||safe.id!==user.id)return NextResponse.json({error:'Notification preferences unavailable'},{status:503});
   return NextResponse.json({ok:true,user:safe},{headers:{'Cache-Control':'private, no-store'}});

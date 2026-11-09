@@ -16,7 +16,7 @@ interface ReadingProgressBarProps {
 
 export function ReadingProgressBar(props:ReadingProgressBarProps){return <EntryReadingProgressBar key={props.shelfBookId} {...props}/>;}
 function EntryReadingProgressBar({shelfBookId,bookId,userId,sourceBookId=bookId,pageCount,progressPages,progressPercent}:ReadingProgressBarProps){
-  const t=useTranslations('readingProgress'),common=useTranslations('common'),formatter=useFormatter(),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>>(),[error,setError]=useState(false);
+  const t=useTranslations('readingProgress'),common=useTranslations('common'),formatter=useFormatter(),busy=useRef(false),timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined),[error,setError]=useState(false);
   useEffect(()=>()=>clearTimeout(timer.current),[]);
   const [isEditing, setIsEditing] = useState(false);
   const [inputPages, setInputPages] = useState(progressPages?.toString() ?? '');

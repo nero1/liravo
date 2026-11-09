@@ -1,10 +1,9 @@
 import {useQuery} from '@tanstack/react-query';
 import {api} from '@/lib/api';
 import type {UserRow} from '@/types';
-import {ActivityIndicator} from 'react-native';
+import {ActivityIndicator, View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import {Button} from '@/components/ui/Button';
 import {useTranslations} from '@/hooks/useTranslations';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Settings, BookOpen, Zap, Flame } from 'lucide-react-native';

@@ -1,10 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { middleware } from '@/middleware';
+import {proxy as middleware} from '@/proxy';
 import { CSRF_COOKIE, CSRF_HEADER } from '@/lib/csrf';
 
 const session=vi.hoisted(()=>({refresh:vi.fn()}));
-type CookieAdapter={set:(name:string,value:string,options:Record<string,unknown>)=>void;remove:(name:string,options:Record<string,unknown>)=>void};
+type CookieAdapter={setAll:(values:Array<{name:string;value:string;options:Record<string,unknown>}>)=>void};
 vi.mock('@supabase/ssr',()=>({createServerClient:(_url:string,_key:string,options:{cookies:CookieAdapter})=>({auth:{getUser:async()=>{session.refresh(options.cookies);return {data:{user:null}};}}})}));
 
 afterEach(()=>vi.unstubAllEnvs());
@@ -29,7 +29,7 @@ it('propagates one validated request ID to the handler and browser response',asy
 
 it('retains every refreshed and deleted cookie on normal and redirect responses',async()=>{
  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','https://fixture.supabase.co');vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY','fixture');
- session.refresh.mockImplementation((cookies:CookieAdapter)=>{cookies.set('sb-token.0','first',{path:'/'});cookies.set('sb-token.1','second',{path:'/'});cookies.remove('sb-token.2',{path:'/',maxAge:0});});
+ session.refresh.mockImplementation((cookies:CookieAdapter)=>{cookies.setAll([{name:'sb-token.0',value:'first',options:{path:'/'}}]);cookies.setAll([{name:'sb-token.1',value:'second',options:{path:'/'}},{name:'sb-token.2',value:'',options:{path:'/',maxAge:0}}]);});
  for(const path of['/book/fixture','/shelf']){const result=await middleware(new NextRequest('https://app.test'+path));expect(result.cookies.get('sb-token.0')?.value).toBe('first');expect(result.cookies.get('sb-token.1')?.value).toBe('second');expect(result.cookies.get('sb-token.2')?.maxAge).toBe(0);}
  session.refresh.mockReset();
 });

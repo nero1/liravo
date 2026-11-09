@@ -28,7 +28,7 @@ export async function POST(request:Request){
     const redis=getRedisClient(),keys=['auth:fail:'+ip,'auth:fail:email:'+identity];
     const counts=await Promise.all(keys.map(async key=>{const value=await redis.get(key);if(value!==null&&!/^\d+$/.test(value))throw new Error('Invalid authentication counter');return Number(value??0);}));
     if(process.env.HCAPTCHA_SECRET_KEY&&Math.max(...counts)>=CAPTCHA_THRESHOLD)await verifyAuthChallenge(hcaptchaToken,request);
-    const {data,error}=await createServiceClient().rpc('find_direct_account' as never,{p_email:email} as never);if(error)throw new Error('Authentication lookup unavailable');
+    const {data,error}=await createServiceClient().rpc('find_direct_account',{p_email:email});if(error)throw new Error('Authentication lookup unavailable');
     const user=data as unknown as {id:string;email:string;password_hash:string|null;deleted_at:string|null}|null;
     const valid=await bcrypt.compare(password,user?.password_hash??dummyHash);
     if(!user||user.deleted_at||!user.password_hash||!valid){

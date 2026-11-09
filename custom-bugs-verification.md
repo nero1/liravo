@@ -1,7 +1,7 @@
 # Bug Fix Verification Audit
 Updated: 5 November 2026
 
-Scope: independent code review and execution against the 21 findings in `custom-bugs-report.md`; the previous 15/15, 100% claim is invalid.
+Scope: verification of the original 21 findings. The current 35-finding follow-up is tracked in [custom-bugs-report.md](custom-bugs-report.md).
 
 ## Status Summary
 - ✅ Resolved or verified false positive: 20/21

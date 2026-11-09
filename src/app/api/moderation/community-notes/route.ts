@@ -24,18 +24,17 @@ export async function GET(request: Request) {
   const contentType = searchParams.get('contentType');
   const contentId = searchParams.get('contentId');
 
-  if (!contentType || !contentId) {
+  if (!contentType || !['review','quote','profile','debate','post','comment'].includes(contentType) || !z.uuid().safeParse(contentId).success) {
     return NextResponse.json({ error: 'contentType and contentId are required' }, { status: 400 });
   }
 
   const supabase = createServiceClient();
 
-  // community_notes table may not be in DB type
   const { data: notes, error } = await supabase
     .from('community_notes')
     .select('id, note:note_text, created_at, author_id')
-    .eq('content_type', contentType)
-    .eq('content_id', contentId)
+    .eq('content_type', contentType as 'review'|'quote'|'profile'|'debate'|'post'|'comment')
+    .eq('content_id', contentId!)
     .eq('status', 'approved')
     .order('created_at', { ascending: false });
 
@@ -47,7 +46,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -85,7 +84,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // community_notes table may not be in DB type
   let data;
   try {
     const intent=await contentIntent(request,user.id,'community_notes',{

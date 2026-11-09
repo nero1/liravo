@@ -5,7 +5,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 
 export const dynamic='force-dynamic';
 import { PUBLIC_USER_COLUMNS } from '@/lib/user-profile';
-export async function GET(_request:Request,{params}:{params:{id:string}}){
+export async function GET(_request:Request, props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
   const actor=await getCurrentUser();if(!actor)return NextResponse.json({error:'Unauthorized'},{status:401});
   if(!/^[\w-]{1,50}$/.test(params.id))return NextResponse.json({error:'Invalid username'},{status:400});
   const db=createServiceClient();

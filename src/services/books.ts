@@ -140,7 +140,7 @@ export async function searchBooks(query:string,maxResults=10){
 export class CatalogIdentityError extends Error {}
 export async function storeCatalogBook(value:unknown):Promise<BookRow>{
   const payload=catalogBookData(value);
-  const {data,error}=await createServiceClient().rpc('store_catalog_book' as never,{p_data:payload} as never);
+  const {data,error}=await createServiceClient().rpc('store_catalog_book',{p_data:payload});
   if(error&&['P1001','P1004','23505'].includes(error.code))throw new CatalogIdentityError('Conflicting edition identity');
   if(error||!data)throw new Error('Book catalog unavailable');
   return clientBook(data as BookRow);
@@ -160,11 +160,11 @@ export async function getOrCreateBook(googleBooksId:string):Promise<BookRow|null
 }
 
 export async function getBookById(id:string):Promise<BookRow|null>{
-  const {data,error}=await createServiceClient().rpc('catalog_book_snapshot' as never,{p_book_id:id} as never);
+  const {data,error}=await createServiceClient().rpc('catalog_book_snapshot',{p_book_id:id});
   if(error)throw new Error('Book catalog unavailable');return data?clientBook(data as BookRow):null;
 }
 export async function getEditionIds(id:string):Promise<string[]>{
-  const {data,error}=await createServiceClient().rpc('book_edition_family' as never,{p_book_id:id} as never);
+  const {data,error}=await createServiceClient().rpc('book_edition_family',{p_book_id:id});
   if(error||!Array.isArray(data))throw new Error('Edition identities unavailable');return data as string[];
 }
 
@@ -178,7 +178,7 @@ export async function resolveEditionMetadata<T extends {id:string;canonical_edit
 }
 
 export async function getWorkCatalog(workId:string,cursor:string|null=null):Promise<WorkCatalog|null>{
-  const {data,error}=await createServiceClient().rpc('book_work_snapshot' as never,{p_work_id:workId,p_cursor:cursor,p_limit:50} as never);
+  const {data,error}=await createServiceClient().rpc('book_work_snapshot',{p_work_id:workId,p_cursor:cursor,p_limit:50});
   if(error)throw new Error('Work catalog unavailable');
   if(!data)return null;
   const catalog=data as WorkCatalog;return {...catalog,editions:catalog.editions.map(clientBook),statistics:{...catalog.statistics,average_rating:bookRating(catalog.statistics.average_rating)}};

@@ -28,11 +28,12 @@ import { APP_URL } from '@/constants/config';
 export const dynamic = 'force-dynamic';
 
 interface BookPageProps {
-  params: { id: string };
-  searchParams?:{reviewCursor?:string};
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{reviewCursor?:string}>;
 }
 
-export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
+export async function generateMetadata(props: BookPageProps): Promise<Metadata> {
+  const params = await props.params;
   const [book,t,shareLocale]=await Promise.all([getBookById(params.id),getTranslations('book'),getLocale()]);
   if(!book)return {title:t('notFound')};
 
@@ -75,9 +76,11 @@ function RatingBar({ star, count, total,label }: { star: number; count: number; 
   );
 }
 
-export default async function BookPage({ params,searchParams }: BookPageProps) {
+export default async function BookPage(props: BookPageProps) {
+  const searchParams = (await props.searchParams)??{};
+  const params = await props.params;
   const [t,books,common,reviewText,moods,communityText,format,debateText,authText]=await Promise.all([getTranslations('book'),getTranslations('books'),getTranslations('common'),getTranslations('reviewForm'),getTranslations('moods'),getTranslations('communityNotes'),getFormatter(),getTranslations('bookDebates'),getTranslations('auth')]);
-  const supabase = createClient();
+  const supabase = (await createClient());
   const serviceSupabase = createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -165,7 +168,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
 
   const authorProfiles=await getBookAuthors(book.id);
 
-  const {data:similar,error:similarError}=await serviceSupabase.rpc('similar_book_snapshot' as never,{p_book:book.id} as never);
+  const {data:similar,error:similarError}=await serviceSupabase.rpc('similar_book_snapshot',{p_book:book.id});
   if(similarError||!Array.isArray(similar))throw new Error('Similar books unavailable');
   const similarBooks=similar as Array<{id:string;title:string;author_name:string;cover_url:string|null}>;
 
@@ -184,7 +187,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-      <script nonce={headers().get('x-nonce')??undefined} type="application/ld+json"  dangerouslySetInnerHTML={{ __html: jsonForHtml({
+      <script nonce={(await headers()).get('x-nonce')??undefined} type="application/ld+json"  dangerouslySetInnerHTML={{ __html: jsonForHtml({
         '@context': 'https://schema.org', '@type': 'Book', name: book.title,
         author: { '@type': 'Person', name: book.author_name }, isbn: book.isbn_13 ?? undefined,
         ...(totalRatings&&reviewPage.statistics.average_rating!==null?{aggregateRating:{'@type':'AggregateRating',ratingValue:reviewPage.statistics.average_rating,ratingCount:totalRatings,bestRating:5,worstRating:1}}:{}),

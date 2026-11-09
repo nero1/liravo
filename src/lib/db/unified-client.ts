@@ -25,17 +25,17 @@ interface DoUser {
   mfaVersion?:number;
 }
 
-function buildAuthModule(readCookie: () => string | undefined) {
+function buildAuthModule(readCookie: () => string | undefined | Promise<string | undefined>) {
   return {
     async getUser(): Promise<{ data: { user: DoUser | null }; error: null }> {
-      const token = readCookie();
+      const token = await readCookie();
       if (!token) return { data: { user: null }, error: null };
 
       return {data:{user:await readDirectSession(token)},error:null};
     },
 
     async signOut(): Promise<void> {
-      const token = readCookie();
+      const token = await readCookie();
       if (!token) return;
       await destroySession(token);
       // Cookie clearing must be done in the route handler that has access to the response.
@@ -86,10 +86,11 @@ function buildRpcModule() {
 // Used in API routes and server components — reads session from cookie store
 export function createDoClient() {
   let _token: string | undefined;
-  const readCookie = () => {
+  const readCookie = async () => {
     if (_token !== undefined) return _token;
     try {
-      const cookieStore = cookies();
+      const cookieStore = (
+      (await cookies()));
       _token = cookieStore.get(SESSION_COOKIE)?.value;
     } catch {
       _token = undefined;

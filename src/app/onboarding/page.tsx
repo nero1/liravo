@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function generateMetadata():Promise<Metadata>{return {title:(await getTranslations('onboarding'))('title'),robots:{index:false}};}
 
 export default async function OnboardingPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect('/login');

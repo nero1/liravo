@@ -18,7 +18,7 @@ async function settleTransfer(notice:PaymentNotice,correlationId:string) {
   const {data:payout,error}=await client.from('payout_requests').select('id,provider_recipient_code').eq('method','paystack').eq('transfer_reference',transfer.reference).maybeSingle();
   if(error||!payout)throw new Error('Payout binding unavailable');
   if(payout.provider_recipient_code!==transfer.recipient.recipient_code)throw Object.assign(new Error('Transfer recipient mismatch'),{code:'P1003'});
-  const {error:settleError}=await client.rpc('settle_payout_request' as never,{p_actor_id:null,p_payout_id:payout.id,p_status:state==='success'?'completed':state,p_reference:transfer.reference,p_amount:new Decimal(transfer.amount).div(100).toFixed(2),p_currency:transfer.currency,p_provider_code:transfer.transfer_code,p_correlation_id:correlationId} as never);
+  const {error:settleError}=await client.rpc('settle_payout_request',{p_actor_id:null,p_payout_id:payout.id,p_status:state==='success'?'completed':state,p_reference:transfer.reference,p_amount:new Decimal(transfer.amount).div(100).toFixed(2),p_currency:transfer.currency,p_provider_code:transfer.transfer_code,p_correlation_id:correlationId});
   if(settleError)throw Object.assign(new Error('Payout settlement failed'),{code:settleError.code});
   return NextResponse.json({received:true,correlationId});
 }
@@ -39,7 +39,7 @@ export async function paymentWebhook(request:Request) {
     }
     const refund=normalizeRefund(notice);
     if(refund){
-      const {data,error}=await createServiceClient().rpc('process_refund_event' as never,{p_provider:notice.provider,p_refund_id:refund.refundId,p_payment_id:refund.paymentId,p_amount_minor:refund.amountMinor,p_currency:refund.currency,p_correlation_id:correlationId} as never);
+      const {data,error}=await createServiceClient().rpc('process_refund_event',{p_provider:notice.provider,p_refund_id:refund.refundId,p_payment_id:refund.paymentId,p_amount_minor:refund.amountMinor,p_currency:refund.currency,p_correlation_id:correlationId});
       if(error)throw Object.assign(new Error('Refund reconciliation unavailable'),{code:error.code});
       if(data==null){await observeOperationalSignal('paymentFailures',correlationId);return NextResponse.json({error:'Captured payment pending reconciliation',code:'REFUND_CAPTURE_PENDING',correlationId},{status:503});}
       if(data===false)await observeOperationalSignal('webhookReplays',correlationId);
@@ -71,7 +71,7 @@ export async function paymentWebhook(request:Request) {
       event=normalizeSubscription(notice);
     }
     if(!event)return NextResponse.json({received:true,ignored:true,correlationId});
-    const {data,error}=await createServiceClient().rpc('process_payment_event' as never,{p_provider:notice.provider,p_event_id:event.eventId,p_payload:event.payload,p_correlation_id:correlationId} as never);
+    const {data,error}=await createServiceClient().rpc('process_payment_event',{p_provider:notice.provider,p_event_id:event.eventId,p_payload:event.payload,p_correlation_id:correlationId});
     if(error)throw Object.assign(new Error('Payment processing failed'),{code:error.code});
     if(data===false){await observeOperationalSignal('webhookReplays',correlationId);recordMetric('payment_webhook_replay',{correlationId,provider:notice.provider,eventId:event.eventId});}
     return NextResponse.json({received:true,correlationId});

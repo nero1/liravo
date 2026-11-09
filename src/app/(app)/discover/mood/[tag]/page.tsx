@@ -6,12 +6,15 @@ import Image from 'next/image';
 import type {Metadata} from 'next';
 import {notFound} from 'next/navigation';
 export const dynamic='force-dynamic';
-interface Props {params:{tag:string};searchParams:{cursor?:string};}
-export async function generateMetadata({params}:Props):Promise<Metadata>{
+interface Props {params: Promise<{tag:string}>;searchParams: Promise<{cursor?:string}>;}
+export async function generateMetadata(props:Props):Promise<Metadata> {
+  const params = await props.params;
   const mood=canonicalMood(params.tag),t=await getTranslations('discover'),moods=await getTranslations('moods');
   return {title:mood?t('moodBooks',{mood:moods(mood)}):t('moodTitle'),alternates:languageAlternates('/discover/mood/'+encodeURIComponent(params.tag))};
 }
-export default async function MoodPage({params,searchParams}:Props){
+export default async function MoodPage(props:Props) {
+  const searchParams = (await props.searchParams)??{};
+  const params = await props.params;
   const mood=canonicalMood(params.tag);if(!mood)notFound();
   const [t,moods,common]=await Promise.all([getTranslations('discover'),getTranslations('moods'),getTranslations('common')]);
   let page;

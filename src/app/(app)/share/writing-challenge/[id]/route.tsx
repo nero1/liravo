@@ -5,10 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
   const {data,t}=await getShareCard(request,'writing-challenge',params.id,new URL(request.url).searchParams.get('userId'));
   const challengeName=data.title,submissionCount=data.submissionCount??0,userName=data.reader?.display_name;

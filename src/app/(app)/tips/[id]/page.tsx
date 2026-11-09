@@ -10,7 +10,11 @@ import { PaymentRecoverySummary } from '@/components/creator/PaymentRecoverySumm
 export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false } };
 
-export default async function TipStatusPage({ params,searchParams }: { params: { id: string };searchParams:{verification?:string} }) {
+export default async function TipStatusPage(
+  props: { params: Promise<{ id: string }>;searchParams: Promise<{verification?:string}> }
+) {
+  const searchParams = (await props.searchParams)??{};
+  const params = await props.params;
   const user = await getCurrentUser();
   if (!user) redirect('/login');
   if (!z.string().uuid().safeParse(params.id).success) notFound();

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {getTranslations} from 'next-intl/server';
 import {languageAlternates} from '@/lib/metadata';
+import {z}from'zod';
 import type { BookRow } from '@/types/database';
 import {AffiliateLinkButtons} from '@/components/books/AffiliateLinkButtons';
 import type {AffiliateLink} from '@/services/books';
@@ -92,7 +93,7 @@ interface BookWithLinks {
 }
 
 export default async function ResourceLibraryPage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const t=await getTranslations('writingResources'),writing=await getTranslations('writing');
   const {
     data: { user },
@@ -110,7 +111,7 @@ export default async function ResourceLibraryPage() {
   if(booksError)throw new Error('Resource books unavailable');
 
   const dbBookByIsbn = new Map<string, BookRow>(
-    (dbBooks ?? []).map((b) => [b.isbn_13 ?? '', b])
+    (dbBooks ?? []).map((b) => [b.isbn_13 ?? '', {...b,average_rating:b.average_rating===null?null:Number(b.average_rating),metadata_provenance:z.record(z.string(),z.string()).parse(b.metadata_provenance)}])
   );
 
   // Build book data with affiliate links

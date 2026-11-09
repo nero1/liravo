@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function generateMetadata():Promise<Metadata>{return {title:(await getTranslations('creator'))('dashboard'),robots:{index:false}};}
 
 export default async function CreatorDashboardPage() {
-  const t=await getTranslations('creator'),formatter=await getFormatter(),supabase = createClient();
+  const t=await getTranslations('creator'),formatter=await getFormatter(),supabase = (await createClient());
   const user=await getCurrentUser();if(!user)redirect('/login');
 
   const { data: profile,error:profileError } = await supabase

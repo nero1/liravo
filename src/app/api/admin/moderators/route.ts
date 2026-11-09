@@ -8,7 +8,7 @@ import { getCurrentUser } from '@/lib/auth/getCurrentUser';
 export const dynamic = 'force-dynamic';
 
 async function requireAdmin() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const user = await getCurrentUser();
   if (!user) return null;
   const { data } = await supabase.from('users').select('is_admin').eq('id', user.id).single();

@@ -1,12 +1,12 @@
 # Custom Bugs Report
 
-Date/time: 09 November 2026, 02:47 AM WAT (Africa/Lagos)
+Date/time: 09 November 2026, 09:15 AM WAT (Africa/Lagos)
 
 Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed and verified; 🟡 partial; 🔵 pending. Original findings remain below; STATUS records describe the verified changes.
 
 ## One-line findings
 
-1: 🔵 BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
+1: ✅ BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
 2: ✅ BUG-20261105-002: [High] Supabase browser reads bypass profile and shelf privacy
 3: ✅ BUG-20261105-003: [High] Author readers expose profile fields without follower authorization
 4: ✅ BUG-20261105-004: [High] Web-push endpoints permit server requests to private network targets
@@ -28,14 +28,14 @@ Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed an
 20: ✅ BUG-20261105-020: [Medium] Failed mutation intent caches grow without bounds or account cleanup
 21: ✅ BUG-20261105-021: [Medium] Native notification taps never navigate to their destination
 22: ✅ GAP-20261105-022: [Medium] AI writing feedback ignores the selected language
-23: 🔵 GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
-24: 🔵 GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
+23: ✅ GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
+24: ✅ GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
 25: ✅ BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
 26: ✅ BUG-20261105-026: [Low] Robots and root social metadata hard-code the production domain
 27: ✅ GAP-20261105-027: [Medium] Author posts and reading-session history have no continuation cursor
 28: ✅ GAP-20261105-028: [Medium] Nonfinancial operational data grows without an archival policy
 29: ✅ GAP-20261105-029: [Medium] Direct PostgreSQL has no application query deadline or queue budget
-30: 🔵 GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
+30: ✅ GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
 31: ✅ BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
 32: ✅ BUG-20261105-032: [Medium] The health endpoint reports HTTP success when all dependencies fail
 33: ✅ GAP-20261105-033: [Low] Production CSP still permits arbitrary inline scripts and eval
@@ -44,13 +44,15 @@ Audited source: `4fb2410b8f311422dc2b542b32d60fcb15cb1d84`. Status: ✅ fixed an
 
 ## Detailed findings
 
-### 1: 🔵 BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
+### 1: ✅ BUG-20261105-001: [High] Installed dependencies have critical and high security advisories
 
 FILES: `package.json`, `package-lock.json`, `mobile/package.json`, `mobile/package-lock.json`
 
 PROBLEM: Fresh production dependency audits report 20 affected web packages (1 critical, 13 high) and 34 native packages (1 critical, 8 high). Next.js 14.2.35, DOMPurify 3.4.2 and Sharp 0.34.5 are installed in active application paths. The native critical result is transitive tar; install tooling and runtime exposure differ. Advisory counts establish dependency debt, not successful exploitation of every advisory or demonstrated RCE. Examples: [Next.js App Router DoS](https://github.com/advisories/GHSA-m99w-x7hq-7vfj), [Sharp/libvips](https://github.com/advisories/GHSA-f88m-g3jw-g9cj).
 
 FIX: Upgrade affected direct dependencies and their dependency trees to supported patched releases. Review advisory applicability individually, including Next.js App Router and image processing, rather than forcing incompatible upgrades. Rebuild web and native bundles and exercise authentication, sanitization, uploads and navigation. Add dependency review to CI with an explicit process for time-limited exceptions.
+
+STATUS: ✅ Upgraded web/native runtimes and patched dependencies; both full dependency audits report zero advisories. Web build, native bundle and prebuild verified; largest function is 43.59 MB.
 
 ### 2: ✅ BUG-20261105-002: [High] Supabase browser reads bypass profile and shelf privacy
 
@@ -262,7 +264,7 @@ FIX: Resolve the supported account/request locale and include it in the model in
 
 STATUS: ✅ Writing feedback uses the saved English/French/German locale in generation and cache identity. Locale, entitlement and dependency-failure regressions pass.
 
-### 23: 🔵 GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
+### 23: ✅ GAP-20261105-023: [Medium] Account export omits several categories of user-authored data
 
 FILES: `supabase/migrations/001_schema.sql:1678`, `src/app/api/users/export/route.ts`
 
@@ -270,13 +272,17 @@ PROBLEM: The account export includes reading history, reviews, quotes, reading s
 
 FIX: Define the complete portable account-data contract and include all owned authored records and relevant financial history with stable identifiers and relationships. Exclude credentials, moderation secrets and other users' private data. Verify a fixture containing each supported content category and make the UI state any deliberate exclusions clearly.
 
-### 24: 🔵 GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
+STATUS: ✅ Exports cover 77 datasets with owned reading, writing, community, security and financial history, exact monetary values and edition identifiers; credentials and provider secrets are excluded. PostgreSQL ownership, privacy and metadata checks pass.
+
+### 24: ✅ GAP-20261105-024: [Medium] Account exports build the entire history in database and application memory
 
 FILES: `supabase/migrations/001_schema.sql:1678`, `src/app/api/users/export/route.ts`, `mobile/lib/account-export.ts`
 
 PROBLEM: The export RPC performs unrestricted JSON aggregation of the account's histories. The API materializes and serializes the full document, even for CSV; native then parses and serializes it again. Large histories can exceed response, memory or request-duration limits despite per-account rate limiting. No resumable export or size-aware delivery path exists.
 
 FIX: Produce exports in bounded, consistent-snapshot chunks or an asynchronous export job with a signed, expiring download. Stream file generation where supported and download directly to native storage. Retain ownership checks and cleanup. Verify large histories above hosting response limits, interrupted downloads and account changes during export.
+
+STATUS: ✅ Consistent versioned snapshots use bounded keyset pages and account-bound signed cursors. Browser and native clients write chunks incrementally; concurrent edits, nested triggers, expiry, permissions and a real 5.3 MB browser download were verified.
 
 ### 25: ✅ BUG-20261105-025: [Medium] Sitemaps include noncanonical/private entries and silently truncate the catalog
 
@@ -328,13 +334,15 @@ FIX: Validate pool settings and enforce request-aware statement/lock deadlines, 
 
 STATUS: ✅ Validated pool limits, bounded queues, statement/lock deadlines and cancellation are implemented. PostgreSQL contention, saturation and recovery checks pass.
 
-### 30: 🔵 GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
+### 30: ✅ GAP-20261105-030: [Medium] Drizzle coverage is zero and database contracts bypass TypeScript checking
 
 FILES: `package.json`, `src/lib/db/query-builder.ts`, `src/lib/db/unified-client.ts`, `src/types/database.ts`
 
 PROBLEM: No Drizzle dependency or import exists. The custom query builder accepts string table/column names, Database.Functions is Record<string,never>, and RPC calls commonly cast arguments to never. The confirmed similar_ids and reading-list field mismatches survive lint/type checks, demonstrating an actual contract gap. Zero Drizzle coverage also misses the explicitly requested coverage goal.
 
 FIX: Generate accurate table and RPC contracts from the canonical schema and remove unchecked casts. Introduce typed Drizzle schema/query coverage for direct database access in measured stages, retaining transactional SQL routines for financial invariants. Track coverage explicitly and exercise contract queries against both direct PostgreSQL and Supabase.
+
+STATUS: ✅ Generated contracts cover 127 public tables and 264 RPCs. Direct CRUD executes through Drizzle with schema-checked projections, relationships, composite upserts and query budgets. Compile-time rejection checks, database workflows and PostgreSQL 15–17 rehearsals pass.
 
 ### 31: ✅ BUG-20261105-031: [Medium] Redis lease loss does not stop the previous worker
 
@@ -413,4 +421,4 @@ Engineering assessment, not a benchmark or security certification:
 
 Proposed batches after plan review: first address findings 1–7 and 11 (dependencies, privacy, SSRF, sessions and sensitive authorization); then 8–10, 12–22 and 31–32 (correctness, delivery and failure handling); then 23–30 and 33–35 (portability, scale, typing, CSP and public navigation). Acceptance requires targeted regression checks, existing tests, lint/types, service-backed schema tests, production bundle limits and device/provider/restore/load checks where applicable. Ratings after remediation are estimates until those validations pass.
 
-Report updated: 09 November 2026, 02:47 AM WAT (Africa/Lagos)
+Report updated: 09 November 2026, 09:15 AM WAT (Africa/Lagos)

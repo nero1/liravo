@@ -46,26 +46,26 @@ it('normalizes signed ticket identities and rejects conflicting target metadata'
   expect(()=>paymentMetadata({...notice,data:{...notice.data,metadata:{ticket_id:id,tip_id:id}}})).toThrow('Conflicting');
 });
 it('persists checkout identity before returning JSON or redirecting a browser form',async()=>{
-  const response=await POST(new Request('https://app.test',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'ticket-route-intent'}}),{params:{id:event}});
+  const response=await POST(new Request('https://app.test',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'ticket-route-intent'}}),{params:Promise.resolve({id:event})});
   expect(response.status).toBe(200);expect(await response.json()).toMatchObject({ticketId:id,status:'pending',redirectUrl:'https://checkout.dodopayments.com/ticket'});
   expect(rpc).toHaveBeenCalledWith('record_ticket_checkout',{p_user_id:actor,p_ticket_id:id,p_checkout_id:'cks_ticket',p_url:'https://checkout.dodopayments.com/ticket'});
   ticket.checkout_url='https://checkout.dodopayments.com/saved';transport.mockClear();
-  const form=await POST(new Request('https://app.test',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'_idempotency=ticket-form-intent'}),{params:{id:event}});
+  const form=await POST(new Request('https://app.test',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'_idempotency=ticket-form-intent'}),{params:Promise.resolve({id:event})});
   expect(form.status).toBe(303);expect(form.headers.get('Location')).toBe(ticket.checkout_url);expect(transport).not.toHaveBeenCalled();
 });
 it('never sends confirmed or expired reservations to a payment provider',async()=>{
   ticket.status='confirmed';
   const request=()=>new Request('https://app.test',{method:'POST',headers:{'Idempotency-Key':'ticket-route-intent'}});
-  expect(await (await POST(request(),{params:{id:event}})).json()).toMatchObject({redirectUrl:'/tickets/'+id});
+  expect(await (await POST(request(),{params:Promise.resolve({id:event})})).json()).toMatchObject({redirectUrl:'/tickets/'+id});
   ticket.status='pending';ticket.reserved_until=new Date(Date.now()-1000).toISOString();
-  expect(await (await POST(request(),{params:{id:event}})).json()).toMatchObject({redirectUrl:'/tickets/'+id});
+  expect(await (await POST(request(),{params:Promise.resolve({id:event})})).json()).toMatchObject({redirectUrl:'/tickets/'+id});
   expect(transport).not.toHaveBeenCalled();
 });
 it('requires authentication and reports checkout persistence failures without false success',async()=>{
   vi.mocked(getCurrentUser).mockResolvedValueOnce(null);
-  expect((await POST(new Request('https://app.test',{method:'POST'}),{params:{id:event}})).status).toBe(401);expect(rpc).not.toHaveBeenCalled();
+  expect((await POST(new Request('https://app.test',{method:'POST'}),{params:Promise.resolve({id:event})})).status).toBe(401);expect(rpc).not.toHaveBeenCalled();
   rpc.mockImplementation(async(name:string)=>({data:name==='reserve_event_ticket'?ticket:null,error:name==='record_ticket_checkout'?{code:'08006'}:null}));
-  expect((await POST(new Request('https://app.test',{method:'POST',headers:{'Idempotency-Key':'ticket-route-intent'}}),{params:{id:event}})).status).toBe(502);
+  expect((await POST(new Request('https://app.test',{method:'POST',headers:{'Idempotency-Key':'ticket-route-intent'}}),{params:Promise.resolve({id:event})})).status).toBe(502);
 });
 const job={provider:'dodopayments',payment_id:'pay_return_fixture',reason:'uncredited_payment',status:'pending',provider_refund_id:null,attempts:1,claim_token:claim,currency:'USD',charged_minor:'1000',refunded_minor:'0'};
 it('commits a refund attempt before requesting it and settles only verified provider evidence',async()=>{

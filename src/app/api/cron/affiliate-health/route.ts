@@ -3,7 +3,7 @@ import {createServiceClient} from '@/lib/supabase/server';
 import {NextResponse} from 'next/server';
 export const dynamic='force-dynamic';
 async function run(){
- const {data,error}=await createServiceClient().rpc('check_affiliate_health' as never);
+ const {data,error}=await createServiceClient().rpc('check_affiliate_health');
  if(error||!data||!['checked','flagged','logged'].every(key=>Number.isSafeInteger((data as Record<string,unknown>)[key])))throw new Error('Affiliate health unavailable');
  return NextResponse.json(data);
 }

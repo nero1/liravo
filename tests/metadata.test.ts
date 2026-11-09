@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { languageAlternates } from '@/lib/metadata';
-import { middleware } from '@/middleware';
+import { proxy as middleware } from '@/proxy';
 import {publicAppPath} from '@/lib/public-routes';
 
 it('allows public content while keeping private and reserved app routes authenticated',()=>{

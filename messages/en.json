@@ -1581,7 +1581,7 @@
   },
   "accountData": {
     "exportTitle": "Export your data",
-    "exportDescription": "Download your profile, reading history, reviews, quotes, writing responses, XP history and sent tips.",
+    "exportDescription": "Download a snapshot of your profile, reading, writing, community activity and financial history.",
     "export": "Export data",
     "exporting": "Preparing export…",
     "exportFailed": "Could not export your data. Please try again.",

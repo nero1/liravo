@@ -13,16 +13,17 @@ import {cleanupAvatarUploads} from '@/lib/profile-avatars';
 
 async function run(req: Request) {
 
-  const {data:retention,error:retentionError}=await createServiceClient().rpc('prune_operational_history' as never);if(retentionError)throw new Error('Operational retention failed');
+  const {data:retention,error:retentionError}=await createServiceClient().rpc('prune_operational_history');if(retentionError)throw new Error('Operational retention failed');
+  const {error:exportCleanupError}=await createServiceClient().rpc('cleanup_account_exports',{p_limit:1000});if(exportCleanupError)throw new Error('Export cleanup failed');
   const batch = Number(req.headers.get('x-outbox-batch') ?? '50');
   const batchSize = Number.isFinite(batch) ? Math.min(200, Math.max(1, batch)) : 50;
 
-  const {error:factorCleanupError}=await createServiceClient().rpc('cleanup_factor_sessions' as never,{p_limit:500} as never);
+  const {error:factorCleanupError}=await createServiceClient().rpc('cleanup_factor_sessions',{p_limit:500});
   if(factorCleanupError)throw new Error('Factor session cleanup failed');
-  const {error:expiryError}=await createServiceClient().rpc('expire_subscription_entitlements' as never,{p_limit:200} as never);
+  const {error:expiryError}=await createServiceClient().rpc('expire_subscription_entitlements',{p_limit:200});
   if (expiryError) throw new Error('Subscription expiry reconciliation failed');
   const [result, cancellations, payouts, refunds, checkouts, returns, avatars] = await Promise.all([drainOutbox(batchSize), drainSubscriptionCancellations(),drainPayoutSettlements(getRequestCorrelationId(req)),drainRefundReconciliation(getRequestCorrelationId(req)),drainCheckoutReconciliation(getRequestCorrelationId(req)),drainPaymentReturns(getRequestCorrelationId(req)),cleanupAvatarUploads()]);
-  const { data, error } = await createServiceClient().rpc('financial_integrity_snapshot' as never);
+  const { data, error } = await createServiceClient().rpc('financial_integrity_snapshot');
   if (error) throw new Error('Financial reconciliation failed');
   const anomalies = data as Record<string, number>;
   recordMetric('financial_integrity_snapshot', { ...anomalies, correlationId: getRequestCorrelationId(req) }, Object.values(anomalies).some(value => value > 0) ? 'error' : 'info');

@@ -1,7 +1,7 @@
 # Custom Bugs Fix Plan
 Date/Time: May 23, 2026 09:39 PM UTC
 
-Updated 5 November 2026. Section status summarizes its bullets; individual verified findings and remaining work are in `custom-bugs-verification.md`.
+Updated 9 November 2026. Section status summarizes its bullets; current verified findings and remaining work are in [custom-bugs-report.md](custom-bugs-report.md).
 
 ✅ 1. Identity and authorization invariants (Critical)
 - ✅ Verify self/admin guards for `/api/users/*` mutations; retain verified cross-user social targets.

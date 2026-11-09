@@ -129,11 +129,11 @@ export default async function AdminPage() {
     .gte('created_at', monthStart.toISOString());
 
   const tipRevenue = (tips ?? []).reduce(
-    (acc: Decimal, t: { platform_fee: string }) => acc.plus(new Decimal(t.platform_fee ?? 0)),
+    (acc: Decimal, t) => acc.plus(new Decimal(t.platform_fee ?? 0)),
     new Decimal(0)
   );
   const subRevenue = (subs ?? []).reduce(
-    (acc: Decimal, s: { amount: string }) => acc.plus(new Decimal(s.amount ?? 0)),
+    (acc: Decimal, s) => acc.plus(new Decimal(s.amount ?? 0)),
     new Decimal(0)
   );
   const revenueThisMonth = tipRevenue.plus(subRevenue).toFixed(2);

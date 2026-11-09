@@ -32,7 +32,7 @@ export async function POST(request:Request){
   try{parsed=parseGoodreadsImport(csv);}catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Invalid CSV'},{status:422});}
   const key=request.headers.get('idempotency-key')??request.headers.get('x-idempotency-key')??'goodreads:'+createHash('sha256').update(csv).digest('hex');
   if(key.length<8||key.length>200)return NextResponse.json({error:'Invalid import intent'},{status:400});
-  const {data,error}=await createServiceClient().rpc('import_goodreads_library_v2' as never,{p_user_id:user.id,p_key:key,p_rows:parsed.rows,p_skipped:parsed.skipped} as never);
+  const {data,error}=await createServiceClient().rpc('import_goodreads_library_v2',{p_user_id:user.id,p_key:key,p_rows:parsed.rows,p_skipped:parsed.skipped});
   if(error){const status=({P1001:409,P1003:403,P1004:422,P1005:503} as Record<string,number>)[error.code]??503;return NextResponse.json({error:status===503?'Import unavailable; retry the same file':error.message},{status});}
   if(!data||typeof data!=='object')return NextResponse.json({error:'Import result unavailable'},{status:503});
   return NextResponse.json(data);

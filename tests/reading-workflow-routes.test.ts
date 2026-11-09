@@ -23,9 +23,9 @@ it('carries both quote cursor fields across tied timestamp pages and rejects inv
  const at='2026-11-05T00:00:00.123456+00:00',rows=Array.from({length:21},(_,index)=>({id:'00000000-0000-4000-8000-'+String(100-index).padStart(12,'0'),created_at:at,content:'Quote '+index}));let page=rows;
  const chain={select:()=>chain,in:()=>chain,eq:()=>chain,order:vi.fn(()=>chain),limit:()=>chain,or:vi.fn(()=>chain),then:(resolve:(value:unknown)=>unknown)=>Promise.resolve({data:page,error:null}).then(resolve)};
  vi.mocked(createClient).mockReturnValue({from:()=>chain}as never);
- const first=await(await bookQuotes(new NextRequest('https://app.test/api/books/'+room+'/quotes'),{params:{id:room}})).json();expect(first.quotes).toHaveLength(20);expect(decodeCursor(first.nextCursor)).toEqual({at,id:rows[19].id});
- page=rows.slice(20);const second=await(await bookQuotes(new NextRequest('https://app.test/api/books/'+room+'/quotes?cursor='+first.nextCursor),{params:{id:room}})).json();expect(second.quotes).toEqual(page);expect(second.nextCursor).toBeNull();expect(chain.or).toHaveBeenCalledWith(`created_at.lt.${at},and(created_at.eq.${at},id.lt.${rows[19].id})`);expect(chain.order).toHaveBeenCalledWith('id',{ascending:false});
- expect((await bookQuotes(new NextRequest('https://app.test/quotes?cursor=invalid'),{params:{id:room}})).status).toBe(400);
+ const first=await(await bookQuotes(new NextRequest('https://app.test/api/books/'+room+'/quotes'),{params:Promise.resolve({id:room})})).json();expect(first.quotes).toHaveLength(20);expect(decodeCursor(first.nextCursor)).toEqual({at,id:rows[19].id});
+ page=rows.slice(20);const second=await(await bookQuotes(new NextRequest('https://app.test/api/books/'+room+'/quotes?cursor='+first.nextCursor),{params:Promise.resolve({id:room})})).json();expect(second.quotes).toEqual(page);expect(second.nextCursor).toBeNull();expect(chain.or).toHaveBeenCalledWith(`created_at.lt.${at},and(created_at.eq.${at},id.lt.${rows[19].id})`);expect(chain.order).toHaveBeenCalledWith('id',{ascending:false});
+ expect((await bookQuotes(new NextRequest('https://app.test/quotes?cursor=invalid'),{params:Promise.resolve({id:room})})).status).toBe(400);
 });
 beforeEach(()=>{vi.resetAllMocks();vi.mocked(getCurrentUser).mockResolvedValue({id:user} as never);vi.mocked(createServiceClient).mockReturnValue({rpc} as never);rpc.mockResolvedValue({data:{imported:1,skipped:0},error:null});});
 it('accepts native JSON and web multipart imports with the same durable file identity',async()=>{
@@ -49,14 +49,14 @@ it('reports import failures without fabricated counts and preserves conflicts',a
 });
 it('rejects invalid buddy updates and submits chapter/note together under the authenticated actor',async()=>{
   const request=(payload:unknown,key='buddy-route-intent')=>new Request('https://app.test/api/buddy-reads/'+room+'/update',{method:'PATCH',headers:{'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify(payload)});
-  for(const payload of [{},{current_chapter:0},{note:' '},{current_chapter:1,created_by:user}])expect((await PATCH(request(payload),{params:{id:room}})).status).toBe(422);
+  for(const payload of [{},{current_chapter:0},{note:' '},{current_chapter:1,created_by:user}])expect((await PATCH(request(payload),{params:Promise.resolve({id:room})})).status).toBe(422);
   expect(rpc).not.toHaveBeenCalled();rpc.mockResolvedValue({data:{updated:true},error:null});
-  expect((await PATCH(request({current_chapter:5,note:' Shared note '}),{params:{id:room}})).status).toBe(200);
+  expect((await PATCH(request({current_chapter:5,note:' Shared note '}),{params:Promise.resolve({id:room})})).status).toBe(200);
   expect(rpc).toHaveBeenCalledWith('update_buddy_progress',{p_actor_id:user,p_room_id:room,p_key:'buddy-route-intent',p_payload:{current_chapter:5,note:'Shared note'}});
 });
 
 it('rejects buddy progress from a changed account before performing database work',async()=>{
-  const response=await PATCH(new Request('https://app.test/api/buddy-reads/'+room+'/update',{method:'PATCH',headers:{'Content-Type':'application/json','Idempotency-Key':'buddy-owned-intent','X-Liravo-Actor':room},body:JSON.stringify({current_chapter:2})}),{params:{id:room}});expect(response.status).toBe(409);expect(rpc).not.toHaveBeenCalled();
+  const response=await PATCH(new Request('https://app.test/api/buddy-reads/'+room+'/update',{method:'PATCH',headers:{'Content-Type':'application/json','Idempotency-Key':'buddy-owned-intent','X-Liravo-Actor':room},body:JSON.stringify({current_chapter:2})}),{params:Promise.resolve({id:room})});expect(response.status).toBe(409);expect(rpc).not.toHaveBeenCalled();
 });
 
 it('parses milestone dates as UTC minutes and rejects calendar rollovers',()=>{
@@ -70,7 +70,7 @@ it('validates quote pages without truncation and checks calendar/proof URL input
 it('rejects invisible sanitized content, overflow pages and malformed JSON before writing',async()=>{
   for(const text of ['<b></b>','<p><br></p>','&nbsp;','&#x200b;'])expect(hasVisibleText(text)).toBe(false);expect(hasVisibleText('<strong>A visible review</strong>')).toBe(true);
   for(const payload of [{book_id:room,content:'<b></b>'},{book_id:room,content:'&nbsp;'},{book_id:room,content:'A quote',page_number:MAX_QUOTE_PAGE+1}])expect((await writeQuote(new Request('https://app.test/quotes',{method:'POST',body:JSON.stringify(payload)}) as never)).status).toBe(400);
-  expect((await writeReview(new Request('https://app.test/reviews',{method:'POST',body:JSON.stringify({star_rating:4,body:'<p><br></p>',review_type:'long'})}),{params:{id:room}})).status).toBe(400);
+  expect((await writeReview(new Request('https://app.test/reviews',{method:'POST',body:JSON.stringify({star_rating:4,body:'<p><br></p>',review_type:'long'})}),{params:Promise.resolve({id:room})})).status).toBe(400);
   expect((await writeQuote(new Request('https://app.test/quotes',{method:'POST',body:'{'}) as never)).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
 });
 it('rejects unsafe author proof links before creating a verification request',async()=>{
@@ -82,8 +82,8 @@ it('binds list cursors to actor, list and scope and fails closed on unavailable 
 });
 it('rejects changed actors and malformed list edits/books before database writes',async()=>{
   const {PATCH:edit}=await import('@/app/api/lists/[id]/route'),{POST:add}=await import('@/app/api/lists/[id]/books/route'),{POST:follow}=await import('@/app/api/lists/[id]/follow/route'),{POST:fork}=await import('@/app/api/lists/[id]/fork/route');
-  for(const route of [edit,add,follow,fork])expect((await route(new Request('https://app.test/lists/'+room,{method:'POST',headers:{'Content-Type':'application/json','X-Liravo-Actor':room},body:'{}'}) as never,{params:{id:room}})).status).toBe(409);
-  for(const body of [{},{name:' '},{user_id:room},{is_public:'true'}])expect((await edit(new Request('https://app.test/lists/'+room,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}) as never,{params:{id:room}})).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
+  for(const route of [edit,add,follow,fork])expect((await route(new Request('https://app.test/lists/'+room,{method:'POST',headers:{'Content-Type':'application/json','X-Liravo-Actor':room},body:'{}'}) as never,{params:Promise.resolve({id:room})})).status).toBe(409);
+  for(const body of [{},{name:' '},{user_id:room},{is_public:'true'}])expect((await edit(new Request('https://app.test/lists/'+room,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}) as never,{params:Promise.resolve({id:room})})).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
 });
 
 it('builds bulk searches only for complete ISBN lists and a configured regional Amazon store',async()=>{

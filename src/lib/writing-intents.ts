@@ -9,9 +9,9 @@ export async function applyWritingIntent(request: Request, userId: string, actio
   const key = request.headers.get('idempotency-key');
   if (!key || key.length < 8 || key.length > 200) throw new ContentIntentError('Missing/invalid idempotency key',400);
   if (!z.string().uuid().safeParse(target).success) throw new ContentIntentError('Invalid writing target',400);
-  const { data, error } = await createServiceClient().rpc('apply_writing_intent' as never, {
-    p_user_id: userId, p_kind: action, p_target: target, p_key: key, p_payload: payload,
-  } as never);
+  const { data, error } = await createServiceClient().rpc('apply_writing_intent', {
+    p_user_id: userId, p_kind: action, p_target: target, p_key: key, p_payload: z.json().parse(payload),
+  });
   if (error) {
     const status = ({P1001:409,P1003:403,P1004:422,P1005:404} as Record<string,number>)[error.code] ?? 503;
     throw new ContentIntentError(status === 503 ? 'Writing service unavailable' : error.message,status);

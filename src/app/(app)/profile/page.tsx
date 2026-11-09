@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export async function generateMetadata(){return {title:(await getTranslations('profile'))('myTitle'),robots:{index:false}};}
 
 export default async function ProfilePage() {
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 

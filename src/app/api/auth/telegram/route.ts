@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   const telegramId = String(telegramData.id);
 
   const displayName=[telegramData.first_name,telegramData.last_name].filter(Boolean).join(' ')||telegramData.username||'tg_'+telegramId;
-  const {data:user,error}=await supabase.rpc('resolve_localized_social_identity' as never,{p_locale:accountLocale(request),p_provider:'telegram',p_subject:telegramId,p_email:null,p_display_name:displayName,p_avatar_url:telegramData.photo_url??null} as never);
+  const {data:user,error}=await supabase.rpc('resolve_localized_social_identity',{p_locale:accountLocale(request),p_provider:'telegram',p_subject:telegramId,p_email:null,p_display_name:displayName,p_avatar_url:telegramData.photo_url??null});
   if(error||!user)return NextResponse.json({error:'Authentication unavailable'},{status:error?.code==='P1003'?403:error?.code==='P1001'?409:503});
   return directLoginResponse(user as unknown as {id:string;email:string|null},clientUser(user),request);
 }
@@ -87,7 +87,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Use POST with Telegram auth data' }, { status: 405 });
   }
 
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'telegram' as never,
     options: {

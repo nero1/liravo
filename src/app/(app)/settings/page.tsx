@@ -3,7 +3,8 @@ import {languageAlternates} from '@/lib/metadata';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText, ShieldCheck, Download, Bell } from 'lucide-react';
+import { ChevronRight, Mail, Lock, Upload, AlertTriangle, FileText, ShieldCheck, Bell } from 'lucide-react';
+import {SettingsExportButton} from './SettingsExportButton';
 import { SettingsDataActions } from './SettingsDataActions';
 import type { Metadata } from 'next';
 
@@ -13,7 +14,7 @@ export async function generateMetadata():Promise<Metadata>{const t=await getTran
 
 export default async function SettingsPage() {
   const [t,nav,data,labels]=await Promise.all([getTranslations('settings'),getTranslations('nativeNavigation'),getTranslations('accountData'),getTranslations('nav')]);
-  const supabase = createClient();
+  const supabase = (await createClient());
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
@@ -53,34 +54,8 @@ export default async function SettingsPage() {
       <div className="mt-8 space-y-4">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{t('dataPrivacy')}</h2>
         <div className="space-y-2">
-          <a
-            href="/api/users/export"
-            download
-            className="flex items-center justify-between p-4 border border-border rounded-xl hover:bg-muted transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Download size={18} className="text-muted-foreground" />
-              <div>
-                <p className="font-medium text-sm">{t('exportJson')}</p>
-                <p className="text-xs text-muted-foreground">{data('exportDescription')}</p>
-              </div>
-            </div>
-            <ChevronRight size={16} className="text-muted-foreground" />
-          </a>
-          <a
-            href="/api/users/export?format=csv"
-            download
-            className="flex items-center justify-between p-4 border border-border rounded-xl hover:bg-muted transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Download size={18} className="text-muted-foreground" />
-              <div>
-                <p className="font-medium text-sm">{t('exportCsv')}</p>
-                <p className="text-xs text-muted-foreground">{t('csvDescription')}</p>
-              </div>
-            </div>
-            <ChevronRight size={16} className="text-muted-foreground" />
-          </a>
+          <SettingsExportButton actorId={user.id} format="json" label={t('exportJson')} description={data('exportDescription')}/>
+          <SettingsExportButton actorId={user.id} format="csv" label={t('exportCsv')} description={t('csvDescription')}/>
         </div>
         <SettingsDataActions />
       </div>

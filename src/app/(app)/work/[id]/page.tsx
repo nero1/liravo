@@ -7,14 +7,16 @@ import {EditionSelector} from '@/components/books/EditionSelector';
 import {languageAlternates} from '@/lib/metadata';
 import {z} from 'zod';
 export const dynamic='force-dynamic';
-export async function generateMetadata({params}:{params:{id:string}}):Promise<Metadata>{
+export async function generateMetadata(props:{params: Promise<{id:string}>}):Promise<Metadata> {
+  const params = await props.params;
   const t=await getTranslations('editions');
   if(!z.string().uuid().safeParse(params.id).success)return {title:t('workNotFound')};
   const catalog=await getWorkCatalog(params.id);if(!catalog)return {title:t('workNotFound')};
   return {title:catalog.work.title,description:t('workDescription',{title:catalog.work.title,author:catalog.work.author_name}),alternates:languageAlternates('/work/'+catalog.work.id)};
 }
-export default async function WorkPage({params}:{params:{id:string}}){
-  if(!await getCurrentUser())redirect('/login');
+export default async function WorkPage(props:{params: Promise<{id:string}>}) {
+  const params = await props.params;
+  if(!(await getCurrentUser()))redirect('/login');
   if(!z.string().uuid().safeParse(params.id).success)notFound();
   const catalog=await getWorkCatalog(params.id);if(!catalog)notFound();
   if(catalog.work.id!==params.id)redirect('/work/'+catalog.work.id);

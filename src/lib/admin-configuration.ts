@@ -1,3 +1,4 @@
+import {z}from'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { ContentIntentError } from '@/lib/content-intents';
 import { getRequestCorrelationId } from '@/lib/utils';
@@ -8,7 +9,7 @@ export async function applyAdminConfiguration(request:Request,actorId:string,act
   const key=request.headers.get('idempotency-key')??request.headers.get('x-idempotency-key');
   if(!key||key.length<8||key.length>200)throw new ContentIntentError('Missing/invalid configuration intent',400);
   if(!await checkRouteRateLimit(actorId,'social'))throw new ContentIntentError('Too many requests',429);
-  const {data,error}=await createServiceClient().rpc('apply_admin_configuration' as never,{p_actor_id:actorId,p_action:action,p_key:key,p_payload:payload,p_correlation_id:getRequestCorrelationId(request)} as never);
+  const {data,error}=await createServiceClient().rpc('apply_admin_configuration',{p_actor_id:actorId,p_action:action,p_key:key,p_payload:z.json().parse(payload),p_correlation_id:getRequestCorrelationId(request)});
   if(error)throw new ContentIntentError('Configuration update unavailable',({P1001:409,P1003:403,P1004:422,P1005:404,23505:409} as Record<string,number>)[error.code]??503);
   if(!data||typeof data!=='object')throw new ContentIntentError('Configuration result unavailable',503);
   return data as Record<string,unknown>;

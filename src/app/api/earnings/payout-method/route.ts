@@ -22,7 +22,7 @@ export async function PUT(request:Request) {
   if(!key||key.length<8||key.length>200)return NextResponse.json({error:'Missing destination intent'},{status:400});
   let hash:string|null;try{hash=await verifyAccountPin(user.id,parsed.data.pin,request);}catch(error){return NextResponse.json({error:'Confirm your PIN',code:error instanceof PinError?error.code:'PIN_UNAVAILABLE'},{status:error instanceof PinError?error.status:503});}
   const {pin,...destination}=parsed.data;void pin;
-  const {error}=await createServiceClient().rpc('save_payout_destination' as never,{p_user_id:user.id,p_key:key,p_data:destination,p_pin_hash:hash,p_correlation_id:getRequestCorrelationId(request)} as never);
+  const {error}=await createServiceClient().rpc('save_payout_destination',{p_user_id:user.id,p_key:key,p_data:destination,p_pin_hash:hash,p_correlation_id:getRequestCorrelationId(request)});
   if(error) return NextResponse.json({error:'Payout destination unavailable'},{status:({P1001:409,P1003:403,P1004:422} as Record<string,number>)[error.code]??503});
   return NextResponse.json({saved:true});
 }
