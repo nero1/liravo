@@ -1,3 +1,4 @@
+import {serviceFetch} from '@/lib/db/service-fetch';
 import { AuthError } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies, headers } from 'next/headers';
@@ -24,7 +25,7 @@ export function createClient(options?:{skipMfa?:boolean}): ReturnType<typeof cre
     supabaseUrl,
     supabaseAnonKey,
     {
-      global:{headers:bearer?{Authorization:`Bearer ${bearer}`}:{ }},
+      global:{fetch:serviceFetch,headers:bearer?{Authorization:`Bearer ${bearer}`}:{ }},
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;
@@ -74,6 +75,7 @@ export function createServiceClient(): ReturnType<typeof createServerClient<Data
     supabaseUrl,
     serviceRoleKey,
     {
+      global:{fetch:serviceFetch},
       cookies: {
         get() { return undefined; },
         set() {},

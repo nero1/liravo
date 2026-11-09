@@ -1,61 +1,19 @@
-import { cron } from '@/lib/cron';
-import { NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-
-export const dynamic = 'force-dynamic';
-
-async function run() {
-
-  const supabase = createServiceClient();
-  const now = new Date();
-
-  const day7Start = new Date(now.getTime() - 7.5 * 24 * 60 * 60 * 1000).toISOString();
-  const day7End = new Date(now.getTime() - 6.5 * 24 * 60 * 60 * 1000).toISOString();
-  const day30Start = new Date(now.getTime() - 30.5 * 24 * 60 * 60 * 1000).toISOString();
-  const day30End = new Date(now.getTime() - 29.5 * 24 * 60 * 60 * 1000).toISOString();
-  const cooloffWindow = new Date(now.getTime() - 25 * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data: day7Users } = await supabase
-    .from('users')
-    .select('id')
-    .is('email', null)
-    .gte('created_at', day7Start)
-    .lte('created_at', day7End);
-
-  const { data: day30Users } = await supabase
-    .from('users')
-    .select('id')
-    .is('email', null)
-    .gte('created_at', day30Start)
-    .lte('created_at', day30End);
-
-  const allUsers = [...(day7Users ?? []), ...(day30Users ?? [])];
-  let notified = 0;
-
-  for (const user of allUsers) {
-    const { data: recent } = await supabase
-      .from('notifications')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('type', 'account_hardening')
-      .gte('created_at', cooloffWindow)
-      .maybeSingle();
-
-    if (recent) continue;
-
-    await supabase.from('notifications').insert({
-      user_id: user.id,
-      type: 'account_hardening',
-      message: 'Secure your account — add an email address to prevent lockout.',
-    });
-
-    notified++;
-  }
-
-  return NextResponse.json({ notified });
+import {cron} from '@/lib/cron';
+import {createServiceClient} from '@/lib/supabase/server';
+import {NextResponse} from 'next/server';
+export const dynamic='force-dynamic';
+async function run(request:Request){
+ const service=createServiceClient(),deadline=Date.now()+20000;let total=0,scanned=0,complete=false;
+ do{
+  request.signal.throwIfAborted();
+  const {data,error}=await service.rpc('account_hardening_batch' as never);
+  const receipt=data as {notified?:number;scanned?:number;complete?:boolean}|null;
+  if(error||!receipt||!Number.isSafeInteger(receipt.notified)||!Number.isSafeInteger(receipt.scanned)||typeof receipt.complete!=='boolean')throw new Error('Job batch unavailable');
+  total+=receipt.notified!;scanned+=receipt.scanned!;complete=receipt.complete;
+  if(!receipt.scanned&&!complete)throw new Error('Job cursor did not advance');
+ }while(!complete&&Date.now()<deadline);
+ return NextResponse.json({notified:total,scanned,complete});
 }
-
-export const GET = cron('account-hardening', run);
-export const POST = GET;
-
-export const maxDuration = 60;
+export const GET=cron('account-hardening',run);
+export const POST=GET;
+export const maxDuration=60;

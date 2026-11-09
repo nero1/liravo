@@ -5,7 +5,7 @@ import {fetchWithRetry} from '@/lib/retry';
 const state=vi.hoisted(()=>({locale:'fr',unavailable:false,cache:new Map<string,string>()}));
 vi.mock('@/lib/auth/getCurrentUser',()=>({getCurrentUser:async()=>({id:'00000000-0000-4000-8000-000000000067'})}));
 vi.mock('@/lib/rate-limit',()=>({checkRouteRateLimit:async()=>true}));
-vi.mock('@/lib/locks',()=>({withRedisLock:async(_key:string,_seconds:number,work:()=>Promise<unknown>)=>work()}));
+vi.mock('@/lib/locks',async original=>({...await original<typeof import('@/lib/locks')>(),withRedisLock:async(_key:string,_seconds:number,work:()=>Promise<unknown>)=>work()}));
 vi.mock('@/lib/supabase/server',()=>({createClient:()=>({from:()=>({select:()=>({eq:()=>({single:async()=>({data:state.unavailable?null:{genres:['Fiction'],preferred_locale:state.locale},error:state.unavailable?{message:'Unavailable'}:null})})})})})}));
 vi.mock('@/lib/redis',()=>({getRedisClient:()=>({get:async(key:string)=>state.cache.get(key)??null,set:async(key:string,value:string)=>{state.cache.set(key,value);}})}));
 vi.mock('@/lib/retry',()=>({fetchWithRetry:vi.fn()}));

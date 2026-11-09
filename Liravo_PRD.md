@@ -373,7 +373,7 @@ The goal is friction-free sign-up with gradual security hardening as the user in
 
 **Reading progress tracker:**
 - Log progress by page or percentage.
-- Optional reading session log (start/end time, pages covered — used for streaks and XP).
+- Optional reading session log (start/end time, pages covered — used for streaks and XP), with paged private history on web/native. Author posts also expose complete paged history.
 - Progress bar on book card within the shelf.
 
 **Annual reading goal:**
@@ -596,6 +596,7 @@ A dedicated feature set for users who select Newbie Writer as their type, access
 **Notifications (in-app):**
 - Follows, likes, want-to-reads, replies, mentions, challenge completions, ARC grants, buddy read invites, author Q&A answers.
 - Notification preferences configurable per type on web/native; saved opt-outs suppress matching in-app and push notifications. Weekly digest and new-release email preferences are independent.
+- Read notifications expire after 90 days, unread notifications after 180 days, and affiliate health logs after 90 days. Completed nonfinancial outbox work expires after 30 days; failed work remains for 90 days. Financial ledgers and replay proofs remain intact.
 - Stored notification facts render in the current English/French/German locale, preserving authored content; financial/security notices remain available. Push uses the recipient’s saved locale, session-owned device registrations, bounded retries and per-device acknowledgements; provider acceptance can still produce duplicate delivery. Logout revokes the current session’s registrations.
 
 **Email notifications (paid tiers only):**
@@ -917,7 +918,7 @@ AI is used sparingly. Every AI call must have a clear user value justification a
 | AI taste profile | On demand or annually | Paid | Server-side |
 | Shelf-overlap recommendations | Nightly cron batch pre-compute | Free | Database query + light ranking |
 | Review tone / moderation pre-screen | On review submit | Platform | Browser pre-screen + server verification |
-| Similar books computation | Nightly cron | Free | Server-side embedding similarity |
+| Similar books computation | Nightly resumable batches | Free | Indexed author/genre/language ranking per canonical work |
 
 No AI feature is triggered on every page load. All AI outputs that can be pre-computed are pre-computed and stored in the database.
 

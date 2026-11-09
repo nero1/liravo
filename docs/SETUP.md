@@ -91,7 +91,7 @@ Redis is required for rate limits, job locks, caching, and direct PostgreSQL ses
 | `DATABASE_PROVIDER` | `digitalocean` for DigitalOcean; `railway` for Railway or another direct PostgreSQL host |
 | `NEXT_PUBLIC_DATABASE_PROVIDER` | Same value as `DATABASE_PROVIDER` |
 | `DATABASE_URL` | Publicly reachable connection URL, preferably a transaction pooler |
-| `DATABASE_POOL_MAX` | `5` |
+| `DATABASE_POOL_MAX` | `5`; keep concurrent app instances × this value below your pooler’s connection limit |
 | `DATABASE_SSL` | `true` for a public connection with valid TLS |
 
 6. For direct PostgreSQL, complete object storage in Section 5 before deploying.
@@ -192,7 +192,7 @@ Use the provider's sandbox to verify checkout, payment, cancellation, and refund
 
 1. In Vercel, confirm `CRON_SECRET` is saved for Production and redeploy.
 2. Open **Project → Cron Jobs**. The schedules in `vercel.json` are installed automatically and run in UTC.
-3. Open the application's **Admin → Cron Status** to check results and run a job manually. The outbox retries pending review checks and push delivery; staff can review pending submissions at `/moderation/reviews`.
+3. Open the application's **Admin → Cron Status** to check results and run a job manually. The outbox retries pending review checks and push delivery, and removes expired operational records; staff can review pending submissions at `/moderation/reviews`.
 4. For more frequent outbox delivery or affiliate checks, sign in at [cron-job.org](https://cron-job.org), choose **Create cronjob**, and enter the matching `/api/cron/...` URL.
 5. Under its advanced settings, use **POST** and add the header `Authorization: Bearer YOUR_CRON_SECRET`.
 6. Choose the schedule, save, and run its test. Avoid scheduling the same job simultaneously in both services.

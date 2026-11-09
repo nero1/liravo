@@ -39,7 +39,7 @@ export async function generateMetadata():Promise<Metadata>{
   openGraph: {
     type: 'website',
     locale:({en:'en_US',fr:'fr_FR',de:'de_DE'}as Record<string,string>)[locale]??'en_US',
-    url: 'https://liravo.org',
+    url: APP_URL,
     siteName:'Liravo',
     images:[{url:'/opengraph-image?locale='+locale,width:1200,height:630,alt:t('socialTagline')}],
   },

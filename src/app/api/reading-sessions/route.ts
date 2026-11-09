@@ -1,5 +1,6 @@
+import {readingSessionPage} from '@/lib/content-history';
+import {decodeCursor} from '@/lib/pagination';
 import { contentIntent, ContentIntentError } from '@/lib/content-intents';
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth/getCurrentUser';
@@ -15,26 +16,11 @@ const sessionSchema = z.object({
 });
 
 // GET /api/reading-sessions?book_id=... — list user's sessions for a book
-export async function GET(req: Request) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { searchParams } = new URL(req.url);
-  const bookId = searchParams.get('book_id');
-
-  const supabase = createClient();
-  let query = supabase
-    .from('reading_sessions')
-    .select('id, book_id, pages_read, started_at, ended_at, notes, created_at')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (bookId) query = query.eq('book_id', bookId);
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ sessions: data ?? [] });
+export async function GET(req:Request){
+ const user=await getCurrentUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+ const query=new URL(req.url).searchParams,book=query.get('book_id'),cursor=query.get('cursor');
+ try{if(book&&!z.string().uuid().safeParse(book).success)throw Error();decodeCursor(cursor);}catch{return NextResponse.json({error:'Invalid history query'},{status:400});}
+ try{return NextResponse.json(await readingSessionPage(user.id,book,cursor),{headers:{'Cache-Control':'private, no-store'}});}catch{return NextResponse.json({error:'Sessions unavailable'},{status:503});}
 }
 
 // POST /api/reading-sessions — log a reading session

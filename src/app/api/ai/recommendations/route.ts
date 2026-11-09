@@ -8,7 +8,7 @@ import { AI_MODELS,AI_MOOD_MAX_LENGTH } from '@/constants/ai';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
 import {callAI} from '@/lib/ai-client';
-import { withRedisLock } from '@/lib/locks';
+import {setLeaseCache,withRedisLock} from '@/lib/locks';
 
 export const dynamic = 'force-dynamic';
 
@@ -118,7 +118,7 @@ Example format:
       const recommendations=parseRecommendations(result.text);
 
       if (recommendations.length > 0) {
-        await redis.set(cacheKey, JSON.stringify(recommendations), { ex: CACHE_TTL_SECONDS });
+        await setLeaseCache(cacheKey,JSON.stringify(recommendations),CACHE_TTL_SECONDS);
       }
       return json(recommendations);
     });

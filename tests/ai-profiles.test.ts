@@ -7,7 +7,7 @@ import { generateTasteProfile,readTasteProfile,generateWritingPlan,WritingTasksS
 vi.mock('@/lib/ai-client',()=>({callAI:vi.fn()}));
 vi.mock('@/lib/premium-access',()=>({hasPremiumAccess:vi.fn()}));
 vi.mock('@/lib/supabase/server',()=>({createServiceClient:vi.fn()}));
-vi.mock('@/lib/locks',()=>({withRedisLock:vi.fn()}));
+vi.mock('@/lib/locks',async original=>({...await original<typeof import('@/lib/locks')>(),withRedisLock:vi.fn()}));
 let source:Record<string,unknown>,stored:Record<string,unknown>|null;
 const rpc=vi.fn(),maybeSingle=vi.fn();
 beforeEach(()=>{

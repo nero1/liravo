@@ -1,5 +1,7 @@
 export const APP_NAME = 'Liravo';
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://liravo.org';
+const appOrigin=new URL(process.env.NEXT_PUBLIC_APP_URL||'https://liravo.org');
+if(!['http:','https:'].includes(appOrigin.protocol)||appOrigin.username||appOrigin.password||appOrigin.pathname!=='/'||appOrigin.search||appOrigin.hash)throw new Error('NEXT_PUBLIC_APP_URL must be an HTTP(S) origin');
+export const APP_URL=appOrigin.origin;
 export const LOCALES = ['en', 'fr', 'de'] as const;
 export const AVATAR_MAX_BYTES = 3 * 1024 * 1024;
 

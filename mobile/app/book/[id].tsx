@@ -24,6 +24,7 @@ export default function BookDetailScreen() {
   const owner=useAuthStore(state=>state.user?.id);
   const [shelfModalOpen, setShelfModalOpen] = useState(false);
   const { data: bookData, isLoading,error,refetch } = useBook(id!);
+  const {t:history}=useTranslations('readingHistory');
   const reviewQuery=useBookReviews(bookData?.book.id??id!);
 
   const book = bookData?.book;
@@ -146,6 +147,7 @@ export default function BookDetailScreen() {
           {/* Affiliate links */}
           <AffiliateLinkButtons book={book} links={[...(bookData?.affiliateLinks??[]),...(bookData?.audibleLink?[bookData.audibleLink]:[])]} />
 
+          <Button variant="outline" onPress={()=>router.push('/reading-sessions?book_id='+book.id)}>{history('title')}</Button>
           {/* Reviews */}
           {statistics&&statistics.ratings_count>0&&<Text className="text-foreground">{t('communityRatings',{count:statistics.ratings_count})} · {statistics.average_rating?.toLocaleString(locale,{maximumFractionDigits:2})}/5</Text>}
           {reviewQuery.isLoading&&<ActivityIndicator accessibilityLabel={common('loading')} color="#d97706"/>}

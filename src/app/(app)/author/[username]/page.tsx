@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import {authorPostPage} from '@/lib/content-history';
 import type { Metadata } from 'next';
 import { FollowButton } from '@/components/profile/FollowButton';
 import { AuthorPostCard } from '@/components/author/AuthorPostCard';
@@ -57,19 +58,9 @@ export async function generateMetadata({
   };
 }
 
-interface AuthorPost {
-  id: string;
-  title: string;
-  body: string;
-  type: string;
-  book_id: string | null;
-  created_at: string;
-}
-
-
-export default async function AuthorProfilePage({params,searchParams}:{params:{username:string};searchParams?:{cursor?:string;qaCursor?:string}}) {
+export default async function AuthorProfilePage({params,searchParams}:{params:{username:string};searchParams?:{cursor?:string;qaCursor?:string;postCursor?:string}}) {
   const common=await getTranslations('common'),t=await getTranslations('authorProfile');
-  try{decodeCursor(searchParams?.cursor??null);}catch{notFound();}
+  try{decodeCursor(searchParams?.cursor??null);decodeCursor(searchParams?.postCursor??null);}catch{notFound();}
   const supabase = createClient();
   const {
     data: { user: currentUser },
@@ -95,15 +86,7 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
 
   const {books:bookDetails,nextCursor}=await getAuthorCatalog(author.id,searchParams?.cursor??null);
 
-  // From-the-author posts
-  const { data: postsRaw } = await supabase
-    .from('author_posts')
-    .select('id, title, body, type, book_id, created_at')
-    .eq('author_id', author.id)
-    .order('created_at', { ascending: false })
-    .limit(10);
-
-  const posts: AuthorPost[] = postsRaw ?? [];
+  const {posts,nextCursor:postsCursor}=await authorPostPage(author.id,currentUser?.id??null,searchParams?.postCursor??null,10);
 
   let questions:Awaited<ReturnType<typeof getAuthorQuestions>>|null=null;
   try{questions=await getAuthorQuestions(author.id,searchParams?.qaCursor??null);}catch(error){if(error instanceof AuthorQuestionError&&error.status===400)notFound();}
@@ -272,7 +255,7 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
 
       {/* From the Author Posts */}
       {posts.length > 0 && (
-        <section>
+        <section id="author-posts">
           <h2 className="font-display text-xl font-bold mb-4">{t('posts')}</h2>
           <div className="space-y-4">
             {posts.map((post) => (
@@ -290,6 +273,8 @@ export default async function AuthorProfilePage({params,searchParams}:{params:{u
           </div>
         </section>
       )}
+
+      {postsCursor&&<Link href={'/author/'+encodeURIComponent(params.username)+'?'+new URLSearchParams({...(searchParams?.cursor?{cursor:searchParams.cursor}:{}),...(searchParams?.qaCursor?{qaCursor:searchParams.qaCursor}:{}),postCursor:postsCursor})+'#author-posts'} className="text-sm underline">{common('loadMore')}</Link>}
 
       {/* Books that inspired me */}
       {inspiredBooks.length > 0 && (

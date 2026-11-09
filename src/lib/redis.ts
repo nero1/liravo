@@ -12,16 +12,18 @@ export interface RedisClient {
   setNx(key: string, value: string): Promise<boolean | number>;
   compareExpire(key: string, owner: string, seconds: number): Promise<unknown>;
   compareDelete(key: string, owner: string): Promise<unknown>;
+  setOwned(key:string,owner:string,target:string,value:string,seconds:number):Promise<unknown>;
   setNxEx?(key: string, value: string, ttlSeconds: number): Promise<boolean>;
 }
 
 let _client: RedisClient | null = null;
 
 function createIoRedisClient(): RedisClient {
-  const redis = new IORedis(process.env.REDIS_URL!, { lazyConnect: true });
+  const redis = new IORedis(process.env.REDIS_URL!, {connectTimeout:3000,commandTimeout:3000,maxRetriesPerRequest:1});
 
   return {
     async compareExpire(key, owner, seconds) { return redis.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],ARGV[2]) else return 0 end", 1, key, owner, seconds); },
+    async setOwned(key,owner,target,value,seconds){return redis.eval("if redis.call('get',KEYS[1])~=ARGV[1]then return 0 end;redis.call('set',KEYS[2],ARGV[2],'EX',ARGV[3]);return 1",2,key,target,owner,value,seconds);},
     async compareDelete(key, owner) { return redis.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", 1, key, owner); },
     async get(key) { return redis.get(key); },
     async set(key, value, options) {
@@ -52,6 +54,7 @@ function createUpstashClient(): RedisClient {
 
   return {
     async compareExpire(key, owner, seconds) { return redis.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],ARGV[2]) else return 0 end", [key], [owner, seconds]); },
+    async setOwned(key,owner,target,value,seconds){return redis.eval("if redis.call('get',KEYS[1])~=ARGV[1]then return 0 end;redis.call('set',KEYS[2],ARGV[2],'EX',ARGV[3]);return 1",[key,target],[owner,value,seconds]);},
     async compareDelete(key, owner) { return redis.eval("if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end", [key], [owner]); },
     async get(key) {
       const val = await redis.get<string>(key);

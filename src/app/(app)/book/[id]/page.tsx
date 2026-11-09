@@ -165,31 +165,9 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
 
   const authorProfiles=await getBookAuthors(book.id);
 
-  // Similar books: check computed table first, then fall back to book.similar_book_ids, then genre
-  let similarBooks: Array<{ id: string; title: string; author_name: string; cover_url: string | null }> = [];
-  const { data: computedSimilar } = await serviceSupabase
-    .from('similar_books_computed')
-    .select('similar_book_ids')
-    .in('book_id',editionIds)
-    .maybeSingle();
-  const simIds: string[] = (computedSimilar?.similar_book_ids as string[] | null) ?? (book.similar_book_ids as string[] | null) ?? [];
-  if (simIds.length > 0) {
-    const { data } = await serviceSupabase.from('books').select('id, title, author_name, cover_url').in('id', simIds.slice(0, 6));
-    similarBooks = data ?? [];
-  } else {
-    // Fallback: same genre, different book
-    const genres = book.genres as string[];
-    if (genres.length > 0) {
-      const { data } = await serviceSupabase
-        .from('books')
-        .select('id, title, author_name, cover_url')
-        .overlaps('genres', genres)
-        .neq('id', params.id)
-        .order('have_read_count', { ascending: false })
-        .limit(6);
-      similarBooks = data ?? [];
-    }
-  }
+  const {data:similar,error:similarError}=await serviceSupabase.rpc('similar_book_snapshot' as never,{p_book:book.id} as never);
+  if(similarError||!Array.isArray(similar))throw new Error('Similar books unavailable');
+  const similarBooks=similar as Array<{id:string;title:string;author_name:string;cover_url:string|null}>;
 
   // Reply counts per review
   const replyCounts: Record<string, number> = {};
@@ -394,6 +372,7 @@ export default async function BookPage({ params,searchParams }: BookPageProps) {
         </section>
       )}
 
+      {user&&<Link href={'/reading-sessions?book_id='+book.id} className="text-sm text-accent underline">{(await getTranslations('readingHistory'))('title')}</Link>}
       {/* Reviews */}
       <section id="reviews" className="mb-8">
         <h2 className="font-display font-bold text-lg mb-4">

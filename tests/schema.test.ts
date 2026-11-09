@@ -40,7 +40,7 @@ it('creates a usable plain PostgreSQL database without Supabase tables and rejec
   const id='00000000-0000-4000-8000-000000001104';
   const profile=(await db.query<{profile:{id:string}}>("select create_direct_account($1,'plain@example.test','plain_reader','Plain reader')profile",[id])).rows[0].profile;
   expect(profile.id).toBe(id);expect((await db.query('select count(*)::int count from shelves where user_id=$1',[id])).rows).toEqual([{count:3}]);
-  expect((await db.query("select count(*)::int count from pg_tables where schemaname='public'")).rows).toEqual([{count:122}]);
+  expect((await db.query("select count(*)::int count from pg_tables where schemaname='public'")).rows).toEqual([{count:124}]);
   await expect(db.exec(schema)).rejects.toThrow('Use a new database with an empty public schema');await db.exec('ROLLBACK');
   expect((await db.query('select id from users where id=$1',[id])).rows).toEqual([{id}]);
  }finally{await db.exec('reset role');}

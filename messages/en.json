@@ -2526,5 +2526,12 @@
     "writingChallenge": "Writing on Liravo",
     "writingMessage": "Join the challenge and share your writing.",
     "submissionCount": "{count, plural, one {# submission} other {# submissions}}"
+  },
+  "readingHistory": {
+    "title": "Reading sessions",
+    "empty": "No reading sessions yet.",
+    "viewBook": "View book",
+    "pages": "{count, plural, one {# page read} other {# pages read}}",
+    "failed": "Could not load reading sessions. Try again."
   }
 }

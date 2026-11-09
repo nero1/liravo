@@ -1,6 +1,6 @@
 import { buildPgProjection } from './relations';
 import type { PendingQuery, Row, ParameterOrJSON, SerializableParameter } from 'postgres';
-import { getSql } from './pg';
+import {getSql,withDatabaseOperation,executeQuery} from './pg';
 
 type QueryResult<T> = { data: T | null; error: { message: string; code?: string } | null; count?: number };
 
@@ -260,7 +260,11 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
     return { data: (this._isSingle || this._isMaybeSingle ? rows[0] ?? null : rows) as T, error: null };
   }
 
-  async execute(): Promise<QueryResult<T>> {
+  async execute():Promise<QueryResult<T>>{
+    try{return await withDatabaseOperation(()=>this.executeInScope());}catch(error){return {data:null,error:queryError(error)};}
+  }
+
+  private async executeInScope(): Promise<QueryResult<T>> {
     const sql = getSql();
     try {
       if (this._mutation) {
@@ -272,8 +276,8 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         const where = this.buildWhere();
         const hasWhere = this._filters.length > 0 || this._orFragments.length > 0;
         const rows = hasWhere
-          ? await sql`SELECT COUNT(*) AS count FROM ${sql(this._table)} WHERE ${where}`
-          : await sql`SELECT COUNT(*) AS count FROM ${sql(this._table)}`;
+          ? await executeQuery(sql`SELECT COUNT(*) AS count FROM ${sql(this._table)} WHERE ${where}`)
+          : await executeQuery(sql`SELECT COUNT(*) AS count FROM ${sql(this._table)}`);
         count = parseInt(rows[0]?.count ?? '0', 10);
         if (this._head) return { data: null, error: null, count };
       }
@@ -314,7 +318,7 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         }
       }
 
-      const rows = await (query as ReturnType<typeof sql>);
+      const rows = await executeQuery(query as ReturnType<typeof sql>);
 
       if (this._head) return { data: null, error: null };
       if (this._isSingle) {
@@ -342,10 +346,10 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
         case 'insert': {
           const rows = Array.isArray(m.data) ? m.data : [m.data!];
           if (m.returning) {
-            const result = await sql`INSERT INTO ${sql(this._table)} ${sql(rows)} RETURNING ${sql.unsafe(returning)}`;
+            const result = await executeQuery(sql`INSERT INTO ${sql(this._table)} ${sql(rows)} RETURNING ${sql.unsafe(returning)}`);
             return this.mutationResult(result);
           }
-          await sql`INSERT INTO ${sql(this._table)} ${sql(rows)}`;
+          await executeQuery(sql`INSERT INTO ${sql(this._table)} ${sql(rows)}`);
           return { data: null, error: null };
         }
 
@@ -366,36 +370,36 @@ export class PgQueryBuilder<T = Record<string, unknown>> {
             : 'DO NOTHING';
 
           if (m.returning) {
-            const result = await sql.unsafe(
+            const result = await executeQuery(sql.unsafe(
               `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr} RETURNING ${returning}`,
               rows.flatMap((r) => keys.map((k) => r[k])) as ParameterOrJSON<never>[]
-            );
+            ));
             return this.mutationResult(result);
           }
-          await sql.unsafe(
+          await executeQuery(sql.unsafe(
             `INSERT INTO "${this._table}" (${keys.map(safeId).join(', ')}) VALUES (${rows.map((_, i) => keys.map((k, j) => `$${i * keys.length + j + 1}`).join(', ')).join('), (')}) ON CONFLICT (${conflictExpr}) ${updateExpr}`,
             rows.flatMap((r) => keys.map((k) => r[k])) as ParameterOrJSON<never>[]
-          );
+          ));
           return { data: null, error: null };
         }
 
         case 'update': {
           if (!hasWhere) throw new Error('update() requires at least one filter');
           if (m.returning) {
-            const result = await sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where} RETURNING ${sql.unsafe(returning)}`;
+            const result = await executeQuery(sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where} RETURNING ${sql.unsafe(returning)}`);
             return this.mutationResult(result);
           }
-          await sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where}`;
+          await executeQuery(sql`UPDATE ${sql(this._table)} SET ${sql(m.data as Record<string, unknown>)} WHERE ${where}`);
           return { data: null, error: null };
         }
 
         case 'delete': {
           if (!hasWhere) throw new Error('delete() requires at least one filter');
           if (m.returning) {
-            const result = await sql`DELETE FROM ${sql(this._table)} WHERE ${where} RETURNING ${sql.unsafe(returning)}`;
+            const result = await executeQuery(sql`DELETE FROM ${sql(this._table)} WHERE ${where} RETURNING ${sql.unsafe(returning)}`);
             return this.mutationResult(result);
           }
-          await sql`DELETE FROM ${sql(this._table)} WHERE ${where}`;
+          await executeQuery(sql`DELETE FROM ${sql(this._table)} WHERE ${where}`);
           return { data: null, error: null };
         }
       }
@@ -424,16 +428,16 @@ export function getPgQueryBuilderFactory() {
       fnName: string,
       params?: Record<string, unknown>
     ): Promise<QueryResult<T>> {
-      const sql = getSql();
-      try {
+      try{return await withDatabaseOperation(async()=>{
+        const sql=getSql();
         const entries = Object.entries(params ?? {});
         if (![fnName, ...entries.map(([key]) => key)].every(name => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name))) throw new Error('Invalid RPC identifier');
         const args = entries.map(([key], i) => `"${key}" => $${i + 1}`).join(', ');
         const values = entries.map(([, value]) => value);
-        const rows = await sql.unsafe(`SELECT * FROM "${fnName}"(${args})`, values as ParameterOrJSON<never>[]);
+        const rows = await executeQuery(sql.unsafe(`SELECT * FROM "${fnName}"(${args})`, values as ParameterOrJSON<never>[]));
         const scalar = rows.length === 1 && Object.prototype.hasOwnProperty.call(rows[0], fnName);
         return { data: (scalar ? rows[0][fnName] : rows) as T, error: null };
-      } catch (err) {
+      });} catch (err) {
         return { data: null, error: queryError(err) };
       }
     },
